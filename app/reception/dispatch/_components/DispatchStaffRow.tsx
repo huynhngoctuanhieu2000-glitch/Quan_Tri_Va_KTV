@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Trash2, Star, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { StaffData, TurnQueueData } from '../page'; // I'll export these types from page.tsx
+import { Trash2, Star, Clock, AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react';
+import { StaffData, TurnQueueData } from '../page';
 
 interface StaffAssignment {
     id: string;
@@ -25,13 +25,12 @@ interface DispatchStaffRowProps {
     canRemove: boolean;
 }
 
-// Map service names to DB skill keys
 const SERVICE_TO_SKILL: Record<string, string> = {
     'Gội đầu': 'shampoo',
     'Massage Thái': 'thaiBody',
     'Massage Dầu': 'oilBody',
     'Đá Nóng': 'hotStoneBody',
-    'Massage Body': 'thaiBody', // Default for body
+    'Massage Body': 'thaiBody',
     'Foot Dầu': 'oilFoot',
     'Ráy tai': 'earCleaning',
     'Chăm sóc da': 'facial',
@@ -63,19 +62,19 @@ export const DispatchStaffRow = ({
     };
 
     return (
-        <div className="p-3 bg-white rounded-xl border border-gray-100 shadow-sm space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+        <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm space-y-4">
+            <div className="flex flex-col gap-4">
                 {/* KTV Selector */}
-                <div className="flex-1 w-full">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Kỹ thuật viên</label>
-                    <div className="relative group">
+                <div className="w-full">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 px-1">Kỹ thuật viên</label>
+                    <div className="relative">
                         <select
                             value={row.ktvId}
                             onChange={e => {
                                 const selected = availableTurns.find(t => t.employee_id === e.target.value);
                                 handleChange({ ktvId: e.target.value, ktvName: selected?.staff?.full_name || '' });
                             }}
-                            className="w-full px-3 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-gray-50/50 transition-all appearance-none"
+                            className="w-full pl-4 pr-10 py-3 border-2 border-gray-50 rounded-2xl text-sm font-black focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-gray-50/30 transition-all appearance-none active:scale-[0.99]"
                         >
                             <option value="">— Chọn KTV trong hàng đợi —</option>
                             {availableTurns.map(turn => {
@@ -98,88 +97,86 @@ export const DispatchStaffRow = ({
                                 );
                             })}
                         </select>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                            <Clock size={14} />
-                        </div>
+                        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
                     </div>
                 </div>
 
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="grid grid-cols-3 gap-2">
                     {/* Start Time */}
-                    <div className="flex-1 sm:w-24">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Bắt đầu</label>
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Bắt đầu</label>
                         <input
                             type="time"
                             value={row.startTime}
                             onChange={e => handleChange({ startTime: e.target.value })}
-                            className="w-full px-2 py-2 border-2 border-gray-100 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-center bg-gray-50/50"
+                            className="w-full px-2 py-3 border-2 border-gray-50 rounded-xl text-xs font-black focus:border-indigo-500 outline-none text-center bg-gray-50/30 transition-all"
                         />
                     </div>
 
                     {/* Duration */}
-                    <div className="w-16">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Phút</label>
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Phút</label>
                         <input
                             type="number"
                             min={5} max={300} step={5}
                             value={row.duration}
                             onChange={e => handleChange({ duration: parseInt(e.target.value) || 60 })}
-                            className="w-full px-2 py-2 border-2 border-gray-100 rounded-xl text-sm font-black text-center focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-gray-50/50"
+                            className="w-full px-2 py-3 border-2 border-gray-50 rounded-xl text-xs font-black text-center focus:border-indigo-500 outline-none bg-gray-50/30 transition-all"
                         />
                     </div>
 
                     {/* End Time */}
-                    <div className="flex-1 sm:w-24">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Kết thúc</label>
-                        <div className="w-full px-2 py-2 bg-emerald-50 border-2 border-emerald-100 rounded-xl text-sm font-black text-emerald-600 text-center shadow-inner">
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Kết thúc</label>
+                        <div className="w-full py-3 bg-emerald-50 border-2 border-emerald-100 rounded-xl text-xs font-black text-emerald-600 text-center shadow-inner">
                             {row.endTime || '--:--'}
                         </div>
                     </div>
+                </div>
 
-                    {/* Remove */}
+                {/* Actions Row */}
+                <div className="flex items-center justify-between gap-3 pt-1">
+                    {/* Visual Feedback for Skills */}
+                    <div className="flex-1">
+                        {row.ktvId && (
+                            <div className="flex items-center">
+                                {availableTurns.find(t => t.employee_id === row.ktvId)?.staff?.skills?.[targetSkill || ''] === 'expert' ? (
+                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black border border-amber-100 uppercase tracking-tighter">
+                                        <Star size={10} className="fill-amber-500" /> Chuyên gia
+                                    </div>
+                                ) : availableTurns.find(t => t.employee_id === row.ktvId)?.staff?.skills?.[targetSkill || ''] === 'basic' ? (
+                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black border border-emerald-100 uppercase tracking-tighter">
+                                        <CheckCircle2 size={10} className="text-emerald-500" /> Đạt yêu cầu
+                                    </div>
+                                ) : targetSkill && (
+                                    <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[9px] font-black border border-rose-100 uppercase tracking-tighter">
+                                        <AlertCircle size={10} className="text-rose-500" /> Thiếu kỹ năng
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    
                     {canRemove && (
-                        <div className="flex items-end pb-0.5">
-                            <button
-                                onClick={() => onRemove(orderId, svcId, row.id)}
-                                className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                            >
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => onRemove(orderId, svcId, row.id)}
+                            className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+                        >
+                            <Trash2 size={18} />
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Note & Suggestions */}
-            <div className="flex items-center gap-3">
-                <div className="flex-1 relative">
-                    <input
-                        type="text"
-                        value={row.noteForKtv}
-                        onChange={e => handleChange({ noteForKtv: e.target.value })}
-                        placeholder="Ghi chú cho KTV (VD: Lực mạnh, massage kỹ vai...)"
-                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-[11px] font-medium text-indigo-700 focus:ring-1 focus:ring-indigo-400 outline-none bg-indigo-50/30 placeholder:text-gray-400"
-                    />
-                </div>
-
-                {/* Visual Feedback for Skills */}
-                {row.ktvId && (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                        {availableTurns.find(t => t.employee_id === row.ktvId)?.staff?.skills?.[targetSkill || ''] === 'expert' ? (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black border border-amber-100">
-                                <Star size={10} className="fill-amber-500" /> CHUYÊN GIA
-                            </div>
-                        ) : availableTurns.find(t => t.employee_id === row.ktvId)?.staff?.skills?.[targetSkill || ''] === 'basic' ? (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black border border-emerald-100">
-                                <CheckCircle2 size={10} className="text-emerald-500" /> ĐẠT YÊU CẦU
-                            </div>
-                        ) : targetSkill && (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-black border border-rose-100">
-                                <AlertCircle size={10} className="text-rose-500" /> THIẾU KỸ NĂNG
-                            </div>
-                        )}
-                    </div>
-                )}
+            {/* Note Input */}
+            <div className="relative pt-1 border-t border-gray-50 pt-3">
+                <input
+                    type="text"
+                    value={row.noteForKtv}
+                    onChange={e => handleChange({ noteForKtv: e.target.value })}
+                    placeholder="Ghi chú cho KTV (VD: Lực mạnh...)"
+                    className="w-full px-4 py-2 bg-indigo-50/30 border border-indigo-100 rounded-xl text-[11px] font-black text-indigo-700 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-300 transition-all"
+                />
             </div>
         </div>
     );

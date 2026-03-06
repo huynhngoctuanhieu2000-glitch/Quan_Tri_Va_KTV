@@ -133,8 +133,12 @@ function ScreenDashboard({ logic }: { logic: ReturnType<typeof useKTVDashboard> 
             </div>
 
             <div className="p-5">
-              <h3 className={`font-bold text-xl ${THEME.textBase} mb-1`}>Dịch Vụ Spa</h3>
-              <p className={`text-sm ${THEME.textMuted} mb-4`}>Thời gian: 90 phút</p>
+              <h3 className={`font-bold text-xl ${THEME.textBase} mb-1`}>
+                {booking.BookingItems?.[0]?.service_name || 'Dịch Vụ Spa'}
+              </h3>
+              <p className={`text-sm ${THEME.textMuted} mb-4`}>
+                Thời gian: {booking.BookingItems?.[0]?.duration || 60} phút
+              </p>
 
               <div className="bg-orange-50/50 border-l-2 border-orange-400 p-3 rounded-r-lg mb-4">
                 <span className="text-xs font-bold text-orange-600 mb-1 block">YÊU CẦU ĐẶC BIỆT</span>
@@ -202,14 +206,15 @@ function ScreenTimer({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
     return `${m}:${s}`;
   };
 
-  const progress = ((90 * 60 - timeRemaining) / (90 * 60)) * 100;
+  const totalDuration = (booking?.BookingItems?.[0]?.duration || 60) * 60;
+  const progress = ((totalDuration - timeRemaining) / totalDuration) * 100;
 
   return (
     <div className="p-4 h-full flex flex-col">
       <div className="flex justify-between items-start mb-8 mt-4">
         <div>
-          <h2 className={`text-xl font-bold ${THEME.textBase}`}>Phòng V1</h2>
-          <p className={THEME.textMuted}>{booking?.billCode || 'Đang thực hiện'}</p>
+          <h2 className={`text-xl font-bold ${THEME.textBase}`}>Phòng {booking?.roomName || 'V1'}</h2>
+          <p className={THEME.textMuted}>{booking?.BookingItems?.[0]?.service_name || 'Đang thực hiện'}</p>
         </div>
       </div>
 
@@ -381,7 +386,10 @@ function ScreenReward({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) 
 
 function ChecklistItem({ label, checked, onChange }: { label: string, checked: boolean, onChange: () => void }) {
   return (
-    <label className={`flex items-center gap-4 p-3 ${THEME.radius} cursor-pointer transition-colors ${checked ? 'bg-emerald-50' : THEME.bgCard}`}>
+    <label 
+      onClick={onChange}
+      className={`flex items-center gap-4 p-3 ${THEME.radius} cursor-pointer transition-colors ${checked ? 'bg-emerald-50' : THEME.bgCard}`}
+    >
       <div className={`w-6 h-6 rounded flex items-center justify-center border-2 transition-colors ${checked ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
         {checked && <CheckCircle size={14} className="text-white" />}
       </div>

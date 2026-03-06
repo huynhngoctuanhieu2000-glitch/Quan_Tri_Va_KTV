@@ -2,30 +2,63 @@
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
-export async function getPendingBooking(branchCode: string = '11NDK') {
+export async function getPendingBooking(technicianCode: string) {
+    if (!technicianCode) return { success: false, error: 'Technician code is required' };
+    
     try {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        // Get the oldest NEW booking for this branch
-        // Assuming we just get any NEW booking for demo purposes
-        const { data, error } = await supabase
+        // Get the latest active booking for this specific technician
+        const { data: booking, error: bError } = await supabase
             .from('Bookings')
-            .select(`
-        *,
-        BookingItems (*)
-      `)
-            .eq('status', 'NEW')
-            .order('createdAt', { ascending: true })
+            .select('*')
+            .eq('technicianCode', technicianCode)
+            .in('status', ['PREPARING', 'IN_PROGRESS'])
+            .order('createdAt', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is no rows returned, which is fine
-            console.error('Error fetching pending booking:', error);
-            return { success: false, error: error.message };
+        if (bError) throw bError;
+        if (!booking) return { success: true, data: null };
+
+        // 2. Fetch BookingItems manually
+        const { data: items, error: iError } = await supabase
+            .from('BookingItems')
+            .select('*')
+            .eq('bookingId', booking.id);
+
+        if (iError) console.error('Error fetching booking items:', iError);
+
+        // 3. Fetch Service details (name, duration)
+        let itemsWithService = items || [];
+        if (items && items.length > 0) {
+            const serviceIds = items.map((i: any) => i.serviceId).filter(Boolean);
+            const { data: svcs } = await supabase
+                .from('Services')
+                .select('id, nameVN, nameEN, duration')
+                .in('id', serviceIds);
+            
+            if (svcs) {
+                const svcMap = new Map(svcs.map((s: any) => [s.id, s]));
+                itemsWithService = items.map((i: any) => ({
+                    ...i,
+                    service_name: svcMap.get(i.serviceId)?.nameVN || svcMap.get(i.serviceId)?.nameEN || `Dịch vụ ${i.serviceId}`,
+                    duration: svcMap.get(i.serviceId)?.duration || 60
+                }));
+            }
         }
 
-        if (!data) return { success: true, data: null };
+        const data = {
+            ...booking,
+            BookingItems: itemsWithService
+        };
+        
+        console.log(`🔍 [KTV] Fetching for ${technicianCode}:`, { 
+            found: !!booking, 
+            status: booking?.status,
+            itemCount: itemsWithService.length
+        });
 
         return { success: true, data };
     } catch (error: any) {
@@ -41,12 +74,9 @@ export async function updateBookingStatus(bookingId: string, status: string, add
 
         const updatePayload: any = { status };
         if (status === 'IN_PROGRESS') {
-            updatePayload.actual_start_time = new Date().toISOString();
+            updatePayload.timeStart = new Date().toISOString();
         } else if (status === 'COMPLETED') {
-            updatePayload.actual_end_time = new Date().toISOString();
-            if (additionalData?.customerProfile) {
-                updatePayload.customerProfile = additionalData.customerProfile;
-            }
+            updatePayload.timeEnd = new Date().toISOString();
         }
 
         const { data, error } = await supabase

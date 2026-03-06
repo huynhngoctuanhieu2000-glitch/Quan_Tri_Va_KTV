@@ -37,14 +37,24 @@ export function useKTVDashboard() {
         let intervalId: NodeJS.Timeout;
 
         const fetchBooking = async () => {
-            if (booking) return; // Already have a booking active
+            if (booking || !user?.id) {
+                setIsLoading(false);
+                return;
+            }
             try {
-                const res = await getPendingBooking('11NDK');
+                const res = await getPendingBooking(user.id);
                 if (res.success && res.data) {
                     setBooking(res.data);
-                    // Assuming the duration is in minutes
-                    // Let's set the mock countdown
-                    setTimeRemaining(90 * 60);
+                    // Determine initial screen based on booking status
+                    if (res.data.status === 'IN_PROGRESS') {
+                        setScreen('TIMER');
+                        setIsTimerRunning(true);
+                    }
+                    
+                    // Set time remaining based on the first service item or default 60
+                    const firstItem = res.data.BookingItems?.[0];
+                    const duration = firstItem?.duration || 60;
+                    setTimeRemaining(duration * 60);
                 }
             } catch (err) {
                 console.error('Error polling booking:', err);
