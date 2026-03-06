@@ -1,0 +1,208 @@
+'use client';
+
+import React from 'react';
+import { Plus, AlertTriangle, UserCheck, Bed as BedIcon, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { DispatchStaffRow } from './DispatchStaffRow';
+import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../page';
+
+// Mock/Real data for Rooms and Beds - for now I'll use the ones from page.tsx or passed as props
+interface Bed {
+    id: string;
+    roomId: string;
+    status: 'available' | 'occupied' | 'cleaning';
+}
+
+interface Room {
+    id: string;
+    name: string;
+    type: string;
+}
+
+interface DispatchServiceBlockProps {
+    svc: ServiceBlock;
+    svcIndex: number;
+    orderId: string;
+    rooms: Room[];
+    beds: Bed[];
+    availableTurns: (TurnQueueData & { staff?: StaffData })[];
+    onUpdateSvc: (orderId: string, svcId: string, patch: Partial<ServiceBlock>) => void;
+    onSelectRoom: (orderId: string, svcId: string, roomId: string) => void;
+    onSelectBed: (orderId: string, svcId: string, bedId: string) => void;
+    onUpdateStaff: (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => void;
+    onAddStaff: (orderId: string, svcId: string) => void;
+    onRemoveStaff: (orderId: string, svcId: string, rowId: string) => void;
+}
+
+export const DispatchServiceBlock = ({
+    svc, svcIndex, orderId, rooms, beds, availableTurns,
+    onUpdateSvc, onSelectRoom, onSelectBed, onUpdateStaff, onAddStaff, onRemoveStaff
+}: DispatchServiceBlockProps) => {
+
+    return (
+        <div className="border-2 border-gray-100 rounded-3xl overflow-hidden bg-white shadow-sm transition-all hover:shadow-md hover:border-indigo-100">
+            {/* Service Header */}
+            <div className="bg-gray-50/80 px-5 py-4 flex items-center justify-between border-b border-gray-100 backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                    <span className="bg-indigo-600 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-100">
+                        {svcIndex + 1}
+                    </span>
+                    <h3 className="font-black text-gray-900 text-base">{svc.serviceName}</h3>
+                    <span className="text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
+                </div>
+            </div>
+
+            <div className="p-5 space-y-6">
+                {/* Customer Requirements */}
+                {(svc.genderReq || svc.strength || svc.focus || svc.avoid || svc.customerNote) && (
+                    <div className="bg-amber-50/50 border-2 border-amber-100 rounded-2xl p-4 space-y-3 shadow-inner">
+                        <p className="text-[11px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+                            <AlertTriangle size={14} className="text-amber-500" /> Yêu Cầu Từ Khách
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {svc.genderReq && svc.genderReq !== 'Ngẫu nhiên' && (
+                                <span className="px-3 py-1.5 rounded-xl text-xs font-black border-2 bg-purple-50 text-purple-700 border-purple-100 flex items-center gap-1.5 shadow-sm">
+                                    <UserCheck size={12} /> {svc.genderReq}
+                                </span>
+                            )}
+                            {svc.strength && (
+                                <span className="px-3 py-1.5 rounded-xl text-xs font-black border-2 bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
+                                    💪 {svc.strength}
+                                </span>
+                            )}
+                            {svc.focus && (
+                                <span className="px-3 py-1.5 rounded-xl text-xs font-black border-2 bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
+                                    🎯 {svc.focus}
+                                </span>
+                            )}
+                            {svc.avoid && (
+                                <span className="px-3 py-1.5 rounded-xl text-xs font-black border-2 bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
+                                    🚫 {svc.avoid}
+                                </span>
+                            )}
+                        </div>
+                        {svc.customerNote && (
+                            <p className="text-xs text-amber-800 bg-white/60 p-3 rounded-xl font-bold italic border border-amber-100 line-clamp-2">
+                                &quot;{svc.customerNote}&quot;
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* RoomSelector */}
+                <div className="space-y-4">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block pl-1">
+                        Vị trí thực hiện <span className="text-rose-500">*</span>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Step 1: Chọn Phòng */}
+                        <div className="space-y-2">
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1 leading-none">Phòng</p>
+                            <div className="flex flex-wrap gap-2">
+                                {rooms.map(room => {
+                                    const hasAvailable = beds.some(b => b.roomId === room.id && b.status === 'available');
+                                    const isSelected = svc.selectedRoomId === room.id;
+                                    return (
+                                        <button
+                                            key={room.id}
+                                            onClick={() => onSelectRoom(orderId, svc.id, room.id)}
+                                            disabled={!hasAvailable}
+                                            className={`px-4 py-2.5 rounded-2xl border-2 text-xs font-black transition-all ${isSelected
+                                                ? 'border-indigo-500 bg-indigo-500 text-white shadow-xl shadow-indigo-100'
+                                                : hasAvailable
+                                                    ? 'border-gray-100 hover:border-indigo-300 bg-gray-50/50 text-gray-600'
+                                                    : 'border-gray-50 bg-gray-50/30 text-gray-300 cursor-not-allowed'
+                                                }`}
+                                        >
+                                            {room.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Step 2: Chọn Giường */}
+                        <div className="space-y-2 min-h-[40px]">
+                            {svc.selectedRoomId ? (
+                                <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest pl-1 leading-none">Giường</p>
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {beds
+                                            .filter(b => b.roomId === svc.selectedRoomId)
+                                            .map(bed => {
+                                                const isAvail = bed.status === 'available';
+                                                const isPicked = svc.bedId === bed.id;
+                                                return (
+                                                    <button
+                                                        key={bed.id}
+                                                        onClick={() => isAvail && onSelectBed(orderId, svc.id, bed.id)}
+                                                        disabled={!isAvail}
+                                                        className={`px-3 py-2 rounded-xl border-2 text-[11px] font-black transition-all flex items-center gap-2 ${isPicked
+                                                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-xl shadow-emerald-100'
+                                                            : isAvail
+                                                                ? 'border-gray-100 hover:border-emerald-300 bg-gray-50/50 text-gray-600'
+                                                                : 'border-gray-50 bg-gray-50/30 text-gray-300 cursor-not-allowed'
+                                                            }`}
+                                                    >
+                                                        <BedIcon size={14} />
+                                                        {bed.id.split('-').pop()}
+                                                    </button>
+                                                );
+                                            })}
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <div className="h-full flex items-center p-3 border-2 border-dashed border-gray-100 rounded-2xl">
+                                    <p className="text-[10px] text-gray-300 font-bold uppercase tracking-widest text-center w-full">Vui lòng chọn phòng</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Staff Selection Area */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                            Kỹ thuật viên <span className="text-rose-500">*</span>
+                        </label>
+                        <button
+                            onClick={() => onAddStaff(orderId, svc.id)}
+                            className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors flex items-center gap-1"
+                        >
+                            <Plus size={12} strokeWidth={3} /> Thêm KTV
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                        {svc.staffList.map((row) => (
+                            <DispatchStaffRow
+                                key={row.id}
+                                row={row}
+                                svcId={svc.id}
+                                orderId={orderId}
+                                serviceName={svc.serviceName}
+                                availableTurns={availableTurns}
+                                onUpdate={onUpdateStaff}
+                                onRemove={onRemoveStaff}
+                                canRemove={svc.staffList.length > 1}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block pl-1">Ghi chú điều phối</label>
+                    <textarea
+                        value={svc.adminNote}
+                        onChange={e => onUpdateSvc(orderId, svc.id, { adminNote: e.target.value })}
+                        placeholder="VD: Khách cần thư giãn tuyệt đối, không nói chuyện..."
+                        rows={2}
+                        className="w-full px-4 py-3 border-2 border-gray-100 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-gray-50/30 transition-all resize-none"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};

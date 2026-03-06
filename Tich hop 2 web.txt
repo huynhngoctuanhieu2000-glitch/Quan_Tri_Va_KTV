@@ -1,0 +1,41 @@
+# Kế Hoạch Tích Hợp Web Khách Hàng và Web KTV
+
+## Mục Tiêu
+Kết nối hệ thống giữa **App Khách Hàng** (`wrb-noi-bo-dev`) và **App Quản Trị & KTV** (`Quan_Tri_Va_KTV`) để khi KTV bấm **Bắt đầu tính giờ**, hệ thống sẽ tự động cập nhật trạng thái đơn hàng (Booking) trên database chung, từ đó App Khách Hàng cũng sẽ nhận được tín hiệu và chuyển trạng thái tương ứng.
+
+## Kế Hoạch Đề Xuất (Proposed Changes)
+
+### 1. Cấu Hình Chung Môi Trường Database (Supabase)
+Hiện tại, App Khách Hàng đang dùng **Supabase** (với các bảng `Bookings`, `Customers`, `BookingItems`). App KTV hiện tại chỉ đang dùng dữ liệu giả (Mock Data) trong giao diện.
+- [ ] **Thêm thư viện**: Cài đặt `@supabase/supabase-js` và `@supabase/ssr` vào App KTV.
+- [ ] **Biến Môi Trường**: Copy chuỗi kết nối Supabase (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) từ [.env.local](file:///C:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/wrb-noi-bo-dev/.env.local) của Web Khách Hàng sang Web KTV.
+- [ ] **Khởi tạo Config**: Tạo file [lib/supabase.ts](file:///C:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/wrb-noi-bo-dev/src/lib/supabase.ts) ở Web KTV chuẩn hóa kết nối giống Web Khách Hàng.
+
+### 2. Cập Nhật Màn Hình App KTV ([Quan_Tri_Va_KTV/app/ktv/dashboard/page.tsx](file:///C:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/Quan_Tri_Va_KTV/app/ktv/dashboard/page.tsx))
+Thay thế toàn bộ quy trình nhận đơn giả lập (Mock) bằng API thực tế và áp dụng luồng (flow) từ file [ktv-demo.html](file:///C:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/web-quan-tri-spa/ktv-demo.html):
+- [ ] **Màn hình Nhận đơn & Quy trình mở phòng**: Hiển thị đơn chờ, yêu cầu KTV xác nhận checklist (mở máy lạnh, setup giường...).
+- [ ] **Màn hình Thời gian (Timer)**: Sau khi setup xong, KTV nhấn **BẮT ĐẦU** -> Cập nhật trạng thái Booking sang `in_progress` lưu xuống Supabase thực tế.
+- [ ] **Nút thao tác nhanh**: Trong lúc đếm ngược, có các nút báo cáo (Khách về sớm, cần hỗ trợ, khẩn cấp...).
+- [ ] **Màn hình Đánh giá chéo (Cross Profiling)**: KTV chấm điểm/tag tính cách Khách hàng sau khi nhấn hoàn thành dịch vụ.
+- [ ] **Màn hình Bàn giao phòng**: KTV xác nhận dọn phòng xong. 
+
+### 3. Tái Thiết Kế Giao Diện KTV (UI/UX Redesign)
+Giao diện [ktv-demo.html](file:///C:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/web-quan-tri-spa/ktv-demo.html) hiện tại đang mang phong cách Dark Mode/Neon. Yêu cầu sẽ sửa lại thành:
+- [ ] **Màu sắc**: Trắng, Kem (Cream), Be (Beige) sang trọng, chuẩn ngành Spa (ví dụ: dùng `bg-[#FDFBF7]`, màu nhấn là `emerald` nhạt hoặc vàng nhạt `#D4AF37`).
+- [ ] **Cảm giác (Vibe)**: Clean, Calming, Luxurious. Khử bỏ các hiệu ứng Neon.
+- [ ] **Tuân thủ Constants (Top-Level Config)**: Định nghĩa Animation và Color Config ở đầu từng file `*.tsx`.
+
+### 4. Đồng Bộ Trạng Thái Web Khách Hàng (`wrb-noi-bo-dev`)
+- [ ] Bên Web Khách Hàng, trong các trang hiển thị hành trình (Journey Flow), thiết lập tính năng **Supabase Realtime** hoặc gọi (fetch/poll) API định kỳ.
+- [ ] Khi DB cập nhật `in_progress`, Web Khách Hàng sẽ nhận được sự kiện và thay đổi giao diện để khách hàng biết dịch vụ đã bắt đầu.
+
+## Kế Hoạch Kiểm Thử (Verification Plan)
+1. Kiểm tra biến môi trường: Đảm bảo [.env.local](file:///C:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/wrb-noi-bo-dev/.env.local) của Web KTV sử dụng đúng Supabase Project với Khách Hàng.
+2. Kiểm tra thao tác KTV: Đăng nhập KTV, thấy Booking -> Bấm "Bắt đầu tính giờ" -> Vào giao diện Supabase Dashboard hoặc gọi API kiểm tra xem trạng thái đơn có thành `in_progress` chưa.
+3. Kiểm tra phía Khách Hàng: Đóng vai khách hàng đặt lịch, khi KTV bấm bắt đầu, màn hình khách hàng tự động chuyển sang trạng thái "Đang thực hiện dịch vụ".
+
+---
+> [!IMPORTANT]
+> **Cần User Xác Nhận:** 
+> 1. Bạn có đồng ý với luồng dữ liệu sử dụng chung 1 project Supabase này không?
+> 2. Bạn muốn App KTV truy cập trực tiếp Supabase từ Client-side (dùng Supabase client) hay Server-side (Tạo Next.js API route tại App KTV)? (Khuyến nghị dùng Server actions / API route để bảo mật).
