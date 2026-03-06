@@ -203,33 +203,33 @@ export default function OrderManagementPage() {
                     </div>
                 </div>
 
-                {/* Vertical Groups Area */}
-                <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar pb-10">
-                    {STATUS_CONFIG.map(group => {
-                        const groupOrders = orders.filter(o => o.status === group.id);
+                {/* Kanban Main Area (Side-by-side Columns) */}
+                <div className="flex-1 flex gap-4 overflow-x-auto pb-6 no-scrollbar min-h-0">
+                    {STATUS_CONFIG.map(column => {
+                        const columnOrders = orders.filter(o => o.status === column.id);
                         return (
                             <div
-                                key={group.id}
-                                className={`flex flex-col gap-3 transition-colors rounded-3xl p-4 border-2 ${draggedOrderId ? 'bg-gray-50/50 border-dashed border-gray-200 hover:bg-indigo-50/50 hover:border-indigo-300' : 'bg-transparent border-transparent'}`}
+                                key={column.id}
+                                className={`flex-1 min-w-[300px] max-w-[360px] flex flex-col bg-gray-50/40 rounded-[2rem] border-2 border-transparent transition-all duration-300 ${draggedOrderId ? 'bg-indigo-50/30 border-dashed border-indigo-200 shadow-inner' : 'hover:bg-gray-100/50'}`}
                                 onDragOver={e => e.preventDefault()}
-                                onDrop={() => draggedOrderId && moveOrder(draggedOrderId, group.id)}
+                                onDrop={() => draggedOrderId && moveOrder(draggedOrderId, column.id)}
                             >
-                                {/* Group Header */}
-                                <div className="flex items-center justify-between px-2">
+                                {/* Column Header */}
+                                <div className="p-5 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-3 h-3 rounded-full ${group.dot} shadow-sm`} />
-                                        <h2 className="text-sm font-black text-gray-900 uppercase tracking-[0.2em]">{group.label}</h2>
-                                        <span className="bg-white border-2 border-gray-100 text-gray-400 px-3 py-0.5 rounded-full text-[10px] font-black shadow-sm">
-                                            {groupOrders.length}
+                                        <div className={`w-3.5 h-3.5 rounded-full ${column.dot} shadow-lg shadow-indigo-200`} />
+                                        <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest leading-none">{column.shortLabel}</h2>
+                                        <span className="bg-white border text-gray-400 px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-sm">
+                                            {columnOrders.length}
                                         </span>
                                     </div>
-                                    <div className="h-px flex-1 bg-gradient-to-r from-gray-200 to-transparent ml-6" />
+                                    <div className={`w-1.5 h-1.5 rounded-full ${draggedOrderId ? 'animate-pulse bg-indigo-400' : 'bg-gray-200'}`} />
                                 </div>
 
-                                {/* Order Cards (Grid/Flex for the group) */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {/* Order Cards (Vertical List in Column) */}
+                                <div className="flex-1 overflow-y-auto space-y-4 px-3 pb-4 custom-scrollbar">
                                     <AnimatePresence mode="popLayout">
-                                        {groupOrders.map(order => {
+                                        {columnOrders.map(order => {
                                             const cfg = getStatusConfig(order.status);
                                             const total = order.services.reduce((sum, s) => sum + s.price, 0);
                                             const isSelected = selectedOrderId === order.id;
@@ -238,72 +238,66 @@ export default function OrderManagementPage() {
                                                 <motion.div
                                                     key={order.id}
                                                     layout
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
+                                                    initial={{ opacity: 0, scale: 0.9 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
                                                     exit={{ opacity: 0, scale: 0.9 }}
                                                     draggable
                                                     onDragStart={() => setDraggedOrderId(order.id)}
                                                     onDragEnd={() => setDraggedOrderId(null)}
                                                     onClick={() => { setSelectedOrderId(isSelected ? null : order.id); setInternalNote(order.note ?? ''); }}
-                                                    className={`bg-white rounded-2xl border-2 cursor-grab active:cursor-grabbing transition-all shadow-sm hover:shadow-xl hover:translate-y-[-2px] ${isSelected ? 'border-primary ring-4 ring-primary/5' : 'border-gray-50 hover:border-indigo-100'}`}
+                                                    className={`bg-white rounded-[1.5rem] border-2 cursor-grab active:cursor-grabbing transition-all shadow-sm hover:shadow-2xl hover:translate-y-[-4px] ${isSelected ? 'border-primary ring-4 ring-primary/5' : 'border-white hover:border-indigo-100'}`}
                                                 >
                                                     <div className="p-4">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] font-black text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg">{order.id}</span>
-                                                                {order.unpaid && (
-                                                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-100 flex items-center gap-1">
-                                                                        <AlertCircle size={10} /> Chưa TT
-                                                                    </span>
-                                                                )}
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <span className="text-[10px] font-black text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg tracking-wider">{order.id}</span>
+                                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
+                                                                <Clock size={11} className="text-indigo-400" /> {order.startedAt}
                                                             </div>
-                                                            <span className="text-[10px] text-gray-400 flex items-center gap-1 font-bold">
-                                                                <Clock size={10} className="text-indigo-400" /> {order.startedAt}
-                                                            </span>
                                                         </div>
 
-                                                        <div className="flex items-center justify-between mb-4">
+                                                        <div className="flex items-start justify-between mb-4">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-indigo-200 shadow-lg shrink-0">
+                                                                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-primary rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xl shadow-indigo-100 shrink-0">
                                                                     {order.customerName.charAt(0)}
                                                                 </div>
-                                                                <div>
-                                                                    <p className="font-black text-sm text-gray-900 leading-tight">{order.customerName}</p>
-                                                                    <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{order.phone || 'Không có sđt'}</p>
+                                                                <div className="min-w-0">
+                                                                    <p className="font-black text-sm text-gray-900 leading-none mb-1 truncate">{order.customerName}</p>
+                                                                    {order.unpaid && (
+                                                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-100 flex items-center gap-1 w-fit">
+                                                                            <AlertCircle size={9} /> Chưa TT
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             </div>
-                                                            <div className="text-right">
-                                                                <p className="text-sm font-black text-gray-900">{formatVND(total)}</p>
-                                                                <p className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">{order.services.length} dịch vụ</p>
-                                                            </div>
+                                                            <p className="text-sm font-black text-gray-900 shrink-0">{formatVND(total)}</p>
                                                         </div>
 
-                                                        {/* Services list */}
-                                                        <div className="bg-gray-50/50 rounded-xl p-2.5 space-y-1.5 mb-4">
-                                                            {order.services.map(s => (
+                                                        {/* Mini Service List */}
+                                                        <div className="bg-gray-50/50 rounded-xl p-3 space-y-2 mb-4">
+                                                            {order.services.slice(0, 2).map(s => (
                                                                 <div key={s.id} className="flex items-center justify-between text-[11px]">
-                                                                    <span className="text-gray-600 font-bold flex items-center gap-1.5">
-                                                                        <div className="w-1 h-1 rounded-full bg-indigo-400" />
-                                                                        {s.name}
-                                                                    </span>
-                                                                    <span className="text-[10px] font-black text-emerald-600 bg-white border border-emerald-100 px-2 py-0.5 rounded-lg shadow-sm">{s.room}</span>
+                                                                    <span className="text-gray-500 font-bold truncate pr-2">{s.name}</span>
+                                                                    <span className="text-[9px] font-black text-indigo-600 bg-white px-1.5 py-0.5 rounded-lg shadow-sm border border-indigo-50 shrink-0">{s.room}</span>
                                                                 </div>
                                                             ))}
+                                                            {order.services.length > 2 && (
+                                                                <p className="text-[9px] text-gray-400 font-black italic">+ {order.services.length - 2} dịch vụ</p>
+                                                            )}
                                                         </div>
 
-                                                        {/* Action Footer */}
+                                                        {/* Footer Actions */}
                                                         <div className="flex items-center gap-2">
                                                             {cfg.next && (
                                                                 <button
                                                                     onClick={e => { e.stopPropagation(); advanceStatus(order.id); }}
-                                                                    className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-lg ${cfg.activeBg} text-white hover:brightness-110 active:scale-95`}
+                                                                    className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-lg ${cfg.activeBg} text-white hover:opacity-90 active:scale-95`}
                                                                 >
                                                                     {cfg.nextLabel}
                                                                 </button>
                                                             )}
                                                             <button
                                                                 onClick={e => { e.stopPropagation(); setSelectedOrderId(isSelected ? null : order.id); setInternalNote(order.note ?? ''); }}
-                                                                className="px-4 py-2.5 rounded-xl text-[11px] font-black text-gray-400 bg-gray-50 hover:bg-gray-100 hover:text-gray-600 transition-all border border-transparent hover:border-gray-200"
+                                                                className="px-3 py-2.5 rounded-xl text-[11px] font-black text-gray-400 bg-gray-50 hover:bg-gray-100 transition-all"
                                                             >
                                                                 Chi tiết
                                                             </button>
@@ -314,16 +308,25 @@ export default function OrderManagementPage() {
                                         })}
                                     </AnimatePresence>
 
-                                    {groupOrders.length === 0 && (
-                                        <div className="col-span-full h-24 flex flex-col items-center justify-center text-gray-300 gap-2 border-2 border-dashed border-gray-100 rounded-3xl bg-gray-50/30">
-                                            <CheckCircle2 size={24} className="opacity-20" />
-                                            <p className="text-[11px] font-bold uppercase tracking-widest">Trống</p>
+                                    {columnOrders.length === 0 && (
+                                        <div className="h-32 flex flex-col items-center justify-center text-gray-300 gap-3 border-4 border-dashed border-gray-100 rounded-[2rem] bg-gray-50/50">
+                                            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
+                                                <CheckCircle2 size={16} className="opacity-20" />
+                                            </div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest">Trống</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         );
                     })}
+
+                    {/* Placeholder to keep layout stable when detail panel is open */}
+                    <AnimatePresence>
+                        {selectedOrder && (
+                            <div className={`${SLIDE_OVER_WIDTH} shrink-0 hidden lg:block`} />
+                        )}
+                    </AnimatePresence>
                 </div>
 
                     {/* Detail Slide-Over Panel */}
