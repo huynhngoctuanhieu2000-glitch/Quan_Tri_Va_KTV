@@ -3,7 +3,46 @@
 import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { MOCK_HANDBOOK } from '@/lib/mock-db';
+interface HandbookItem {
+  id: string;
+  title: string;
+  category: string;
+  steps: string[];
+  duration: string;
+  notes: string;
+}
+
+const MOCK_HANDBOOK: HandbookItem[] = [
+  {
+    id: 'hb1',
+    title: 'Quy trình Gội Đầu Dưỡng Sinh',
+    category: 'Gội Đầu',
+    duration: '45 - 60 phút',
+    steps: [
+      'Chào đón khách và mời khách thay đồ.',
+      'Khai thông huyệt đạo vùng đầu.',
+      'Gội đầu lần 1 bằng dầu gội thảo dược.',
+      'Massage cổ vai gáy và tay.',
+      'Gội đầu lần 2 và xả tóc.',
+      'Sấy tóc và mời khách dùng trà.'
+    ],
+    notes: 'Luôn kiểm tra nhiệt độ nước trước khi gội cho khách.'
+  },
+  {
+    id: 'hb2',
+    title: 'Quy trình Massage Body Đá Nóng',
+    category: 'Massage',
+    duration: '90 phút',
+    steps: [
+      'Khởi động cơ thể bằng kỹ thuật ấn huyệt.',
+      'Thoa tinh dầu và massage nhẹ nhàng toàn thân.',
+      'Sử dụng đá nóng để massage các vùng cơ căng thẳng.',
+      'Đặt đá nóng dọc sống lưng và lòng bàn chân.',
+      'Kết thúc bằng massage đầu và lau sạch dầu thừa.'
+    ],
+    notes: 'Đá nóng cần được làm nóng ở nhiệt độ 50-60 độ C.'
+  }
+];
 import { ShieldAlert, BookOpen, Search, Clock, ChevronRight, Info, Edit3, Save, X as CloseIcon, Plus, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 

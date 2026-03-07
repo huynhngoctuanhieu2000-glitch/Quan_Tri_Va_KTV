@@ -6,17 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { ShieldAlert, Plus, Edit2, Trash2, Image as ImageIcon, Star, TrendingUp } from 'lucide-react';
 import { getServices } from './actions';
 
-interface Service {
-  id: string;
-  nameVN: string;
-  category: string;
-  priceVND: number;
-  duration: number;
-  isActive: boolean;
-  imageUrl?: string;
-  isBestSeller?: boolean;
-  isBestChoice?: boolean;
-}
+import { Service } from '@/lib/types';
 
 export default function ServiceMenuPage() {
   const { hasPermission } = useAuth();
@@ -123,8 +113,8 @@ export default function ServiceMenuPage() {
                     <tr key={service.id} className="hover:bg-gray-50 transition-colors">
                       <td className="p-4">
                         <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center text-gray-400 border border-gray-100">
-                          {service.imageUrl ? (
-                            <img src={service.imageUrl} alt={service.nameVN} className="w-full h-full object-cover" />
+                          {(service.imageUrl || service.image_url) ? (
+                            <img src={service.imageUrl || service.image_url} alt={service.nameVN || service.name} className="w-full h-full object-cover" />
                           ) : (
                             <ImageIcon size={20} />
                           )}
@@ -132,7 +122,7 @@ export default function ServiceMenuPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex flex-col gap-1">
-                          <span className="font-medium text-gray-900">{service.nameVN}</span>
+                          <span className="font-medium text-gray-900">{service.nameVN || service.name}</span>
                           <div className="flex flex-wrap gap-1">
                             {service.isBestSeller && (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-100">
@@ -149,16 +139,16 @@ export default function ServiceMenuPage() {
                       </td>
                       <td className="p-4 text-gray-600 text-sm">{service.category}</td>
                       <td className="p-4 text-right font-medium text-indigo-600">
-                        {service.priceVND.toLocaleString()}đ
+                        {(service.priceVND || service.price || 0).toLocaleString()}đ
                       </td>
                       <td className="p-4 text-center text-gray-600 text-sm">
                         {service.duration} phút
                       </td>
                       <td className="p-4 text-center">
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                          service.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                          (service.isActive !== false) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {service.isActive ? 'Đang bán' : 'Tạm ngưng'}
+                          {(service.isActive !== false) ? 'Đang bán' : 'Tạm ngưng'}
                         </span>
                       </td>
                       <td className="p-4">

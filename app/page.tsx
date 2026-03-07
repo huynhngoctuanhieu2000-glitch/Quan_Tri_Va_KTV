@@ -1,9 +1,15 @@
 'use client';
 
+// 🔧 SYSTEM CONFIGURATION
+const SYSTEM_CONFIG = {
+  spa_name: 'Ngan Ha Spa',
+  spa_address: '123 Đường ABC, Quận 1, TP. HCM',
+  internal_qr_url: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://nganha-internal.com',
+};
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { MOCK_CONFIG } from '@/lib/mock-db';
 import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { QrCode, ExternalLink, Info, ShieldCheck, Zap, Clock, Calendar, AlertTriangle, Camera } from 'lucide-react';
@@ -53,7 +59,7 @@ export default function HomePage() {
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
               Chào mừng, <span className="text-indigo-600">{user?.name}</span>
             </h1>
-            <p className="text-gray-500 mt-1">Hệ thống quản trị trung tâm {MOCK_CONFIG.spa_name}</p>
+            <p className="text-gray-500 mt-1">Hệ thống quản trị trung tâm {SYSTEM_CONFIG.spa_name}</p>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-400 bg-gray-50 px-4 py-2 rounded-full border border-gray-100">
             <ShieldCheck size={16} className="text-emerald-500" />
@@ -79,7 +85,7 @@ export default function HomePage() {
                 <div className="absolute -inset-4 bg-indigo-100 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative bg-white p-4 rounded-2xl shadow-lg border border-gray-100">
                   <Image
-                    src={MOCK_CONFIG.internal_qr_url}
+                    src={SYSTEM_CONFIG.internal_qr_url}
                     alt="Internal QR Code"
                     width={200}
                     height={200}
@@ -131,11 +137,11 @@ export default function HomePage() {
                   <div className="mt-2 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">Tên:</span>
-                      <span className="font-medium text-gray-900">{MOCK_CONFIG.spa_name}</span>
+                      <span className="font-medium text-gray-900">{SYSTEM_CONFIG.spa_name}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">Địa chỉ:</span>
-                      <span className="font-medium text-gray-900 text-right max-w-[150px]">{MOCK_CONFIG.spa_address}</span>
+                      <span className="font-medium text-gray-900 text-right max-w-[150px]">{SYSTEM_CONFIG.spa_address}</span>
                     </div>
                   </div>
                 </div>

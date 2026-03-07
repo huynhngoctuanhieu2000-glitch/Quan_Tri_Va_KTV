@@ -5,21 +5,31 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { ShieldAlert, Search, Filter, Plus, User, Phone, Calendar, Star, MoreHorizontal } from 'lucide-react';
 
-const MOCK_CUSTOMERS = [
-  { id: 'CUS-001', name: 'Nguyễn Thị Hoa', phone: '0901234567', tier: 'VIP', totalSpent: 15500000, lastVisit: '24/02/2026', visits: 12 },
-  { id: 'CUS-002', name: 'Trần Anh Tuấn', phone: '0987654321', tier: 'Gold', totalSpent: 8200000, lastVisit: '20/02/2026', visits: 8 },
-  { id: 'CUS-003', name: 'Lê Hoàng Lan', phone: '0912345678', tier: 'Silver', totalSpent: 3500000, lastVisit: '15/02/2026', visits: 4 },
-  { id: 'CUS-004', name: 'Phạm Thị Mai', phone: '0933334444', tier: 'Member', totalSpent: 800000, lastVisit: '23/02/2026', visits: 2 },
-  { id: 'CUS-005', name: 'Hoàng Văn Hùng', phone: '0922225555', tier: 'VIP', totalSpent: 22000000, lastVisit: '10/02/2026', visits: 18 },
-];
+import { Customer } from '@/lib/types';
 
 export default function CRMPage() {
   const { hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   React.useEffect(() => {
     setMounted(true);
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch('/api/customers');
+        const data = await res.json();
+        if (data.success) {
+          setCustomers(data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch customers:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchCustomers();
   }, []);
 
   if (!mounted) return null;
@@ -35,10 +45,13 @@ export default function CRMPage() {
     );
   }
 
-  const filteredCustomers = MOCK_CUSTOMERS.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.phone.includes(searchTerm)
+  const filteredCustomers = customers.filter(c => 
+    (c.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.phone || '').includes(searchTerm) ||
+    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const formatVND = (n?: number) => n ? new Intl.NumberFormat('vi-VN').format(n) + 'đ' : '0đ';
 
   return (
     <AppLayout>
@@ -60,7 +73,7 @@ export default function CRMPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="text" 
-                placeholder="Tìm theo tên, số điện thoại..." 
+                placeholder="Tìm theo tên, SĐT, Email..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
@@ -85,42 +98,52 @@ export default function CRMPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredCustomers.map(customer => (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                      Đang tải danh sách khách hàng...
+                    </td>
+                  </tr>
+                ) : filteredCustomers.map(customer => (
                   <tr key={customer.id} className="hover:bg-gray-50 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
-                          {customer.name.charAt(0)}
+                          {(customer.fullName || '?').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium text-gray-900">{customer.name}</div>
-                          <div className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-                            <Phone size={12} /> {customer.phone}
+                          <div className="font-medium text-gray-900">{customer.fullName}</div>
+                          <div className="text-[11px] text-gray-500 flex flex-col gap-0.5 mt-0.5">
+                            <div className="flex items-center gap-1.5 line-clamp-1">
+                              <Phone size={10} className="text-gray-400" /> {customer.phone}
+                            </div>
+                            {customer.email && (
+                              <div className="flex items-center gap-1.5 text-indigo-500 font-medium line-clamp-1 italic">
+                                @ {customer.email}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="p-4">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                        customer.tier === 'VIP' ? 'bg-amber-100 text-amber-700' :
-                        customer.tier === 'Gold' ? 'bg-yellow-100 text-yellow-700' :
-                        customer.tier === 'Silver' ? 'bg-gray-200 text-gray-700' :
-                        'bg-blue-100 text-blue-700'
+                        (customer.visitCount || 0) > 10 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
                       }`}>
                         <Star size={12} />
-                        {customer.tier}
+                        {(customer.visitCount || 0) > 10 ? 'VIP' : 'Member'}
                       </span>
                     </td>
                     <td className="p-4 text-right font-medium text-gray-900">
-                      {customer.totalSpent.toLocaleString()}đ
+                      {formatVND(customer.totalSpent)}
                     </td>
-                    <td className="p-4 text-center text-gray-700">
-                      {customer.visits}
+                    <td className="p-4 text-center text-gray-700 font-medium">
+                      {customer.visitCount || 0}
                     </td>
                     <td className="p-4">
                       <div className="text-sm text-gray-600 flex items-center gap-1.5">
                         <Calendar size={14} className="text-gray-400" />
-                        {customer.lastVisit}
+                        {customer.lastVisited ? new Date(customer.lastVisited).toLocaleDateString('vi-VN') : '---'}
                       </div>
                     </td>
                     <td className="p-4 text-right">
@@ -130,7 +153,7 @@ export default function CRMPage() {
                     </td>
                   </tr>
                 ))}
-                {filteredCustomers.length === 0 && (
+                {!isLoading && filteredCustomers.length === 0 && (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-gray-500">
                       Không tìm thấy khách hàng nào phù hợp.

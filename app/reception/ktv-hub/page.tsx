@@ -6,7 +6,6 @@ const ANIMATION_DURATION = 0.2;
 import React, { useState, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { MOCK_TURNS, MOCK_EMPLOYEES } from '@/lib/mock-db';
 import {
     ClipboardList, Camera, Users, CheckCircle2, Timer, Clock,
     MapPin, RotateCcw, ArrowDown, ArrowUp, ChevronRight,

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Save, User, UserPlus, Award } from 'lucide-react';
 import { createStaffMember } from '@/app/admin/employees/actions';
-import { SkillLevel } from '@/lib/mock-db';
+import { SkillLevel } from '@/lib/types';
 
 const DEFAULT_SKILLS = {
     hairCut: 'none', shampoo: 'none', hairExtensionShampoo: 'none', earCleaning: 'none',

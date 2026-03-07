@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { Employee } from '@/lib/mock-db';
+import { Employee } from '@/lib/types';
 import { getStaffList, deleteStaffMember } from './actions';
 import { AddEmployeeModal } from '@/components/AddEmployeeModal';
 import {
@@ -65,7 +65,7 @@ export default function EmployeeManagementPage() {
           shiatsuBody: 'none', oilBody: 'basic', hotStoneBody: 'none', scrubBody: 'none',
           oilFoot: 'none', hotStoneFoot: 'none', acupressureFoot: 'none', heelScrub: 'none', maniPedi: 'none'
         }
-      }));
+      })) as Employee[];
       setEmployees(mapped);
     }
     setIsLoading(false);

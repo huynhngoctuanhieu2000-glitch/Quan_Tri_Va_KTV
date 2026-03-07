@@ -57,7 +57,7 @@ export async function createStaffMember(formData: any) {
             fullName: formData.full_name,
             gender: formData.gender || null,
             role: 'TECHNICIAN',
-            // Default KTV permissions mapping based on mock-db
+            // Default KTV permissions mapping based on system defaults
             permissions: [
                 'ktv_dashboard',
                 'ktv_attendance',

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Role, MOCK_USERS, MOCK_ROLES, ModuleId } from './mock-db';
+import { User, Role, ModuleId } from './types';
+import { MODULES } from './constants';
 import { createClient } from './supabase';
 import { authenticateUser } from '@/app/login/actions';
 
@@ -10,8 +11,8 @@ interface AuthContextType {
   role: Role | null;
   login: (userId: string, password?: string) => Promise<boolean>;
   logout: () => void;
-  changePassword: (newPassword: string) => void;
-  updateProfile: (name: string, avatarUrl: string) => void;
+  changePassword: (newPassword: string) => Promise<void>;
+  updateProfile: (name: string, avatarUrl: string) => Promise<void>;
   hasPermission: (moduleId: ModuleId) => boolean;
 }
 
@@ -47,27 +48,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(dbUser.fullName || dbUser.username)}`
         });
 
-        const fallbackRole = MOCK_ROLES.find(r => r.id === roleId) || null;
+        // Set role permissions (use DB permissions if available)
+        let permissions: ModuleId[] = (dbUser.permissions && Array.isArray(dbUser.permissions)) ? dbUser.permissions : [];
+        
+        // If no permissions in DB, use smart defaults based on roleId
+        if (permissions.length === 0) {
+          if (roleId === 'admin') {
+            permissions = MODULES.map(m => m.id);
+          } else if (roleId === 'reception') {
+            permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'settings'];
+          } else if (roleId === 'ktv') {
+            permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'];
+          }
+        }
 
         setRole({
           id: roleId,
           name: dbUser.role,
-          // Use DB permissions if available, else fallback to mock permissions
-          permissions: (dbUser.permissions && Array.isArray(dbUser.permissions))
-            ? dbUser.permissions
-            : fallbackRole?.permissions || []
+          permissions
         });
 
         return true;
       }
-
-      // Fallback to MOCK_USERS if not found in Database (just for backwards compatibility / testing)
-      const u = MOCK_USERS.find(user => user.id === userId || user.id === userId.replace('admin_', 'u'));
-      if (u && (!password || u.password === password)) {
-        setUser(u);
-        setRole(MOCK_ROLES.find(r => r.id === u.roleId) || null);
-        return true;
-      }
+      return false;
 
       return false;
     } catch (err) {
@@ -85,22 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) { }
   };
 
-  const changePassword = (newPassword: string) => {
+  const changePassword = async (newPassword: string) => {
     if (user) {
-      const u = MOCK_USERS.find(u => u.id === user.id);
-      if (u) {
-        u.password = newPassword;
+      const { updatePasswordInDB } = await import('@/app/login/actions');
+      const res = await updatePasswordInDB(user.id, newPassword);
+      if (res.success) {
         setUser({ ...user, password: newPassword });
       }
     }
   };
 
-  const updateProfile = (name: string, avatarUrl: string) => {
+  const updateProfile = async (name: string, avatarUrl: string) => {
     if (user) {
-      const u = MOCK_USERS.find(u => u.id === user.id);
-      if (u) {
-        u.name = name;
-        u.avatarUrl = avatarUrl;
+      const { updateProfileInDB } = await import('@/app/login/actions');
+      const res = await updateProfileInDB(user.id, name, avatarUrl);
+      if (res.success) {
         setUser({ ...user, name, avatarUrl });
       }
     }

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, User, Phone, Mail, CreditCard, Calendar, Ruler, Weight, Award, CheckCircle2, Briefcase, Edit2, Save, GraduationCap, Zap, BookOpen, Key } from 'lucide-react';
-import { Employee, SkillLevel } from '@/lib/mock-db';
+import { Employee, SkillLevel } from '@/lib/types';
 import Image from 'next/image';
 
 interface EmployeeDetailModalProps {

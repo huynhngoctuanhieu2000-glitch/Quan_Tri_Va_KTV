@@ -127,37 +127,70 @@ export default function DispatchBoardPage() {
   const [beds, setBeds] = useState<any[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const lastSoundTimeRef = useRef<number>(0);
+  const playNotificationSound = (source: string) => {
+    const now = Date.now();
+    // Tránh phát âm thanh quá gần nhau (trong vòng 3s) để không bị lặp
+    if (now - lastSoundTimeRef.current < 3000) return;
+    
+    console.log(`🔔 [Dispatch] Playing sound from ${source}...`);
+    const audio = new Audio('/sounds/reception-notification.wav');
+    audio.play()
+      .then(() => { lastSoundTimeRef.current = now; })
+      .catch(err => console.error("🔇 [Dispatch] Audio play failed:", err));
+  };
+
+  // 📡 Realtime Subscriptions
   useEffect(() => {
     setMounted(true);
     fetchData();
 
-    // 📡 Realtime Subscriptions
     const channel = supabase
       .channel('dispatch_board_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, () => {
-        console.log("🔄 [Dispatch] Realtime: Bookings changed, fetching...");
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, (payload) => {
+        console.log("🔄 [Dispatch] Realtime: Bookings changed", payload.eventType);
+        
+        // 🔊 Tốc độ cao: Phát âm thanh ngay lập tức nếu là đơn mới (INSERT)
+        if (payload.eventType === 'INSERT' && soundEnabled) {
+           playNotificationSound('Realtime Callback');
+        }
+        
         fetchData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
-        console.log("🔄 [Dispatch] Realtime: TurnQueue changed, fetching...");
         fetchData();
       })
       .subscribe();
 
-    const staffChannel = supabase
-      .channel('staff_presence')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Staff' }, () => {
-        fetchData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(staffChannel);
-    };
-  }, [selectedDate]);
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedDate, soundEnabled]); // Thêm soundEnabled vào deps để ref luôn mới nhất nếu cần
 
   const [loadingStaff, setLoadingStaff] = useState(true);
+  const prevPendingCountRef = useRef<number>(0);
+  const isFirstLoadRef = useRef<boolean>(true);
+
+  // 🔊 Audio Notification Logic - Backup & Reliable
+  useEffect(() => {
+    if (!mounted) return;
+    const currentPendingCount = orders.filter(o => o.dispatchStatus === 'pending').length;
+    
+    // Nếu là lần đầu tiên dữ liệu được load, không kêu chuông mà chỉ cập nhật count
+    if (isFirstLoadRef.current) {
+        if (orders.length > 0 || !loading) {
+            prevPendingCountRef.current = currentPendingCount;
+            isFirstLoadRef.current = false;
+            console.log("ℹ️ [Dispatch] Initial data loaded, skipping sound.");
+        }
+        return;
+    }
+
+    // Nếu số lượng đơn tăng mà Realtime callback chưa phát âm thanh (hoặc bị sót)
+    if (currentPendingCount > prevPendingCountRef.current && soundEnabled) {
+      playNotificationSound('State Observer (Backup)');
+    }
+    
+    prevPendingCountRef.current = currentPendingCount;
+  }, [orders, soundEnabled, mounted, loading]);
 
   const fetchData = async () => {
     setLoading(true);

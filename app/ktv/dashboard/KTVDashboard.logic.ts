@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getPendingBooking, updateBookingStatus } from './actions';
 import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase';
 
 export type ScreenState = 'DASHBOARD' | 'TIMER' | 'REVIEW' | 'REWARD' | 'HANDOVER';
 
@@ -32,42 +33,84 @@ export function useKTVDashboard() {
     const [timeRemaining, setTimeRemaining] = useState(90 * 60); // Mock 90 min
     const [isTimerRunning, setIsTimerRunning] = useState(false);
 
-    // Poll for new booking if IDLE
+    const prevBookingIdRef = useRef<string | null>(null);
+    const isFirstLoadRef = useRef<boolean>(true);
+
+    // 🔊 Audio Notification Logic
     useEffect(() => {
-        let intervalId: NodeJS.Timeout;
+        // Skip sound on initial page load
+        if (!isLoading && isFirstLoadRef.current) {
+            prevBookingIdRef.current = booking?.id || null;
+            isFirstLoadRef.current = false;
+            console.log("ℹ️ [KTV] First load synced, skipping potential sound.");
+            return;
+        }
+
+        if (booking?.id && booking.id !== prevBookingIdRef.current) {
+            console.log("🔔 [KTV] New booking assigned! Playing sound...");
+            const audio = new Audio('/sounds/ktv-notification.wav');
+            audio.play().catch(err => console.error("🔇 [KTV] Audio play failed:", err));
+        }
+        prevBookingIdRef.current = booking?.id || null;
+    }, [booking, isLoading]);
+
+    // 📡 Realtime & Polling Fetch
+    useEffect(() => {
+        if (!user?.id) return;
 
         const fetchBooking = async () => {
-            if (booking || !user?.id) {
-                setIsLoading(false);
-                return;
-            }
             try {
                 const res = await getPendingBooking(user.id);
                 if (res.success && res.data) {
-                    setBooking(res.data);
-                    // Determine initial screen based on booking status
-                    if (res.data.status === 'IN_PROGRESS') {
-                        setScreen('TIMER');
-                        setIsTimerRunning(true);
-                    }
-                    
-                    // Set time remaining based on the first service item or default 60
-                    const firstItem = res.data.BookingItems?.[0];
-                    const duration = firstItem?.duration || 60;
-                    setTimeRemaining(duration * 60);
+                    // Update state ONLY if data actually changed to avoid timer reset & sound spam
+                    setBooking((prev: any) => {
+                        const isNew = !prev || prev.id !== res.data.id;
+                        const isStatusChanged = prev?.status !== res.data.status;
+                        
+                        if (isNew || isStatusChanged) {
+                            // Update timer only if it's a new booking or not already running
+                            if (isNew || (res.data.status === 'IN_PROGRESS' && !isTimerRunning)) {
+                                if (res.data.status === 'IN_PROGRESS') {
+                                    setScreen('TIMER');
+                                    setIsTimerRunning(true);
+                                }
+                                const firstItem = res.data.BookingItems?.[0];
+                                const duration = firstItem?.duration || 60;
+                                setTimeRemaining(duration * 60);
+                            }
+                            return res.data;
+                        }
+                        return prev;
+                    });
+                } else if (res.success && !res.data) {
+                    setBooking(null);
                 }
             } catch (err) {
-                console.error('Error polling booking:', err);
+                console.error('Error fetching booking:', err);
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchBooking();
-        intervalId = setInterval(fetchBooking, 10000); // Check every 10 seconds
 
-        return () => clearInterval(intervalId);
-    }, [booking]);
+        // Subscribe to real-time changes
+        const channel = supabase
+            .channel(`ktv_realtime_${user.id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, (payload: any) => {
+                console.log("🔄 [KTV] Realtime signal received:", payload.eventType);
+                fetchBooking();
+            })
+            .subscribe();
+
+        // Polling fallback (every 20 seconds) for high reliability
+        const intervalId = setInterval(fetchBooking, 20000);
+
+        return () => {
+            supabase.removeChannel(channel);
+            clearInterval(intervalId);
+        };
+    }, [user?.id]); // Only depend on user.id to keep subscription stable
 
     useEffect(() => {
         let timer: NodeJS.Timeout;

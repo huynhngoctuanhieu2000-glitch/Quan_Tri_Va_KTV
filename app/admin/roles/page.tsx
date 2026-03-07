@@ -3,7 +3,32 @@
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { MOCK_ROLES, MODULES, Role, ModuleId } from '@/lib/mock-db';
+import { Role, ModuleId } from '@/lib/types';
+import { MODULES } from '@/lib/constants';
+
+const MOCK_ROLES: Role[] = [
+  {
+    id: 'admin',
+    name: 'Admin Tối Cao',
+    permissions: [
+      'dashboard', 'dispatch_board', 'order_management', 'customer_management',
+      'revenue_reports', 'payroll_commissions', 'cashbook_supplies', 'web_booking',
+      'service_menu', 'role_management', 'employee_management', 'ktv_hub',
+      'ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance',
+      'ktv_history', 'turn_tracking', 'service_handbook', 'ai_features', 'settings',
+    ],
+  },
+  {
+    id: 'reception',
+    name: 'Lễ Tân',
+    permissions: ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'settings'],
+  },
+  {
+    id: 'ktv',
+    name: 'Kỹ Thuật Viên',
+    permissions: ['ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'],
+  },
+];
 import { ShieldAlert, Check, Plus, Save, User, Key, Lock, Eye, EyeOff } from 'lucide-react';
 import * as Checkbox from '@radix-ui/react-checkbox';
 import * as Tabs from '@radix-ui/react-tabs';

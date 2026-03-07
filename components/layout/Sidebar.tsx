@@ -4,7 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { MODULES } from '@/lib/mock-db';
+import { MODULES } from '@/lib/constants';
+import { ModuleId } from '@/lib/types';
 import {
   LayoutDashboard,
   KanbanSquare,
