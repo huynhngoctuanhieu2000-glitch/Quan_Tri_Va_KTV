@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, User, Phone, Mail, CreditCard, Calendar, Ruler, Weight, Award, CheckCircle2, Briefcase, Edit2, Save, GraduationCap, Zap, BookOpen, Key } from 'lucide-react';
 import { Employee, SkillLevel } from '@/lib/types';
-import Image from 'next/image';
 
 interface EmployeeDetailModalProps {
   employee: Employee | null;
@@ -119,11 +118,10 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
             </div>
             <div className="absolute -bottom-12 left-8">
               <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-4 border-white shadow-lg bg-gray-100">
-                <Image
+                <img
                   src={employee.photoUrl}
                   alt={employee.name}
-                  fill
-                  className="object-cover"
+                  className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
                 />
               </div>

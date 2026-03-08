@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -30,14 +32,63 @@ export async function GET(request: Request) {
                 .select('*')
                 .in('bookingId', bookingIds);
 
-            if (!iError && items) {
-                // Attach BookingItems to each booking
-                const bookingsWithItems = bookings.map(b => ({
-                    ...b,
-                    BookingItems: items.filter(i => i.bookingId === b.id)
-                }));
-                return NextResponse.json({ success: true, data: bookingsWithItems });
+            if (iError) throw iError;
+
+            // Fetch Services to map info
+            const { data: svcs, error: svError } = await supabase
+                .from('Services')
+                .select('id, code, nameVN, nameEN, duration')
+                .limit(1000);
+
+            if (svError) console.error('❌ [API Bookings] Svc fetch error:', svError.message);
+            console.log(`📡 [API Bookings] Fetched ${svcs?.length || 0} services`);
+
+            const svcMap = new Map();
+            if (svcs) {
+                svcs.forEach((s: any) => {
+                    if (s.id) svcMap.set(String(s.id).trim().toLowerCase(), s);
+                    if (s.code) svcMap.set(String(s.code).trim().toLowerCase(), s);
+                });
             }
+            console.log(`📡 [API Bookings] svcMap keys:`, Array.from(svcMap.keys()).slice(0, 10));
+            console.log(`📡 [API Bookings] has nhs0002:`, svcMap.has('nhs0002'));
+
+            const bookingsWithItems = bookings.map(b => ({
+                ...b,
+                BookingItems: (items || [])
+                    .filter(i => i.bookingId === b.id)
+                    .map(i => {
+                        const sId = String(i.serviceId || '').trim().toLowerCase();
+                        const svc = svcMap.get(sId);
+                        const getName = () => {
+                            const n = svc?.nameVN || svc?.nameEN || svc?.name;
+                            if (typeof n === 'object' && n !== null) return n.vn || n.en || String(n);
+                            return n || `DV ${sId.toUpperCase()}`;
+                        };
+                        return {
+                            ...i,
+                            service_name: getName(),
+                            duration: i.duration || svc?.duration || 60
+                        };
+                    })
+            }));
+
+            return NextResponse.json({ 
+                success: true, 
+                data: bookingsWithItems,
+                _debug: {
+                    svcCount: svcs?.length,
+                    svError: svError?.message || null,
+                    hasNHS0002: svcMap.has('nhs0002'),
+                    nhs0002_data: svcMap.get('nhs0002'),
+                    sampleKeys: Array.from(svcMap.keys()).slice(0, 5),
+                    envStatus: {
+                        hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+                        hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+                        keyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) : 'none'
+                    }
+                }
+            });
         }
 
         return NextResponse.json({ success: true, data: bookings || [] });

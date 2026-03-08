@@ -1,17 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
-  Camera, CheckCircle, Play, StopCircle,
-  Smile, Frown, Meh, Star, Gift, ArrowRight
+  CheckCircle, Play, StopCircle,
+  Smile, Frown, Meh, Star, Gift, ArrowRight, X,
+  ClipboardList, Coffee, LogOut, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useKTVDashboard, ScreenState } from './KTVDashboard.logic';
-import Image from 'next/image';
 
-// 🔧 UI CONFIGURATION - SPA THEME
+// 🌿 UI CONFIGURATION - SPA THEME (RESORED)
 const THEME = {
   bgBase: 'bg-[#FDFBF7]',
   bgCard: 'bg-white',
@@ -37,7 +37,18 @@ const ANIMATION = {
 
 export default function KTVDashboardPage() {
   const logic = useKTVDashboard();
-  const { user, screen, booking, isLoading } = logic;
+  const { 
+    user, 
+    screen, 
+    booking, 
+    isLoading, 
+    bonusMessage, 
+    setBonusMessage,
+    showProcedure,
+    setShowProcedure,
+    handleInteraction,
+    handleEarlyExit
+  } = logic;
 
   if (isLoading && !booking && screen === 'DASHBOARD') {
     return (
@@ -61,6 +72,38 @@ export default function KTVDashboardPage() {
     );
   }
 
+  // 🔔 HEADER NOTIFICATION (Bonus Points)
+  const renderBonusNotification = () => (
+    <AnimatePresence>
+      {bonusMessage && (
+        <motion.div
+           initial={{ y: -100, opacity: 0 }}
+           animate={{ y: 0, opacity: 1 }}
+           exit={{ y: -100, opacity: 0 }}
+           className="fixed top-0 left-0 right-0 z-[200] p-4 flex justify-center"
+        >
+          <div className="bg-white/95 backdrop-blur-xl border border-emerald-100 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-4 max-w-lg w-full">
+            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200">
+              <Star className="text-white fill-white" size={20} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Thưởng Nóng +25Đ</p>
+              <p className="text-sm font-bold text-gray-800 leading-tight">
+                {bonusMessage}
+              </p>
+            </div>
+            <button 
+              onClick={() => setBonusMessage(null)}
+              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <X size={18} className="text-gray-400" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   const renderScreen = () => {
     switch (screen) {
       case 'DASHBOARD': return <ScreenDashboard logic={logic} />;
@@ -74,7 +117,8 @@ export default function KTVDashboardPage() {
 
   return (
     <AppLayout>
-      <div className={`max-w-md mx-auto min-h-screen pb-24 ${THEME.bgBase}`}>
+      <div className={`max-w-md mx-auto min-h-screen pb-24 ${THEME.bgBase} relative`}>
+        {renderBonusNotification()}
         <AnimatePresence mode="wait">
           <motion.div
             key={screen}
@@ -87,7 +131,33 @@ export default function KTVDashboardPage() {
             {renderScreen()}
           </motion.div>
         </AnimatePresence>
+
+        {/* Floating Quick Support Actions */}
+        {['TIMER', 'REVIEW', 'HANDOVER'].includes(screen) && (
+            <div className="fixed bottom-24 right-4 flex flex-col gap-3 z-50">
+               <button 
+                  onClick={() => handleInteraction('WATER')}
+                  className="w-12 h-12 bg-white shadow-lg border border-slate-100 rounded-full flex items-center justify-center text-amber-500 active:scale-95 transition-transform"
+               >
+                  <Coffee size={20} />
+               </button>
+               <button 
+                  onClick={() => handleInteraction('SUPPORT')}
+                  className="w-12 h-12 bg-white shadow-lg border border-slate-100 rounded-full flex items-center justify-center text-rose-500 active:scale-95 transition-transform"
+               >
+                  <AlertCircle size={20} />
+               </button>
+            </div>
+        )}
       </div>
+
+      {/* Procedure Modal */}
+      <ProcedureModal 
+        isOpen={showProcedure} 
+        onClose={() => setShowProcedure(false)} 
+        procedure={booking?.BookingItems?.[0]?.procedure}
+        serviceName={booking?.BookingItems?.[0]?.service_name}
+      />
     </AppLayout>
   );
 }
@@ -96,19 +166,19 @@ export default function KTVDashboardPage() {
 // SCREENS
 // ----------------------------------------------------
 
-function ScreenDashboard({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
-  const { booking, checklist, toggleChecklist, isChecklistComplete, handleConfirmSetup } = logic;
+function ScreenDashboard({ logic }: { logic: any }) {
+  const { booking, checklist, toggleChecklist, isChecklistComplete, handleConfirmSetup, setShowProcedure } = logic;
 
   return (
     <div className="p-4 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-xl font-bold ${THEME.textBase}`}>Xin chào, {logic.user?.name}</h1>
-          <p className={`text-sm ${THEME.textMuted}`}>Ca làm việc hôm nay của bạn</p>
+          <h1 className={`text-xl font-bold ${THEME.textBase}`}>Xin chào,</h1>
+          <p className={`text-sm ${THEME.textMuted}`}>{(logic.user as any)?.email?.split('@')[0] || 'Kỹ thuật viên'}</p>
         </div>
         <div className={`w-10 h-10 ${THEME.primaryMuted} rounded-full flex items-center justify-center font-bold`}>
-          NV
+           <User size={20} />
         </div>
       </div>
 
@@ -129,57 +199,53 @@ function ScreenDashboard({ logic }: { logic: ReturnType<typeof useKTVDashboard> 
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Đơn Mới
               </span>
-              <span className={`text-sm font-semibold ${THEME.textMuted}`}>{booking.billCode}</span>
+              <span className={`text-sm font-semibold ${THEME.textMuted}`}>#{booking.billCode}</span>
             </div>
 
             <div className="p-5">
-              <h3 className={`font-bold text-xl ${THEME.textBase} mb-1`}>
-                {booking.BookingItems?.[0]?.service_name || 'Dịch Vụ Spa'}
-              </h3>
-              <p className={`text-sm ${THEME.textMuted} mb-4`}>
-                Thời gian: {booking.BookingItems?.[0]?.duration || 60} phút
-              </p>
-
-              <div className="bg-orange-50/50 border-l-2 border-orange-400 p-3 rounded-r-lg mb-4">
-                <span className="text-xs font-bold text-orange-600 mb-1 block">YÊU CẦU ĐẶC BIỆT</span>
-                <p className="text-sm text-orange-900 italic">"Ghi chú từ khách hàng sẽ hiển thị tại đây"</p>
+              <div className="flex justify-between items-start mb-4">
+                 <h3 className={`font-bold text-2xl ${THEME.textBase}`}>
+                  Phòng {booking.roomName}
+                </h3>
+                <button 
+                  onClick={() => setShowProcedure(true)}
+                  className="text-emerald-600 text-xs font-bold flex items-center gap-1 underline"
+                >
+                   <ClipboardList size={14} /> Quy trình
+                </button>
               </div>
+
+              <div className="space-y-2 mb-4">
+                {booking.BookingItems?.map((item: any) => (
+                   <div key={item.id} className="flex justify-between items-center text-sm">
+                      <span className="font-bold text-slate-700">{item.service_name}</span>
+                      <span className="text-slate-500">{item.duration} phút</span>
+                   </div>
+                ))}
+              </div>
+
+              {booking.dispatcherNote && (
+                <div className="bg-orange-50/50 border-l-2 border-orange-400 p-3 rounded-r-lg mb-4">
+                  <span className="text-xs font-bold text-orange-600 mb-1 block">YÊU CẦU ĐẶC BIỆT</span>
+                  <p className="text-sm text-orange-900 italic">{booking.dispatcherNote}</p>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Setup Checklist */}
           <div>
-            <h3 className={`font-bold ${THEME.textBase} mb-3 flex items-center gap-2`}>
+            <h3 className={`font-bold ${THEME.textBase} mb-3 flex items-center gap-2 uppercase text-[11px] tracking-widest`}>
               <CheckCircle size={18} className={THEME.gold} />
-              Quy trình mở phòng
+              Quy trình chuẩn bị
             </h3>
 
             <div className="space-y-2">
-              <ChecklistItem
-                label="Mở máy lạnh, quạt thông gió"
-                checked={checklist.ac}
-                onChange={() => toggleChecklist('ac')}
-              />
-              <ChecklistItem
-                label="Bật đèn xông tinh dầu"
-                checked={checklist.oil}
-                onChange={() => toggleChecklist('oil')}
-              />
-              <ChecklistItem
-                label="Setup giường (Khăn, gối)"
-                checked={checklist.bed}
-                onChange={() => toggleChecklist('bed')}
-              />
-              <ChecklistItem
-                label="Chuẩn bị khăn nóng"
-                checked={checklist.towel}
-                onChange={() => toggleChecklist('towel')}
-              />
-              <ChecklistItem
-                label="Kiểm tra vệ sinh phòng"
-                checked={checklist.toilet}
-                onChange={() => toggleChecklist('toilet')}
-              />
+              <ChecklistItem label="Vệ sinh máy lạnh & quạt" checked={checklist.ac} onChange={() => toggleChecklist('ac')} />
+              <ChecklistItem label="Chuẩn bị tinh dầu & dụng cụ" checked={checklist.oil} onChange={() => toggleChecklist('oil')} />
+              <ChecklistItem label="Setup giường (Khăn, gối)" checked={checklist.bed} onChange={() => toggleChecklist('bed')} />
+              <ChecklistItem label="Chuẩn bị khăn nóng" checked={checklist.towel} onChange={() => toggleChecklist('towel')} />
+              <ChecklistItem label="Kiểm tra vệ sinh phòng" checked={checklist.toilet} onChange={() => toggleChecklist('toilet')} />
             </div>
           </div>
 
@@ -197,8 +263,8 @@ function ScreenDashboard({ logic }: { logic: ReturnType<typeof useKTVDashboard> 
   );
 }
 
-function ScreenTimer({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
-  const { booking, timeRemaining, isTimerRunning, handleStartTimer, handleFinishTimer } = logic;
+function ScreenTimer({ logic }: { logic: any }) {
+  const { booking, timeRemaining, isTimerRunning, handleStartTimer, handleFinishTimer, handleEarlyExit } = logic;
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -213,9 +279,15 @@ function ScreenTimer({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
     <div className="p-4 h-full flex flex-col">
       <div className="flex justify-between items-start mb-8 mt-4">
         <div>
-          <h2 className={`text-xl font-bold ${THEME.textBase}`}>Phòng {booking?.roomName || 'V1'}</h2>
-          <p className={THEME.textMuted}>{booking?.BookingItems?.[0]?.service_name || 'Đang thực hiện'}</p>
+          <h2 className={`text-xl font-bold ${THEME.textBase}`}>Phòng {booking?.roomName}</h2>
+          <p className={THEME.textMuted}>{booking?.BookingItems?.[0]?.service_name}</p>
         </div>
+        <button 
+           onClick={handleEarlyExit}
+           className="text-slate-400 hover:text-rose-500 transition-colors"
+        >
+           <LogOut size={20} />
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center">
@@ -261,49 +333,42 @@ function ScreenTimer({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
           </button>
         )}
       </div>
-
-      {isTimerRunning && (
-        <div className="grid grid-cols-2 gap-3 mt-auto">
-          <QuickActionButton icon={<AlertTriangle />} label="Khẩn cấp" color="text-rose-600 bg-rose-50" />
-          <QuickActionButton icon={<Clock />} label="Thêm giờ" color="text-indigo-600 bg-indigo-50" />
-        </div>
-      )}
     </div>
   );
 }
 
-function ScreenReview({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
-  const [rating, setRating] = React.useState(0);
+function ScreenReview({ logic }: { logic: any }) {
+  const [rating, setRating] = useState(0);
 
   return (
-    <div className="p-5 flex flex-col h-full">
+    <div className="p-5 flex flex-col h-full bg-[#fdfbf7]">
       <div className="text-center mb-8 mt-4">
         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle size={32} />
         </div>
-        <h2 className="text-2xl font-bold text-slate-800">Hoàn thành dịch vụ!</h2>
-        <p className="text-slate-500 mt-2">Đánh giá nhanh hồ sơ khách hàng</p>
+        <h2 className="text-2xl font-bold text-slate-800">Dịch vụ hoàn tất!</h2>
+        <p className="text-slate-500 mt-2">Đánh giá hồ sơ khách hàng</p>
       </div>
 
       <div className="space-y-4 mb-8">
         <RatingCard
           icon={<Smile size={24} />}
           title="Khách Dễ Thương"
-          desc="Thân thiện, trò chuyện cởi mở"
+          desc="Thân thiện, vui vẻ"
           isSelected={rating === 1}
           onClick={() => setRating(1)}
         />
         <RatingCard
           icon={<Meh size={24} />}
           title="Khách Hướng Nội"
-          desc="Thích không gian tĩnh lặng để nghỉ"
+          desc="Thích yên tĩnh"
           isSelected={rating === 2}
           onClick={() => setRating(2)}
         />
         <RatingCard
           icon={<Frown size={24} />}
           title="Khách Kỹ Tính"
-          desc="Yêu cầu cao về chuyên môn"
+          desc="Yêu cầu cao"
           isSelected={rating === 3}
           onClick={() => setRating(3)}
         />
@@ -311,32 +376,30 @@ function ScreenReview({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) 
 
       <button
         onClick={() => logic.handleSubmitReview({ personality: rating })}
-        disabled={rating === 0}
         className={`w-full py-4 mt-auto font-bold text-white ${THEME.radius} transition-colors ${rating !== 0 ? THEME.primary : 'bg-slate-300'}`}
       >
-        Lưu hồ sơ khách hàng
+        Lưu hồ sơ
       </button>
     </div>
   );
 }
 
-function ScreenHandover({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
+function ScreenHandover({ logic }: { logic: any }) {
   const { handoverChecklist, toggleHandoverChecklist, isHandoverComplete, handleFinishHandover } = logic;
 
   return (
-    <div className="p-5 flex flex-col h-full space-y-6">
+    <div className="p-5 flex flex-col h-full space-y-6 bg-[#fdfbf7]">
       <div className="text-center mt-4">
-        <h2 className="text-xl font-bold text-slate-800">Bàn Giao Phòng</h2>
-        <p className="text-sm text-slate-500 mt-1">Vui lòng dọn dẹp trước khi kết thúc ca</p>
+        <h2 className="text-xl font-bold text-slate-800">Dọn dẹp phòng</h2>
+        <p className="text-sm text-slate-500 mt-1">Xác nhận trước khi kết thúc ca</p>
       </div>
 
       <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} border p-4 shadow-sm`}>
         <div className="space-y-1">
           <ChecklistItem label="Thu dọn khăn bẩn" checked={handoverChecklist.towel} onChange={() => toggleHandoverChecklist('towel')} />
-          <ChecklistItem label="Chỉnh lại ga giường" checked={handoverChecklist.bed} onChange={() => toggleHandoverChecklist('bed')} />
-          <ChecklistItem label="Đổ rác" checked={handoverChecklist.trash} onChange={() => toggleHandoverChecklist('trash')} />
-          <ChecklistItem label="Tắt máy lạnh" checked={handoverChecklist.ac} onChange={() => toggleHandoverChecklist('ac')} />
-          <ChecklistItem label="Tắt quạt" checked={handoverChecklist.fan} onChange={() => toggleHandoverChecklist('fan')} />
+          <ChecklistItem label="Thay ga giường & gối" checked={handoverChecklist.bed} onChange={() => toggleHandoverChecklist('bed')} />
+          <ChecklistItem label="Đổ rác & vệ sinh sàn" checked={handoverChecklist.trash} onChange={() => toggleHandoverChecklist('trash')} />
+          <ChecklistItem label="Tắt máy lạnh & quạt" checked={handoverChecklist.ac} onChange={() => toggleHandoverChecklist('ac')} />
           <ChecklistItem label="Tắt đèn" checked={handoverChecklist.light} onChange={() => toggleHandoverChecklist('light')} />
         </div>
       </div>
@@ -347,31 +410,44 @@ function ScreenHandover({ logic }: { logic: ReturnType<typeof useKTVDashboard> }
         className={`w-full py-4 mt-auto font-bold text-slate-900 ${THEME.radius} transition-all 
           ${isHandoverComplete ? THEME.goldBg + ' shadow-lg shadow-yellow-200' : 'bg-slate-300 text-white'}`}
       >
-        Hoàn tất bàn giao
+        Hoàn tất dọn phòng
       </button>
     </div>
   );
 }
 
-function ScreenReward({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) {
+function ScreenReward({ logic }: { logic: any }) {
+  const { booking, commission, goToDashboard } = logic;
+  const isExcellent = booking?.rating >= 4;
+
   return (
-    <div className="p-5 flex flex-col items-center justify-center h-[80vh] text-center">
+    <div className="p-5 flex flex-col items-center justify-center h-[80vh] text-center bg-[#fdfbf7]">
       <div className="w-24 h-24 bg-yellow-50 text-yellow-500 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-yellow-100">
         <Gift size={48} />
       </div>
 
-      <h2 className="text-2xl font-bold text-slate-800 mb-2">Thật Tuyệt Vời!</h2>
-      <p className="text-slate-500 mb-8">Bạn đã hoàn thành xuất sắc ca làm việc.</p>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Xin cảm ơn!</h2>
+      <p className="text-slate-500 mb-8">Bạn đã hoàn thành ca làm việc.</p>
 
       <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} border p-6 w-full shadow-sm mb-8`}>
-        <div className="text-sm text-slate-500 uppercase tracking-widest font-bold mb-2">ĐIỂM THƯỞNG</div>
-        <div className="text-4xl font-black text-emerald-600 flex items-center justify-center gap-2">
-          +25 <Star fill="currentColor" className="text-yellow-400" />
+        <div className="text-sm text-slate-500 uppercase tracking-widest font-bold mb-2">Tiền tua của bạn</div>
+        <div className="text-4xl font-black text-emerald-600">
+          {(commission || 0).toLocaleString()} đ
         </div>
       </div>
 
+      {isExcellent && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-4 mb-8 w-full">
+            <Star className="text-amber-500 fill-amber-500" size={24} />
+            <div className="text-left">
+              <p className="text-xs font-black text-amber-700 uppercase">Đánh giá xuất sắc</p>
+              <p className="text-sm font-bold text-amber-900">+25 Điểm Thưởng</p>
+            </div>
+          </div>
+      )}
+
       <button
-        onClick={logic.goToDashboard}
+        onClick={goToDashboard}
         className={`w-full py-4 font-bold text-white ${THEME.primary} ${THEME.radius} flex items-center justify-center gap-2`}
       >
         Trở về trang chủ <ArrowRight size={20} />
@@ -386,7 +462,7 @@ function ScreenReward({ logic }: { logic: ReturnType<typeof useKTVDashboard> }) 
 
 function ChecklistItem({ label, checked, onChange }: { label: string, checked: boolean, onChange: () => void }) {
   return (
-    <label 
+    <div 
       onClick={onChange}
       className={`flex items-center gap-4 p-3 ${THEME.radius} cursor-pointer transition-colors ${checked ? 'bg-emerald-50' : THEME.bgCard}`}
     >
@@ -394,16 +470,7 @@ function ChecklistItem({ label, checked, onChange }: { label: string, checked: b
         {checked && <CheckCircle size={14} className="text-white" />}
       </div>
       <span className={`font-medium ${checked ? 'text-emerald-800' : THEME.textBase}`}>{label}</span>
-    </label>
-  );
-}
-
-function QuickActionButton({ icon, label, color }: { icon: React.ReactNode, label: string, color: string }) {
-  return (
-    <button className={`p-4 ${THEME.radius} flex flex-col items-center justify-center gap-2 ${color} font-medium active:scale-95 transition-transform`}>
-      {icon}
-      <span className="text-sm">{label}</span>
-    </button>
+    </div>
   );
 }
 
@@ -412,7 +479,7 @@ function RatingCard({ icon, title, desc, isSelected, onClick }: { icon: React.Re
     <button
       onClick={onClick}
       className={`w-full text-left p-4 ${THEME.radius} border-2 transition-all flex items-start gap-4
-        ${isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-white hover:border-emerald-200'}`}
+      ${isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-white hover:border-emerald-200'}`}
     >
       <div className={`mt-1 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`}>
         {icon}
@@ -422,5 +489,73 @@ function RatingCard({ icon, title, desc, isSelected, onClick }: { icon: React.Re
         <p className={`text-sm ${isSelected ? 'text-emerald-600/80' : 'text-slate-500'}`}>{desc}</p>
       </div>
     </button>
+  );
+}
+
+function ProcedureModal({ isOpen, onClose, procedure, serviceName }: { isOpen: boolean, onClose: () => void, procedure: any, serviceName: string }) {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6">
+       <motion.div 
+         initial={{ opacity: 0, scale: 0.9, y: 30 }}
+         animate={{ opacity: 1, scale: 1, y: 0 }}
+         className="bg-white w-full max-w-lg max-h-[80vh] rounded-[40px] shadow-2xl overflow-hidden flex flex-col"
+       >
+          <div className="bg-emerald-600 p-8 text-white flex items-center justify-between">
+             <div>
+                <h3 className="text-xl font-black uppercase tracking-tight">{serviceName}</h3>
+                <p className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest mt-1">Quy trình thực hiện chuẩn</p>
+             </div>
+             <button onClick={onClose} className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors">
+                <X size={24} />
+             </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-8 font-bold text-slate-600 leading-relaxed text-sm">
+             {procedure ? (
+                <div className="space-y-4">
+                   {Array.isArray(procedure) ? (
+                      procedure.map((step, idx) => (
+                         <div key={idx} className="flex gap-4">
+                            <span className="text-emerald-500 font-black">{(idx + 1).toString().padStart(2, '0')}.</span>
+                            <p>{step}</p>
+                         </div>
+                      ))
+                   ) : (
+                      <p className="whitespace-pre-line">{procedure}</p>
+                   )}
+                </div>
+             ) : (
+                <p className="italic text-slate-400 text-center py-10">Quy trình đang được cập nhật...</p>
+             )}
+          </div>
+          <div className="p-8 border-t border-slate-100">
+             <button onClick={onClose} className="w-full bg-slate-900 text-white py-5 rounded-[24px] font-black text-xs uppercase tracking-widest uppercase">Đã hiểu quy trình</button>
+          </div>
+       </motion.div>
+    </div>
+  );
+}
+
+function User({ size }: { size: number }) {
+  return (
+    <svg 
+      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    >
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function AlertCircle({ size }: { size: number }) {
+  return (
+    <svg 
+      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
   );
 }

@@ -23,6 +23,7 @@ interface DispatchServiceBlockProps {
     orderId: string;
     rooms: Room[];
     beds: Bed[];
+    busyBedIds?: string[];
     availableTurns: (TurnQueueData & { staff?: StaffData })[];
     onUpdateSvc: (orderId: string, svcId: string, patch: Partial<ServiceBlock>) => void;
     onSelectRoom: (orderId: string, svcId: string, roomId: string) => void;
@@ -33,7 +34,7 @@ interface DispatchServiceBlockProps {
 }
 
 export const DispatchServiceBlock = ({
-    svc, svcIndex, orderId, rooms, beds, availableTurns,
+    svc, svcIndex, orderId, rooms, beds, busyBedIds = [], availableTurns,
     onUpdateSvc, onSelectRoom, onSelectBed, onUpdateStaff, onAddStaff, onRemoveStaff
 }: DispatchServiceBlockProps) => {
 
@@ -45,7 +46,14 @@ export const DispatchServiceBlock = ({
                     <span className="bg-indigo-600 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-100">
                         {svcIndex + 1}
                     </span>
-                    <h3 className="font-black text-gray-900 text-base">{svc.serviceName}</h3>
+                    <div className="flex flex-col">
+                        <h3 className="font-black text-gray-900 text-base leading-tight">{svc.serviceName}</h3>
+                        {svc.serviceDescription && (
+                            <p className="text-[11px] text-gray-500 font-medium mt-1 line-clamp-2 max-w-[250px]">
+                                {svc.serviceDescription}
+                            </p>
+                        )}
+                    </div>
                     <span className="hidden sm:inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
                 </div>
             </div>
@@ -129,17 +137,24 @@ export const DispatchServiceBlock = ({
                                         .filter(b => b.roomId === svc.selectedRoomId)
                                         .map(bed => {
                                             const isPicked = svc.bedId === bed.id;
+                                            const isBusy = busyBedIds.includes(bed.id);
+                                            
                                             return (
                                                 <button
                                                     key={bed.id}
-                                                    onClick={() => onSelectBed(orderId, svc.id, bed.id)}
-                                                    className={`px-3 py-3 rounded-2xl border-2 text-[11px] font-black transition-all flex items-center gap-2 active:scale-95 ${isPicked
-                                                        ? 'border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-100'
-                                                        : 'border-gray-100 bg-gray-50/50 text-gray-600 hover:border-emerald-200'
-                                                        }`}
+                                                    onClick={() => !isBusy && onSelectBed(orderId, svc.id, bed.id)}
+                                                    disabled={isBusy && !isPicked}
+                                                    className={`px-3 py-3 rounded-2xl border-2 text-[11px] font-black transition-all flex items-center gap-2 active:scale-95 ${
+                                                        isPicked
+                                                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-100'
+                                                            : isBusy
+                                                                ? 'border-gray-100 bg-gray-100 text-gray-300 cursor-not-allowed opacity-50'
+                                                                : 'border-gray-100 bg-gray-50/50 text-gray-600 hover:border-emerald-200'
+                                                    }`}
                                                 >
-                                                    <BedIcon size={14} />
+                                                    <BedIcon size={14} className={isBusy ? 'text-gray-200' : ''} />
                                                     {bed.id.split('-').pop()}
+                                                    {isBusy && !isPicked && <span className="text-[8px] opacity-60">(Bận)</span>}
                                                 </button>
                                             );
                                         })}

@@ -9,12 +9,14 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { DispatchServiceBlock } from './_components/DispatchServiceBlock';
-import { getDispatchData, processDispatch } from './actions';
+import { getDispatchData, processDispatch, cancelBooking, updateBookingStatus, createQuickBooking } from './actions';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { AddOrderModal } from './_components/AddOrderModal';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,7 @@ export interface StaffAssignment {
 export interface ServiceBlock {
   id: string; // BookingItem ID
   serviceName: string;
+  serviceDescription?: string;
   duration: number;
   selectedRoomId: string | null;
   bedId: string | null;
@@ -43,7 +46,7 @@ export interface ServiceBlock {
   customerNote: string;
 }
 
-export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'done';
+export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'cleaning' | 'done';
 
 export interface PendingOrder {
   id: string; // Booking ID
@@ -54,6 +57,8 @@ export interface PendingOrder {
   services: ServiceBlock[];
   dispatchStatus: DispatchStatus;
   createdAt: string;
+  totalAmount?: number;
+  paymentMethod?: string;
 }
 
 export type StaffData = {
@@ -119,13 +124,28 @@ export default function DispatchBoardPage() {
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [allServices, setAllServices] = useState<any[]>([]);
+  const [showAddOrderModal, setShowAddOrderModal] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [leftPanelTab, setLeftPanelTab] = useState<DispatchStatus>('pending');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { user } = useAuth();
+  const push = usePushNotifications(user?.id);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
+
+  // Synchronize sound with push permission on load
+  useEffect(() => {
+    if (push.permission !== 'granted') {
+      setSoundEnabled(false);
+    } else {
+      setSoundEnabled(true);
+    }
+  }, [push.permission]);
 
   const lastSoundTimeRef = useRef<number>(0);
   const playNotificationSound = (source: string) => {
@@ -195,8 +215,15 @@ export default function DispatchBoardPage() {
   const fetchData = async () => {
     setLoading(true);
     setLoadingStaff(true);
+    console.log("📡 [Dispatch] Fetching data for date:", selectedDate);
     try {
       const res = await getDispatchData(selectedDate);
+      console.log("🔍 [Dispatch] getDispatchData response:", {
+        success: res.success,
+        bookingsCount: res.data?.bookings?.length,
+        firstBooking: res.data?.bookings?.[0]?.billCode,
+        firstItem: res.data?.bookings?.[0]?.BookingItems?.[0]
+      });
       
       if (!res.success || !res.data) {
         console.error("❌ [Dispatch] Server Action error:", JSON.stringify(res, null, 2));
@@ -226,15 +253,17 @@ export default function DispatchBoardPage() {
       const bdData = res.data.beds || [];
       setRooms(rData);
       setBeds(bdData);
+      if (res.data.allServices) setAllServices(res.data.allServices);
       console.log(`✅ [Dispatch] Loaded ${rData.length} rooms and ${bdData.length} beds`);
 
       // 4. Set Bookings
       if (bData) {
-        const mappedOrders: PendingOrder[] = (bData as any[]).map(b => {
+        const mappedOrders: PendingOrder[] = (bData as any[]).filter(b => b.status !== 'CANCELLED').map(b => {
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'CONFIRMED' || b.status === 'PREPARING') dStatus = 'dispatched';
           if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          if (b.status === 'COMPLETED' || b.status === 'DONE' || b.status === 'FEEDBACK') dStatus = 'done';
+          if (b.status === 'DONE') dStatus = 'cleaning';
+          if (b.status === 'COMPLETED' || b.status === 'FEEDBACK') dStatus = 'done';
 
           return {
             id: b.id,
@@ -244,10 +273,13 @@ export default function DispatchBoardPage() {
             time: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
             dispatchStatus: dStatus,
             createdAt: b.createdAt || new Date().toISOString(),
+            totalAmount: b.totalAmount || 0,
+            paymentMethod: b.paymentMethod || 'Chưa rõ',
             services: (b.BookingItems || []).map((bi: any) => ({
               id: bi.id,
-              serviceName: bi.service_name || bi.serviceName || 'Dịch vụ',
-              duration: bi.duration || 60,
+              serviceName: bi.serviceName || bi.service_name || 'Dịch vụ',
+              serviceDescription: bi.serviceDescription || bi.service_description || '',
+              duration: Number(bi.duration) || 0,
               selectedRoomId: b.roomName || null,
               bedId: b.bedId || null,
               staffList: b.technicianCode ? [{
@@ -255,15 +287,15 @@ export default function DispatchBoardPage() {
                 ktvId: b.technicianCode,
                 ktvName: (sData as StaffData[])?.find((s: any) => s.id === b.technicianCode)?.full_name || 'KTV',
                 startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
-                duration: bi.duration || 60,
+                duration: bi.duration ?? 0,
                 endTime: '',
-                noteForKtv: ''
+                noteForKtv: bi.options?.noteForKtv || '' // Bóc tách ghi chú cũ từ database
               }] : [{
                 id: `st-${bi.id}`,
                 ktvId: '',
                 ktvName: '',
                 startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
-                duration: bi.duration || 60,
+                duration: bi.duration ?? 0,
                 endTime: '',
                 noteForKtv: ''
               }],
@@ -282,7 +314,10 @@ export default function DispatchBoardPage() {
         });
 
         setOrders(mappedOrders);
-        console.log(`✅ [Dispatch] Fetched ${mappedOrders.length} bookings successfully via Server Action`);
+        console.log(`✅ [Dispatch] Fetched ${mappedOrders.length} bookings successfully:`, mappedOrders);
+        if (mappedOrders.length > 0) {
+          console.log("🔍 [Debug] First Order Services Sample:", mappedOrders[0].services);
+        }
       }
 
     } catch (e) {
@@ -299,9 +334,14 @@ export default function DispatchBoardPage() {
         setDropdownOpen(false);
       }
     };
+    const handleCloseContext = () => setContextMenu(null);
     if (dropdownOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [dropdownOpen]);
+    if (contextMenu) document.addEventListener('mousedown', handleCloseContext);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleCloseContext);
+    };
+  }, [dropdownOpen, contextMenu]);
 
   if (!mounted) return null;
 
@@ -319,11 +359,12 @@ export default function DispatchBoardPage() {
   const pendingOrders = orders.filter(o => o.dispatchStatus === 'pending');
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null;
 
-  const LEFT_TABS: { id: DispatchStatus; label: string; color: string; activeBg: string; dot: string }[] = [
-    { id: 'pending', label: 'Chờ điều phối', color: 'text-rose-600', activeBg: 'bg-rose-500', dot: 'bg-rose-500' },
-    { id: 'dispatched', label: 'Đã điều phối', color: 'text-indigo-600', activeBg: 'bg-indigo-500', dot: 'bg-indigo-500' },
-    { id: 'in_progress', label: 'Đang làm', color: 'text-amber-600', activeBg: 'bg-amber-500', dot: 'bg-amber-500' },
-    { id: 'done', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500' },
+  const LEFT_TABS: { id: DispatchStatus; label: string; color: string; activeBg: string; dot: string; badgeBg: string; badgeText: string }[] = [
+    { id: 'pending', label: 'Chờ điều phối', color: 'text-rose-600', activeBg: 'bg-rose-500', dot: 'bg-rose-500', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700' },
+    { id: 'dispatched', label: 'Đã điều phối', color: 'text-indigo-600', activeBg: 'bg-indigo-500', dot: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-700' },
+    { id: 'in_progress', label: 'Đang làm', color: 'text-amber-600', activeBg: 'bg-amber-500', dot: 'bg-amber-500', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700' },
+    { id: 'cleaning', label: 'Đang dọn', color: 'text-purple-600', activeBg: 'bg-purple-500', dot: 'bg-purple-500', badgeBg: 'bg-purple-100', badgeText: 'text-purple-700' },
+    { id: 'done', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700' },
   ];
 
   const displayedOrders = orders.filter(o => o.dispatchStatus === leftPanelTab);
@@ -443,7 +484,6 @@ export default function DispatchBoardPage() {
     ));
     setShowAddSvcModal(false);
   };
-
   const handleDispatch = async () => {
     if (!selectedOrder) return;
     const missing = getMissingInfo(selectedOrder);
@@ -479,13 +519,38 @@ export default function DispatchBoardPage() {
       }
 
       const primaryService = selectedOrder.services[0];
+      
+      // Thu thập tất cả các ghi chú cho KTV từ các item
+      const itemUpdates = selectedOrder.services.map(svc => {
+          // Lấy options hiện tại từ dữ liệu thô (bookings được fetch về)
+          // Tìm lại item gốc trong state orders để lấy thông tin
+          const order = orders.find(o => o.id === selectedOrder.id);
+          const service = order?.services.find(s => s.id === svc.id);
+          
+          // Vì chúng ta không lưu 'options' thô vào ServiceBlock, 
+          // chúng ta cần bóc tách các giá trị quan trọng để tái cấu trúc lại options
+          return {
+              id: svc.id,
+              options: {
+                  note: svc.customerNote?.split(' | ')[0] || '', // Ghi chú của khách
+                  therapist: svc.genderReq,
+                  strength: svc.strength,
+                  focus: svc.focus.split(',').map(f => f.trim()).filter(Boolean),
+                  avoid: svc.avoid.split(',').map(a => a.trim()).filter(Boolean),
+                  noteForKtv: svc.staffList?.[0]?.noteForKtv || '' // Lưu ghi chú cho KTV
+              }
+          };
+      });
+
       const res = await processDispatch(selectedOrder.id, {
         status: 'CONFIRMED',
         technicianCode: primaryService?.staffList[0]?.ktvId || null,
         bedId: primaryService?.bedId || null,
         roomName: primaryService?.selectedRoomId || null,
         staffAssignments,
-        date: selectedDate
+        date: selectedDate,
+        notes: primaryService?.adminNote || '', // Lưu ghi chú điều phối vào Bookings.notes
+        itemUpdates: itemUpdates
       });
 
       if (res.success) {
@@ -504,9 +569,62 @@ export default function DispatchBoardPage() {
     }
   };
 
+
+  const handleCancelBooking = async (orderId: string) => {
+    if (!confirm('Bạn có chắc chắn muốn HỦY đơn hàng này không?')) return;
+    try {
+      const res = await cancelBooking(orderId, selectedDate);
+      if (res.success) {
+        setOrders(prev => prev.filter(o => o.id !== orderId));
+        if (selectedOrderId === orderId) setSelectedOrderId(null);
+        setContextMenu(null);
+      } else {
+        alert('Lỗi khi hủy đơn: ' + res.error);
+      }
+    } catch (err) {
+      alert('Lỗi hệ thống khi hủy đơn.');
+    }
+  };
+
+  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+    const statusLabel = newStatus === 'COMPLETED' ? 'HOÀN TẤT' : newStatus;
+    if (!confirm(`Xác nhận ${statusLabel} đơn hàng này?`)) return;
+    try {
+      const res = await updateBookingStatus(orderId, newStatus, selectedDate);
+      if (res.success) {
+        // Cập nhật local state hoặc refetch
+        setOrders(prev => prev.filter(o => o.id !== orderId));
+        if (selectedOrderId === orderId) setSelectedOrderId(null);
+        setContextMenu(null);
+        fetchData();
+      } else {
+        alert(`Lỗi khi cập nhật trạng thái: ${res.error}`);
+      }
+    } catch (err) {
+      alert('Lỗi hệ thống khi cập nhật trạng thái.');
+    }
+  };
+
+  const handleCreateQuickBooking = async (data: { customerName: string; customerPhone: string; serviceId: string }) => {
+    try {
+      const res = await createQuickBooking({
+        ...data,
+        bookingDate: selectedDate
+      });
+      if (res.success) {
+        fetchData();
+        setShowAddOrderModal(false);
+      } else {
+        alert('Lỗi khi tạo đơn: ' + res.error);
+      }
+    } catch (err) {
+      alert('Lỗi hệ thống khi tạo đơn.');
+    }
+  };
+
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+      <div className="h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-6 px-1 lg:px-0">
           <div className="flex items-center justify-between sm:block">
@@ -514,8 +632,15 @@ export default function DispatchBoardPage() {
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
                 <span className="lg:hidden">Điều Phối</span>
                 <span className="hidden lg:inline">Bảng Điều Phối Trung Tâm</span>
-                <span className="bg-rose-100 text-rose-700 text-[10px] lg:text-xs px-2.5 py-1 rounded-full font-black animate-pulse whitespace-nowrap">
-                  {pendingOrders.length} ĐƠN
+                <div className="hidden sm:flex items-center gap-1.5">
+                  {LEFT_TABS.map(tab => (
+                    <span key={tab.id} title={tab.label} className={`${tab.badgeBg} ${tab.badgeText} w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center rounded-full font-black text-[10px] lg:text-xs border border-current border-opacity-20 shadow-sm transition-transform hover:scale-110 cursor-help`}>
+                      {orders.filter(o => o.dispatchStatus === tab.id).length}
+                    </span>
+                  ))}
+                </div>
+                <span className="sm:hidden bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded-full font-black">
+                  {orders.length} TỔNG
                 </span>
               </h1>
               <p className="text-[10px] lg:text-xs text-gray-500 mt-1 font-medium hidden sm:block">Điều phối KTV & Phòng chuyên nghiệp</p>
@@ -524,11 +649,47 @@ export default function DispatchBoardPage() {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+            {/* Master Notification Control */}
             <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`flex-shrink-0 p-2.5 rounded-xl transition-all ${soundEnabled ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400 bg-gray-50'}`}
+              onClick={async () => {
+                if (soundEnabled) {
+                  setSoundEnabled(false);
+                  return;
+                }
+
+                // If currently OFF and trying to turn ON
+                if (push.permission === 'denied') {
+                  alert('Bạn đã chặn thông báo trên trình duyệt. Hãy bấm vào biểu tượng Ổ khóa trên thanh địa chỉ để "Cho phép" thông báo nhé!');
+                  return;
+                }
+
+                if (push.permission === 'default') {
+                  const success = await push.subscribe();
+                  if (success) setSoundEnabled(true);
+                  return;
+                }
+
+                setSoundEnabled(true);
+              }}
+              disabled={push.isRegistering}
+              className={`flex-shrink-0 px-4 py-2.5 rounded-2xl transition-all shadow-sm border flex items-center gap-2.5 font-black text-xs
+                ${soundEnabled 
+                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+                  : (push.permission === 'denied' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')}`}
             >
-              {soundEnabled ? <Bell size={20} /> : <BellOff size={20} />}
+              <div className="relative">
+                {push.isRegistering ? (
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : soundEnabled ? (
+                  <Bell size={20} className="animate-bounce" />
+                ) : (
+                  <BellOff size={20} />
+                )}
+                {soundEnabled && <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-emerald-50" />}
+              </div>
+              <span className="whitespace-nowrap uppercase tracking-tight">
+                {push.isRegistering ? 'Đang kết nối...' : soundEnabled ? 'Thông báo: BẬT' : 'Thông báo: TẮT'}
+              </span>
             </button>
 
             <div className="relative flex-shrink-0">
@@ -541,7 +702,10 @@ export default function DispatchBoardPage() {
               />
             </div>
 
-            <button className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-black text-sm transition-all shadow-lg shadow-indigo-100 active:scale-95">
+            <button 
+              onClick={() => setShowAddOrderModal(true)}
+              className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-black text-sm transition-all shadow-lg shadow-indigo-100 active:scale-95"
+            >
               <Plus size={18} strokeWidth={3} /> <span className="hidden sm:inline">Tạo Đơn Mới</span><span className="sm:hidden">Thêm</span>
             </button>
           </div>
@@ -549,7 +713,7 @@ export default function DispatchBoardPage() {
 
         <div className="flex-1 flex flex-col lg:flex-row gap-5 overflow-hidden">
           {/* LEFT: Order Panel */}
-          <div className={`${selectedOrderId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 shrink-0 flex-col border border-gray-200 bg-white rounded-3xl overflow-hidden shadow-sm transition-all`}>
+          <div className={`${selectedOrderId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 shrink-0 flex-col border border-gray-200 bg-white rounded-3xl shadow-sm transition-all`}>
             <div className="p-4 border-b border-gray-100 bg-white shrink-0">
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -571,7 +735,7 @@ export default function DispatchBoardPage() {
                   {dropdownOpen && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                      className="absolute top-full mt-2 left-0 right-0 z-30 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden"
+                      className="absolute top-full mt-2 left-0 right-0 z-30 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-y-auto max-h-64"
                     >
                       {LEFT_TABS.map((tab) => (
                         <button
@@ -599,16 +763,32 @@ export default function DispatchBoardPage() {
                     layout
                     key={order.id}
                     onClick={() => setSelectedOrderId(order.id)}
-                    className={`bg-white p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedOrderId === order.id ? 'border-indigo-600 shadow-xl shadow-indigo-100 ring-4 ring-indigo-50' : 'border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md'}`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, orderId: order.id });
+                    }}
+                    className={`bg-white p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] relative ${selectedOrderId === order.id ? 'border-indigo-600 shadow-xl shadow-indigo-100 ring-4 ring-indigo-50' : 'border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md'}`}
                   >
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wider">#{order.billCode}</span>
                       <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1.5"><Clock size={12} className="text-gray-300" /> {order.time}</span>
                     </div>
-                    <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{order.customerName}</p>
-                    <div className="mt-3 flex items-center justify-between gap-4">
-                      <p className="text-[10px] text-gray-500 font-medium truncate flex-1">
-                        {order.services.map(s => s.serviceName).join(', ')} · {order.services.reduce((acc, s) => acc + s.duration, 0)}p
+                    <div className="flex justify-between items-baseline gap-2">
+                      <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors uppercase tracking-tight truncate">{order.customerName}</p>
+                      {order.totalAmount !== undefined && order.totalAmount > 0 && (
+                        <div className="shrink-0 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          <span>{order.totalAmount.toLocaleString('vi-VN')}đ</span>
+                          <span className="opacity-30">·</span>
+                          <span>{order.paymentMethod === 'Cash' ? 'TM' : (order.paymentMethod === 'Transfer' ? 'CK' : order.paymentMethod)}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between gap-4">
+                      <p className="text-[10px] text-gray-500 font-medium truncate flex-1 leading-tight">
+                        {order.services.length > 0 
+                          ? `${order.services.map(s => s.serviceName || 'Dịch vụ').join(', ')} · ${order.services.reduce((acc, s) => acc + (s.duration || 0), 0)}p`
+                          : 'Chưa có dịch vụ'
+                        }
                       </p>
                       {selectedOrderId === order.id && <span className="shrink-0 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Đang chọn →</span>}
                     </div>
@@ -654,23 +834,41 @@ export default function DispatchBoardPage() {
 
             {selectedOrder ? (
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 bg-slate-50/30">
-                {selectedOrder.services.map((svc, idx) => (
-                  <DispatchServiceBlock
-                    key={svc.id}
-                    svc={svc}
-                    svcIndex={idx}
-                    orderId={selectedOrder.id}
-                    rooms={rooms}
-                    beds={beds}
-                    availableTurns={turns}
-                    onUpdateSvc={updateSvcField}
-                    onSelectRoom={selectRoom}
-                    onSelectBed={selectBed}
-                    onUpdateStaff={updateStaffRow}
-                    onAddStaff={addStaffRow}
-                    onRemoveStaff={removeStaffRow}
-                  />
-                ))}
+                {selectedOrder.services.map((svc, idx) => {
+                  // 🚩 LOGIC: Xác định các giường đang bận
+                  // 1. Giường bận do đơn hàng khác (đang làm hoặc đang dọn)
+                  const busyInOtherOrders = orders
+                    .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
+                    .flatMap(o => o.services.map(s => s.bedId))
+                    .filter(Boolean) as string[];
+
+                  // 2. Giường bận do dịch vụ khác TRONG CÙNG BILL
+                  const busyInCurrentOrder = selectedOrder.services
+                    .filter(s => s.id !== svc.id)
+                    .map(s => s.bedId)
+                    .filter(Boolean) as string[];
+
+                  const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
+
+                  return (
+                    <DispatchServiceBlock
+                      key={svc.id}
+                      svc={svc}
+                      svcIndex={idx}
+                      orderId={selectedOrder.id}
+                      rooms={rooms}
+                      beds={beds}
+                      busyBedIds={allBusyBedIds}
+                      availableTurns={turns}
+                      onUpdateSvc={updateSvcField}
+                      onSelectRoom={selectRoom}
+                      onSelectBed={selectBed}
+                      onUpdateStaff={updateStaffRow}
+                      onAddStaff={addStaffRow}
+                      onRemoveStaff={removeStaffRow}
+                    />
+                  );
+                })}
 
                 <button
                   onClick={() => setShowAddSvcModal(true)}
@@ -756,6 +954,58 @@ export default function DispatchBoardPage() {
           </div>
         )}
       </AnimatePresence>
+      {/* Context Menu for Cancellation */}
+      <AnimatePresence>
+        {contextMenu && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 p-1.5 min-w-[180px] overflow-hidden"
+          >
+            {/* Các nút chức năng dựa trên trạng thái */}
+            {(() => {
+              const order = orders.find(o => o.id === contextMenu.orderId);
+              if (!order) return null;
+
+              if (order.dispatchStatus === 'in_progress' || order.dispatchStatus === 'cleaning') {
+                return (
+                  <button
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
+                  >
+                    <CheckCircle2 size={18} />
+                    Hoàn tất đơn này
+                  </button>
+                );
+              }
+              return null;
+            })()}
+
+            <button
+              onClick={() => handleCancelBooking(contextMenu.orderId)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider"
+            >
+              <Trash2 size={18} />
+              Hủy đơn hàng này
+            </button>
+            <button
+              onClick={() => setContextMenu(null)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:bg-gray-50 rounded-xl transition-colors font-bold text-xs uppercase tracking-wider"
+            >
+              Đóng menu
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AddOrderModal
+        isOpen={showAddOrderModal}
+        onClose={() => setShowAddOrderModal(false)}
+        services={allServices}
+        onConfirm={handleCreateQuickBooking}
+        selectedDate={selectedDate}
+      />
     </AppLayout>
   );
 }

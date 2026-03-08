@@ -53,6 +53,13 @@ export const DispatchStaffRow = ({
         ? SERVICE_TO_SKILL[Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))!]
         : null;
 
+    const [now, setNow] = React.useState(new Date());
+
+    React.useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 30000); // Update every 30s
+        return () => clearInterval(timer);
+    }, []);
+
     const handleChange = (patch: Partial<StaffAssignment>) => {
         const merged = { ...row, ...patch };
         if (patch.startTime !== undefined || patch.duration !== undefined) {
@@ -90,7 +97,19 @@ export const DispatchStaffRow = ({
                                     >
                                         #{turn.queue_position} {turn.staff?.full_name}
                                         {isExpert ? ' (⭐ Chuyên gia)' : ''}
-                                        {isBusy ? ` (⌛ Bận đến ${turn.estimated_end_time || '?'})` : ` (✅ Rảnh)`}
+                                        {(() => {
+                                            if (turn.status !== 'working') return ' (✅ Rảnh)';
+                                            
+                                            // Check time reliably
+                                            if (turn.estimated_end_time) {
+                                                const [h, m] = turn.estimated_end_time.split(':').map(Number);
+                                                const end = new Date();
+                                                end.setHours(h, m, 0, 0);
+                                                if (end < now) return ' (✅ Đã xong giờ)';
+                                                return ` (⌛ Bận đến ${turn.estimated_end_time})`;
+                                            }
+                                            return ' (⌛ Đang làm)';
+                                        })()}
                                         {turn.turns_completed > 0 ? ` [Tua: ${turn.turns_completed}]` : ''}
                                         {!hasSkill ? ' [Không đủ kỹ năng]' : ''}
                                     </option>

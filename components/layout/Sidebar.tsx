@@ -168,10 +168,6 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
               </div>
               {/* Actions */}
               <div className="flex items-center gap-0.5 shrink-0">
-                <button className="relative p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Thông báo">
-                  <Bell size={16} />
-                  <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-rose-500 rounded-full" />
-                </button>
                 <button onClick={logout} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Đăng xuất">
                   <LogOut size={16} />
                 </button>

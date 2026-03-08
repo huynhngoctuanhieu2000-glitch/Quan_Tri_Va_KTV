@@ -19,7 +19,6 @@ import {
   Filter,
   Trash2
 } from 'lucide-react';
-import Image from 'next/image';
 import { EmployeeDetailModal } from '@/components/EmployeeDetailModal';
 
 export default function EmployeeManagementPage() {
@@ -185,12 +184,12 @@ export default function EmployeeManagementPage() {
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="relative w-10 h-10 rounded-full overflow-hidden border border-gray-200">
-                          <Image
+                          <img
                             src={emp.photoUrl}
                             alt={emp.name}
-                            fill
-                            className="object-cover"
+                            className="w-full h-full object-cover"
                             referrerPolicy="no-referrer"
+                            loading="lazy"
                           />
                         </div>
                         <div>

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     try {
         const supabase = getSupabaseAdmin();
@@ -12,7 +14,8 @@ export async function GET() {
             .from('Services')
             .select('*')
             .order('category', { ascending: true })
-            .order('nameVN', { ascending: true });
+            .order('nameVN', { ascending: true })
+            .limit(1000);
 
         if (error) throw error;
 
