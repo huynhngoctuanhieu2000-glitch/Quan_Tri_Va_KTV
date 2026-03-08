@@ -7,13 +7,28 @@ const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BEQkLUJGYd
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'sMNjj18PAzSRo_36rNKDIQY28jihusAiovtTANk_NHw';
 const GMAIL_ACCOUNT = 'huynhngoctuanhieu2000@gmail.com'; // Contact email for VAPID
 
-webpush.setVapidDetails(
-    `mailto:${GMAIL_ACCOUNT}`,
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
-);
+// 🏗️ LAZY INITIALIZATION
+let isVapidInitialized = false;
+const initVapid = () => {
+    if (isVapidInitialized) return;
+    try {
+        if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+            console.warn('⚠️ [Push API] VAPID keys missing — skipping initialization');
+            return;
+        }
+        webpush.setVapidDetails(
+            `mailto:${GMAIL_ACCOUNT}`,
+            VAPID_PUBLIC_KEY,
+            VAPID_PRIVATE_KEY
+        );
+        isVapidInitialized = true;
+    } catch (err) {
+        console.error('❌ [Push API] VAPID initialization failed:', err);
+    }
+};
 
 export async function POST(request: Request) {
+    initVapid();
     try {
         // 🔒 SECURITY CHECK
         const authHeader = request.headers.get('x-webhook-secret');
