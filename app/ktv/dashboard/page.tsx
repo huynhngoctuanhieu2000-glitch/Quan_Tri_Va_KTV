@@ -6,7 +6,9 @@ import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
   CheckCircle, Play, StopCircle,
   Smile, Frown, Meh, Star, Gift, ArrowRight, X,
-  ClipboardList, Coffee, LogOut, Sparkles
+  ClipboardList, Coffee, LogOut, Sparkles, User, 
+  PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
+  Dumbbell, Quote, BookOpen, BellRing
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useKTVDashboard, ScreenState } from './KTVDashboard.logic';
@@ -131,24 +133,6 @@ export default function KTVDashboardPage() {
             {renderScreen()}
           </motion.div>
         </AnimatePresence>
-
-        {/* Floating Quick Support Actions */}
-        {['TIMER', 'REVIEW', 'HANDOVER'].includes(screen) && (
-            <div className="fixed bottom-24 right-4 flex flex-col gap-3 z-50">
-               <button 
-                  onClick={() => handleInteraction('WATER')}
-                  className="w-12 h-12 bg-white shadow-lg border border-slate-100 rounded-full flex items-center justify-center text-amber-500 active:scale-95 transition-transform"
-               >
-                  <Coffee size={20} />
-               </button>
-               <button 
-                  onClick={() => handleInteraction('SUPPORT')}
-                  className="w-12 h-12 bg-white shadow-lg border border-slate-100 rounded-full flex items-center justify-center text-rose-500 active:scale-95 transition-transform"
-               >
-                  <AlertCircle size={20} />
-               </button>
-            </div>
-        )}
       </div>
 
       {/* Procedure Modal */}
@@ -219,15 +203,63 @@ function ScreenDashboard({ logic }: { logic: any }) {
                 {booking.BookingItems?.map((item: any) => (
                    <div key={item.id} className="flex justify-between items-center text-sm">
                       <span className="font-bold text-slate-700">{item.service_name}</span>
-                      <span className="text-slate-500">{item.duration} phút</span>
+                      <p className="text-slate-400 font-medium">{item.duration} phút</p>
                    </div>
                 ))}
               </div>
 
-              {booking.dispatcherNote && (
-                <div className="bg-orange-50/50 border-l-2 border-orange-400 p-3 rounded-r-lg mb-4">
-                  <span className="text-xs font-bold text-orange-600 mb-1 block">YÊU CẦU ĐẶC BIỆT</span>
-                  <p className="text-sm text-orange-900 italic">{booking.dispatcherNote}</p>
+              {/* Special Requirements (Same as Timer Screen) */}
+              {booking.BookingItems?.[0] && (
+                <div className="bg-amber-50/40 border border-amber-100 rounded-[24px] p-5 mb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                      <AlertTriangle size={16} className="text-amber-600" />
+                      <span className="text-[11px] font-black text-amber-800 uppercase tracking-wider">YÊU CẦU TỪ KHÁCH</span>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2 mb-4">
+                      {/* Strength Tag */}
+                      <div className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                        <Dumbbell size={14} /> {booking.BookingItems[0].strength || 'Vừa'}
+                      </div>
+                      {/* Focus Tag */}
+                      {booking.BookingItems[0].focus && (
+                        <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5 text-xs font-bold shadow-sm font-sans">
+                            <Target size={14} className="text-rose-400" /> {booking.BookingItems[0].focus}
+                        </div>
+                      )}
+                      {/* Avoid Tag */}
+                      {booking.BookingItems[0].avoid && (
+                        <div className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                            <Ban size={14} /> {booking.BookingItems[0].avoid}
+                        </div>
+                      )}
+                  </div>
+
+                  {booking.BookingItems[0].customerNote && (
+                    <div className="bg-white/80 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 font-medium italic leading-relaxed shadow-sm">
+                        "{booking.BookingItems[0].customerNote}"
+                    </div>
+                  )}
+
+                  {/* Additional Notes */}
+                  <div className="mt-4 space-y-3">
+                     {booking.dispatcherNote && (
+                        <div className="flex flex-col gap-1">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Ghi chú của quầy</span>
+                           <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-600 font-medium">
+                              {booking.dispatcherNote}
+                           </div>
+                        </div>
+                     )}
+                     {booking.BookingItems[0].noteForKtv && (
+                        <div className="flex flex-col gap-1">
+                           <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest px-1">Ghi chú cho kỹ thuật viên</span>
+                           <div className="bg-rose-50/50 p-3 rounded-xl text-xs text-rose-700 font-bold border border-rose-100">
+                              {booking.BookingItems[0].noteForKtv}
+                           </div>
+                        </div>
+                     )}
+                  </div>
                 </div>
               )}
             </div>
@@ -264,7 +296,17 @@ function ScreenDashboard({ logic }: { logic: any }) {
 }
 
 function ScreenTimer({ logic }: { logic: any }) {
-  const { booking, timeRemaining, isTimerRunning, handleStartTimer, handleFinishTimer, handleEarlyExit } = logic;
+  const { 
+    booking, 
+    timeRemaining, 
+    prepTimeRemaining, 
+    isPrepping, 
+    isTimerRunning, 
+    handleStartTimer, 
+    handleFinishTimer, 
+    handleEarlyExit,
+    handleInteraction 
+  } = logic;
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -272,68 +314,196 @@ function ScreenTimer({ logic }: { logic: any }) {
     return `${m}:${s}`;
   };
 
-  const totalDuration = (booking?.BookingItems?.[0]?.duration || 60) * 60;
-  const progress = ((totalDuration - timeRemaining) / totalDuration) * 100;
+  const currentSecs = isPrepping ? prepTimeRemaining : timeRemaining;
+  const totalDuration = isPrepping 
+    ? (logic.settings?.ktv_setup_duration_minutes || 10) * 60 
+    : (booking?.BookingItems?.[0]?.duration || 60) * 60;
+  
+  // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
+  const progress = (currentSecs / totalDuration) * 100;
+  const item = booking?.BookingItems?.[0] || {};
 
   return (
-    <div className="p-4 h-full flex flex-col">
-      <div className="flex justify-between items-start mb-8 mt-4">
+    <div className="p-4 h-full flex flex-col pt-8">
+      {/* Header Info */}
+      <div className="flex justify-between items-start mb-6 px-2">
         <div>
-          <h2 className={`text-xl font-bold ${THEME.textBase}`}>Phòng {booking?.roomName}</h2>
-          <p className={THEME.textMuted}>{booking?.BookingItems?.[0]?.service_name}</p>
+          <h2 className={`text-2xl font-black ${THEME.textBase}`}>Phòng {booking?.roomName}</h2>
+          <p className={`${THEME.textMuted} font-medium`}>{item.service_name}</p>
         </div>
-        <button 
-           onClick={handleEarlyExit}
-           className="text-slate-400 hover:text-rose-500 transition-colors"
-        >
-           <LogOut size={20} />
-        </button>
+        {!isTimerRunning && (
+          <button 
+            onClick={() => logic.setShowProcedure(true)}
+            className="flex flex-col items-center gap-1 text-emerald-600 active:scale-90 transition-all"
+          >
+            <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100 shadow-sm">
+              <BookOpen size={22} />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-tighter">Quy trình</span>
+          </button>
+        )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center">
-        {/* Circle Timer */}
-        <div className="relative w-64 h-64 flex items-center justify-center mb-8">
-          <svg className="absolute inset-0 w-full h-full transform -rotate-90">
-            <circle cx="128" cy="128" r="120" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100" />
+      {/* Main Timer Display */}
+      <div className="flex flex-col items-center justify-center pb-8">
+        <div className="relative w-64 h-64 flex items-center justify-center">
+          {/* Subtle Background Ring (always there) */}
+          <div className="absolute inset-0 rounded-full border-[12px] border-slate-50 opacity-50"></div>
+          
+          <svg className="absolute inset-0 w-full h-full transform -rotate-90 drop-shadow-sm">
             <circle
-              cx="128" cy="128" r="120" stroke="currentColor" strokeWidth="8" fill="transparent"
-              className="text-emerald-500 transition-all duration-1000 ease-linear"
-              strokeDasharray={2 * Math.PI * 120}
-              strokeDashoffset={2 * Math.PI * 120 * (1 - progress / 100)}
+              cx="128" cy="128" r="115" stroke="currentColor" strokeWidth="12" fill="transparent"
+              className={`${isPrepping ? 'text-blue-400' : 'text-emerald-500'} transition-all duration-1000 ease-linear shadow-inner`}
+              strokeDasharray={2 * Math.PI * 115}
+              strokeDashoffset={2 * Math.PI * 115 * (1 - progress / 100)}
               strokeLinecap="round"
             />
           </svg>
+          
           <div className="text-center z-10">
-            <div className="text-5xl font-mono font-bold text-slate-800 tracking-wider">
-              {formatTime(timeRemaining)}
+            <div className={`text-6xl font-black ${isPrepping ? 'text-blue-600' : 'text-slate-800'} tracking-tighter tabular-nums`}>
+              {formatTime(currentSecs)}
             </div>
-            <div className="text-xs font-bold text-emerald-600 uppercase tracking-widest mt-2 bg-emerald-50 px-3 py-1 rounded-full inline-block">
-              {isTimerRunning ? 'ĐANG THỰC HIỆN' : 'ĐỢI BẮT ĐẦU'}
+            <div className={`mt-3 px-4 py-1.5 rounded-full border font-black text-[10px] tracking-widest uppercase flex items-center gap-1.5
+              ${isPrepping ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+              {isPrepping && <Clock size={12} className="animate-pulse" />}
+              {isPrepping ? 'THỜI GIAN CHUẨN BỊ' : (isTimerRunning ? 'ĐANG THỰC HIỆN' : 'ĐỢI BẮT ĐẦU')}
             </div>
           </div>
         </div>
+      </div>
 
-        {!isTimerRunning ? (
+      {/* Primary Action Button */}
+      <div className="px-6 mb-10">
+        {!isTimerRunning || isPrepping ? (
           <button
             onClick={handleStartTimer}
-            disabled={logic.isLoading}
-            className={`w-48 h-16 ${THEME.radius} ${THEME.primary} text-white font-bold text-lg shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 hover:scale-105 transition-transform`}
+            disabled={logic.isLoading || (isPrepping && prepTimeRemaining > 0)}
+            className={`w-full h-16 ${THEME.radius} bg-emerald-600 text-white font-black text-lg shadow-xl shadow-emerald-200/50 flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-40 disabled:grayscale-[0.5] disabled:active:scale-100`}
           >
-            <Play fill="currentColor" size={20} />
+            <Play fill="white" size={24} />
             BẮT ĐẦU
           </button>
         ) : (
           <button
             onClick={handleFinishTimer}
             disabled={logic.isLoading}
-            className={`w-full py-4 ${THEME.radius} bg-indigo-600 text-white font-bold text-lg shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors mt-8`}
+            className={`w-full h-16 ${THEME.radius} bg-slate-900 text-white font-black text-lg shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-[0.98] transition-all`}
           >
-            <StopCircle size={20} />
+            <CheckCircle size={24} />
             HOÀN THÀNH
           </button>
         )}
       </div>
+
+      {/* Special Requirements Section */}
+      <div className="bg-amber-50/40 border border-amber-100 rounded-[28px] p-6 mb-8">
+         <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle size={16} className="text-amber-600" />
+            <span className="text-[10px] font-black text-amber-800 uppercase tracking-[0.2em]">YÊU CẦU TỪ KHÁCH</span>
+         </div>
+         
+         <div className="flex flex-wrap gap-2 mb-4">
+            {/* Gender Tag */}
+            <div className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+               <User size={14} /> {item.therapistGender || 'Tự do'}
+            </div>
+            {/* Strength Tag */}
+            <div className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+               <Dumbbell size={14} /> {item.strength || 'Vừa'}
+            </div>
+            {/* Focus Tag */}
+            {item.focus && (
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                 <Target size={14} className="text-rose-400" /> {item.focus}
+              </div>
+            )}
+            {/* Avoid Tag */}
+            {item.avoid && (
+              <div className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                 <Ban size={14} /> {item.avoid}
+              </div>
+            )}
+         </div>
+
+         {item.customerNote && (
+           <div className="bg-white/80 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 font-medium italic shadow-sm mb-4">
+              "{item.customerNote}"
+           </div>
+         )}
+
+         {/* Extra Notes for KTV / Reception */}
+         <div className="space-y-3 pt-2">
+            {booking.dispatcherNote && (
+               <div className="flex flex-col gap-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Ghi chú của quầy</span>
+                  <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-600 font-medium">
+                     {booking.dispatcherNote}
+                  </div>
+               </div>
+            )}
+            {item.noteForKtv && (
+               <div className="flex flex-col gap-1">
+                  <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest px-1">Ghi chú cho kỹ thuật viên</span>
+                  <div className="bg-rose-50/50 p-3 rounded-xl text-xs text-rose-700 font-black border border-rose-100">
+                     {item.noteForKtv}
+                  </div>
+               </div>
+            )}
+         </div>
+      </div>
+
+      {/* 2x2 Action Grid + Emergency Wide */}
+      <div className="flex flex-col gap-3 mb-12">
+          <div className="grid grid-cols-2 gap-3">
+              <ActionGridButton 
+                onClick={handleEarlyExit} 
+                icon={<LogOut size={20} />} 
+                label="KHÁCH VỀ SỚM" 
+                color="text-slate-400 border-slate-100" 
+              />
+              <ActionGridButton 
+                onClick={() => handleInteraction('WATER')} 
+                icon={<Coffee size={20} />} 
+                label="KHÁCH KHÁT NƯỚC" 
+                color="text-emerald-500 border-emerald-50" 
+              />
+              <ActionGridButton 
+                onClick={() => handleInteraction('BUY_MORE')} 
+                icon={<PlusSquare size={20} />} 
+                label="MUA THÊM DV" 
+                color="text-emerald-600 border-emerald-50" 
+              />
+              <ActionGridButton 
+                onClick={() => handleInteraction('SUPPORT')} 
+                icon={<HelpCircle size={20} />} 
+                label="CẦN HỖ TRỢ" 
+                color="text-indigo-500 border-indigo-50" 
+              />
+          </div>
+          
+          {/* Emergency Wide Button */}
+          <button 
+            onClick={() => handleInteraction('EMERGENCY')}
+            className="w-full h-16 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all text-rose-600"
+          >
+             <BellRing size={24} className="animate-bounce" />
+             <span className="text-sm font-black uppercase tracking-[0.1em]">KHẨN CẤP</span>
+          </button>
+      </div>
     </div>
+  );
+}
+
+function ActionGridButton({ onClick, icon, label, color }: { onClick: () => void, icon: React.ReactNode, label: string, color: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`bg-white border p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-2 active:scale-95 transition-all ${color}`}
+    >
+      <div className="opacity-80">{icon}</div>
+      <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+    </button>
   );
 }
 
@@ -537,25 +707,3 @@ function ProcedureModal({ isOpen, onClose, procedure, serviceName }: { isOpen: b
   );
 }
 
-function User({ size }: { size: number }) {
-  return (
-    <svg 
-      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    >
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-
-function AlertCircle({ size }: { size: number }) {
-  return (
-    <svg 
-      width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}

@@ -156,8 +156,8 @@ export async function PATCH(request: Request) {
 
         if (error) throw error;
 
-        // Logic giải phóng KTV chỉ khi THỰC SỰ XONG (COMPLETED)
-        if (status === 'COMPLETED') {
+        // Logic giải phóng KTV chỉ khi đơn hàng THỰC SỰ KẾT THÚC (DONE)
+        if (status === 'DONE') {
             const { data: queueItems } = await supabase
                 .from('TurnQueue')
                 .select('*')
