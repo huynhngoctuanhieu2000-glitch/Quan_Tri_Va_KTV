@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
@@ -85,6 +85,15 @@ export type TurnQueueData = {
   estimated_end_time?: string | null;
 };
 
+export interface StaffNotification {
+  id: string;
+  bookingId: string;
+  type: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 
 // MOCK DATA REMOVED - Using real data from Supabase
@@ -132,6 +141,7 @@ export default function DispatchBoardPage() {
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
+  const [staffNotifications, setStaffNotifications] = useState<StaffNotification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
@@ -148,16 +158,25 @@ export default function DispatchBoardPage() {
   }, [push.permission]);
 
   const lastSoundTimeRef = useRef<number>(0);
-  const playNotificationSound = (source: string) => {
+  const playNotificationSound = (source: string, type?: string) => {
     const now = Date.now();
     // Tránh phát âm thanh quá gần nhau (trong vòng 3s) để không bị lặp
-    if (now - lastSoundTimeRef.current < 3000) return;
+    // Exception: EMERGENCY sound always plays if enabled
+    if (type !== 'EMERGENCY' && now - lastSoundTimeRef.current < 3000) return;
     
     console.log(`🔔 [Dispatch] Playing sound from ${source}...`);
-    const audio = new Audio('/sounds/reception-notification.wav');
+    // Use a more urgent sound for Emergency if available, otherwise default
+    const soundFile = type === 'EMERGENCY' ? '/sounds/emergency-alert.wav' : '/sounds/reception-notification.wav';
+    const audio = new Audio(soundFile);
     audio.play()
       .then(() => { lastSoundTimeRef.current = now; })
-      .catch(err => console.error("🔇 [Dispatch] Audio play failed:", err));
+      .catch(err => {
+         console.error("🔇 [Dispatch] Audio play failed, trying fallback...", err);
+         if (type === 'EMERGENCY') {
+            const fallback = new Audio('/sounds/reception-notification.wav');
+            fallback.play().catch(e => console.error("Fallback audio failed too"));
+         }
+      });
   };
 
   // 📡 Realtime Subscriptions
@@ -169,18 +188,36 @@ export default function DispatchBoardPage() {
       .channel('dispatch_board_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, (payload) => {
         console.log("🔄 [Dispatch] Realtime: Bookings changed", payload.eventType);
-        
-        // 🔊 Tốc độ cao: Phát âm thanh ngay lập tức nếu là đơn mới (INSERT)
         if (payload.eventType === 'INSERT' && soundEnabled) {
-           playNotificationSound('Realtime Callback');
+           playNotificationSound('Realtime (Booking)');
         }
-        
         fetchData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
         fetchData();
       })
-      .subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'StaffNotifications' }, (payload) => {
+        console.log("🔔 [Dispatch] Realtime: New Staff Notification RECEIVED", payload);
+        const newNotif = payload.new as StaffNotification;
+        if (!newNotif || !newNotif.id) {
+          console.error("❌ [Dispatch] Realtime: Empty or invalid notification payload", payload);
+          return;
+        }
+        setStaffNotifications(prev => {
+          // Tránh trùng lặp nếu query fetch chạy cùng lúc
+          if (prev.some(p => p.id === newNotif.id)) return prev;
+          return [newNotif, ...prev];
+        });
+        if (soundEnabled) {
+           playNotificationSound('Realtime (Staff)', newNotif.type);
+        }
+      })
+      .on('system', { event: '*', schema: 'public', table: 'StaffNotifications' }, (payload) => {
+        console.log("📡 [Dispatch] Realtime: System event", payload);
+      })
+      .subscribe((status) => {
+        console.log("📡 [Dispatch] Realtime: Subscription status:", status);
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [selectedDate, soundEnabled]); // Thêm soundEnabled vào deps để ref luôn mới nhất nếu cần
@@ -262,8 +299,8 @@ export default function DispatchBoardPage() {
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'CONFIRMED' || b.status === 'PREPARING') dStatus = 'dispatched';
           if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          if (b.status === 'DONE') dStatus = 'cleaning';
-          if (b.status === 'COMPLETED' || b.status === 'FEEDBACK') dStatus = 'done';
+          if (b.status === 'DONE' || b.status === 'FEEDBACK') dStatus = 'done';
+          if (b.status === 'COMPLETED') dStatus = 'cleaning';
 
           return {
             id: b.id,
@@ -315,8 +352,20 @@ export default function DispatchBoardPage() {
 
         setOrders(mappedOrders);
         console.log(`✅ [Dispatch] Fetched ${mappedOrders.length} bookings successfully:`, mappedOrders);
-        if (mappedOrders.length > 0) {
-          console.log("🔍 [Debug] First Order Services Sample:", mappedOrders[0].services);
+
+        // 5. Fetch Unread Staff Notifications
+        const { data: notifs, error: nError } = await supabase
+            .from('StaffNotifications')
+            .select('*')
+            .eq('isRead', false)
+            .order('createdAt', { ascending: false })
+            .limit(20);
+        
+        if (nError) {
+          console.error("❌ [Dispatch] Error fetching StaffNotifications:", nError);
+        } else if (notifs) {
+          console.log(`🔔 [Dispatch] Fetched ${notifs.length} unread staff notifications`);
+          setStaffNotifications(notifs as StaffNotification[]);
         }
       }
 
@@ -344,6 +393,60 @@ export default function DispatchBoardPage() {
   }, [dropdownOpen, contextMenu]);
 
   if (!mounted) return null;
+
+  const renderStaffNotifications = () => {
+    const unread = staffNotifications.filter(n => !n.isRead);
+    if (unread.length > 0) {
+      console.log(`🎨 [Dispatch] Rendering ${unread.length} notifications...`);
+    }
+    return (
+      <div className="fixed top-20 right-6 z-[99999] flex flex-col gap-3 pointer-events-none">
+         <AnimatePresence>
+            {unread.map((n) => {
+               console.log(`📦 [Dispatch] Rendering single item: ${n.id} - ${n.type}`);
+               return (
+                 <motion.div
+                    key={n.id}
+                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border min-w-[320px] max-w-sm flex gap-4 items-start
+                      ${n.type === 'EMERGENCY' 
+                        ? 'bg-rose-600 border-rose-500 text-white' 
+                        : 'bg-white/95 backdrop-blur-md border-emerald-100'}`}
+                 >
+                    <div className={`mt-1 p-2 rounded-xl flex-shrink-0 
+                       ${n.type === 'EMERGENCY' ? 'bg-white/20' : 'bg-emerald-50 text-emerald-600'}`}>
+                       {n.type === 'EMERGENCY' ? <ShieldAlert size={24} className="animate-pulse" /> : <Bell size={20} />}
+                    </div>
+                    <div className="flex-1">
+                       <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5
+                          ${n.type === 'EMERGENCY' ? 'text-rose-100' : 'text-emerald-600'}`}>
+                          KTV Yêu cầu hỗ trợ
+                       </p>
+                       <p className={`text-sm font-bold leading-tight ${n.type === 'EMERGENCY' ? 'text-white' : 'text-slate-800'}`}>
+                          {n.message}
+                       </p>
+                       <p className={`text-[10px] mt-2 font-medium opacity-60 ${n.type === 'EMERGENCY' ? 'text-rose-100' : 'text-slate-400'}`}>
+                          {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                       </p>
+                    </div>
+                    <button 
+                       onClick={async () => {
+                          setStaffNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item));
+                          await supabase.from('StaffNotifications').update({ isRead: true }).eq('id', n.id);
+                       }}
+                       className="p-1 hover:bg-black/5 rounded-lg transition-colors"
+                    >
+                       <X size={18} className={n.type === 'EMERGENCY' ? 'text-white' : 'text-slate-400'} />
+                    </button>
+                 </motion.div>
+               );
+            })}
+         </AnimatePresence>
+      </div>
+    );
+  };
 
   if (!hasPermission('dispatch_board')) {
     return (
@@ -587,7 +690,7 @@ export default function DispatchBoardPage() {
   };
 
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
-    const statusLabel = newStatus === 'COMPLETED' ? 'HOÀN TẤT' : newStatus;
+    const statusLabel = newStatus === 'DONE' ? 'HOÀN TẤT' : newStatus;
     if (!confirm(`Xác nhận ${statusLabel} đơn hàng này?`)) return;
     try {
       const res = await updateBookingStatus(orderId, newStatus, selectedDate);
@@ -622,6 +725,51 @@ export default function DispatchBoardPage() {
     }
   };
 
+  const renderSoundToggle = () => {
+    return (
+      <button
+        onClick={async () => {
+          if (soundEnabled) {
+            setSoundEnabled(false);
+            return;
+          }
+
+          if (push.permission === 'denied') {
+            alert('Bạn đã chặn thông báo trên trình duyệt. Hãy bấm vào biểu tượng Ổ khóa trên thanh địa chỉ để "Cho phép" thông báo nhé!');
+            return;
+          }
+
+          if (push.permission === 'default') {
+            const success = await push.subscribe();
+            if (success) setSoundEnabled(true);
+            return;
+          }
+
+          setSoundEnabled(true);
+        }}
+        disabled={push.isRegistering}
+        className={`flex-shrink-0 px-4 py-2.5 rounded-2xl transition-all shadow-sm border flex items-center gap-2.5 font-black text-xs
+          ${soundEnabled 
+            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+            : (push.permission === 'denied' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')}`}
+      >
+        <div className="relative">
+          {push.isRegistering ? (
+            <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : soundEnabled ? (
+            <Bell size={20} className="animate-bounce" />
+          ) : (
+            <BellOff size={20} />
+          )}
+          {soundEnabled && <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-emerald-50" />}
+        </div>
+        <span className="whitespace-nowrap uppercase tracking-tight">
+          {push.isRegistering ? 'Đang kết nối...' : soundEnabled ? 'Thông báo: BẬT' : 'Thông báo: TẮT'}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
@@ -634,9 +782,22 @@ export default function DispatchBoardPage() {
                 <span className="hidden lg:inline">Bảng Điều Phối Trung Tâm</span>
                 <div className="hidden sm:flex items-center gap-1.5">
                   {LEFT_TABS.map(tab => (
-                    <span key={tab.id} title={tab.label} className={`${tab.badgeBg} ${tab.badgeText} w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center rounded-full font-black text-[10px] lg:text-xs border border-current border-opacity-20 shadow-sm transition-transform hover:scale-110 cursor-help`}>
+                    <button 
+                      key={tab.id} 
+                      title={tab.label}
+                      onClick={() => setLeftPanelTab(tab.id)}
+                      className={`
+                        ${tab.badgeBg} ${tab.badgeText} 
+                        w-6 h-6 lg:w-7 lg:h-7 
+                        flex items-center justify-center 
+                        rounded-full font-black text-[10px] lg:text-xs 
+                        border border-current border-opacity-20 shadow-sm 
+                        transition-all hover:scale-110 active:scale-95 
+                        cursor-pointer
+                      `}
+                    >
                       {orders.filter(o => o.dispatchStatus === tab.id).length}
-                    </span>
+                    </button>
                   ))}
                 </div>
                 <span className="sm:hidden bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded-full font-black">
@@ -649,48 +810,7 @@ export default function DispatchBoardPage() {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
-            {/* Master Notification Control */}
-            <button
-              onClick={async () => {
-                if (soundEnabled) {
-                  setSoundEnabled(false);
-                  return;
-                }
-
-                // If currently OFF and trying to turn ON
-                if (push.permission === 'denied') {
-                  alert('Bạn đã chặn thông báo trên trình duyệt. Hãy bấm vào biểu tượng Ổ khóa trên thanh địa chỉ để "Cho phép" thông báo nhé!');
-                  return;
-                }
-
-                if (push.permission === 'default') {
-                  const success = await push.subscribe();
-                  if (success) setSoundEnabled(true);
-                  return;
-                }
-
-                setSoundEnabled(true);
-              }}
-              disabled={push.isRegistering}
-              className={`flex-shrink-0 px-4 py-2.5 rounded-2xl transition-all shadow-sm border flex items-center gap-2.5 font-black text-xs
-                ${soundEnabled 
-                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
-                  : (push.permission === 'denied' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')}`}
-            >
-              <div className="relative">
-                {push.isRegistering ? (
-                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : soundEnabled ? (
-                  <Bell size={20} className="animate-bounce" />
-                ) : (
-                  <BellOff size={20} />
-                )}
-                {soundEnabled && <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-emerald-50" />}
-              </div>
-              <span className="whitespace-nowrap uppercase tracking-tight">
-                {push.isRegistering ? 'Đang kết nối...' : soundEnabled ? 'Thông báo: BẬT' : 'Thông báo: TẮT'}
-              </span>
-            </button>
+            {renderSoundToggle()}
 
             <div className="relative flex-shrink-0">
               <CalendarIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -972,7 +1092,7 @@ export default function DispatchBoardPage() {
               if (order.dispatchStatus === 'in_progress' || order.dispatchStatus === 'cleaning') {
                 return (
                   <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}
                     className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
                   >
                     <CheckCircle2 size={18} />
@@ -1006,6 +1126,7 @@ export default function DispatchBoardPage() {
         onConfirm={handleCreateQuickBooking}
         selectedDate={selectedDate}
       />
+      {renderStaffNotifications()}
     </AppLayout>
   );
 }

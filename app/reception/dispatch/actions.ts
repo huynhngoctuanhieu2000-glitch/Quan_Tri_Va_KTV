@@ -16,6 +16,7 @@ export async function getDispatchData(date: string) {
             .from('TurnQueue')
             .select('*')
             .eq('date', date)
+            .order('turns_completed', { ascending: true })
             .order('queue_position', { ascending: true });
         if (tError) throw tError;
 
@@ -266,8 +267,8 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
         if (bError) throw bError;
 
-        // 2. Nếu trạng thái mới là COMPLETED hoặc CANCELLED, giải phóng KTV trong TurnQueue
-        if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
+        // 2. Nếu trạng thái mới là DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
+        if (newStatus === 'DONE' || newStatus === 'CANCELLED') {
             const { error: tError } = await supabase
                 .from('TurnQueue')
                 .update({

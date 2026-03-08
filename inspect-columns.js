@@ -8,22 +8,16 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function inspectSchema() {
     console.log('--- SCHEMA INSPECTION ---');
     try {
-        const tables = ['Bookings', 'Services', 'BookingItems', 'Customers'];
-        for (const table of tables) {
-            const { data, error } = await supabase.from(table).select('*').limit(1);
-            if (error) {
-                console.error(`Error fetching ${table}:`, error.message);
-                // Try fetching without * if it fails
-                const { data: data2, error: error2 } = await supabase.from(table).select().limit(1);
-                if (data2 && data2.length > 0) {
-                    console.log(`${table} Columns:`, Object.keys(data2[0]).join(', '));
-                }
-            } else if (data && data.length > 0) {
-                console.log(`${table} Columns:`, Object.keys(data[0]).join(', '));
-                console.log(`${table} First Row:`, JSON.stringify(data[0], null, 2));
-            } else {
-                console.log(`${table} is EMPTY or not found.`);
-            }
+        console.log('\n--- LATEST BOOKINGS ---');
+        const { data: bks, error: be } = await supabase
+            .from('Bookings')
+            .select('id, billCode, status, rating, technicianCode, createdAt')
+            .order('createdAt', { ascending: false })
+            .limit(5);
+        
+        if (be) console.error('Error fetching bookings:', be);
+        else {
+            console.table(bks);
         }
     } catch (err) {
         console.error('Unexpected error:', err);

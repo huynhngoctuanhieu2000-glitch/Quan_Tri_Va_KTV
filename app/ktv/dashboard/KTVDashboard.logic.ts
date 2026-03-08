@@ -111,7 +111,7 @@ export function useKTVDashboard() {
                         // ✨ CHECK FOR NEW EXCELLENT RATING (>= 4 stars)
                         const newRating = res.data.rating;
                         const oldRating = prev?.rating;
-                        if (newRating >= 4 && (!oldRating || oldRating < 4)) {
+                        if (newRating >= 4 && (!oldRating || oldRating < 4) && res.data.status === 'DONE') {
                             console.log("💎 [KTV] Excellent rating detected inside sync:", newRating);
                             setBonusMessage(`Bạn nhận được 25đ đánh giá xuất sắc từ đơn hàng #${res.data.billCode}`);
                             try {

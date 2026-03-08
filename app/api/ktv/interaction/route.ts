@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 /**
  * API Gửi tương tác từ KTV
  * POST /api/ktv/interaction
- * Body: { bookingId: string, type: 'WATER' | 'SUPPORT' | 'EMERGENCY' }
+ * Body: { bookingId: string, type: 'WATER' | 'SUPPORT' | 'EMERGENCY' | 'BUY_MORE' | 'EARLY_EXIT' }
  */
 export async function POST(request: Request) {
     try {
@@ -14,32 +15,68 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'bookingId and type are required' }, { status: 400 });
         }
 
-        console.log(`🔔 [API KTV Interaction] Booking ${bookingId} sent ${type}`);
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // 1. Lấy thông tin chi tiết đơn hàng (Phòng, Giường)
+        const { data: booking, error: bError } = await supabase
+            .from('Bookings')
+            .select('roomName, bedId')
+            .eq('id', bookingId)
+            .single();
+
+        const roomInfo = booking ? `phòng ${booking.roomName || '???'}${booking.bedId ? ` giường ${booking.bedId}` : ''}` : `phòng (không rõ)`;
+        const roomUpper = booking ? `Phòng ${booking.roomName || '???'}${booking.bedId ? ` giường ${booking.bedId}` : ''}` : `Phòng (không rõ)`;
+
+        // 2. Map template tin nhắn theo yêu cầu của User
+        const messageMap: Record<string, string> = {
+            'EARLY_EXIT': `KH ${roomUpper} đang xuống cb đón khách nhé quầy`,
+            'WATER': `Yêu cầu mang nước/trà lên ${roomInfo}`,
+            'BUY_MORE': `Khách muốn làm thêm, cần lễ tân lên tư vấn ở ${roomInfo}`,
+            'SUPPORT': `Báo các vấn đề kỹ thuật hoặc thiếu đồ dùng ở ${roomInfo}`,
+            'EMERGENCY': `BÁO ĐỘNG: Sự cố lớn hoặc khách hàng cực kỳ không hài lòng ở ${roomInfo}`
+        };
+
+        const finalMessage = messageMap[type] || `Yêu cầu (${type}) tại ${roomInfo}`;
+
+        // 3. Lưu vào bảng StaffNotifications để Lễ tân nhận Realtime
+        console.log(`💾 [API KTV Interaction] Inserting notification:`, { bookingId, type, message: finalMessage });
+        const { data: nData, error: nError } = await supabase
+            .from('StaffNotifications')
+            .insert({
+                bookingId,
+                type,
+                message: finalMessage,
+                isRead: false
+            })
+            .select()
+            .single();
+
+        if (nError) {
+            console.error('❌ [API KTV Interaction] Failed to insert notification:', nError);
+            return NextResponse.json({ success: false, error: 'Failed to create internal notification' }, { status: 500 });
+        }
         
-        // 1. Gửi thông báo Push cho Lễ tân và Quản lý
+        console.log('✅ [API KTV Interaction] Notification stored successfully:', nData);
+        console.log(`🔔 [API KTV Interaction] Booking ${bookingId} (${roomInfo}) sent ${type}: ${finalMessage}`);
+        
+        // 4. Gửi thông báo Push (Dự phòng)
         try {
             const baseUrl = request.url.split('/api')[0];
-            const messageMap: any = {
-                'WATER': 'Khách cần nước uống',
-                'SUPPORT': 'Cần hỗ trợ gấp tại phòng',
-                'EMERGENCY': 'BÁO ĐỘNG: Khách đang giận dữ'
-            };
-            
             await fetch(`${baseUrl}/api/notifications/push`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    title: `Yêu cầu từ phòng: ${bookingId.split('-')[1] || bookingId}`, 
-                    message: messageMap[type] || `Yêu cầu: ${type}`,
+                    title: `Yêu cầu từ ${roomUpper}`, 
+                    message: finalMessage,
                     url: '/reception/dispatch',
-                    // targetStaffIds không truyền để mặc định gửi cho admin/reception
                 })
             });
         } catch (err) {
             console.error('❌ [API KTV Interaction] Push notification failed:', err);
         }
 
-        return NextResponse.json({ success: true, message: `Sent interaction: ${type}` });
+        return NextResponse.json({ success: true, message: finalMessage });
     } catch (error: any) {
         console.error('API Error (POST /api/ktv/interaction):', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });

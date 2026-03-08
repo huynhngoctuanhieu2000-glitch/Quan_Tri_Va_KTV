@@ -95,6 +95,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             .from('TurnQueue')
             .select('*')
             .eq('date', today)
+            .order('turns_completed', { ascending: true })
             .order('queue_position', { ascending: true });
 
         if (data) {
