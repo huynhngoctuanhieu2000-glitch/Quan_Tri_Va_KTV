@@ -5,7 +5,12 @@ import { supabase } from '@/lib/supabase';
 
 export type ScreenState = 'DASHBOARD' | 'TIMER' | 'REVIEW' | 'REWARD' | 'HANDOVER';
 
-export function useKTVDashboard() {
+export interface DashboardConfig {
+    initialAction?: string | null;
+    targetBookingId?: string | null;
+}
+
+export function useKTVDashboard(config?: DashboardConfig) {
     const { user } = useAuth();
     const [screen, setScreen] = useState<ScreenState>('DASHBOARD');
     const [booking, setBooking] = useState<any>(null);
@@ -77,6 +82,60 @@ export function useKTVDashboard() {
     }, [booking, isLoading]);
 
     // ✨ Bonus Points logic consolidated into fetchBooking for reliability
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const checkRewards = async () => {
+            // Không gửi thông báo khi đang trong quy trình làm dịch vụ (TIMER)
+            if (screenRef.current === 'TIMER') return;
+
+            try {
+                const response = await fetch(`/api/ktv/notifications?techCode=${user.id}`);
+                const res = await response.json();
+                
+                if (res.success && res.data && res.data.length > 0) {
+                    const notify = res.data[0]; // Lấy cái mới nhất
+                    setBonusMessage(notify.message);
+                    
+                    try {
+                        const winAudio = new Audio('/sounds/ktv-notification.wav');
+                        winAudio.volume = 0.5;
+                        winAudio.play().catch(e => console.warn("🔊 [KTV] Bonus sound failed:", e));
+                    } catch(e) {}
+
+                    // Đánh dấu đã đọc
+                    await fetch(`/api/ktv/notifications?id=${notify.id}`, { method: 'PATCH' });
+                    
+                    setTimeout(() => setBonusMessage(null), 15000);
+                }
+            } catch (err) {
+                console.error('Error checking rewards:', err);
+            }
+        };
+
+        // Check ngay khi load và khi trạng thái thay đổi sang IDLE
+        checkRewards();
+
+        // Realtime listener cho thông báo mới
+        const channel = supabase
+            .channel(`ktv_rewards_${user.id}`)
+            .on('postgres_changes', { 
+                event: 'INSERT', 
+                schema: 'public', 
+                table: 'StaffNotifications',
+                filter: `employeeId=eq.${user.id}`
+            }, () => {
+                checkRewards();
+            })
+            .subscribe();
+
+        const interval = setInterval(checkRewards, 60000); // Poll mỗi phút đề phòng realtime tạch
+
+        return () => {
+            supabase.removeChannel(channel);
+            clearInterval(interval);
+        };
+    }, [user?.id, screen]);
 
     // ⚙️ Fetch Settings
     useEffect(() => {
@@ -96,10 +155,31 @@ export function useKTVDashboard() {
 
         const fetchBooking = async () => {
             try {
-                const response = await fetch(`/api/ktv/booking?techCode=${user.id}`);
+                if (!user?.id) return;
+
+                // Mặc định: Lấy đơn đang gán cho KTV trong TurnQueue
+                let url = `/api/ktv/booking?techCode=${user.id}`;
+                
+                // Nâng cao: Ưu tiên targetBookingId từ URL (nếu có)
+                if (config?.targetBookingId) {
+                    url = `/api/ktv/booking?bookingId=${config.targetBookingId}`;
+                } 
+                // Nếu đã giải phóng KTV nhưng đang ở màn REWARD/HANDOVER, track đơn cũ
+                else if ((screenRef.current === 'REWARD' || screenRef.current === 'HANDOVER') && !booking && prevBookingIdRef.current) {
+                    // Nếu đã xác nhận xong (lastAcknowledgedIdRef), không track nữa
+                    if (lastAcknowledgedIdRef.current === prevBookingIdRef.current) {
+                        setBooking(null);
+                        return;
+                    }
+                    url = `/api/ktv/booking?bookingId=${prevBookingIdRef.current}`;
+                    console.log("🔍 [KTV] Tracking released booking for rating:", prevBookingIdRef.current);
+                }
+
+                const response = await fetch(url);
                 const res = await response.json();
                 
                 if (res.success && res.data) {
+                    console.log("📡 [KTV] Fetch Success - ID:", res.data.id, "Status:", res.data.status, "Rating:", res.data.rating);
                     // IGNORE if this is the booking we just finished and acknowledged
                     if (res.data.id === lastAcknowledgedIdRef.current) {
                         setBooking(null);
@@ -109,28 +189,20 @@ export function useKTVDashboard() {
                     // Update state ONLY if data actually changed to avoid timer reset & sound spam
                     setBooking((prev: any) => {
                         // ✨ CHECK FOR NEW EXCELLENT RATING (>= 4 stars)
-                        const newRating = res.data.rating;
-                        const oldRating = prev?.rating;
-                        if (newRating >= 4 && (!oldRating || oldRating < 4) && res.data.status === 'DONE') {
-                            console.log("💎 [KTV] Excellent rating detected inside sync:", newRating);
-                            setBonusMessage(`Bạn nhận được 25đ đánh giá xuất sắc từ đơn hàng #${res.data.billCode}`);
-                            try {
-                                // 🔊 Audio Fix: Use existing ktv-notification.wav instead of missing win-sound.wav
-                                const winAudio = new Audio('/sounds/ktv-notification.wav');
-                                winAudio.volume = 0.5;
-                                winAudio.play().catch(e => console.warn("🔊 [KTV] Bonus sound play failed:", e));
-                            } catch(e) {
-                                console.error("🔊 [KTV] Audio creation error:", e);
-                            }
-                            setTimeout(() => setBonusMessage(null), 15000);
+                        const newRating = Number(res.data.rating || 0);
+                        const oldRating = Number(prev?.rating || 0);
+                        
+                        // ✨ Đã chuyển sang dùng StaffNotifications Trigger để thông báo bền vững hơn
+                        // Ở đây chỉ log để debug nếu cần
+                        if (newRating >= 4 && oldRating < 4) {
+                            console.log("💎 [KTV] High rating detected in direct fetch:", newRating);
                         }
 
                         const isNew = !prev || prev.id !== res.data.id;
                         const isStatusChanged = prev?.status !== res.data.status;
+                        const isRatingChanged = oldRating !== newRating;
                         
-                        // Always update if we have new items content (names, durations, focus)
-                        // but only trigger screen jumps or timer resets if significantly different
-                        if (isNew || isStatusChanged || JSON.stringify(prev?.BookingItems) !== JSON.stringify(res.data.BookingItems)) {
+                        if (isNew || isStatusChanged || isRatingChanged || JSON.stringify(prev?.BookingItems) !== JSON.stringify(res.data.BookingItems)) {
                             // Tính tổng thời gian của tất cả dịch vụ trong đơn
                             const durationArr = res.data.BookingItems?.map((i: any) => i.duration || 60) || [60];
                             const totalDuration = durationArr.reduce((a: number, b: number) => a + b, 0);
@@ -172,6 +244,12 @@ export function useKTVDashboard() {
                                 setScreen('REVIEW');
                                 setIsTimerRunning(false);
                             }
+
+                            // ✨ HACK: Nếu bấm "Đánh giá" từ trang Lịch sử
+                            if (config?.initialAction === 'rate' && config?.targetBookingId === res.data.id && screenRef.current === 'DASHBOARD') {
+                                setScreen('REVIEW');
+                                setIsTimerRunning(false);
+                            }
                             return res.data;
                         }
                         return prev;
@@ -189,10 +267,27 @@ export function useKTVDashboard() {
         fetchBooking();
 
         // Subscribe to real-time changes
+        // ✨ Tối ưu: Lắng nghe cụ thể ID đơn hàng hiện tại nếu có để đồng bộ tức thì
         const channel = supabase
             .channel(`ktv_realtime_${user.id}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, (payload: any) => {
-                console.log("🔄 [KTV] Realtime signal received:", payload.eventType);
+            .on('postgres_changes', { 
+                event: 'UPDATE', 
+                schema: 'public', 
+                table: 'Bookings',
+                filter: booking?.id ? `id=eq.${booking.id}` : undefined
+            }, (payload: any) => {
+                console.log("🔄 [KTV] Realtime Booking Update detected:", payload.new.status);
+                // Nếu status đổi sang IN_PROGRESS hoặc COMPLETED, fetch để update UI ngay
+                fetchBooking();
+            })
+            // Vẫn giữ lắng nghe chung để nhận đơn mới (INSERT vào TurnQueue hoặc UPDATE status cũ)
+            .on('postgres_changes', { 
+                event: '*', 
+                schema: 'public', 
+                table: 'TurnQueue',
+                filter: `employee_id=eq.${user.id}`
+            }, () => {
+                console.log("🔄 [KTV] Realtime TurnQueue change detected");
                 fetchBooking();
             })
             .subscribe();
@@ -204,7 +299,7 @@ export function useKTVDashboard() {
             supabase.removeChannel(channel);
             clearInterval(intervalId);
         };
-    }, [user?.id, isTimerRunning]); // Added isTimerRunning to dependencies to ensure timer updates correctly on status change
+    }, [user?.id, booking?.id, isTimerRunning]); // Added booking?.id to deps to re-bind filter
 
     useEffect(() => {
         let timer: NodeJS.Timeout;
@@ -251,12 +346,16 @@ export function useKTVDashboard() {
     };
 
     const handleStartTimer = async () => {
-        if (!booking) return;
+        if (!booking || !user?.id) return;
         setIsLoading(true);
         const response = await fetch('/api/ktv/booking', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookingId: booking.id, status: 'IN_PROGRESS' })
+            body: JSON.stringify({ 
+                bookingId: booking.id, 
+                status: 'IN_PROGRESS',
+                techCode: user.id 
+            })
         });
         const res = await response.json();
         if (res.success) {
@@ -268,12 +367,16 @@ export function useKTVDashboard() {
     };
 
     const handleFinishTimer = async () => {
-        if (!booking) return;
+        if (!booking || !user?.id) return;
         setIsLoading(true);
         const response = await fetch('/api/ktv/booking', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookingId: booking.id, status: 'COMPLETED' })
+            body: JSON.stringify({ 
+                bookingId: booking.id, 
+                status: 'COMPLETED',
+                techCode: user.id 
+            })
         });
         const res = await response.json();
         if (res.success) {
@@ -292,19 +395,25 @@ export function useKTVDashboard() {
 
 
     const handleFinishHandover = async () => {
-        if (!booking) return;
+        if (!booking || !user?.id) return;
         setIsLoading(true);
         try {
-            // Sau khi dọn dẹp xong, KTV gửi lệnh DONE để kết thúc đơn hàng hoàn toàn
+            // Sau khi dọn dẹp xong, KTV gửi lệnh RELEASE_KTV để giải phóng lượt làm của mình
+            // Quan trọng: Lệnh này không được đóng đơn hàng (DONE) để khách có thể gửi Feedback độc lập
             const response = await fetch('/api/ktv/booking', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bookingId: booking.id, status: 'DONE' })
+                body: JSON.stringify({ 
+                    bookingId: booking.id, 
+                    status: booking.status, // Giữ nguyên status hiện tại
+                    action: 'RELEASE_KTV',
+                    techCode: user.id // QUAN TRỌNG: Chỉ giải phóng KTV này
+                })
             });
             const res = await response.json();
             
             if (!res.success) {
-                console.error('Lỗi khi cập nhật trạng thái dọn dẹp xong:', res.error);
+                console.error('Lỗi khi giải phóng KTV:', res.error);
             }
 
             // Tính tiền tua (Ưu tiên bảng mốc, sau đó mới tính theo công thức và làm tròn)
@@ -348,7 +457,7 @@ export function useKTVDashboard() {
         }
     };
 
-    const handleInteraction = async (type: 'WATER' | 'SUPPORT' | 'EMERGENCY' | 'BUY_MORE') => {
+    const handleInteraction = async (type: 'WATER' | 'SUPPORT' | 'EMERGENCY' | 'BUY_MORE' | 'EARLY_EXIT') => {
         if (!booking) return;
         setIsLoading(true);
         try {
@@ -371,23 +480,14 @@ export function useKTVDashboard() {
     };
 
     const handleEarlyExit = async () => {
-        if (!booking) return;
-        if (!confirm('Xác nhận khách muốn kết thúc dịch vụ sớm?')) return;
+        if (!booking || !user?.id) return;
+        if (!confirm('Thông báo cho quầy khách muốn kết thúc sớm?')) return;
         
-        setIsLoading(true);
-        const response = await fetch('/api/ktv/booking', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookingId: booking.id, status: 'COMPLETED', action: 'EARLY_EXIT' })
-        });
-        const res = await response.json();
-        if (res.success) {
-            setIsTimerRunning(false);
-            setScreen('REVIEW');
-        } else {
-            alert('Lỗi khi chốt đơn sớm');
-        }
-        setIsLoading(false);
+        // 🚀 THAY ĐỔI: Không tự ý PATCH status
+        // Thay vào đó gửi Interaction 'EARLY_EXIT' để Lễ tân xử lý
+        // Khi lễ tân xử lý xong, Realtime sẽ tự đưa KTV qua trang REVIEW
+        await handleInteraction('EARLY_EXIT');
+        alert('Đã gửi thông báo. Vui lòng đợi lễ tân xác nhận hoàn thành đơn.');
     };
 
     const goToDashboard = () => {

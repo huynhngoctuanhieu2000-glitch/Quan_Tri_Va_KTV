@@ -10,32 +10,50 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const technicianCode = searchParams.get('techCode');
-
-    if (!technicianCode) {
-        return NextResponse.json({ success: false, error: 'Technician code is required' }, { status: 400 });
-    }
+    const bookingIdParam = searchParams.get('bookingId'); // Thêm parameter này
 
     try {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        // 1. Lấy đơn hàng active
-        // Chỉ lấy COMPLETED nếu mới cập nhật trong 10 phút gần nhất để tránh kẹt màn hình KTV
-        const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-        
+        let bookingId = bookingIdParam;
+
+        // Nếu không có bookingId cụ thể, tìm theo KTV trong TurnQueue
+        if (!bookingId) {
+            if (!technicianCode) {
+                return NextResponse.json({ success: false, error: 'Technician code or bookingId is required' }, { status: 400 });
+            }
+            
+            const today = new Date().toISOString().split('T')[0];
+            const { data: turn, error: tError } = await supabase
+                .from('TurnQueue')
+                .select('current_order_id')
+                .eq('employee_id', technicianCode)
+                .eq('date', today)
+                .maybeSingle();
+
+            if (tError) throw tError;
+            
+            if (!turn || !turn.current_order_id) {
+                return NextResponse.json({ success: true, data: null });
+            }
+            bookingId = turn.current_order_id;
+        }
+
+        // 2. Lấy đơn hàng tương ứng
         const { data: booking, error: bError } = await supabase
             .from('Bookings')
             .select('*')
-            .eq('technicianCode', technicianCode)
-            .or(`status.in.(PREPARING,IN_PROGRESS,DONE),and(status.eq.COMPLETED,updatedAt.gte.${tenMinsAgo})`)
-            .order('createdAt', { ascending: false })
-            .limit(1)
+            .eq('id', bookingId)
             .maybeSingle();
 
         if (bError) throw bError;
-        if (!booking) return NextResponse.json({ success: true, data: null });
+        if (!booking) {
+            // Trường hợp hy hữu: TurnQueue có ID nhưng Booking không tồn tại
+            return NextResponse.json({ success: true, data: null });
+        }
 
-        // 2. Lấy BookingItems
+        // 3. Lấy BookingItems
         const { data: items, error: iError } = await supabase
             .from('BookingItems')
             .select('*')
@@ -43,10 +61,10 @@ export async function GET(request: Request) {
 
         if (iError) console.error('Error fetching booking items:', iError);
 
-        // 3. Lấy chi tiết dịch vụ
+        // 4. Lấy chi tiết dịch vụ
         let itemsWithService = items || [];
         if (items && items.length > 0) {
-            // Lấy tất cả dịch vụ để map (hiệu quả hơn query phức tạp với 100+ bản ghi)
+            // Lấy tất cả dịch vụ để map
             const { data: svcs, error: svcError } = await supabase
                 .from('Services')
                 .select('id, code, nameVN, nameEN, duration, focusConfig, description')
@@ -96,10 +114,6 @@ export async function GET(request: Request) {
                     therapistGender: therapistGender
                 };
                 
-                if (!svc) {
-                    console.warn(`⚠️ [KTV API] Service NOT FOUND for i.serviceId: "${i.serviceId}". rawSId: "${rawSId}"`);
-                }
-                
                 return item;
             });
         }
@@ -125,8 +139,12 @@ export async function GET(request: Request) {
  */
 export async function PATCH(request: Request) {
     try {
+        const { searchParams } = new URL(request.url);
+        const techCodeFromQuery = searchParams.get('techCode'); // Lấy techCode từ query nếu có
         const body = await request.json();
-        const { bookingId, status, action } = body;
+        const { bookingId, status, action, techCode: techCodeFromBody } = body;
+        
+        const technicianCode = techCodeFromQuery || techCodeFromBody;
 
         if (!bookingId || !status) {
             return NextResponse.json({ success: false, error: 'bookingId and status are required' }, { status: 400 });
@@ -135,6 +153,41 @@ export async function PATCH(request: Request) {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
+        // 🔥 XỬ LÝ RELEASE_KTV (Giải phóng KTV độc lập với Booking status)
+        if (action === 'RELEASE_KTV') {
+            if (!technicianCode) {
+                return NextResponse.json({ success: false, error: 'techCode is required for RELEASE_KTV' }, { status: 400 });
+            }
+
+            const today = new Date().toISOString().split('T')[0];
+            const { data: turn } = await supabase
+                .from('TurnQueue')
+                .select('*')
+                .eq('employee_id', technicianCode)
+                .eq('date', today)
+                .eq('current_order_id', bookingId)
+                .maybeSingle();
+
+            if (turn) {
+                const { data: allActiveTurns } = await supabase.from('TurnQueue').select('queue_position').eq('date', today);
+                let maxPos = 0;
+                allActiveTurns?.forEach(t => { if (t.queue_position > maxPos) maxPos = t.queue_position; });
+
+                const newTurns = (turn.turns_completed || 0) + 1;
+                const newPos = maxPos + 1;
+                
+                await supabase.from('TurnQueue').update({
+                    status: 'waiting',
+                    current_order_id: null,
+                    estimated_end_time: null,
+                    turns_completed: newTurns,
+                    queue_position: newPos
+                }).eq('id', turn.id);
+            }
+            return NextResponse.json({ success: true, message: 'KTV Released' });
+        }
+
+        // --- Logic cũ cho Status update ---
         const updatePayload: any = { status, updatedAt: new Date().toISOString() };
         
         if (status === 'IN_PROGRESS') {

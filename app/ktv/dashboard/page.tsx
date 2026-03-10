@@ -8,10 +8,12 @@ import {
   Smile, Frown, Meh, Star, Gift, ArrowRight, X,
   ClipboardList, Coffee, LogOut, Sparkles, User, 
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
-  Dumbbell, Quote, BookOpen, BellRing
+  Dumbbell, Quote, BookOpen, BellRing, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Image from 'next/image';
 import { useKTVDashboard, ScreenState } from './KTVDashboard.logic';
+import { useSearchParams } from 'next/navigation';
 
 // 🌿 UI CONFIGURATION - SPA THEME (RESORED)
 const THEME = {
@@ -38,7 +40,14 @@ const ANIMATION = {
 };
 
 export default function KTVDashboardPage() {
-  const logic = useKTVDashboard();
+  const searchParams = useSearchParams();
+  const action = searchParams.get('action');
+  const bookingId = searchParams.get('bookingId');
+  
+  const logic = useKTVDashboard({ 
+    initialAction: action, 
+    targetBookingId: bookingId 
+  });
   const { 
     user, 
     screen, 
@@ -82,7 +91,15 @@ export default function KTVDashboardPage() {
            initial={{ y: -100, opacity: 0 }}
            animate={{ y: 0, opacity: 1 }}
            exit={{ y: -100, opacity: 0 }}
-           className="fixed top-0 left-0 right-0 z-[200] p-4 flex justify-center"
+           drag="x"
+           dragConstraints={{ left: 0, right: 0 }}
+           dragElastic={0.7}
+           onDragEnd={(_, info) => {
+             if (Math.abs(info.offset.x) > 100) {
+               setBonusMessage(null);
+             }
+           }}
+           className="fixed top-0 left-0 right-0 z-[200] p-4 flex justify-center cursor-grab active:cursor-grabbing"
         >
           <div className="bg-white/95 backdrop-blur-xl border border-emerald-100 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-4 max-w-lg w-full">
             <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200">
@@ -158,8 +175,9 @@ function ScreenDashboard({ logic }: { logic: any }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-xl font-bold ${THEME.textBase}`}>Xin chào,</h1>
-          <p className={`text-sm ${THEME.textMuted}`}>{(logic.user as any)?.email?.split('@')[0] || 'Kỹ thuật viên'}</p>
+          <h1 className={`text-xl font-bold ${THEME.textBase}`}>
+            Xin chào, <span className="text-emerald-600 ml-1">{logic.user?.id || 'Kỹ thuật viên'}</span>
+          </h1>
         </div>
         <div className={`w-10 h-10 ${THEME.primaryMuted} rounded-full flex items-center justify-center font-bold`}>
            <User size={20} />
@@ -167,12 +185,38 @@ function ScreenDashboard({ logic }: { logic: any }) {
       </div>
 
       {!booking ? (
-        <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} p-8 text-center border shadow-sm`}>
-          <div className={`w-16 h-16 ${THEME.primaryMuted} rounded-full flex items-center justify-center mx-auto mb-4`}>
-            <Clock size={24} className="text-emerald-600" />
+        <div className="space-y-6">
+          <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} p-8 text-center border shadow-sm`}>
+            {/* QR Code Section - Internal Access / Identity (MOVED TO TOP) */}
+            <div className="flex flex-col items-center mb-8">
+               <div className="relative group mb-4">
+                  <div className="absolute -inset-2 bg-emerald-50 rounded-[2rem] blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative p-3 bg-white rounded-[2rem] shadow-xl border border-emerald-100/50 transition-transform active:scale-95 duration-300">
+                     <Image 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://nganhaspa.vn/ktv/${(logic.user as any)?.id || 'profile'}`}
+                        alt="QR Code"
+                        width={160}
+                        height={160}
+                        className="rounded-2xl"
+                        referrerPolicy="no-referrer"
+                     />
+                  </div>
+               </div>
+               <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                    <QrCode size={12} className="text-emerald-500" />
+                    QR TRUY CẬP NHANH
+                  </p>
+                  <p className="text-[9px] text-slate-300 font-medium">Quản lý định danh cá nhân</p>
+               </div>
+            </div>
+
+            <div className={`w-12 h-12 ${THEME.primaryMuted} rounded-full flex items-center justify-center mx-auto mb-4 opacity-50`}>
+              <Clock size={20} className="text-emerald-600" />
+            </div>
+            <h3 className={`text-lg font-bold ${THEME.textBase} mb-2`}>Chưa có đơn hàng</h3>
+            <p className={`text-sm ${THEME.textMuted}`}>Hệ thống sẽ thông báo ngay khi có khách hàng được xếp phòng.</p>
           </div>
-          <h3 className={`text-lg font-bold ${THEME.textBase} mb-2`}>Chưa có đơn hàng</h3>
-          <p className={`text-sm ${THEME.textMuted}`}>Hệ thống sẽ thông báo ngay khi có khách hàng được xếp phòng.</p>
         </div>
       ) : (
         <div className="space-y-6">

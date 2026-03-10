@@ -46,7 +46,7 @@ export interface ServiceBlock {
   customerNote: string;
 }
 
-export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'cleaning' | 'done';
+export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'cleaning' | 'waiting_rating' | 'done';
 
 export interface PendingOrder {
   id: string; // Booking ID
@@ -59,6 +59,8 @@ export interface PendingOrder {
   createdAt: string;
   totalAmount?: number;
   paymentMethod?: string;
+  rawStatus?: string;
+  hasAssignedKtv?: boolean;
 }
 
 export type StaffData = {
@@ -293,15 +295,20 @@ export default function DispatchBoardPage() {
       if (res.data.allServices) setAllServices(res.data.allServices);
       console.log(`✅ [Dispatch] Loaded ${rData.length} rooms and ${bdData.length} beds`);
 
-      // 4. Set Bookings
+        // 4. Set Bookings
       if (bData) {
         const mappedOrders: PendingOrder[] = (bData as any[]).filter(b => b.status !== 'CANCELLED').map(b => {
+          // Tìm tất cả KTV đang được gán cho đơn này trong TurnQueue
+          const assignedTurns = tData?.filter((t: any) => t.current_order_id === b.id) || [];
+          const hasAssignedKtv = assignedTurns.length > 0;
+
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'CONFIRMED' || b.status === 'PREPARING') dStatus = 'dispatched';
-          if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          if (b.status === 'DONE' || b.status === 'FEEDBACK') dStatus = 'done';
-          if (b.status === 'COMPLETED') dStatus = 'cleaning';
-
+          else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
+          else if (b.status === 'FEEDBACK') dStatus = 'waiting_rating';
+          else if (b.status === 'COMPLETED' || hasAssignedKtv) dStatus = 'cleaning';
+          else if (b.status === 'DONE') dStatus = 'done';
+          
           return {
             id: b.id,
             billCode: b.billCode || 'N/A',
@@ -312,41 +319,60 @@ export default function DispatchBoardPage() {
             createdAt: b.createdAt || new Date().toISOString(),
             totalAmount: b.totalAmount || 0,
             paymentMethod: b.paymentMethod || 'Chưa rõ',
-            services: (b.BookingItems || []).map((bi: any) => ({
-              id: bi.id,
-              serviceName: bi.serviceName || bi.service_name || 'Dịch vụ',
-              serviceDescription: bi.serviceDescription || bi.service_description || '',
-              duration: Number(bi.duration) || 0,
-              selectedRoomId: b.roomName || null,
-              bedId: b.bedId || null,
-              staffList: b.technicianCode ? [{
-                id: `st-${bi.id}`,
-                ktvId: b.technicianCode,
-                ktvName: (sData as StaffData[])?.find((s: any) => s.id === b.technicianCode)?.full_name || 'KTV',
-                startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
-                duration: bi.duration ?? 0,
-                endTime: '',
-                noteForKtv: bi.options?.noteForKtv || '' // Bóc tách ghi chú cũ từ database
-              }] : [{
-                id: `st-${bi.id}`,
-                ktvId: '',
-                ktvName: '',
-                startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
-                duration: bi.duration ?? 0,
-                endTime: '',
-                noteForKtv: ''
-              }],
-              adminNote: b.notes || '',
-              genderReq: bi.options?.therapist || 'Ngẫu nhiên',
-              strength: bi.options?.strength || '',
-              focus: Array.isArray(bi.options?.focus) ? bi.options.focus.join(', ') : (bi.options?.focus || b.focusAreaNote || ''),
-              avoid: Array.isArray(bi.options?.avoid) ? bi.options.avoid.join(', ') : (bi.options?.avoid || ''),
-              customerNote: [
-                bi.options?.note,
-                Array.isArray(bi.options?.tags) && bi.options.tags.length > 0 ? `Yêu cầu đặc biệt: ${bi.options.tags.join(', ')}` : '',
-                b.focusAreaNote
-              ].filter(Boolean).join(' | '),
-            }))
+            rawStatus: b.status,
+            hasAssignedKtv,
+            services: (b.BookingItems || []).map((bi: any) => {
+              // Đối với mỗi service, chúng ta có thể gán nhiều KTV. 
+              // Hiện tại trong UI, staffList nằm trong khối service.
+              // Nếu đơn đã được điều phối, ta lấy danh sách KTV từ TurnQueue.
+              
+              // GIẢ ĐỊNH: Nếu có nhiều KTV và nhiều dịch vụ, ta gán tất cả KTV cho dịch vụ đầu tiên
+              // để hiển thị đủ danh sách. Trong thực tế, có thể cần mapping phức tạp hơn.
+              const isFirstService = (b.BookingItems || []).indexOf(bi) === 0;
+              
+              const staffList = (assignedTurns.length > 0 && isFirstService) 
+                ? assignedTurns.map((t: any) => {
+                    const staff = (sData as StaffData[])?.find((s: any) => s.id === t.employee_id);
+                    return {
+                      id: `st-${bi.id}-${t.employee_id}`,
+                      ktvId: t.employee_id,
+                      ktvName: staff?.full_name || 'KTV',
+                      startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
+                      duration: bi.duration ?? 0,
+                      endTime: t.estimated_end_time || '',
+                      noteForKtv: bi.options?.noteForKtv || ''
+                    };
+                  })
+                : [{
+                    id: `st-${bi.id}`,
+                    ktvId: '',
+                    ktvName: '',
+                    startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
+                    duration: bi.duration ?? 0,
+                    endTime: '',
+                    noteForKtv: ''
+                  }];
+
+              return {
+                id: bi.id,
+                serviceName: bi.serviceName || bi.service_name || 'Dịch vụ',
+                serviceDescription: bi.serviceDescription || bi.service_description || '',
+                duration: Number(bi.duration) || 0,
+                selectedRoomId: b.roomName || null,
+                bedId: b.bedId || null,
+                staffList: staffList,
+                adminNote: b.notes || '',
+                genderReq: bi.options?.therapist || 'Ngẫu nhiên',
+                strength: bi.options?.strength || '',
+                focus: Array.isArray(bi.options?.focus) ? bi.options.focus.join(', ') : (bi.options?.focus || b.focusAreaNote || ''),
+                avoid: Array.isArray(bi.options?.avoid) ? bi.options.avoid.join(', ') : (bi.options?.avoid || ''),
+                customerNote: [
+                  bi.options?.note,
+                  Array.isArray(bi.options?.tags) && bi.options.tags.length > 0 ? `Yêu cầu đặc biệt: ${bi.options.tags.join(', ')}` : '',
+                  b.focusAreaNote
+                ].filter(Boolean).join(' | '),
+              };
+            })
           };
         });
 
@@ -410,7 +436,16 @@ export default function DispatchBoardPage() {
                     initial={{ opacity: 0, y: -20, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border min-w-[320px] max-w-sm flex gap-4 items-start
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.7}
+                    onDragEnd={async (_, info) => {
+                       if (Math.abs(info.offset.x) > 100) {
+                          setStaffNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item));
+                          await supabase.from('StaffNotifications').update({ isRead: true }).eq('id', n.id);
+                       }
+                    }}
+                    className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border min-w-[320px] max-w-sm flex gap-4 items-start cursor-grab active:cursor-grabbing
                       ${n.type === 'EMERGENCY' 
                         ? 'bg-rose-600 border-rose-500 text-white' 
                         : 'bg-white/95 backdrop-blur-md border-emerald-100'}`}
@@ -467,10 +502,27 @@ export default function DispatchBoardPage() {
     { id: 'dispatched', label: 'Đã điều phối', color: 'text-indigo-600', activeBg: 'bg-indigo-500', dot: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-700' },
     { id: 'in_progress', label: 'Đang làm', color: 'text-amber-600', activeBg: 'bg-amber-500', dot: 'bg-amber-500', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700' },
     { id: 'cleaning', label: 'Đang dọn', color: 'text-purple-600', activeBg: 'bg-purple-500', dot: 'bg-purple-500', badgeBg: 'bg-purple-100', badgeText: 'text-purple-700' },
+    { id: 'waiting_rating', label: 'Chờ đánh giá', color: 'text-blue-600', activeBg: 'bg-blue-500', dot: 'bg-blue-500', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700' },
     { id: 'done', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700' },
   ];
 
-  const displayedOrders = orders.filter(o => o.dispatchStatus === leftPanelTab);
+  const displayedOrders = orders.filter(o => {
+    // 🚀 ĐỘC LẬP TRẠNG THÁI: Một đơn có thể xuất hiện ở nhiều tab nếu cần
+    if (leftPanelTab === 'cleaning') {
+      // Hiện trong tab Dọn dẹp nếu status là COMPLETED HOẶC vẫn còn KTV đang gán (chưa release)
+      return o.rawStatus === 'COMPLETED' || o.hasAssignedKtv;
+    }
+    if (leftPanelTab === 'waiting_rating') {
+      // Chỉ hiện trong tab Chờ đánh giá nếu status của Khách là FEEDBACK
+      return o.rawStatus === 'FEEDBACK';
+    }
+    if (leftPanelTab === 'done') {
+      // Chỉ hiện trong tab Hoàn tất nếu Khách đã DONE VÀ KTV đã được giải phóng (hết dọn phòng)
+      return o.rawStatus === 'DONE' && !o.hasAssignedKtv;
+    }
+    // Các trạng thái khác (pending, dispatched, in_progress) dùng logic so khớp trực tiếp
+    return o.dispatchStatus === leftPanelTab;
+  });
 
   const updateOrder = (orderId: string, patchFn: (o: PendingOrder) => PendingOrder) => {
     setOrders(prev => prev.map(o => o.id === orderId ? patchFn(o) : o));
@@ -596,10 +648,16 @@ export default function DispatchBoardPage() {
     }
 
     try {
-      const staffAssignments = [];
+      const allStaffAssignments = [];
+      const techCodesSet = new Set<string>();
+
       for (const svc of selectedOrder.services) {
         for (const row of svc.staffList) {
+          if (!row.ktvId) continue;
+          
           const ktvId = row.ktvId;
+          techCodesSet.add(ktvId); // Thu thập tất cả mã KTV duy nhất
+
           const currentTurn = turns.find(t => t.employee_id === ktvId);
           if (!currentTurn) continue;
 
@@ -608,11 +666,13 @@ export default function DispatchBoardPage() {
 
           if (currentTurn.current_order_id !== selectedOrder.id) {
             turnsCompleted += 1;
-            const maxPos = Math.max(...turns.map(t => t.queue_position), 0);
-            queuePos = maxPos + 1;
+            // Tính toán queuePos mới: Lấy max hiện tại trong state + số người đã được xử lý trong vòng lặp này
+            const currentMax = Math.max(...turns.map(t => t.queue_position), 0);
+            const addedCount = allStaffAssignments.length; 
+            queuePos = currentMax + addedCount + 1;
           }
           
-          staffAssignments.push({
+          allStaffAssignments.push({
             ktvId,
             turnsCompleted,
             queuePos,
@@ -621,6 +681,9 @@ export default function DispatchBoardPage() {
         }
       }
 
+      // Tạo chuỗi mã KTV phân cách bằng dấu phẩy để lưu vào Bookings.technicianCode
+      const combinedTechCodes = Array.from(techCodesSet).join(', ');
+      
       const primaryService = selectedOrder.services[0];
       
       // Thu thập tất cả các ghi chú cho KTV từ các item
@@ -647,10 +710,10 @@ export default function DispatchBoardPage() {
 
       const res = await processDispatch(selectedOrder.id, {
         status: 'CONFIRMED',
-        technicianCode: primaryService?.staffList[0]?.ktvId || null,
+        technicianCode: combinedTechCodes,
         bedId: primaryService?.bedId || null,
         roomName: primaryService?.selectedRoomId || null,
-        staffAssignments,
+        staffAssignments: allStaffAssignments,
         date: selectedDate,
         notes: primaryService?.adminNote || '', // Lưu ghi chú điều phối vào Bookings.notes
         itemUpdates: itemUpdates
