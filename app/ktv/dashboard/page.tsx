@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
@@ -39,7 +39,7 @@ const ANIMATION = {
   exit: { opacity: 0, scale: 0.95 }
 };
 
-export default function KTVDashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams();
   const action = searchParams.get('action');
   const bookingId = searchParams.get('bookingId');
@@ -63,23 +63,19 @@ export default function KTVDashboardPage() {
 
   if (isLoading && !booking && screen === 'DASHBOARD') {
     return (
-      <AppLayout>
-        <div className={`min-h-[80vh] flex flex-col items-center justify-center ${THEME.bgBase}`}>
-          <div className="w-8 h-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
-          <p className="mt-4 text-emerald-700 font-medium">Đang tải dữ liệu ca làm việc...</p>
-        </div>
-      </AppLayout>
+      <div className={`min-h-[80vh] flex flex-col items-center justify-center ${THEME.bgBase}`}>
+        <div className="w-8 h-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
+        <p className="mt-4 text-emerald-700 font-medium">Đang tải dữ liệu ca làm việc...</p>
+      </div>
     );
   }
 
   if (!user) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center justify-center h-64 text-center">
-          <ShieldAlert size={48} className="text-red-500 mb-4" />
-          <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
-        </div>
-      </AppLayout>
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <ShieldAlert size={48} className="text-red-500 mb-4" />
+        <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
+      </div>
     );
   }
 
@@ -135,7 +131,7 @@ export default function KTVDashboardPage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className={`max-w-md mx-auto min-h-screen pb-24 ${THEME.bgBase} relative`}>
         {renderBonusNotification()}
         <AnimatePresence mode="wait">
@@ -159,6 +155,21 @@ export default function KTVDashboardPage() {
         procedure={booking?.BookingItems?.[0]?.procedure}
         serviceName={booking?.BookingItems?.[0]?.service_name}
       />
+    </>
+  );
+}
+
+export default function KTVDashboardPage() {
+  return (
+    <AppLayout>
+      <Suspense fallback={
+        <div className={`min-h-[80vh] flex flex-col items-center justify-center bg-[#FDFBF7]`}>
+          <div className="w-8 h-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
+          <p className="mt-4 text-emerald-700 font-medium">Đang chuẩn bị dữ liệu...</p>
+        </div>
+      }>
+        <DashboardContent />
+      </Suspense>
     </AppLayout>
   );
 }
