@@ -19,82 +19,29 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AddOrderModal } from './_components/AddOrderModal';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
+import { 
+  StaffAssignment, 
+  ServiceBlock, 
+  DispatchStatus, 
+  PendingOrder, 
+  StaffData, 
+  TurnQueueData, 
+  StaffNotification 
+} from './types';
 
-export interface StaffAssignment {
-  id: string; // Internal mapping ID
-  ktvId: string;
-  ktvName: string;
-  startTime: string;
-  duration: number;
-  endTime: string;
-  noteForKtv: string;
-}
 
-export interface ServiceBlock {
-  id: string; // BookingItem ID
-  serviceName: string;
-  serviceDescription?: string;
-  duration: number;
-  selectedRoomId: string | null;
-  bedId: string | null;
-  staffList: StaffAssignment[];
-  adminNote: string;
-  genderReq: string;
-  strength: string;
-  focus: string;
-  avoid: string;
-  customerNote: string;
-}
 
-export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'cleaning' | 'waiting_rating' | 'done';
 
-export interface PendingOrder {
-  id: string; // Booking ID
-  billCode: string;
-  customerName: string;
-  phone: string;
-  time: string;
-  services: ServiceBlock[];
-  dispatchStatus: DispatchStatus;
-  createdAt: string;
-  totalAmount?: number;
-  paymentMethod?: string;
-  rawStatus?: string;
-  hasAssignedKtv?: boolean;
-}
 
-export type StaffData = {
-  id: string;
-  full_name: string;
-  status: string;
-  gender: string;
-  skills: Record<string, string>;
-  phone: string;
-  position: string;
-  avatar_url: string;
-  experience: string;
-};
 
-export type TurnQueueData = {
-  id?: string;
-  employee_id: string;
-  date: string;
-  queue_position: number;
-  check_in_order: number;
-  status: 'waiting' | 'working' | 'done_turn';
-  turns_completed: number;
-  current_order_id?: string | null;
-  estimated_end_time?: string | null;
-};
 
-export interface StaffNotification {
-  id: string;
-  bookingId: string;
-  type: string;
-  message: string;
-  isRead: boolean;
-  createdAt: string;
-}
+
+
+
+
+
+
+
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 
@@ -205,13 +152,21 @@ export default function DispatchBoardPage() {
           console.error("❌ [Dispatch] Realtime: Empty or invalid notification payload", payload);
           return;
         }
+
+        // 🚀 Lọc bỏ thông báo THƯỞNG (REWARD) - chỉ dành cho KTV
+        if (newNotif.type === 'REWARD') {
+           console.log("⏭️ [Dispatch] Skipping REWARD notification for reception UI");
+           return;
+        }
+
         setStaffNotifications(prev => {
-          // Tránh trùng lặp nếu query fetch chạy cùng lúc
           if (prev.some(p => p.id === newNotif.id)) return prev;
           return [newNotif, ...prev];
         });
         if (soundEnabled) {
-           playNotificationSound('Realtime (Staff)', newNotif.type);
+           // Ưu tiên âm thanh cấp cứu cho EMERGENCY và COMPLAINT
+           const isUrgent = newNotif.type === 'EMERGENCY' || newNotif.type === 'COMPLAINT';
+           playNotificationSound('Realtime (Staff)', isUrgent ? 'EMERGENCY' : newNotif.type);
         }
       })
       .on('system', { event: '*', schema: 'public', table: 'StaffNotifications' }, (payload) => {
@@ -305,8 +260,9 @@ export default function DispatchBoardPage() {
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'CONFIRMED' || b.status === 'PREPARING') dStatus = 'dispatched';
           else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
+          else if (hasAssignedKtv) dStatus = 'cleaning'; // Ưu tiên hiển thị đang dọn nếu KTV chưa release
           else if (b.status === 'FEEDBACK') dStatus = 'waiting_rating';
-          else if (b.status === 'COMPLETED' || hasAssignedKtv) dStatus = 'cleaning';
+          else if (b.status === 'COMPLETED') dStatus = 'cleaning';
           else if (b.status === 'DONE') dStatus = 'done';
           
           return {
@@ -379,18 +335,19 @@ export default function DispatchBoardPage() {
         setOrders(mappedOrders);
         console.log(`✅ [Dispatch] Fetched ${mappedOrders.length} bookings successfully:`, mappedOrders);
 
-        // 5. Fetch Unread Staff Notifications
+        // 5. Fetch Unread Staff Notifications (Lọc REWARD)
         const { data: notifs, error: nError } = await supabase
             .from('StaffNotifications')
             .select('*')
             .eq('isRead', false)
+            .neq('type', 'REWARD')
             .order('createdAt', { ascending: false })
             .limit(20);
         
         if (nError) {
           console.error("❌ [Dispatch] Error fetching StaffNotifications:", nError);
         } else if (notifs) {
-          console.log(`🔔 [Dispatch] Fetched ${notifs.length} unread staff notifications`);
+          console.log(`🔔 [Dispatch] Fetched ${notifs.length} unread relevant notifications`);
           setStaffNotifications(notifs as StaffNotification[]);
         }
       }
@@ -456,8 +413,11 @@ export default function DispatchBoardPage() {
                     </div>
                     <div className="flex-1">
                        <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5
-                          ${n.type === 'EMERGENCY' ? 'text-rose-100' : 'text-emerald-600'}`}>
-                          KTV Yêu cầu hỗ trợ
+                          ${n.type === 'EMERGENCY' || n.type === 'COMPLAINT' ? (n.type === 'EMERGENCY' ? 'text-rose-100' : 'text-rose-600') : 'text-emerald-600'}`}>
+                          {n.type === 'COMPLAINT' ? '🚨 Đánh giá tệ (Cần xử lý)' : 
+                           n.type === 'EMERGENCY' ? '🆘 Báo động khẩn cấp' : 
+                           n.type === 'EARLY_EXIT' ? '🏃 Khách về sớm (Chờ xác nhận)' : 
+                           'KTV Yêu cầu hỗ trợ'}
                        </p>
                        <p className={`text-sm font-bold leading-tight ${n.type === 'EMERGENCY' ? 'text-white' : 'text-slate-800'}`}>
                           {n.message}
@@ -753,8 +713,14 @@ export default function DispatchBoardPage() {
   };
 
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
-    const statusLabel = newStatus === 'DONE' ? 'HOÀN TẤT' : newStatus;
-    if (!confirm(`Xác nhận ${statusLabel} đơn hàng này?`)) return;
+    let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
+    if (newStatus === 'COMPLETED') {
+      confirmMsg = `Xác nhận HOÀN THÀNH dịch vụ và chuyển sang giai đoạn DỌN PHÒNG cho KTV?`;
+    } else if (newStatus === 'DONE') {
+      confirmMsg = `Xác nhận HOÀN TẤT TOÀN BỘ đơn hàng và giải phóng KTV?`;
+    }
+    
+    if (!confirm(confirmMsg)) return;
     try {
       const res = await updateBookingStatus(orderId, newStatus, selectedDate);
       if (res.success) {
@@ -1152,14 +1118,25 @@ export default function DispatchBoardPage() {
               const order = orders.find(o => o.id === contextMenu.orderId);
               if (!order) return null;
 
-              if (order.dispatchStatus === 'in_progress' || order.dispatchStatus === 'cleaning') {
+              if (order.dispatchStatus === 'in_progress') {
+                return (
+                  <button
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
+                  >
+                    <CheckCircle2 size={18} />
+                    Hoàn thành & Dọn phòng
+                  </button>
+                );
+              }
+              if (order.dispatchStatus === 'cleaning' || order.dispatchStatus === 'waiting_rating') {
                 return (
                   <button
                     onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}
                     className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
                   >
                     <CheckCircle2 size={18} />
-                    Hoàn tất đơn này
+                    Hoàn tất toàn bộ đơn
                   </button>
                 );
               }

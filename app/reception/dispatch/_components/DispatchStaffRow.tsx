@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Trash2, Star, Clock, AlertCircle, CheckCircle2, ChevronDown } from 'lucide-react';
-import { StaffData, TurnQueueData } from '../page';
+import { StaffData, TurnQueueData } from '../types';
 
 interface StaffAssignment {
     id: string;

@@ -4,7 +4,7 @@ import React from 'react';
 import { Plus, AlertTriangle, UserCheck, Bed as BedIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { DispatchStaffRow } from './DispatchStaffRow';
-import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../page';
+import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
 
 interface Bed {
     id: string;

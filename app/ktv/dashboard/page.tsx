@@ -6,9 +6,10 @@ import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
   CheckCircle, Play, StopCircle,
   Smile, Frown, Meh, Star, Gift, ArrowRight, X,
-  ClipboardList, Coffee, LogOut, Sparkles, User, 
+  ClipboardList, Coffee, LogOut, Sparkles, User, Users,
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
-  Dumbbell, Quote, BookOpen, BellRing, QrCode
+  Dumbbell, Quote, BookOpen, BellRing, QrCode,
+  ChevronDown, ChevronUp, Heart, MicOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Image from 'next/image';
@@ -183,17 +184,19 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
   return (
     <div className="p-4 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className={`text-xl font-bold ${THEME.textBase}`}>
-            Xin chào, <span className="text-emerald-600 ml-1">{logic.user?.id || 'Kỹ thuật viên'}</span>
-          </h1>
+      {/* Header - Only show when NO active booking */}
+      {!booking && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className={`text-xl font-bold ${THEME.textBase}`}>
+              Xin chào, <span className="text-emerald-600 ml-1">{logic.user?.id || 'Kỹ thuật viên'}</span>
+            </h1>
+          </div>
+          <div className={`w-10 h-10 ${THEME.primaryMuted} rounded-full flex items-center justify-center font-bold`}>
+             <User size={20} />
+          </div>
         </div>
-        <div className={`w-10 h-10 ${THEME.primaryMuted} rounded-full flex items-center justify-center font-bold`}>
-           <User size={20} />
-        </div>
-      </div>
+      )}
 
       {!booking ? (
         <div className="space-y-6">
@@ -232,92 +235,45 @@ function ScreenDashboard({ logic }: { logic: any }) {
       ) : (
         <div className="space-y-6">
           {/* Active Booking Card */}
-          <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} overflow-hidden border shadow-sm`}>
-            <div className="p-4 bg-emerald-50/50 border-b border-emerald-100 flex justify-between items-center">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Đơn Mới
-              </span>
-              <span className={`text-sm font-semibold ${THEME.textMuted}`}>#{booking.billCode}</span>
-            </div>
+          <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} overflow-hidden border shadow-sm p-6 pb-0`}>
+              <div className="mb-4">
+                {booking.BookingItems?.map((item: any) => (
+                   <div key={item.id} className="flex flex-col">
+                      <h3 className="font-black text-3xl text-emerald-700 leading-tight tracking-tight">
+                        {item.service_name}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{item.duration} phút</span>
+                        <span className="text-sm font-black text-slate-800">#{booking.billCode}</span>
+                      </div>
+                   </div>
+                ))}
+              </div>
 
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-4">
-                 <h3 className={`font-bold text-2xl ${THEME.textBase}`}>
-                  Phòng {booking.roomName}
-                </h3>
+              <div className="flex justify-between items-end mb-6">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">Vị trí</span>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-emerald-600 text-white px-4 py-2 rounded-2xl font-black text-lg shadow-lg shadow-emerald-100">
+                      Phòng {booking.roomName}
+                    </div>
+                    {booking.bedId && (
+                      <div className="bg-white border-2 border-emerald-100 text-emerald-700 px-4 py-2 rounded-2xl font-black text-lg">
+                        Giường {booking.bedId.split('-').pop()}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <button 
                   onClick={() => setShowProcedure(true)}
-                  className="text-emerald-600 text-xs font-bold flex items-center gap-1 underline"
+                  className="text-emerald-600 text-xs font-bold flex items-center gap-1 underline mb-2"
                 >
                    <ClipboardList size={14} /> Quy trình
                 </button>
               </div>
 
-              <div className="space-y-2 mb-4">
-                {booking.BookingItems?.map((item: any) => (
-                   <div key={item.id} className="flex justify-between items-center text-sm">
-                      <span className="font-bold text-slate-700">{item.service_name}</span>
-                      <p className="text-slate-400 font-medium">{item.duration} phút</p>
-                   </div>
-                ))}
-              </div>
-
               {/* Special Requirements (Same as Timer Screen) */}
-              {booking.BookingItems?.[0] && (
-                <div className="bg-amber-50/40 border border-amber-100 rounded-[24px] p-5 mb-6">
-                  <div className="flex items-center gap-2 mb-4">
-                      <AlertTriangle size={16} className="text-amber-600" />
-                      <span className="text-[11px] font-black text-amber-800 uppercase tracking-wider">YÊU CẦU TỪ KHÁCH</span>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mb-4">
-                      {/* Strength Tag */}
-                      <div className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                        <Dumbbell size={14} /> {booking.BookingItems[0].strength || 'Vừa'}
-                      </div>
-                      {/* Focus Tag */}
-                      {booking.BookingItems[0].focus && (
-                        <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5 text-xs font-bold shadow-sm font-sans">
-                            <Target size={14} className="text-rose-400" /> {booking.BookingItems[0].focus}
-                        </div>
-                      )}
-                      {/* Avoid Tag */}
-                      {booking.BookingItems[0].avoid && (
-                        <div className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                            <Ban size={14} /> {booking.BookingItems[0].avoid}
-                        </div>
-                      )}
-                  </div>
-
-                  {booking.BookingItems[0].customerNote && (
-                    <div className="bg-white/80 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 font-medium italic leading-relaxed shadow-sm">
-                        "{booking.BookingItems[0].customerNote}"
-                    </div>
-                  )}
-
-                  {/* Additional Notes */}
-                  <div className="mt-4 space-y-3">
-                     {booking.dispatcherNote && (
-                        <div className="flex flex-col gap-1">
-                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Ghi chú của quầy</span>
-                           <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-600 font-medium">
-                              {booking.dispatcherNote}
-                           </div>
-                        </div>
-                     )}
-                     {booking.BookingItems[0].noteForKtv && (
-                        <div className="flex flex-col gap-1">
-                           <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest px-1">Ghi chú cho kỹ thuật viên</span>
-                           <div className="bg-rose-50/50 p-3 rounded-xl text-xs text-rose-700 font-bold border border-rose-100">
-                              {booking.BookingItems[0].noteForKtv}
-                           </div>
-                        </div>
-                     )}
-                  </div>
-                </div>
-              )}
-            </div>
+              <CollapsibleRequirements booking={booking} />
           </div>
 
           {/* Setup Checklist */}
@@ -382,9 +338,21 @@ function ScreenTimer({ logic }: { logic: any }) {
     <div className="p-4 h-full flex flex-col pt-8">
       {/* Header Info */}
       <div className="flex justify-between items-start mb-6 px-2">
-        <div>
-          <h2 className={`text-2xl font-black ${THEME.textBase}`}>Phòng {booking?.roomName}</h2>
-          <p className={`${THEME.textMuted} font-medium`}>{item.service_name}</p>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-black text-emerald-700 leading-tight tracking-tight">
+            {item.service_name}
+          </h1>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-slate-800 font-black">
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest">Phòng</span>
+              <span className="text-lg">{booking?.roomName}</span>
+            </div>
+            <div className="w-px h-3 bg-slate-200" />
+            <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs">
+              <Clock size={14} />
+              <span>{item.duration} phút</span>
+            </div>
+          </div>
         </div>
         {!isTimerRunning && (
           <button 
@@ -452,61 +420,7 @@ function ScreenTimer({ logic }: { logic: any }) {
       </div>
 
       {/* Special Requirements Section */}
-      <div className="bg-amber-50/40 border border-amber-100 rounded-[28px] p-6 mb-8">
-         <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={16} className="text-amber-600" />
-            <span className="text-[10px] font-black text-amber-800 uppercase tracking-[0.2em]">YÊU CẦU TỪ KHÁCH</span>
-         </div>
-         
-         <div className="flex flex-wrap gap-2 mb-4">
-            {/* Gender Tag */}
-            <div className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-               <User size={14} /> {item.therapistGender || 'Tự do'}
-            </div>
-            {/* Strength Tag */}
-            <div className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-               <Dumbbell size={14} /> {item.strength || 'Vừa'}
-            </div>
-            {/* Focus Tag */}
-            {item.focus && (
-              <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                 <Target size={14} className="text-rose-400" /> {item.focus}
-              </div>
-            )}
-            {/* Avoid Tag */}
-            {item.avoid && (
-              <div className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                 <Ban size={14} /> {item.avoid}
-              </div>
-            )}
-         </div>
-
-         {item.customerNote && (
-           <div className="bg-white/80 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 font-medium italic shadow-sm mb-4">
-              "{item.customerNote}"
-           </div>
-         )}
-
-         {/* Extra Notes for KTV / Reception */}
-         <div className="space-y-3 pt-2">
-            {booking.dispatcherNote && (
-               <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Ghi chú của quầy</span>
-                  <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-600 font-medium">
-                     {booking.dispatcherNote}
-                  </div>
-               </div>
-            )}
-            {item.noteForKtv && (
-               <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest px-1">Ghi chú cho kỹ thuật viên</span>
-                  <div className="bg-rose-50/50 p-3 rounded-xl text-xs text-rose-700 font-black border border-rose-100">
-                     {item.noteForKtv}
-                  </div>
-               </div>
-            )}
-         </div>
-      </div>
+      <CollapsibleRequirements booking={booking} />
 
       {/* 2x2 Action Grid + Emergency Wide */}
       <div className="flex flex-col gap-3 mb-12">
@@ -575,27 +489,51 @@ function ScreenReview({ logic }: { logic: any }) {
         <p className="text-slate-500 mt-2">Đánh giá hồ sơ khách hàng</p>
       </div>
 
-      <div className="space-y-4 mb-8">
+      {/* 🚨 NHẮC KHÁCH TÀI SẢN */}
+      <div className="mb-8 p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-center gap-4 animate-pulse">
+        <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-rose-200">
+          <AlertTriangle size={24} className="text-white" />
+        </div>
+        <p className="text-[11px] font-black text-rose-700 leading-tight uppercase tracking-wider">
+          NHẮC KHÁCH KIỂM TRA LẠI ĐIỆN THOẠI, VÍ TIỀN VÀ NỮ TRANG TRƯỚC KHI RỜI PHÒNG
+        </p>
+      </div>
+
+      <div className="space-y-3 mb-8">
         <RatingCard
-          icon={<Smile size={24} />}
-          title="Khách Dễ Thương"
-          desc="Thân thiện, vui vẻ"
+          icon={<ShieldAlert size={24} />}
+          title="Khách Dê Xồm"
+          desc="Thiếu tôn trọng KTV"
           isSelected={rating === 1}
           onClick={() => setRating(1)}
         />
         <RatingCard
-          icon={<Meh size={24} />}
-          title="Khách Hướng Nội"
-          desc="Thích yên tĩnh"
+          icon={<Frown size={24} />}
+          title="Khách Kỹ Tính + Khó Chịu"
+          desc="Yêu cầu sự tinh tế"
           isSelected={rating === 2}
           onClick={() => setRating(2)}
         />
         <RatingCard
-          icon={<Frown size={24} />}
-          title="Khách Kỹ Tính"
-          desc="Yêu cầu cao"
+          icon={<Heart size={24} />}
+          title="Khách Dễ Thương"
+          desc="Thân thiện, cởi mở"
           isSelected={rating === 3}
           onClick={() => setRating(3)}
+        />
+        <RatingCard
+          icon={<MicOff size={24} />}
+          title="Khách Hướng Nội"
+          desc="Thích yên tĩnh, ít nói"
+          isSelected={rating === 4}
+          onClick={() => setRating(4)}
+        />
+        <RatingCard
+          icon={<Users size={24} />}
+          title="Khách Hướng Ngoại"
+          desc="Thích giao lưu, kết nối"
+          isSelected={rating === 5}
+          onClick={() => setRating(5)}
         />
       </div>
 
@@ -695,6 +633,94 @@ function ChecklistItem({ label, checked, onChange }: { label: string, checked: b
         {checked && <CheckCircle size={14} className="text-white" />}
       </div>
       <span className={`font-medium ${checked ? 'text-emerald-800' : THEME.textBase}`}>{label}</span>
+    </div>
+  );
+}
+
+function CollapsibleRequirements({ booking }: { booking: any }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const item = booking?.BookingItems?.[0];
+  if (!item) return null;
+
+  const hasContent = item.strength || item.focus || item.avoid || item.customerNote || booking.dispatcherNote || item.noteForKtv;
+  if (!hasContent) return null;
+
+  return (
+    <div className="bg-amber-50/40 border border-amber-100 rounded-[28px] overflow-hidden mb-6 transition-all duration-300">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-5 text-amber-800"
+      >
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={16} className="text-amber-600" />
+          <span className="text-[11px] font-black uppercase tracking-wider">YÊU CẦU DỊCH VỤ</span>
+        </div>
+        <div className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+          <ChevronDown size={18} />
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+          >
+            <div className="px-5 pb-6 space-y-5">
+              {/* 1. Yêu cầu của khách hàng */}
+              <div className="space-y-3">
+                <span className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest px-1">Yêu cầu của khách hàng</span>
+                <div className="flex flex-wrap gap-2">
+                  {/* Strength Tag */}
+                  <div className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                    <Dumbbell size={14} /> {item.strength || 'Vừa'}
+                  </div>
+                  {/* Focus Tag */}
+                  {item.focus && (
+                    <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                      <Target size={14} className="text-rose-400" /> {item.focus}
+                    </div>
+                  )}
+                  {/* Avoid Tag */}
+                  {item.avoid && (
+                    <div className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
+                      <Ban size={14} /> {item.avoid}
+                    </div>
+                  )}
+                </div>
+
+                {item.customerNote && (
+                  <div className="bg-white/80 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 font-medium italic leading-relaxed shadow-sm">
+                    "{item.customerNote}"
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Ghi chú của quầy */}
+              {booking.dispatcherNote && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-1">Ghi chú của quầy</span>
+                  <div className="bg-slate-50 p-3.5 rounded-2xl text-xs text-slate-600 font-medium whitespace-pre-wrap border border-slate-100 shadow-sm leading-relaxed">
+                    {booking.dispatcherNote}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Ghi chú cho KTV */}
+              {item.noteForKtv && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest px-1">Ghi chú cho kỹ thuật viên</span>
+                  <div className="bg-rose-50/50 p-3.5 rounded-2xl text-xs text-rose-700 font-bold border border-rose-100 whitespace-pre-wrap shadow-sm leading-relaxed">
+                    {item.noteForKtv}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

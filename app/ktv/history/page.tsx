@@ -5,50 +5,23 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { ShieldAlert, History, Clock, Star, DollarSign, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { useKTVHistory } from './KTVHistory.logic';
 
 export default function KTVHistoryPage() {
-  const { hasPermission, user } = useAuth();
-  const [mounted, setMounted] = React.useState(false);
-  const [history, setHistory] = React.useState<any[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
   const router = useRouter();
+  const [mounted, setMounted] = React.useState(false);
+  const { 
+    hasPermission, 
+    history, 
+    isLoading, 
+    fetchHistory, 
+    getStatusLabel 
+  } = useKTVHistory();
 
   React.useEffect(() => {
     setMounted(true);
-    if (user?.id) {
-       fetchHistory();
-    }
-  }, [user?.id]);
-
-  const fetchHistory = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch bookings where technicianCode contains user.id
-      // technicianCode is comma separated string like "KTV001, KTV002"
-      const { data, error } = await supabase
-        .from('Bookings')
-        .select(`
-          *,
-          BookingItems (
-            serviceId,
-            price,
-            duration
-          )
-        `)
-        .ilike('technicianCode', `%${user?.id}%`)
-        .order('createdAt', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-      setHistory(data || []);
-    } catch (err) {
-      console.error('Error fetching history:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, []);
 
   if (!mounted) return null;
 
@@ -62,15 +35,6 @@ export default function KTVHistoryPage() {
       </AppLayout>
     );
   }
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'IN_PROGRESS': return { label: 'Đang làm', color: 'text-indigo-600 bg-indigo-50' };
-      case 'FEEDBACK': return { label: 'Chờ đánh giá', color: 'text-blue-600 bg-blue-50' };
-      case 'DONE': return { label: 'Hoàn tất', color: 'text-emerald-600 bg-emerald-50' };
-      default: return { label: status, color: 'text-gray-500 bg-gray-50' };
-    }
-  };
 
   return (
     <AppLayout>

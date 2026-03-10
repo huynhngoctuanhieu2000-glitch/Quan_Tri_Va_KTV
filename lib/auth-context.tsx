@@ -23,7 +23,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
 
   useEffect(() => {
-    // Initialization already handled in useState
+    // 🔄 Restore session from SessionStorage on mount
+    const savedUser = sessionStorage.getItem('spa_auth_user');
+    const savedRole = sessionStorage.getItem('spa_auth_role');
+
+    if (savedUser && savedRole) {
+      try {
+        setUser(JSON.parse(savedUser));
+        setRole(JSON.parse(savedRole));
+      } catch (e) {
+        console.error('Failed to parse saved auth session', e);
+        sessionStorage.removeItem('spa_auth_user');
+        sessionStorage.removeItem('spa_auth_role');
+      }
+    }
   }, []);
 
   const login = async (userId: string, password?: string) => {
@@ -36,17 +49,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Map database Role ENUM to local Role ID
         let roleId = 'ktv';
-        if (dbUser.role === 'ADMIN') roleId = 'admin';
-        else if (dbUser.role === 'MANAGER') roleId = 'branch_manager';
-        else if (dbUser.role === 'RECEPTIONIST' || dbUser.role === 'LEAD_RECEPTIONIST') roleId = 'reception';
+        const rawRole = dbUser.role?.toUpperCase();
+        
+        if (rawRole === 'ADMIN') roleId = 'admin';
+        else if (rawRole === 'MANAGER') roleId = 'branch_manager';
+        else if (rawRole === 'RECEPTIONIST' || rawRole === 'LEAD_RECEPTIONIST') roleId = 'reception';
+        else if (rawRole === 'TECHNICIAN' || rawRole === 'KTV') roleId = 'ktv';
 
-        setUser({
+        const finalUser = {
           id: dbUser.id,
           password: dbUser.password,
           name: dbUser.fullName || dbUser.username,
           roleId: roleId,
           avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(dbUser.fullName || dbUser.username)}`
-        });
+        };
+
+        setUser(finalUser);
 
         // Set role permissions (use DB permissions if available)
         let permissions: ModuleId[] = (dbUser.permissions && Array.isArray(dbUser.permissions)) ? dbUser.permissions : [];
@@ -62,11 +80,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        setRole({
+        const finalRole = {
           id: roleId,
           name: dbUser.role,
           permissions
-        });
+        };
+
+        setRole(finalRole);
+
+        // 💾 Save to sessionStorage for persistence
+        sessionStorage.setItem('spa_auth_user', JSON.stringify(finalUser));
+        sessionStorage.setItem('spa_auth_role', JSON.stringify(finalRole));
 
         return true;
       }
@@ -82,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setUser(null);
     setRole(null);
+    sessionStorage.removeItem('spa_auth_user');
+    sessionStorage.removeItem('spa_auth_role');
     try {
       const supabase = createClient();
       await supabase.auth.signOut();

@@ -164,8 +164,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 if (config?.targetBookingId) {
                     url = `/api/ktv/booking?bookingId=${config.targetBookingId}`;
                 } 
-                // Nếu đã giải phóng KTV nhưng đang ở màn REWARD/HANDOVER, track đơn cũ
-                else if ((screenRef.current === 'REWARD' || screenRef.current === 'HANDOVER') && !booking && prevBookingIdRef.current) {
+                // Nếu đã giải phóng KTV nhưng đang ở màn checkout (REVIEW/HANDOVER/REWARD), track đơn cũ
+                else if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current) && !booking && prevBookingIdRef.current) {
                     // Nếu đã xác nhận xong (lastAcknowledgedIdRef), không track nữa
                     if (lastAcknowledgedIdRef.current === prevBookingIdRef.current) {
                         setBooking(null);
@@ -233,8 +233,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             if (res.data.status === 'IN_PROGRESS' && currentScreen !== 'TIMER') {
                                 setScreen('TIMER');
                                 setIsTimerRunning(true);
-                            } else if (res.data.status === 'COMPLETED' && (currentScreen === 'DASHBOARD' || currentScreen === 'TIMER') && !hasSubmittedReview) {
-                                // Status COMPLETED means "Checking items & Feedback" for customer
+                            } else if ((res.data.status === 'COMPLETED' || res.data.status === 'FEEDBACK') && (currentScreen === 'DASHBOARD' || currentScreen === 'TIMER') && !hasSubmittedReview) {
+                                // Status COMPLETED or FEEDBACK means customer is checking items & Feedback
                                 // KTV moves to Review/Handover
                                 setScreen('REVIEW');
                                 setIsTimerRunning(false);
@@ -485,9 +485,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
         
         // 🚀 THAY ĐỔI: Không tự ý PATCH status
         // Thay vào đó gửi Interaction 'EARLY_EXIT' để Lễ tân xử lý
-        // Khi lễ tân xử lý xong, Realtime sẽ tự đưa KTV qua trang REVIEW
+        // Khi lễ tân xử lý xong (Hoàn tất trên Dispatch Board), Realtime sẽ tự đưa KTV qua trang REVIEW/REWARD
         await handleInteraction('EARLY_EXIT');
-        alert('Đã gửi thông báo. Vui lòng đợi lễ tân xác nhận hoàn thành đơn.');
+        alert('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.');
     };
 
     const goToDashboard = () => {

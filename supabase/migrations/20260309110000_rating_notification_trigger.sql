@@ -1,7 +1,7 @@
 -- 1. Thêm cột employeeId vào StaffNotifications để biết thông báo gửi cho ai
 ALTER TABLE public."StaffNotifications" ADD COLUMN IF NOT EXISTS "employeeId" TEXT;
 
--- 2. Hàm xử lý khi Booking có đánh giá xuất sắc (>= 4 sao)
+-- 2. Hàm xử lý khi Booking có đánh giá
 CREATE OR REPLACE FUNCTION public.fn_notify_ktv_on_rating()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -10,6 +10,7 @@ DECLARE
     num_techs INTEGER;
     reward_points NUMERIC;
 BEGIN
+    -- PHẦN 1: THƯỞNG CHO KTV (Rating >= 4)
     -- Chỉ chạy khi rating thay đổi từ dưới 4 lên >= 4
     IF (OLD.rating IS NULL OR OLD.rating < 4) AND NEW.rating >= 4 THEN
         -- Tách danh sách KTV từ chuỗi technicianCode (ví dụ: "NH001, NH002")
@@ -17,12 +18,12 @@ BEGIN
         num_techs := array_length(tech_list, 1);
         
         IF num_techs > 0 THEN
-            -- Chia đều 25 điểm cho số lượng KTV
-            reward_points := 25.0 / num_techs;
+            -- Chia đều 25 điểm cho số lượng KTV và làm tròn
+            reward_points := ROUND(25.0 / num_techs, 0);
             
             FOREACH tech_code IN ARRAY tech_list
             LOOP
-                -- Thêm thông báo thưởng cho từng KTV
+                -- Thêm thông báo thưởng cho từng KTV (employeeId được set để KTV tự nhận)
                 INSERT INTO public."StaffNotifications" (
                     "bookingId",
                     "employeeId",
@@ -34,13 +35,33 @@ BEGIN
                     NEW.id,
                     trim(tech_code),
                     'REWARD',
-                    'Bạn nhận được ' || reward_points || 'đ đánh giá xuất sắc từ đơn hàng #' || NEW."billCode",
+                    'Bạn nhận được ' || reward_points::INTEGER || 'đ đánh giá xuất sắc từ đơn hàng #' || NEW."billCode",
                     false,
                     now()
                 );
             END LOOP;
         END IF;
     END IF;
+
+    -- PHẦN 2: THÔNG BÁO CHO QUẦY/ADMIN KHI CÓ ĐÁNH GIÁ TỆ (Rating <= 2)
+    IF (OLD.rating IS NULL OR OLD.rating > 2) AND NEW.rating <= 2 AND NEW.rating > 0 THEN
+        INSERT INTO public."StaffNotifications" (
+            "bookingId",
+            "employeeId",
+            "type",
+            "message",
+            "isRead",
+            "createdAt"
+        ) VALUES (
+            NEW.id,
+            NULL, -- employeeId = NULL nghĩa là thông báo chung cho Quầy/Admin
+            'COMPLAINT',
+            'Khách hàng đánh giá ' || NEW.rating || ' sao cho đơn hàng #' || NEW."billCode" || '. Nội dung: ' || COALESCE(NEW."feedbackNote", 'Không có ghi chú'),
+            false,
+            now()
+        );
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

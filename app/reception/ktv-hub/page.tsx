@@ -323,13 +323,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
         const currentTime = format(new Date(), 'HH:mm:ss');
         const existing = attendances[staffId];
 
-        // 1. Check if record exists for today
-        const { data: existingAtt } = await supabase
-            .from('DailyAttendance')
-            .select('id')
-            .eq('employee_id', staffId)
-            .eq('date', today)
-            .maybeSingle();
+
 
         const payload = {
             employee_id: staffId,
@@ -337,28 +331,12 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
             status: status,
             check_in_time: (status === 'on_duty' && !existing?.check_in_time) ? currentTime : (existing?.check_in_time || null),
             check_out_time: status === 'off_duty' ? currentTime : (existing?.check_out_time || null),
-        };
-
-        // 2. Insert or Update DailyAttendance
-        let attData, attError;
-        if (existingAtt) {
-            const { data: d, error: e } = await supabase
-                .from('DailyAttendance')
-                .update(payload)
-                .eq('id', existingAtt.id)
-                .select()
-                .single();
-            attData = d;
-            attError = e;
-        } else {
-            const { data: d, error: e } = await supabase
-                .from('DailyAttendance')
-                .insert(payload)
-                .select()
-                .single();
-            attData = d;
-            attError = e;
-        }
+        };        // 1. Upsert DailyAttendance
+        const { data: attData, error: attError } = await supabase
+            .from('DailyAttendance')
+            .upsert(payload, { onConflict: 'employee_id, date' })
+            .select()
+            .single();
 
         if (attError) {
             console.error("❌ [KTVHub] Error saving attendance:", attError.message, attError.details, attError.hint);
