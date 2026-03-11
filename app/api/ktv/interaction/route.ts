@@ -60,21 +60,14 @@ export async function POST(request: Request) {
         console.log('✅ [API KTV Interaction] Notification stored successfully:', nData);
         console.log(`🔔 [API KTV Interaction] Booking ${bookingId} (${roomInfo}) sent ${type}: ${finalMessage}`);
         
-        // 4. Gửi thông báo Push (Dự phòng)
-        try {
-            const baseUrl = request.url.split('/api')[0];
-            await fetch(`${baseUrl}/api/notifications/push`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: `Yêu cầu từ ${roomUpper}`, 
-                    message: finalMessage,
-                    url: '/reception/dispatch',
-                })
-            });
-        } catch (err) {
-            console.error('❌ [API KTV Interaction] Push notification failed:', err);
-        }
+        // 4. Gửi thông báo Push
+        const { sendPushNotification } = await import('@/lib/push-helper');
+        sendPushNotification({
+            title: `Yêu cầu từ ${roomUpper}`,
+            message: finalMessage,
+            targetRoles: ['ADMIN', 'RECEPTIONIST'],
+            url: '/reception/dispatch',
+        }).catch(err => console.error('❌ [API KTV Interaction] Push notification failed:', err));
 
         return NextResponse.json({ success: true, message: finalMessage });
     } catch (error: any) {

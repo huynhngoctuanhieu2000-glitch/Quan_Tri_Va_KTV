@@ -43,7 +43,8 @@ export async function POST(request: Request) {
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         // 1. Fetch subscriptions for target staff or by roles
-        // We join with Users table to get the role
+        const { targetRoles } = body; // Array of roles like ['ADMIN', 'RECEPTIONIST']
+        
         let query = supabase.from('StaffPushSubscriptions').select(`
             subscription,
             Users:staff_id (
@@ -53,6 +54,10 @@ export async function POST(request: Request) {
         
         if (targetStaffIds && targetStaffIds.length > 0) {
             query = query.in('staff_id', targetStaffIds);
+        } else if (targetRoles && targetRoles.length > 0) {
+            // Target specific roles
+            const rolesFilter = targetRoles.map((r: string) => `role.eq.${r.toUpperCase()}`).join(',');
+            query = query.or(rolesFilter, { foreignTable: 'Users' });
         } else {
             // Default: Send to all ADMIN and RECEPTIONIST roles
             query = query.or('role.eq.ADMIN,role.eq.RECEPTIONIST', { foreignTable: 'Users' });

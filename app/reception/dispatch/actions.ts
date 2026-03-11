@@ -1,6 +1,7 @@
 'use server';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { sendPushNotification } from '@/lib/push-helper';
 
 export async function getDispatchData(date: string) {
     try {
@@ -205,6 +206,19 @@ export async function processDispatch(bookingId: string, dispatchData: {
             }
         }
 
+        // 4. Send background push to KTVs
+        if (dispatchData.staffAssignments && dispatchData.staffAssignments.length > 0) {
+            const staffIds = dispatchData.staffAssignments.map(a => a.ktvId).filter(Boolean);
+            if (staffIds.length > 0) {
+                sendPushNotification({
+                    title: 'Bạn có ca làm mới! 💆',
+                    message: `Bạn được phân công cho đơn hàng ${bookingId}. Vui lòng kiểm tra ứng dụng.`,
+                    targetStaffIds: staffIds,
+                    url: '/ktv/dashboard'
+                }).catch(err => console.error('Push error:', err));
+            }
+        }
+
         return { success: true };
     } catch (error: any) {
         console.error('❌ [Server] processDispatch error:', error);
@@ -345,6 +359,14 @@ export async function createQuickBooking(data: {
             });
 
         if (iError) throw iError;
+
+        // 4. Send background push to Receptionists/Admins
+        sendPushNotification({
+            title: 'Có Đơn Hàng Mới! 📋',
+            message: `Khách ${data.customerName} vừa được tạo đơn. Hãy nhanh chóng điều phối!`,
+            targetRoles: ['ADMIN', 'RECEPTIONIST'],
+            url: '/reception/dispatch'
+        }).catch(err => console.error('Push error:', err));
 
         return { success: true, bookingId: booking.id };
     } catch (error: any) {

@@ -36,12 +36,16 @@ export const viewport = {
   userScalable: false,
 };
 
+import { NotificationProvider } from '@/components/NotificationProvider';
+
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body suppressHydrationWarning className="font-sans antialiased">
         <AuthProvider>
-          {children}
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>
