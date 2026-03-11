@@ -352,6 +352,7 @@ export default function DispatchBoardPage() {
         }
       }
 
+    
     } catch (e) {
       console.error("❌ [Dispatch] Unexpected error in fetchData:", e);
     } finally {
@@ -379,14 +380,17 @@ export default function DispatchBoardPage() {
 
   const renderStaffNotifications = () => {
     const unread = staffNotifications.filter(n => !n.isRead);
-    if (unread.length > 0) {
-      console.log(`🎨 [Dispatch] Rendering ${unread.length} notifications...`);
-    }
     return (
       <div className="fixed top-20 right-6 z-[99999] flex flex-col gap-3 pointer-events-none">
          <AnimatePresence>
             {unread.map((n) => {
-               console.log(`📦 [Dispatch] Rendering single item: ${n.id} - ${n.type}`);
+               const normalizedType = n.type?.trim().toUpperCase();
+               const isEarlyExit = normalizedType === 'EARLY_EXIT';
+               const isEmergency = normalizedType === 'EMERGENCY';
+               const isComplaint = normalizedType === 'COMPLAINT';
+               const isWater = normalizedType === 'WATER';
+               const isBuyMore = normalizedType === 'BUY_MORE';
+
                return (
                  <motion.div
                     key={n.id}
@@ -403,26 +407,50 @@ export default function DispatchBoardPage() {
                        }
                     }}
                     className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border min-w-[320px] max-w-sm flex gap-4 items-start cursor-grab active:cursor-grabbing
-                      ${n.type === 'EMERGENCY' 
+                      ${(isEmergency || isComplaint)
                         ? 'bg-rose-600 border-rose-500 text-white' 
-                        : 'bg-white/95 backdrop-blur-md border-emerald-100'}`}
+                        : isEarlyExit 
+                          ? 'bg-amber-50/95 backdrop-blur-md border-amber-200 shadow-amber-100/50' 
+                          : isWater
+                            ? 'bg-sky-50/95 backdrop-blur-md border-sky-200 shadow-sky-100/50'
+                            : isBuyMore
+                              ? 'bg-violet-50/95 backdrop-blur-md border-violet-200 shadow-violet-100/50'
+                              : 'bg-white/95 backdrop-blur-md border-emerald-100'}`}
                  >
                     <div className={`mt-1 p-2 rounded-xl flex-shrink-0 
-                       ${n.type === 'EMERGENCY' ? 'bg-white/20' : 'bg-emerald-50 text-emerald-600'}`}>
-                       {n.type === 'EMERGENCY' ? <ShieldAlert size={24} className="animate-pulse" /> : <Bell size={20} />}
+                       ${(isEmergency || isComplaint)
+                          ? 'bg-white/20' 
+                          : isEarlyExit 
+                             ? 'bg-amber-100 text-amber-600' 
+                             : isWater
+                               ? 'bg-sky-100 text-sky-600'
+                               : isBuyMore
+                                 ? 'bg-violet-100 text-violet-600'
+                                 : 'bg-emerald-50 text-emerald-600'}`}>
+                       {(isEmergency || isComplaint) ? <ShieldAlert size={24} className="animate-pulse" /> : <Bell size={20} />}
                     </div>
                     <div className="flex-1">
                        <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5
-                          ${n.type === 'EMERGENCY' || n.type === 'COMPLAINT' ? (n.type === 'EMERGENCY' ? 'text-rose-100' : 'text-rose-600') : 'text-emerald-600'}`}>
-                          {n.type === 'COMPLAINT' ? '🚨 Đánh giá tệ (Cần xử lý)' : 
-                           n.type === 'EMERGENCY' ? '🆘 Báo động khẩn cấp' : 
-                           n.type === 'EARLY_EXIT' ? '🏃 Khách về sớm (Chờ xác nhận)' : 
+                          ${(isEmergency || isComplaint)
+                             ? 'text-rose-100' 
+                             : isEarlyExit 
+                               ? 'text-amber-600' 
+                               : isWater
+                                 ? 'text-sky-600'
+                                 : isBuyMore
+                                   ? 'text-violet-600'
+                                   : 'text-emerald-600'}`}>
+                          {isComplaint ? '🚨 Đánh giá tệ (Cần xử lý)' : 
+                           isEmergency ? '🆘 Báo động khẩn cấp' : 
+                           isEarlyExit ? '🏃 Khách về sớm (Chờ đón)' : 
+                           isWater ? '💧 Khách gọi nước' :
+                           isBuyMore ? '✨ Khách muốn mua thêm' :
                            'KTV Yêu cầu hỗ trợ'}
                        </p>
-                       <p className={`text-sm font-bold leading-tight ${n.type === 'EMERGENCY' ? 'text-white' : 'text-slate-800'}`}>
+                       <p className={`text-sm font-bold leading-tight ${(isEmergency || isComplaint) ? 'text-white' : 'text-slate-800'}`}>
                           {n.message}
                        </p>
-                       <p className={`text-[10px] mt-2 font-medium opacity-60 ${n.type === 'EMERGENCY' ? 'text-rose-100' : 'text-slate-400'}`}>
+                       <p className={`text-[10px] mt-2 font-medium opacity-60 ${(isEmergency || isComplaint) ? 'text-rose-100' : 'text-slate-400'}`}>
                           {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                        </p>
                     </div>
@@ -433,7 +461,7 @@ export default function DispatchBoardPage() {
                        }}
                        className="p-1 hover:bg-black/5 rounded-lg transition-colors"
                     >
-                       <X size={18} className={n.type === 'EMERGENCY' ? 'text-white' : 'text-slate-400'} />
+                       <X size={16} className={(isEmergency || isComplaint) ? 'text-white' : 'text-slate-400'} />
                     </button>
                  </motion.div>
                );
@@ -442,8 +470,7 @@ export default function DispatchBoardPage() {
       </div>
     );
   };
-
-  if (!hasPermission('dispatch_board')) {
+if (!hasPermission('dispatch_board')) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center h-64 text-center">

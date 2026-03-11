@@ -190,6 +190,18 @@ export async function PATCH(request: Request) {
         // --- Logic cũ cho Status update ---
         const updatePayload: any = { status, updatedAt: new Date().toISOString() };
         
+        // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
+        if (action === 'APPEND_NOTES' && body.notes) {
+            const { data: currentB } = await supabase.from('Bookings').select('notes').eq('id', bookingId).single();
+            const oldNotes = currentB?.notes || '';
+            // Nối thêm nếu chưa có nội dung tương tự (tránh lặp lại khi refresh)
+            if (!oldNotes.includes(body.notes)) {
+                updatePayload.notes = oldNotes ? `${oldNotes} | ${body.notes}` : body.notes;
+            } else {
+                updatePayload.notes = oldNotes;
+            }
+        }
+        
         if (status === 'IN_PROGRESS') {
             updatePayload.timeStart = new Date().toISOString();
         } else if (status === 'DONE' || status === 'COMPLETED') {

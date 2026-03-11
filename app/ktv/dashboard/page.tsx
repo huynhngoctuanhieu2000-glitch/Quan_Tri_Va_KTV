@@ -477,11 +477,25 @@ function ActionGridButton({ onClick, icon, label, color }: { onClick: () => void
 }
 
 function ScreenReview({ logic }: { logic: any }) {
-  const [rating, setRating] = useState(0);
+  const [selectedPersonalities, setSelectedPersonalities] = useState<string[]>([]);
+
+  const assessmentItems = [
+    { id: 'DE_XOM', icon: <ShieldAlert size={24} />, title: "Khách Dê Xồm", desc: "Thiếu tôn trọng KTV" },
+    { id: 'KHO_CHIU', icon: <Frown size={24} />, title: "Khách Kỹ Tính + Khó Chịu", desc: "Yêu cầu sự tinh tế" },
+    { id: 'DE_THUONG', icon: <Heart size={24} />, title: "Khách Dễ Thương", desc: "Thân thiện, cởi mở" },
+    { id: 'HUONG_NOI', icon: <MicOff size={24} />, title: "Khách Hướng Nội", desc: "Thích yên tĩnh, ít nói" },
+    { id: 'HUONG_NGOAI', icon: <Users size={24} />, title: "Khách Hướng Ngoại", desc: "Thích giao lưu, kết nối" },
+  ];
+
+  const togglePersonality = (id: string) => {
+    setSelectedPersonalities(prev => 
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
 
   return (
     <div className="p-5 flex flex-col h-full bg-[#fdfbf7]">
-      <div className="text-center mb-8 mt-4">
+      <div className="text-center mb-6 mt-4">
         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle size={32} />
         </div>
@@ -490,7 +504,7 @@ function ScreenReview({ logic }: { logic: any }) {
       </div>
 
       {/* 🚨 NHẮC KHÁCH TÀI SẢN */}
-      <div className="mb-8 p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-center gap-4 animate-pulse">
+      <div className="mb-6 p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-center gap-4 animate-pulse">
         <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-rose-200">
           <AlertTriangle size={24} className="text-white" />
         </div>
@@ -500,48 +514,29 @@ function ScreenReview({ logic }: { logic: any }) {
       </div>
 
       <div className="space-y-3 mb-8">
-        <RatingCard
-          icon={<ShieldAlert size={24} />}
-          title="Khách Dê Xồm"
-          desc="Thiếu tôn trọng KTV"
-          isSelected={rating === 1}
-          onClick={() => setRating(1)}
-        />
-        <RatingCard
-          icon={<Frown size={24} />}
-          title="Khách Kỹ Tính + Khó Chịu"
-          desc="Yêu cầu sự tinh tế"
-          isSelected={rating === 2}
-          onClick={() => setRating(2)}
-        />
-        <RatingCard
-          icon={<Heart size={24} />}
-          title="Khách Dễ Thương"
-          desc="Thân thiện, cởi mở"
-          isSelected={rating === 3}
-          onClick={() => setRating(3)}
-        />
-        <RatingCard
-          icon={<MicOff size={24} />}
-          title="Khách Hướng Nội"
-          desc="Thích yên tĩnh, ít nói"
-          isSelected={rating === 4}
-          onClick={() => setRating(4)}
-        />
-        <RatingCard
-          icon={<Users size={24} />}
-          title="Khách Hướng Ngoại"
-          desc="Thích giao lưu, kết nối"
-          isSelected={rating === 5}
-          onClick={() => setRating(5)}
-        />
+        {assessmentItems.map((item) => (
+          <RatingCard
+            key={item.id}
+            icon={item.icon}
+            title={item.title}
+            desc={item.desc}
+            isSelected={selectedPersonalities.includes(item.id)}
+            onClick={() => togglePersonality(item.id)}
+          />
+        ))}
       </div>
 
       <button
-        onClick={() => logic.handleSubmitReview({ personality: rating })}
-        className={`w-full py-4 mt-auto font-bold text-white ${THEME.radius} transition-colors ${rating !== 0 ? THEME.primary : 'bg-slate-300'}`}
+        onClick={() => {
+          const personalityNames = selectedPersonalities.map(id => 
+            assessmentItems.find(i => i.id === id)?.title
+          ).filter(Boolean);
+          logic.handleSubmitReview({ personality: personalityNames });
+        }}
+        className={`w-full py-4 mt-auto font-bold text-white ${THEME.radius} transition-colors 
+          ${selectedPersonalities.length > 0 ? THEME.primary + ' shadow-lg shadow-emerald-100' : 'bg-slate-300 pointer-events-none'}`}
       >
-        Lưu hồ sơ
+        Lưu hồ sơ {selectedPersonalities.length > 0 ? `(${selectedPersonalities.length})` : ''}
       </button>
     </div>
   );

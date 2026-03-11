@@ -388,9 +388,37 @@ export function useKTVDashboard(config?: DashboardConfig) {
         setIsLoading(false);
     };
 
-    const handleSubmitReview = (customerProfile: any) => {
-        setHasSubmittedReview(true);
-        setScreen('HANDOVER');
+    const handleSubmitReview = async (customerProfile: any) => {
+        if (!booking || !user?.id) return;
+        
+        setIsLoading(true);
+        try {
+            const personality = customerProfile.personality || [];
+            if (personality.length > 0) {
+                const noteContent = `[Đánh giá KTV: ${personality.join(', ')}]`;
+                
+                // Gửi ghi chú đánh giá về quầy
+                await fetch('/api/ktv/booking', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        bookingId: booking.id, 
+                        status: booking.status,
+                        notes: noteContent,
+                        action: 'APPEND_NOTES',
+                        techCode: user.id
+                    })
+                });
+            }
+            
+            setHasSubmittedReview(true);
+            setScreen('HANDOVER');
+        } catch (err) {
+            console.error('❌ [KTV Logic] Error submitting review:', err);
+            setScreen('HANDOVER');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
 
