@@ -95,7 +95,7 @@ export const DispatchStaffRow = ({
                                         value={turn.employee_id}
                                         className={!hasSkill ? 'text-gray-300' : ''}
                                     >
-                                        #{turn.queue_position} [{turn.employee_id}]
+                                        #{turn.check_in_order} [{turn.employee_id}]
                                         {isExpert ? ' (⭐ Chuyên gia)' : ''}
                                         {(() => {
                                             if (turn.status !== 'working') return ' (✅ Rảnh)';

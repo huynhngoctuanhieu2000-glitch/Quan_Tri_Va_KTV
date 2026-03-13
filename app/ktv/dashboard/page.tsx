@@ -387,7 +387,7 @@ function ScreenTimer({ logic }: { logic: any }) {
             <div className={`text-6xl font-black ${isPrepping ? 'text-blue-600' : 'text-slate-800'} tracking-tighter tabular-nums`}>
               {formatTime(currentSecs)}
             </div>
-            <div className={`mt-3 px-4 py-1.5 rounded-full border font-black text-[10px] tracking-widest uppercase flex items-center gap-1.5
+            <div className={`mt-3 px-4 py-1.5 rounded-full border font-black text-[10px] tracking-widest uppercase flex items-center justify-center gap-1.5
               ${isPrepping ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
               {isPrepping && <Clock size={12} className="animate-pulse" />}
               {isPrepping ? 'THỜI GIAN CHUẨN BỊ' : (isTimerRunning ? 'ĐANG THỰC HIỆN' : 'ĐỢI BẮT ĐẦU')}
@@ -422,44 +422,50 @@ function ScreenTimer({ logic }: { logic: any }) {
       {/* Special Requirements Section */}
       <CollapsibleRequirements booking={booking} />
 
-      {/* 2x2 Action Grid + Emergency Wide */}
-      <div className="flex flex-col gap-3 mb-12">
-          <div className="grid grid-cols-2 gap-3">
-              <ActionGridButton 
-                onClick={handleEarlyExit} 
-                icon={<LogOut size={20} />} 
-                label="KHÁCH VỀ SỚM" 
-                color="text-slate-400 border-slate-100" 
-              />
-              <ActionGridButton 
-                onClick={() => handleInteraction('WATER')} 
-                icon={<Coffee size={20} />} 
-                label="KHÁCH KHÁT NƯỚC" 
-                color="text-emerald-500 border-emerald-50" 
-              />
-              <ActionGridButton 
-                onClick={() => handleInteraction('BUY_MORE')} 
-                icon={<PlusSquare size={20} />} 
-                label="MUA THÊM DV" 
-                color="text-emerald-600 border-emerald-50" 
-              />
-              <ActionGridButton 
-                onClick={() => handleInteraction('SUPPORT')} 
-                icon={<HelpCircle size={20} />} 
-                label="CẦN HỖ TRỢ" 
-                color="text-indigo-500 border-indigo-50" 
-              />
-          </div>
-          
-          {/* Emergency Wide Button */}
-          <button 
-            onClick={() => handleInteraction('EMERGENCY')}
-            className="w-full h-16 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all text-rose-600"
-          >
-             <BellRing size={24} className="animate-bounce" />
-             <span className="text-sm font-black uppercase tracking-[0.1em]">KHẨN CẤP</span>
-          </button>
-      </div>
+      {/* 2x2 Action Grid + Emergency Wide - ONLY SHOW WHEN RUNNING */}
+      {isTimerRunning && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="flex flex-col gap-3 mb-12"
+        >
+            <div className="grid grid-cols-2 gap-3">
+                <ActionGridButton 
+                  onClick={handleEarlyExit} 
+                  icon={<LogOut size={20} />} 
+                  label="KHÁCH VỀ SỚM" 
+                  color="text-slate-400 border-slate-100" 
+                />
+                <ActionGridButton 
+                  onClick={() => handleInteraction('WATER')} 
+                  icon={<Coffee size={20} />} 
+                  label="KHÁCH KHÁT NƯỚC" 
+                  color="text-emerald-500 border-emerald-50" 
+                />
+                <ActionGridButton 
+                  onClick={() => handleInteraction('BUY_MORE')} 
+                  icon={<PlusSquare size={20} />} 
+                  label="MUA THÊM DV" 
+                  color="text-emerald-600 border-emerald-50" 
+                />
+                <ActionGridButton 
+                  onClick={() => handleInteraction('SUPPORT')} 
+                  icon={<HelpCircle size={20} />} 
+                  label="CẦN HỖ TRỢ" 
+                  color="text-indigo-500 border-indigo-50" 
+                />
+            </div>
+            
+            {/* Emergency Wide Button */}
+            <button 
+              onClick={() => handleInteraction('EMERGENCY')}
+              className="w-full h-16 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all text-rose-600"
+            >
+               <BellRing size={24} className="animate-bounce" />
+               <span className="text-sm font-black uppercase tracking-[0.1em]">KHẨN CẤP</span>
+            </button>
+        </motion.div>
+      )}
     </div>
   );
 }

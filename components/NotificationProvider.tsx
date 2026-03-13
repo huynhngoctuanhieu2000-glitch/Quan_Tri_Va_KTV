@@ -27,13 +27,15 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 // --- CONFIG ---
 const SOUND_MAP: Record<string, string> = {
-    'EMERGENCY': '/sounds/emergency-alert.wav',
-    'COMPLAINT': '/sounds/emergency-alert.wav',
-    'EARLY_EXIT': '/sounds/reception-notification.wav',
+    'EMERGENCY': '/sounds/quay-bao-khan-cap.wav',
+    'COMPLAINT': '/sounds/quay-danh-gia-te.wav',
+    'EARLY_EXIT': '/sounds/quay-khach-ve-som.wav',
     'WATER': '/sounds/reception-notification.wav',
     'BUY_MORE': '/sounds/reception-notification.wav',
-    'NEW_ORDER': '/sounds/reception-notification.wav',
-    'REWARD': '/sounds/ktv-notification.wav',
+    'SUPPORT': '/sounds/reception-notification.wav',
+    'NEW_ORDER': '/sounds/quay-don-hang-moi.wav', // Mặc định cho quầy
+    'KTV_NEW_ORDER': '/sounds/ktv-don-hang-moi.wav',
+    'REWARD': '/sounds/ktv-nhan-thuong.wav',
     'default': '/sounds/reception-notification.wav'
 };
 
@@ -44,13 +46,25 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     const router = useRouter();
 
     const playSound = (type: string) => {
+        const normalizedType = type?.toUpperCase() || 'DEFAULT';
         const now = Date.now();
         // Giới hạn tần suất âm thanh (3 giây), ngoại trừ khẩn cấp
-        if (type !== 'EMERGENCY' && type !== 'COMPLAINT' && now - lastSoundTimeRef.current < 3000) return;
+        if (normalizedType !== 'EMERGENCY' && normalizedType !== 'COMPLAINT' && now - lastSoundTimeRef.current < 3000) return;
 
-        const soundFile = SOUND_MAP[type] || SOUND_MAP['default'];
+        let soundKey = normalizedType;
+        
+        // Đặc biệt cho NEW_ORDER: Phân biệt âm thanh theo vai trò
+        if (normalizedType === 'NEW_ORDER' && role?.id === 'ktv') {
+            soundKey = 'KTV_NEW_ORDER';
+        }
+
+        const soundFile = SOUND_MAP[soundKey] || SOUND_MAP[normalizedType] || SOUND_MAP['default'];
+        console.log(`🔊 [NotificationProvider] Attempting to play: ${soundFile} (Type: ${normalizedType}, Key: ${soundKey})`);
+        
         const audio = new Audio(soundFile);
-        audio.play().catch(err => console.warn('🔇 Audio play blocked:', err));
+        audio.play().catch(err => {
+            console.warn('🔇 [NotificationProvider] Audio play blocked/failed. Interaction may be required.', err);
+        });
         lastSoundTimeRef.current = now;
     };
 

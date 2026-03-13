@@ -72,10 +72,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
         if (booking?.id && booking.id !== prevBookingIdRef.current) {
             console.log("🔔 [KTV] New booking assigned! Playing sound...");
             try {
-                const audio = new Audio('/sounds/ktv-notification.wav');
-                audio.play().catch(err => console.error("🔇 [KTV] Audio play failed:", err));
+                const soundPath = '/sounds/ktv-don-hang-moi.wav';
+                console.log("🔔 [KTV Logic] New booking audio attempt:", soundPath);
+                const audio = new Audio(soundPath);
+                audio.play().catch(err => console.error("🔇 [KTV Logic] Audio play failed (Check interaction):", err));
             } catch (e) {
-                console.error("🔇 [KTV] Audio creation failed:", e);
+                console.error("🔇 [KTV Logic] Audio creation failed:", e);
             }
         }
         prevBookingIdRef.current = booking?.id || null;
@@ -98,7 +100,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     setBonusMessage(notify.message);
                     
                     try {
-                        const winAudio = new Audio('/sounds/ktv-notification.wav');
+                        const winAudio = new Audio('/sounds/ktv-nhan-thuong.wav');
                         winAudio.volume = 0.5;
                         winAudio.play().catch(e => console.warn("🔊 [KTV] Bonus sound failed:", e));
                     } catch(e) {}
@@ -267,7 +269,6 @@ export function useKTVDashboard(config?: DashboardConfig) {
         fetchBooking();
 
         // Subscribe to real-time changes
-        // ✨ Tối ưu: Lắng nghe cụ thể ID đơn hàng hiện tại nếu có để đồng bộ tức thì
         const channel = supabase
             .channel(`ktv_realtime_${user.id}`)
             .on('postgres_changes', { 
@@ -276,18 +277,24 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 table: 'Bookings',
                 filter: booking?.id ? `id=eq.${booking.id}` : undefined
             }, (payload: any) => {
-                console.log("🔄 [KTV] Realtime Booking Update detected:", payload.new.status);
-                // Nếu status đổi sang IN_PROGRESS hoặc COMPLETED, fetch để update UI ngay
+                console.log("🔄 [KTV] Realtime Booking Update:", payload.new.status);
+                
+                // 🚀 STATE PATCHING: Update status locally immediately
+                setBooking((prev: any) => {
+                    if (!prev || prev.id !== payload.new.id) return prev;
+                    return { ...prev, ...payload.new };
+                });
+
+                // Background sync
                 fetchBooking();
             })
-            // Vẫn giữ lắng nghe chung để nhận đơn mới (INSERT vào TurnQueue hoặc UPDATE status cũ)
             .on('postgres_changes', { 
                 event: '*', 
                 schema: 'public', 
                 table: 'TurnQueue',
                 filter: `employee_id=eq.${user.id}`
-            }, () => {
-                console.log("🔄 [KTV] Realtime TurnQueue change detected");
+            }, (payload: any) => {
+                console.log("🔄 [KTV] Realtime TurnQueue change:", payload.eventType);
                 fetchBooking();
             })
             .subscribe();

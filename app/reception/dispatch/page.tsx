@@ -98,8 +98,14 @@ export default function DispatchBoardPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
+  const lastSoundTimeRef = useRef<number>(0);
   const push = usePushNotifications(user?.id);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
+
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   // Synchronize sound with push permission on load
   useEffect(() => {
@@ -118,22 +124,54 @@ export default function DispatchBoardPage() {
 
     const channel = supabase
       .channel('dispatch_board_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, (payload) => {
-        console.log("🔄 [Dispatch] Realtime: Bookings changed", payload.eventType);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Bookings' }, (payload) => {
+        console.log("🔔 [Dispatch] New Booking detected!", payload.new.id);
+        
+        // 🔊 Sound Fallback
+        if (soundEnabledRef.current) {
+          const now = Date.now();
+          if (now - lastSoundTimeRef.current > 3000) {
+            const audio = new Audio('/sounds/quay-don-hang-moi.wav');
+            audio.play().catch(() => {});
+            lastSoundTimeRef.current = now;
+          }
+        }
+        
+        // Always refetch on INSERT to get related BookingItems & mapping
         fetchData();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Bookings' }, (payload: any) => {
+        console.log("🔄 [Dispatch] Booking updated:", payload.new.id, payload.new.status);
+        
+        // 🚀 STATE PATCHING: Update status locally before refetching
+        setOrders(prev => prev.map(o => 
+          o.id === payload.new.id 
+            ? { ...o, rawStatus: payload.new.status, dispatchStatus: (payload.new.status === 'DONE' && !o.hasAssignedKtv) ? 'done' : (payload.new.status === 'FEEDBACK' ? 'waiting_rating' : o.dispatchStatus) } 
+            : o
+        ));
+
+        // Refetch in background to sync everything else
         fetchData();
       })
-      .on('system', { event: '*', schema: 'public', table: 'StaffNotifications' }, (payload) => {
-        console.log("📡 [Dispatch] Realtime: System event", payload);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, (payload: any) => {
+        console.log("🔄 [Dispatch] TurnQueue change:", payload.eventType);
+        
+        // 🚀 STATE PATCHING: Update turns list locally
+        if (payload.eventType === 'UPDATE') {
+          setTurns(prev => prev.map(t => t.employee_id === payload.new.employee_id ? { ...t, ...payload.new } : t));
+        } else {
+          // INSERT or DELETE: full sync to maintain order/length
+          fetchData();
+        }
       })
-      .subscribe((status) => {
-        console.log("📡 [Dispatch] Realtime: Subscription status:", status);
-      });
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'StaffNotifications' }, (payload) => {
+        console.log("📡 [Dispatch] New StaffNotification", payload.new.type);
+        fetchData();
+      })
+      .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [selectedDate, soundEnabled]);
+  }, [selectedDate]); // REMOVED soundEnabled from deps
 
 
   const fetchData = async () => {

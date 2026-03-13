@@ -10,7 +10,7 @@ DECLARE
     num_techs INTEGER;
     reward_points NUMERIC;
 BEGIN
-    -- PHẦN 1: THƯỞNG CHO KTV (Rating >= 4)
+    -- PHẦN 1: THƯỞNG CHO KTV (Rating >= 4: Xuất sắc)
     -- Chỉ chạy khi rating thay đổi từ dưới 4 lên >= 4
     IF (OLD.rating IS NULL OR OLD.rating < 4) AND NEW.rating >= 4 THEN
         -- Tách danh sách KTV từ chuỗi technicianCode (ví dụ: "NH001, NH002")
@@ -35,7 +35,7 @@ BEGIN
                     NEW.id,
                     trim(tech_code),
                     'REWARD',
-                    'Bạn nhận được ' || reward_points::INTEGER || 'đ đánh giá xuất sắc từ đơn hàng #' || NEW."billCode",
+                    'Bạn nhận được ' || reward_points::INTEGER || 'đ đánh giá XUẤT SẮC từ đơn hàng #' || NEW."billCode",
                     false,
                     now()
                 );
@@ -43,8 +43,9 @@ BEGIN
         END IF;
     END IF;
 
-    -- PHẦN 2: THÔNG BÁO CHO QUẦY/ADMIN KHI CÓ ĐÁNH GIÁ TỆ (Rating <= 2)
-    IF (OLD.rating IS NULL OR OLD.rating > 2) AND NEW.rating <= 2 AND NEW.rating > 0 THEN
+    -- PHẦN 2: THÔNG BÁO CHO QUẦY/ADMIN KHI CÓ ĐÁNH GIÁ TỆ (Rating = 1)
+    -- Bỏ qua mức 2 (Bình thường) theo yêu cầu
+    IF (OLD.rating IS NULL OR OLD.rating > 1) AND NEW.rating = 1 THEN
         INSERT INTO public."StaffNotifications" (
             "bookingId",
             "employeeId",
@@ -56,7 +57,7 @@ BEGIN
             NEW.id,
             NULL, -- employeeId = NULL nghĩa là thông báo chung cho Quầy/Admin
             'COMPLAINT',
-            'Khách hàng đánh giá ' || NEW.rating || ' sao cho đơn hàng #' || NEW."billCode" || '. Nội dung: ' || COALESCE(NEW."feedbackNote", 'Không có ghi chú'),
+            'Khách hàng đánh giá TỆ cho đơn hàng #' || NEW."billCode" || '. Nội dung: ' || COALESCE(NEW."feedbackNote", 'Không có ghi chú'),
             false,
             now()
         );
