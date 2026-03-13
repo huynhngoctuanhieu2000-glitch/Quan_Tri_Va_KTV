@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Plus, AlertTriangle, UserCheck, Bed as BedIcon } from 'lucide-react';
+import { Plus, AlertTriangle, UserCheck, Bed as BedIcon, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { DispatchStaffRow } from './DispatchStaffRow';
 import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
@@ -31,11 +31,12 @@ interface DispatchServiceBlockProps {
     onUpdateStaff: (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => void;
     onAddStaff: (orderId: string, svcId: string) => void;
     onRemoveStaff: (orderId: string, svcId: string, rowId: string) => void;
+    onRemoveSvc?: (orderId: string, svcId: string) => void;
 }
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], availableTurns,
-    onUpdateSvc, onSelectRoom, onSelectBed, onUpdateStaff, onAddStaff, onRemoveStaff
+    onUpdateSvc, onSelectRoom, onSelectBed, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc
 }: DispatchServiceBlockProps) => {
 
     return (
@@ -56,6 +57,16 @@ export const DispatchServiceBlock = ({
                     </div>
                     <span className="hidden sm:inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
                 </div>
+
+                {onRemoveSvc && (
+                    <button
+                        onClick={() => onRemoveSvc(orderId, svc.id)}
+                        className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-600 border border-rose-100 rounded-2xl transition-all active:scale-90 shadow-sm"
+                        title="Xóa dịch vụ"
+                    >
+                        <Trash2 size={18} strokeWidth={2.5} />
+                    </button>
+                )}
             </div>
 
             <div className="p-4 lg:p-6 space-y-6">

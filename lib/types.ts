@@ -19,6 +19,7 @@ export type ModuleId =
   | 'turn_tracking'
   | 'service_handbook'
   | 'ai_features'
+  | 'staff_notifications'
   | 'settings';
 
 export interface ModuleDefinition {

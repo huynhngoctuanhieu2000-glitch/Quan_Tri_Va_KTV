@@ -49,6 +49,11 @@ import {
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
+const getCurrentTime = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
 const calcEndTime = (start: string, duration: number): string => {
   if (!start || !duration) return '';
   const [h, m] = start.split(':').map(Number);
@@ -90,7 +95,6 @@ export default function DispatchBoardPage() {
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
-  const [staffNotifications, setStaffNotifications] = useState<StaffNotification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
@@ -106,27 +110,6 @@ export default function DispatchBoardPage() {
     }
   }, [push.permission]);
 
-  const lastSoundTimeRef = useRef<number>(0);
-  const playNotificationSound = (source: string, type?: string) => {
-    const now = Date.now();
-    // Tránh phát âm thanh quá gần nhau (trong vòng 3s) để không bị lặp
-    // Exception: EMERGENCY sound always plays if enabled
-    if (type !== 'EMERGENCY' && now - lastSoundTimeRef.current < 3000) return;
-    
-    console.log(`🔔 [Dispatch] Playing sound from ${source}...`);
-    // Use a more urgent sound for Emergency if available, otherwise default
-    const soundFile = type === 'EMERGENCY' ? '/sounds/emergency-alert.wav' : '/sounds/reception-notification.wav';
-    const audio = new Audio(soundFile);
-    audio.play()
-      .then(() => { lastSoundTimeRef.current = now; })
-      .catch(err => {
-         console.error("🔇 [Dispatch] Audio play failed, trying fallback...", err);
-         if (type === 'EMERGENCY') {
-            const fallback = new Audio('/sounds/reception-notification.wav');
-            fallback.play().catch(e => console.error("Fallback audio failed too"));
-         }
-      });
-  };
 
   // 📡 Realtime Subscriptions
   useEffect(() => {
@@ -137,37 +120,10 @@ export default function DispatchBoardPage() {
       .channel('dispatch_board_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, (payload) => {
         console.log("🔄 [Dispatch] Realtime: Bookings changed", payload.eventType);
-        if (payload.eventType === 'INSERT' && soundEnabled) {
-           playNotificationSound('Realtime (Booking)');
-        }
         fetchData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
         fetchData();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'StaffNotifications' }, (payload) => {
-        console.log("🔔 [Dispatch] Realtime: New Staff Notification RECEIVED", payload);
-        const newNotif = payload.new as StaffNotification;
-        if (!newNotif || !newNotif.id) {
-          console.error("❌ [Dispatch] Realtime: Empty or invalid notification payload", payload);
-          return;
-        }
-
-        // 🚀 Lọc bỏ thông báo THƯỞNG (REWARD) - chỉ dành cho KTV
-        if (newNotif.type === 'REWARD') {
-           console.log("⏭️ [Dispatch] Skipping REWARD notification for reception UI");
-           return;
-        }
-
-        setStaffNotifications(prev => {
-          if (prev.some(p => p.id === newNotif.id)) return prev;
-          return [newNotif, ...prev];
-        });
-        if (soundEnabled) {
-           // Ưu tiên âm thanh cấp cứu cho EMERGENCY và COMPLAINT
-           const isUrgent = newNotif.type === 'EMERGENCY' || newNotif.type === 'COMPLAINT';
-           playNotificationSound('Realtime (Staff)', isUrgent ? 'EMERGENCY' : newNotif.type);
-        }
       })
       .on('system', { event: '*', schema: 'public', table: 'StaffNotifications' }, (payload) => {
         console.log("📡 [Dispatch] Realtime: System event", payload);
@@ -177,38 +133,11 @@ export default function DispatchBoardPage() {
       });
 
     return () => { supabase.removeChannel(channel); };
-  }, [selectedDate, soundEnabled]); // Thêm soundEnabled vào deps để ref luôn mới nhất nếu cần
+  }, [selectedDate, soundEnabled]);
 
-  const [loadingStaff, setLoadingStaff] = useState(true);
-  const prevPendingCountRef = useRef<number>(0);
-  const isFirstLoadRef = useRef<boolean>(true);
-
-  // 🔊 Audio Notification Logic - Backup & Reliable
-  useEffect(() => {
-    if (!mounted) return;
-    const currentPendingCount = orders.filter(o => o.dispatchStatus === 'pending').length;
-    
-    // Nếu là lần đầu tiên dữ liệu được load, không kêu chuông mà chỉ cập nhật count
-    if (isFirstLoadRef.current) {
-        if (orders.length > 0 || !loading) {
-            prevPendingCountRef.current = currentPendingCount;
-            isFirstLoadRef.current = false;
-            console.log("ℹ️ [Dispatch] Initial data loaded, skipping sound.");
-        }
-        return;
-    }
-
-    // Nếu số lượng đơn tăng mà Realtime callback chưa phát âm thanh (hoặc bị sót)
-    if (currentPendingCount > prevPendingCountRef.current && soundEnabled) {
-      playNotificationSound('State Observer (Backup)');
-    }
-    
-    prevPendingCountRef.current = currentPendingCount;
-  }, [orders, soundEnabled, mounted, loading]);
 
   const fetchData = async () => {
     setLoading(true);
-    setLoadingStaff(true);
     console.log("📡 [Dispatch] Fetching data for date:", selectedDate);
     try {
       const res = await getDispatchData(selectedDate);
@@ -222,7 +151,6 @@ export default function DispatchBoardPage() {
       if (!res.success || !res.data) {
         console.error("❌ [Dispatch] Server Action error:", JSON.stringify(res, null, 2));
         setLoading(false);
-        setLoadingStaff(false);
         return;
       }
 
@@ -289,13 +217,16 @@ export default function DispatchBoardPage() {
               const staffList = (assignedTurns.length > 0 && isFirstService) 
                 ? assignedTurns.map((t: any) => {
                     const staff = (sData as StaffData[])?.find((s: any) => s.id === t.employee_id);
+                    // For already assigned turns, use the saved time or estimated time
+                    const st = t.start_time ? t.start_time.substring(11, 16) : (b.timeBooking || getCurrentTime());
+                    const dur = bi.duration ?? 0;
                     return {
                       id: `st-${bi.id}-${t.employee_id}`,
                       ktvId: t.employee_id,
                       ktvName: staff?.full_name || 'KTV',
-                      startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
-                      duration: bi.duration ?? 0,
-                      endTime: t.estimated_end_time || '',
+                      startTime: st,
+                      duration: dur,
+                      endTime: t.estimated_end_time || calcEndTime(st, dur),
                       noteForKtv: bi.options?.noteForKtv || ''
                     };
                   })
@@ -303,9 +234,10 @@ export default function DispatchBoardPage() {
                     id: `st-${bi.id}`,
                     ktvId: '',
                     ktvName: '',
-                    startTime: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
+                    // For fresh/pending assignments, always default to current real time as requested
+                    startTime: getCurrentTime(),
                     duration: bi.duration ?? 0,
-                    endTime: '',
+                    endTime: calcEndTime(getCurrentTime(), bi.duration ?? 0),
                     noteForKtv: ''
                   }];
 
@@ -334,22 +266,6 @@ export default function DispatchBoardPage() {
 
         setOrders(mappedOrders);
         console.log(`✅ [Dispatch] Fetched ${mappedOrders.length} bookings successfully:`, mappedOrders);
-
-        // 5. Fetch Unread Staff Notifications (Lọc REWARD)
-        const { data: notifs, error: nError } = await supabase
-            .from('StaffNotifications')
-            .select('*')
-            .eq('isRead', false)
-            .neq('type', 'REWARD')
-            .order('createdAt', { ascending: false })
-            .limit(20);
-        
-        if (nError) {
-          console.error("❌ [Dispatch] Error fetching StaffNotifications:", nError);
-        } else if (notifs) {
-          console.log(`🔔 [Dispatch] Fetched ${notifs.length} unread relevant notifications`);
-          setStaffNotifications(notifs as StaffNotification[]);
-        }
       }
 
     
@@ -357,7 +273,6 @@ export default function DispatchBoardPage() {
       console.error("❌ [Dispatch] Unexpected error in fetchData:", e);
     } finally {
       setLoading(false);
-      setLoadingStaff(false);
     }
   };
 
@@ -378,98 +293,6 @@ export default function DispatchBoardPage() {
 
   if (!mounted) return null;
 
-  const renderStaffNotifications = () => {
-    const unread = staffNotifications.filter(n => !n.isRead);
-    return (
-      <div className="fixed top-20 right-6 z-[99999] flex flex-col gap-3 pointer-events-none">
-         <AnimatePresence>
-            {unread.map((n) => {
-               const normalizedType = n.type?.trim().toUpperCase();
-               const isEarlyExit = normalizedType === 'EARLY_EXIT';
-               const isEmergency = normalizedType === 'EMERGENCY';
-               const isComplaint = normalizedType === 'COMPLAINT';
-               const isWater = normalizedType === 'WATER';
-               const isBuyMore = normalizedType === 'BUY_MORE';
-
-               return (
-                 <motion.div
-                    key={n.id}
-                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    dragElastic={0.7}
-                    onDragEnd={async (_, info) => {
-                       if (Math.abs(info.offset.x) > 100) {
-                          setStaffNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item));
-                          await supabase.from('StaffNotifications').update({ isRead: true }).eq('id', n.id);
-                       }
-                    }}
-                    className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border min-w-[320px] max-w-sm flex gap-4 items-start cursor-grab active:cursor-grabbing
-                      ${(isEmergency || isComplaint)
-                        ? 'bg-rose-600 border-rose-500 text-white' 
-                        : isEarlyExit 
-                          ? 'bg-amber-50/95 backdrop-blur-md border-amber-200 shadow-amber-100/50' 
-                          : isWater
-                            ? 'bg-sky-50/95 backdrop-blur-md border-sky-200 shadow-sky-100/50'
-                            : isBuyMore
-                              ? 'bg-violet-50/95 backdrop-blur-md border-violet-200 shadow-violet-100/50'
-                              : 'bg-white/95 backdrop-blur-md border-emerald-100'}`}
-                 >
-                    <div className={`mt-1 p-2 rounded-xl flex-shrink-0 
-                       ${(isEmergency || isComplaint)
-                          ? 'bg-white/20' 
-                          : isEarlyExit 
-                             ? 'bg-amber-100 text-amber-600' 
-                             : isWater
-                               ? 'bg-sky-100 text-sky-600'
-                               : isBuyMore
-                                 ? 'bg-violet-100 text-violet-600'
-                                 : 'bg-emerald-50 text-emerald-600'}`}>
-                       {(isEmergency || isComplaint) ? <ShieldAlert size={24} className="animate-pulse" /> : <Bell size={20} />}
-                    </div>
-                    <div className="flex-1">
-                       <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5
-                          ${(isEmergency || isComplaint)
-                             ? 'text-rose-100' 
-                             : isEarlyExit 
-                               ? 'text-amber-600' 
-                               : isWater
-                                 ? 'text-sky-600'
-                                 : isBuyMore
-                                   ? 'text-violet-600'
-                                   : 'text-emerald-600'}`}>
-                          {isComplaint ? '🚨 Đánh giá tệ (Cần xử lý)' : 
-                           isEmergency ? '🆘 Báo động khẩn cấp' : 
-                           isEarlyExit ? '🏃 Khách về sớm (Chờ đón)' : 
-                           isWater ? '💧 Khách gọi nước' :
-                           isBuyMore ? '✨ Khách muốn mua thêm' :
-                           'KTV Yêu cầu hỗ trợ'}
-                       </p>
-                       <p className={`text-sm font-bold leading-tight ${(isEmergency || isComplaint) ? 'text-white' : 'text-slate-800'}`}>
-                          {n.message}
-                       </p>
-                       <p className={`text-[10px] mt-2 font-medium opacity-60 ${(isEmergency || isComplaint) ? 'text-rose-100' : 'text-slate-400'}`}>
-                          {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                       </p>
-                    </div>
-                    <button 
-                       onClick={async () => {
-                          setStaffNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item));
-                          await supabase.from('StaffNotifications').update({ isRead: true }).eq('id', n.id);
-                       }}
-                       className="p-1 hover:bg-black/5 rounded-lg transition-colors"
-                    >
-                       <X size={16} className={(isEmergency || isComplaint) ? 'text-white' : 'text-slate-400'} />
-                    </button>
-                 </motion.div>
-               );
-            })}
-         </AnimatePresence>
-      </div>
-    );
-  };
 if (!hasPermission('dispatch_board')) {
     return (
       <AppLayout>
@@ -554,14 +377,15 @@ if (!hasPermission('dispatch_board')) {
 
   const addStaffRow = (orderId: string, svcId: string) => {
     const svc = orders.find(o => o.id === orderId)?.services.find(s => s.id === svcId);
-    const lastRow = svc?.staffList[svc.staffList.length - 1];
+    const st = getCurrentTime();
+    const dur = svc?.duration ?? DEFAULT_DURATION;
     const newRow: StaffAssignment = {
       id: genId(),
       ktvId: '',
       ktvName: '',
-      startTime: lastRow?.startTime ?? '',
-      duration: svc?.duration ?? DEFAULT_DURATION,
-      endTime: lastRow?.endTime ?? '',
+      startTime: st,
+      duration: dur,
+      endTime: calcEndTime(st, dur),
       noteForKtv: '',
     };
     updateOrder(orderId, o => ({
@@ -625,6 +449,13 @@ if (!hasPermission('dispatch_board')) {
       o.id === selectedOrderId ? { ...o, services: [...o.services, newBlock] } : o
     ));
     setShowAddSvcModal(false);
+  };
+
+  const removeServiceBlock = (orderId: string, svcId: string) => {
+    if (!confirm('Xác nhận xóa dịch vụ này khỏi đơn?')) return;
+    setOrders(prev => prev.map(o =>
+      o.id === orderId ? { ...o, services: o.services.filter(s => s.id !== svcId) } : o
+    ));
   };
   const handleDispatch = async () => {
     if (!selectedOrder) return;
@@ -1042,6 +873,7 @@ if (!hasPermission('dispatch_board')) {
                       onUpdateStaff={updateStaffRow}
                       onAddStaff={addStaffRow}
                       onRemoveStaff={removeStaffRow}
+                      onRemoveSvc={removeServiceBlock}
                     />
                   );
                 })}
@@ -1193,7 +1025,6 @@ if (!hasPermission('dispatch_board')) {
         onConfirm={handleCreateQuickBooking}
         selectedDate={selectedDate}
       />
-      {renderStaffNotifications()}
     </AppLayout>
   );
 }

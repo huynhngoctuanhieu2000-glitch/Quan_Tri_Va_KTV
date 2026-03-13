@@ -56,6 +56,7 @@ const ICONS: Record<string, React.ReactNode> = {
   ktv_hub: <UserCheck size={20} />,
   service_handbook: <BookOpen size={20} />,
   ai_features: <Sparkles size={20} />,
+  staff_notifications: <Bell size={20} />,
   settings: <Settings size={20} />,
 };
 
@@ -80,6 +81,7 @@ const PATHS: Record<string, string> = {
   ktv_hub: '/reception/ktv-hub',
   service_handbook: '/services/handbook',
   ai_features: '/admin/ai',
+  staff_notifications: '/admin/notifications',
   settings: '/settings',
 };
 

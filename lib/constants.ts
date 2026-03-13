@@ -4,6 +4,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: 'dashboard', name: 'Bảng Điều Khiển Chính', group: 'Hệ Thống' },
   { id: 'dispatch_board', name: 'Bảng Điều Phối Trung Tâm', group: 'Vận Hành' },
   { id: 'order_management', name: 'Quản Lý Đơn (Kanban)', group: 'Vận Hành' },
+  { id: 'staff_notifications', name: 'Lịch Sử Thông Báo', group: 'Vận Hành' },
   { id: 'customer_management', name: 'Quản Lý Khách Hàng', group: 'Vận Hành' },
   { id: 'revenue_reports', name: 'Doanh Thu & Báo Cáo', group: 'Tài Chính & Kế Toán' },
   { id: 'payroll_commissions', name: 'Tính Lương & Hoa Hồng', group: 'Tài Chính & Kế Toán' },

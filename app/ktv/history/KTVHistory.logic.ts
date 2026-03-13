@@ -18,26 +18,45 @@ export const useKTVHistory = () => {
     
     setIsLoading(true);
     try {
-      // Fetch bookings where technicianCode contains user.id
-      // technicianCode is comma separated string like "KTV001, KTV002"
-      const { data, error } = await supabase
+      // 1. Fetch Bookings where technicianCode contains user.id
+      const { data: bookings, error: bError } = await supabase
         .from('Bookings')
-        .select(`
-          *,
-          BookingItems (
-            serviceId,
-            price,
-            duration
-          )
-        `)
+        .select('*')
         .ilike('technicianCode', `%${user.id}%`)
         .order('createdAt', { ascending: false })
         .limit(20);
 
-      if (error) throw error;
-      setHistory(data || []);
-    } catch (err) {
-      console.error('Error fetching history:', err);
+      if (bError) {
+        console.error('❌ [KTVHistory] Bookings query error:', bError.message);
+        throw bError;
+      }
+
+      if (!bookings || bookings.length === 0) {
+        setHistory([]);
+        return;
+      }
+
+      // 2. Fetch BookingItems for these bookings
+      const bookingIds = bookings.map(b => b.id);
+      const { data: items, error: iError } = await supabase
+        .from('BookingItems')
+        .select('*')
+        .in('bookingId', bookingIds);
+
+      if (iError) {
+        console.warn('⚠️ [KTVHistory] BookingItems query error:', iError.message);
+        // We still show bookings even if items fail
+        setHistory(bookings.map(b => ({ ...b, BookingItems: [] })));
+      } else {
+        // Attach items to bookings
+        const combined = bookings.map(b => ({
+          ...b,
+          BookingItems: (items || []).filter(item => item.bookingId === b.id)
+        }));
+        setHistory(combined);
+      }
+    } catch (err: any) {
+      console.error('Error fetching history:', err.message || err);
     } finally {
       setIsLoading(false);
     }

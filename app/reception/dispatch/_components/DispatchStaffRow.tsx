@@ -95,7 +95,7 @@ export const DispatchStaffRow = ({
                                         value={turn.employee_id}
                                         className={!hasSkill ? 'text-gray-300' : ''}
                                     >
-                                        #{turn.queue_position} {turn.staff?.full_name}
+                                        #{turn.queue_position} [{turn.employee_id}]
                                         {isExpert ? ' (⭐ Chuyên gia)' : ''}
                                         {(() => {
                                             if (turn.status !== 'working') return ' (✅ Rảnh)';
@@ -179,9 +179,10 @@ export const DispatchStaffRow = ({
                     {canRemove && (
                         <button
                             onClick={() => onRemove(orderId, svcId, row.id)}
-                            className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+                            className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-600 border border-rose-100 rounded-2xl transition-all active:scale-90 shadow-sm"
+                            title="Xóa KTV"
                         >
-                            <Trash2 size={18} />
+                            <Trash2 size={18} strokeWidth={2.5} />
                         </button>
                     )}
                 </div>

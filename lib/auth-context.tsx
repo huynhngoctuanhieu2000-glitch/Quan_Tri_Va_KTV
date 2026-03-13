@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (roleId === 'admin') {
             permissions = MODULES.map(m => m.id);
           } else if (roleId === 'reception') {
-            permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'settings'];
+            permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'staff_notifications', 'settings'];
           } else if (roleId === 'ktv') {
             permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'];
           }
@@ -136,6 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = useCallback((moduleId: ModuleId) => {
     if (!role) return false;
+    // 🛡️ Always allow staff_notifications for Admin & Reception even if not in DB permissions yet
+    if (moduleId === 'staff_notifications') {
+      return role.id === 'admin' || role.id === 'reception';
+    }
     return role.permissions.includes(moduleId);
   }, [role]);
 
