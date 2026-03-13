@@ -34,7 +34,7 @@ export async function POST(request: Request) {
             'WATER': `Yêu cầu mang nước/trà lên ${roomInfo}`,
             'BUY_MORE': `Khách muốn làm thêm, cần lễ tân lên tư vấn ở ${roomInfo}`,
             'SUPPORT': `Báo các vấn đề kỹ thuật hoặc thiếu đồ dùng ở ${roomInfo}`,
-            'EMERGENCY': `BÁO ĐỘNG: Sự cố lớn hoặc khách hàng cực kỳ không hài lòng ở ${roomInfo}`
+            'EMERGENCY': `🚨 KHẨN CẤP: Sự cố lớn tại ${roomUpper}!`
         };
 
         const finalMessage = messageMap[type] || `Yêu cầu (${type}) tại ${roomInfo}`;

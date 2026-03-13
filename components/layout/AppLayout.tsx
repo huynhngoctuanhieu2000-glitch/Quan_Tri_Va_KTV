@@ -6,12 +6,14 @@ import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { AIAssistant } from '@/components/AIAssistant';
+import { useNotifications } from '@/components/NotificationProvider';
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout({ children, hideAI = false }: { children: React.ReactNode, hideAI?: boolean }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar state
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true); // Desktop sidebar state
   const [mounted, setMounted] = useState(false);
   const { user } = useAuth();
+  const { unlockAudio } = useNotifications();
 
   const router = useRouter();
 
@@ -34,7 +36,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex overflow-hidden font-sans text-gray-900">
+    <div 
+      className="min-h-screen bg-gray-50 flex overflow-hidden font-sans text-gray-900"
+      onClick={unlockAudio}
+    >
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -60,7 +65,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </motion.div>
       </main>
-      <AIAssistant />
+      {!hideAI && <AIAssistant />}
     </div>
   );
 }

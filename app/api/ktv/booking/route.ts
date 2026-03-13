@@ -221,35 +221,13 @@ export async function PATCH(request: Request) {
 
         if (error) throw error;
 
-        // Logic giải phóng KTV chỉ khi đơn hàng THỰC SỰ KẾT THÚC (DONE)
-        if (status === 'DONE') {
-            const { data: queueItems } = await supabase
-                .from('TurnQueue')
-                .select('*')
-                .eq('current_order_id', bookingId);
-
-            if (queueItems && queueItems.length > 0) {
-                const today = new Date().toISOString().split('T')[0];
-                const { data: allActiveTurns } = await supabase.from('TurnQueue').select('queue_position').eq('date', today);
-                let maxPos = 0;
-                allActiveTurns?.forEach(t => { if (t.queue_position > maxPos) maxPos = t.queue_position; });
-
-                for (const item of queueItems) {
-                    const newTurns = (item.turns_completed || 0) + 1;
-                    const newPos = ++maxPos;
-                    await supabase.from('TurnQueue').update({
-                        status: 'waiting',
-                        current_order_id: null,
-                        turns_completed: newTurns,
-                        queue_position: newPos
-                    }).eq('id', item.id);
-                }
-            }
-        }
-
         return NextResponse.json({ success: true, data });
     } catch (error: any) {
-        console.error('API Error (PATCH /api/ktv/booking):', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        console.error('❌ [KTV API] PATCH error:', error);
+        return NextResponse.json({ 
+            success: false, 
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+        }, { status: 500 });
     }
 }

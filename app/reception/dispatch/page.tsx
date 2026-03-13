@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +17,7 @@ import { DispatchServiceBlock } from './_components/DispatchServiceBlock';
 import { getDispatchData, processDispatch, cancelBooking, updateBookingStatus, createQuickBooking } from './actions';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AddOrderModal } from './_components/AddOrderModal';
+import { useNotifications } from '@/components/NotificationProvider';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 import { 
@@ -89,7 +90,7 @@ export default function DispatchBoardPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const { soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
   const [leftPanelTab, setLeftPanelTab] = useState<DispatchStatus>('pending');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
@@ -107,16 +108,6 @@ export default function DispatchBoardPage() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
-  // Synchronize sound with push permission on load
-  useEffect(() => {
-    if (push.permission !== 'granted') {
-      setSoundEnabled(false);
-    } else {
-      setSoundEnabled(true);
-    }
-  }, [push.permission]);
-
-
   // 📡 Realtime Subscriptions
   useEffect(() => {
     setMounted(true);
@@ -127,16 +118,7 @@ export default function DispatchBoardPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Bookings' }, (payload) => {
         console.log("🔔 [Dispatch] New Booking detected!", payload.new.id);
         
-        // 🔊 Sound Fallback
-        if (soundEnabledRef.current) {
-          const now = Date.now();
-          if (now - lastSoundTimeRef.current > 3000) {
-            const audio = new Audio('/sounds/quay-don-hang-moi.wav');
-            audio.play().catch(() => {});
-            lastSoundTimeRef.current = now;
-          }
-        }
-        
+        // NotificationProvider will handle the sound via StaffNotifications trigger
         // Always refetch on INSERT to get related BookingItems & mapping
         fetchData();
       })
@@ -224,12 +206,13 @@ export default function DispatchBoardPage() {
           const hasAssignedKtv = assignedTurns.length > 0;
 
           let dStatus: DispatchStatus = 'pending';
-          if (b.status === 'CONFIRMED' || b.status === 'PREPARING') dStatus = 'dispatched';
+          if (b.status === 'PREPARING') dStatus = 'dispatched';
           else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          else if (hasAssignedKtv) dStatus = 'cleaning'; // Ưu tiên hiển thị đang dọn nếu KTV chưa release
           else if (b.status === 'FEEDBACK') dStatus = 'waiting_rating';
           else if (b.status === 'COMPLETED') dStatus = 'cleaning';
+          else if (b.status === 'DONE' && hasAssignedKtv) dStatus = 'cleaning';
           else if (b.status === 'DONE') dStatus = 'done';
+          else if (hasAssignedKtv) dStatus = 'dispatched'; // Fallback for transition state
           
           return {
             id: b.id,
@@ -565,7 +548,7 @@ if (!hasPermission('dispatch_board')) {
       });
 
       const res = await processDispatch(selectedOrder.id, {
-        status: 'CONFIRMED',
+        status: 'PREPARING',
         technicianCode: combinedTechCodes,
         bedId: primaryService?.bedId || null,
         roomName: primaryService?.selectedRoomId || null,
@@ -652,60 +635,76 @@ if (!hasPermission('dispatch_board')) {
 
   const renderSoundToggle = () => {
     return (
-      <button
-        onClick={async () => {
-          if (soundEnabled) {
-            setSoundEnabled(false);
-            return;
-          }
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => {
+            if (soundEnabled) {
+              setSoundEnabled(false);
+              return;
+            }
 
-          if (push.permission === 'denied') {
-            alert('Bạn đã chặn thông báo trên trình duyệt. Hãy bấm vào biểu tượng Ổ khóa trên thanh địa chỉ để "Cho phép" thông báo nhé!');
-            return;
-          }
+            unlockAudio();
 
-          if (push.permission === 'default') {
-            const success = await push.subscribe();
-            if (success) setSoundEnabled(true);
-            return;
-          }
+            if (push.permission === 'denied') {
+              alert('Bạn đã chặn thông báo trên trình duyệt. Hãy bấm vào biểu tượng Ổ khóa trên thanh địa chỉ để "Cho phép" thông báo nhé!');
+              return;
+            }
 
-          setSoundEnabled(true);
-        }}
-        disabled={push.isRegistering}
-        className={`flex-shrink-0 px-4 py-2.5 rounded-2xl transition-all shadow-sm border flex items-center gap-2.5 font-black text-xs
-          ${soundEnabled 
-            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
-            : (push.permission === 'denied' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')}`}
-      >
-        <div className="relative">
-          {push.isRegistering ? (
-            <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          ) : soundEnabled ? (
-            <Bell size={20} className="animate-bounce" />
-          ) : (
-            <BellOff size={20} />
-          )}
-          {soundEnabled && <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-emerald-50" />}
-        </div>
-        <span className="whitespace-nowrap uppercase tracking-tight">
-          {push.isRegistering ? 'Đang kết nối...' : soundEnabled ? 'Thông báo: BẬT' : 'Thông báo: TẮT'}
-        </span>
-      </button>
+            if (push.permission === 'default') {
+              const success = await push.subscribe();
+              if (success) setSoundEnabled(true);
+              return;
+            }
+
+            setSoundEnabled(true);
+          }}
+          disabled={push.isRegistering}
+          className={`flex-shrink-0 px-4 py-2.5 rounded-2xl transition-all shadow-sm border flex items-center gap-2.5 font-black text-xs
+            ${soundEnabled 
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+              : (push.permission === 'denied' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')}`}
+        >
+          <div className="relative">
+            {push.isRegistering ? (
+              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : soundEnabled ? (
+              <Bell size={16} />
+            ) : (
+              <BellOff size={16} />
+            )}
+          </div>
+          <span className="whitespace-nowrap uppercase tracking-tight">
+            {push.isRegistering ? 'Kết nối...' : soundEnabled ? 'ÂM THANH: BẬT' : 'ÂM THANH: TẮT'}
+          </span>
+        </button>
+
+        {soundEnabled && (
+          <button
+            onClick={() => {
+              unlockAudio(); // Priming again just in case
+              playSound('NEW_ORDER'); // Test with a small, fast sound
+            }}
+            className="p-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl hover:bg-indigo-100 transition-all shadow-sm"
+            title="Thử âm thanh"
+          >
+            <Volume2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
     );
   };
 
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
+      <div className="h-[calc(100dvh-3.5rem)] lg:h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-6 px-1 lg:px-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-4 px-1 lg:px-0 mt-2 sm:mt-0">
           <div className="flex items-center justify-between sm:block">
             <div>
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
                 <span className="lg:hidden">Điều Phối</span>
                 <span className="hidden lg:inline">Bảng Điều Phối Trung Tâm</span>
-                <div className="hidden sm:flex items-center gap-1.5">
+                <div className="hidden sm:flex items-center gap-1.5 ml-2">
                   {LEFT_TABS.map(tab => (
                     <button 
                       key={tab.id} 
@@ -731,34 +730,39 @@ if (!hasPermission('dispatch_board')) {
               </h1>
               <p className="text-[10px] lg:text-xs text-gray-500 mt-1 font-medium hidden sm:block">Điều phối KTV & Phòng chuyên nghiệp</p>
             </div>
-            {/* Mobile quick actions toggle or sound could go here */}
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
             {renderSoundToggle()}
 
-            <div className="relative flex-shrink-0">
-              <CalendarIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <div className="relative flex-shrink-0 group">
+              <CalendarIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 z-10" />
+              <div className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm font-black bg-white shadow-sm flex items-center gap-1 min-w-[90px] group-hover:border-emerald-200 transition-colors">
+                <span className="text-slate-800 tracking-tighter">
+                  {new Date(selectedDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }).replace('/', '-')}
+                </span>
+                <ChevronDown size={14} className="text-slate-400" />
+              </div>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none bg-white cursor-pointer min-w-[140px]"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20"
               />
             </div>
 
             <button 
               onClick={() => setShowAddOrderModal(true)}
-              className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-black text-sm transition-all shadow-lg shadow-indigo-100 active:scale-95"
+              className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 font-black text-sm transition-all shadow-lg shadow-indigo-200 active:scale-95"
             >
-              <Plus size={18} strokeWidth={3} /> <span className="hidden sm:inline">Tạo Đơn Mới</span><span className="sm:hidden">Thêm</span>
+              <Plus size={20} strokeWidth={4} /> <span className="hidden sm:inline">Thêm Đơn</span><span className="sm:hidden">Thêm</span>
             </button>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-5 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-5 overflow-hidden pb-4 sm:pb-0">
           {/* LEFT: Order Panel */}
-          <div className={`${selectedOrderId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 shrink-0 flex-col border border-gray-200 bg-white rounded-3xl shadow-sm transition-all`}>
+          <div className={`${selectedOrderId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 flex-1 lg:flex-none shrink-0 flex-col border border-gray-200 bg-white rounded-3xl shadow-sm transition-all min-h-0 overflow-hidden`}>
             <div className="p-4 border-b border-gray-100 bg-white shrink-0">
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -808,11 +812,11 @@ if (!hasPermission('dispatch_board')) {
                     layout
                     key={order.id}
                     onClick={() => setSelectedOrderId(order.id)}
-                    onContextMenu={(e) => {
+                    onContextMenu={(e: React.MouseEvent) => {
                       e.preventDefault();
                       setContextMenu({ x: e.clientX, y: e.clientY, orderId: order.id });
                     }}
-                    className={`bg-white p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] relative ${selectedOrderId === order.id ? 'border-indigo-600 shadow-xl shadow-indigo-100 ring-4 ring-indigo-50' : 'border-transparent shadow-sm hover:border-indigo-200 hover:shadow-md'}`}
+                    className={`bg-white p-5 rounded-3xl border-2 cursor-pointer transition-all active:scale-[0.98] relative ${selectedOrderId === order.id ? 'border-indigo-600 shadow-2xl shadow-indigo-100 ring-4 ring-indigo-50/50' : 'border-transparent shadow-sm hover:border-indigo-100 hover:shadow-lg'}`}
                   >
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wider">#{order.billCode}</span>
@@ -820,13 +824,11 @@ if (!hasPermission('dispatch_board')) {
                     </div>
                     <div className="flex justify-between items-baseline gap-2">
                       <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors uppercase tracking-tight truncate">{order.customerName}</p>
-                      {order.totalAmount !== undefined && order.totalAmount > 0 && (
-                        <div className="shrink-0 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                          <span>{order.totalAmount.toLocaleString('vi-VN')}đ</span>
+                        <div className="shrink-0 text-[11px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-emerald-100/50">
+                          <span>{(order.totalAmount || 0).toLocaleString('vi-VN')}đ</span>
                           <span className="opacity-30">·</span>
-                          <span>{order.paymentMethod === 'Cash' ? 'TM' : (order.paymentMethod === 'Transfer' ? 'CK' : order.paymentMethod)}</span>
+                          <span>{order.paymentMethod === 'Cash' || order.paymentMethod === 'cash_vnd' ? 'cash' : (order.paymentMethod === 'Transfer' ? 'ck' : order.paymentMethod)}</span>
                         </div>
-                      )}
                     </div>
                     <div className="mt-2.5 flex items-center justify-between gap-4">
                       <p className="text-[10px] text-gray-500 font-medium truncate flex-1 leading-tight">
@@ -849,7 +851,7 @@ if (!hasPermission('dispatch_board')) {
           </div>
 
           {/* CENTER: Assignment Panel */}
-          <div className={`${selectedOrderId ? 'flex' : 'hidden lg:flex'} flex-1 flex flex-col border border-gray-200 bg-white rounded-3xl overflow-hidden shadow-sm min-w-0 transition-all`}>
+          <div className={`${selectedOrderId ? 'flex' : 'hidden lg:flex'} flex-1 flex flex-col border border-gray-200 bg-white rounded-3xl overflow-hidden shadow-sm min-w-0 min-h-0 transition-all`}>
             <div className="p-4 lg:p-5 border-b border-gray-100 bg-white shrink-0 flex items-center gap-3">
               {selectedOrderId && (
                 <button 
@@ -1063,6 +1065,7 @@ if (!hasPermission('dispatch_board')) {
         onConfirm={handleCreateQuickBooking}
         selectedDate={selectedDate}
       />
+
     </AppLayout>
   );
 }

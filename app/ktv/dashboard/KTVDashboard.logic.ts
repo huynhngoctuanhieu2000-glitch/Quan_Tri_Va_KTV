@@ -59,36 +59,21 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const screenRef = useRef<ScreenState>(screen);
     useEffect(() => { screenRef.current = screen; }, [screen]);
 
-    // 🔊 Audio Notification Logic
+    // 🔊 Audio Notification Logic - Moved to NotificationProvider for consistency
     useEffect(() => {
-        // Skip sound on initial page load
         if (!isLoading && isFirstLoadRef.current) {
             prevBookingIdRef.current = booking?.id || null;
             isFirstLoadRef.current = false;
-            console.log("ℹ️ [KTV] First load synced, skipping potential sound.");
             return;
-        }
-
-        if (booking?.id && booking.id !== prevBookingIdRef.current) {
-            console.log("🔔 [KTV] New booking assigned! Playing sound...");
-            try {
-                const soundPath = '/sounds/ktv-don-hang-moi.wav';
-                console.log("🔔 [KTV Logic] New booking audio attempt:", soundPath);
-                const audio = new Audio(soundPath);
-                audio.play().catch(err => console.error("🔇 [KTV Logic] Audio play failed (Check interaction):", err));
-            } catch (e) {
-                console.error("🔇 [KTV Logic] Audio creation failed:", e);
-            }
         }
         prevBookingIdRef.current = booking?.id || null;
     }, [booking, isLoading]);
 
-    // ✨ Bonus Points logic consolidated into fetchBooking for reliability
+    // ✨ Bonus Points logic - Sound handled by NotificationProvider
     useEffect(() => {
         if (!user?.id) return;
 
         const checkRewards = async () => {
-            // Không gửi thông báo khi đang trong quy trình làm dịch vụ (TIMER)
             if (screenRef.current === 'TIMER') return;
 
             try {
@@ -96,16 +81,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const res = await response.json();
                 
                 if (res.success && res.data && res.data.length > 0) {
-                    const notify = res.data[0]; // Lấy cái mới nhất
+                    const notify = res.data[0];
                     setBonusMessage(notify.message);
                     
-                    try {
-                        const winAudio = new Audio('/sounds/ktv-nhan-thuong.wav');
-                        winAudio.volume = 0.5;
-                        winAudio.play().catch(e => console.warn("🔊 [KTV] Bonus sound failed:", e));
-                    } catch(e) {}
-
-                    // Đánh dấu đã đọc
+                    // Marks as read, sound is played by global NotificationProvider via Realtime
                     await fetch(`/api/ktv/notifications?id=${notify.id}`, { method: 'PATCH' });
                     
                     setTimeout(() => setBonusMessage(null), 15000);
@@ -162,20 +141,17 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 // Mặc định: Lấy đơn đang gán cho KTV trong TurnQueue
                 let url = `/api/ktv/booking?techCode=${user.id}`;
                 
-                // Nâng cao: Ưu tiên targetBookingId từ URL (nếu có)
+                // Nâng cao: Ưu tiên track đơn cũ khi đang ở màn hậu kỳ (REVIEW/HANDOVER/REWARD)
+                const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
+                
                 if (config?.targetBookingId) {
                     url = `/api/ktv/booking?bookingId=${config.targetBookingId}`;
-                } 
-                // Nếu đã giải phóng KTV nhưng đang ở màn checkout (REVIEW/HANDOVER/REWARD), track đơn cũ
-                else if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current) && !booking && prevBookingIdRef.current) {
-                    // Nếu đã xác nhận xong (lastAcknowledgedIdRef), không track nữa
-                    if (lastAcknowledgedIdRef.current === prevBookingIdRef.current) {
-                        setBooking(null);
-                        return;
-                    }
+                } else if (isPostService && prevBookingIdRef.current) {
+                    // Ưu tiên fetch theo ID đơn vừa làm để tránh bị mất dữ liệu khi đã RELEASE_KTV
                     url = `/api/ktv/booking?bookingId=${prevBookingIdRef.current}`;
-                    console.log("🔍 [KTV] Tracking released booking for rating:", prevBookingIdRef.current);
+                    console.log("🔍 [KTV] Persisting booking fetch for post-service screen:", prevBookingIdRef.current);
                 }
+                // (Đã gộp vào logic ở trên)
 
                 const response = await fetch(url);
                 const res = await response.json();
@@ -257,7 +233,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         return prev;
                     });
                 } else if (res.success && !res.data) {
-                    setBooking(null);
+                    // Chỉ xóa booking nếu không phải màn hình hậu kỳ
+                    const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
+                    if (!isPostService) {
+                        setBooking(null);
+                    }
                 }
             } catch (err) {
                 console.error('Error fetching booking:', err);
@@ -368,7 +348,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         if (res.success) {
             setIsTimerRunning(true);
         } else {
-            alert('Lỗi cập nhật trạng thái');
+            console.error('❌ [KTV Logic] Start error:', res.error);
+            alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
         }
         setIsLoading(false);
     };
@@ -390,7 +371,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setIsTimerRunning(false);
             setScreen('REVIEW');
         } else {
-            alert('Lỗi cập nhật trạng thái');
+            console.error('❌ [KTV Logic] Finish error:', res.error);
+            alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
         }
         setIsLoading(false);
     };

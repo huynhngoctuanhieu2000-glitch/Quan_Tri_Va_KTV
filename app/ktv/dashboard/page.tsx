@@ -582,7 +582,7 @@ function ScreenHandover({ logic }: { logic: any }) {
 
 function ScreenReward({ logic }: { logic: any }) {
   const { booking, commission, goToDashboard } = logic;
-  const isExcellent = booking?.rating >= 4;
+  const isExcellent = Number(booking?.rating || 0) >= 4;
 
   return (
     <div className="p-5 flex flex-col items-center justify-center h-[80vh] text-center bg-[#fdfbf7]">
@@ -605,7 +605,7 @@ function ScreenReward({ logic }: { logic: any }) {
             <Star className="text-amber-500 fill-amber-500" size={24} />
             <div className="text-left">
               <p className="text-xs font-black text-amber-700 uppercase">Đánh giá xuất sắc</p>
-              <p className="text-sm font-bold text-amber-900">+25 Điểm Thưởng</p>
+              <p className="text-sm font-bold text-amber-900">Đơn hàng này bạn đã được cộng 25đ nhé</p>
             </div>
           </div>
       )}

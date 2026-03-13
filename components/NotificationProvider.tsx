@@ -21,6 +21,10 @@ interface Notification {
 interface NotificationContextType {
     notifications: Notification[];
     markAsRead: (id: string) => void;
+    soundEnabled: boolean;
+    setSoundEnabled: (enabled: boolean) => void;
+    unlockAudio: () => void;
+    playSound: (type: string) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -42,39 +46,93 @@ const SOUND_MAP: Record<string, string> = {
 export const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
     const { user, role } = useAuth();
     const [toastQueue, setToastQueue] = useState<Notification[]>([]);
+    const [soundEnabled, setSoundEnabled] = useState(true);
+    const audioUnlockedRef = useRef<boolean>(false);
+    const audioInstanceRef = useRef<HTMLAudioElement | null>(null);
     const lastSoundTimeRef = useRef<number>(0);
     const router = useRouter();
 
+    // Prime the audio instance on first load
+    useEffect(() => {
+        if (typeof window !== 'undefined' && !audioInstanceRef.current) {
+            audioInstanceRef.current = new Audio();
+            audioInstanceRef.current.volume = 0.5;
+        }
+    }, []);
+
+    const unlockAudio = () => {
+        if (audioUnlockedRef.current || !audioInstanceRef.current) return;
+        
+        const audio = audioInstanceRef.current;
+        // iOS needs a real play() on a real file during a user gesture
+        audio.src = '/sounds/quay-don-hang-moi.wav';
+        audio.volume = 0.01;
+        
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                audioUnlockedRef.current = true;
+                console.log('✅ [NotificationProvider] Audio context primed.');
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = 0.5;
+            }).catch(err => {
+                console.debug('⏳ [NotificationProvider] Priming failed (interaction needed):', err);
+            });
+        }
+    };
+
     const playSound = (type: string) => {
-        const normalizedType = type?.toUpperCase() || 'DEFAULT';
+        if (!soundEnabled || !audioInstanceRef.current) return;
+        const normalizedType = (type || 'default').toUpperCase().trim();
         const now = Date.now();
-        // Giới hạn tần suất âm thanh (3 giây), ngoại trừ khẩn cấp
-        if (normalizedType !== 'EMERGENCY' && normalizedType !== 'COMPLAINT' && now - lastSoundTimeRef.current < 3000) return;
+        
+        // Giới hạn tần suất phát (tránh bị rè hoặc chồng chéo quá nhanh), trừ khẩn cấp
+        if (normalizedType !== 'EMERGENCY' && normalizedType !== 'COMPLAINT' && now - lastSoundTimeRef.current < 2000) {
+            console.log('🔇 [NotificationProvider] Sound throttled:', normalizedType);
+            return;
+        }
 
         let soundKey = normalizedType;
         
-        // Đặc biệt cho NEW_ORDER: Phân biệt âm thanh theo vai trò
-        if (normalizedType === 'NEW_ORDER' && role?.id === 'ktv') {
-            soundKey = 'KTV_NEW_ORDER';
+        // Xử lý riêng biệt cho KTV để có âm thanh đặc thù
+        if (role?.id === 'ktv') {
+            if (normalizedType === 'NEW_ORDER') {
+                soundKey = 'KTV_NEW_ORDER';
+            } else if (normalizedType === 'REWARD') {
+                soundKey = 'REWARD';
+            }
         }
 
-        const soundFile = SOUND_MAP[soundKey] || SOUND_MAP[normalizedType] || SOUND_MAP['default'];
-        console.log(`🔊 [NotificationProvider] Attempting to play: ${soundFile} (Type: ${normalizedType}, Key: ${soundKey})`);
+        const soundPath = SOUND_MAP[soundKey] || SOUND_MAP[normalizedType] || SOUND_MAP['default'];
+        console.log(`🔊 [NotificationProvider] Type: ${type} -> Key: ${soundKey} -> Path: ${soundPath}`);
         
-        const audio = new Audio(soundFile);
-        audio.play().catch(err => {
-            console.warn('🔇 [NotificationProvider] Audio play blocked/failed. Interaction may be required.', err);
-        });
+        const audio = audioInstanceRef.current;
+        try {
+            audio.pause();
+            audio.src = soundPath;
+            audio.load();
+            
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    console.warn('🔇 [NotificationProvider] play blocked:', err);
+                    audioUnlockedRef.current = false;
+                });
+            }
+        } catch (e) {
+            console.error('❌ [NotificationProvider] Error playing sound:', e);
+        }
         lastSoundTimeRef.current = now;
     };
 
-    const addToast = (notif: Notification) => {
+    const addToast = (notif: Notification, shouldPlaySound = true) => {
         setToastQueue(prev => {
             // Avoid duplicates
             if (prev.some(n => n.id === notif.id)) return prev;
             return [...prev, notif];
         });
-        playSound(notif.type);
+        if (shouldPlaySound) playSound(notif.type);
         // REMOVED: Auto-dismiss setTimeout as per user request
     };
 
@@ -110,17 +168,35 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 table: 'StaffNotifications' 
             }, (payload) => {
                 const newNotif = payload.new as Notification;
+                console.log('🔔 [NotificationProvider] New notification received:', newNotif);
                 
                 // Logic lọc thông báo theo Role
-                if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
-                    // Thông báo cho quầy
-                    addToast(newNotif);
+                if (roleId === 'admin') {
+                    // Admin chỉ nhận thông báo chung (không dành riêng cho KTV) hoặc khiếu nại
+                    const isGlobal = !newNotif.employeeId;
+                    const isComplaint = newNotif.type === 'COMPLAINT';
+                    
+                    if (isGlobal || isComplaint) {
+                        addToast(newNotif);
+                    }
                 } else if (isKtv && newNotif.employeeId === user.id) {
-                    // Thông báo riêng cho KTV này
+                    // KTV luôn được phát âm thanh cho mọi thông báo gán cho mình
+                    playSound(newNotif.type);
+                    
+                    // Nhưng chỉ hiện Toast nếu không phải là REWARD (vì REWARD đã có UI riêng trên Dashboard)
+                    if (newNotif.type !== 'REWARD') {
+                        console.log('✅ [NotificationProvider] Matching technician! Adding toast.');
+                        addToast(newNotif, false); // false để không playSound lần 2 trong addToast
+                    }
+                } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
+                    // Lễ tân nhận thông báo không gán cho ai (thông báo chung cho quầy)
                     addToast(newNotif);
-                } else if (roleId === 'admin') {
-                    // Admin nhận tất cả
-                    addToast(newNotif);
+                } else {
+                    console.log('⏭️ [NotificationProvider] Notification ignored by filter:', { 
+                        roleId, 
+                        userId: user.id, 
+                        notifTech: newNotif.employeeId 
+                    });
                 }
             })
             .subscribe();
@@ -139,11 +215,18 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     });
 
     return (
-        <NotificationContext.Provider value={{ notifications: toastQueue, markAsRead }}>
+        <NotificationContext.Provider value={{ 
+            notifications: toastQueue, 
+            markAsRead, 
+            soundEnabled, 
+            setSoundEnabled,
+            unlockAudio,
+            playSound
+        }}>
             {children}
             
             {/* TOAST UI */}
-            <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+            <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
                 <AnimatePresence>
                     {sortedToasts.map((n) => (
                         <Toast 
@@ -154,6 +237,8 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                             onRedirect={() => {
                                 if (role?.id === 'admin' || role?.id === 'reception') {
                                     router.push('/reception/dispatch');
+                                } else if (role?.id === 'ktv') {
+                                    router.push('/ktv/dashboard');
                                 }
                             }}
                         />
@@ -226,25 +311,37 @@ const Toast = ({
             initial={{ opacity: 0, x: 50, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-            className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border transition-all duration-500 ${bgColor} ${borderColor} flex gap-4 items-start ${notification.isRead ? 'opacity-60 scale-[0.98]' : ''}`}
+            className={`pointer-events-auto p-4 rounded-2xl shadow-2xl border transition-all duration-500 ${bgColor} ${borderColor} flex gap-4 items-center ${notification.isRead ? 'opacity-60 scale-[0.98]' : ''} ${isCritical && !notification.isRead ? 'ring-4 ring-rose-500/20' : ''}`}
         >
             <div className={`p-2 rounded-xl shrink-0 ${isCritical ? (notification.isRead ? 'bg-white/10' : 'bg-white/20') : 'bg-white shadow-sm'}`}>
                 {icon}
             </div>
             
             <div 
-                className="flex-1 pr-2 cursor-pointer"
+                className="flex-1 min-w-0 cursor-pointer"
                 onClick={onRedirect}
             >
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${isCritical ? 'text-rose-100' : 'text-slate-500'}`}>
-                    {title} {notification.isRead && <span className="text-[8px] normal-case font-bold ml-1 opacity-60">(Đã xử lý)</span>}
-                </p>
-                <p className={`text-sm font-bold leading-tight ${isCritical ? 'text-white' : 'text-slate-800'} ${notification.isRead ? 'line-through' : ''}`}>
+                <div className="flex items-center gap-2 mb-1">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${isCritical ? 'text-rose-100' : 'text-slate-500'}`}>
+                        {title}
+                    </p>
+                    {notification.isRead && (
+                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${isCritical ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                            ĐÃ XỬ LÝ
+                        </span>
+                    )}
+                </div>
+                <p className={`text-sm font-bold leading-tight ${isCritical ? 'text-white' : 'text-slate-800'} ${notification.isRead ? 'line-through opacity-70' : ''} break-words`}>
                     {notification.message}
                 </p>
-                <p className={`text-[9px] mt-1 opacity-60 ${isCritical ? 'text-rose-100' : 'text-slate-400'}`}>
-                    {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
+                <div className="flex items-center gap-2 mt-1.5">
+                    <p className={`text-[9px] font-bold opacity-60 ${isCritical ? 'text-rose-100' : 'text-slate-400'}`}>
+                        {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    {isCritical && !notification.isRead && (
+                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                    )}
+                </div>
             </div>
 
             <div className="flex flex-col gap-2">

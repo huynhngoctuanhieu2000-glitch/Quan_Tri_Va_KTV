@@ -182,7 +182,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
         const { error: bError } = await supabase
             .from('Bookings')
             .update({
-                status: 'PREPARING',
+                status: dispatchData.status || 'PREPARING',
                 technicianCode: dispatchData.technicianCode,
                 bedId: dispatchData.bedId,
                 roomName: dispatchData.roomName,
@@ -336,7 +336,7 @@ export async function createQuickBooking(data: {
                 customerName: data.customerName,
                 customerPhone: data.customerPhone || '',
                 billCode,
-                status: 'PENDING',
+                status: 'NEW',
                 bookingDate: `${data.bookingDate} ${new Date().toLocaleTimeString('en-GB')}`,
                 totalAmount: svc.priceVND || 0,
                 paymentMethod: 'Tiền mặt', // Mặc định
