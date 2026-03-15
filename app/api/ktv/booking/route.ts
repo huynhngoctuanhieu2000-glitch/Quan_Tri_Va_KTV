@@ -84,7 +84,7 @@ export async function GET(request: Request) {
             // Lấy tất cả dịch vụ để map
             const { data: svcs, error: svcError } = await supabase
                 .from('Services')
-                .select('id, code, nameVN, nameEN, duration, focusConfig, description')
+                .select('id, code, nameVN, nameEN, duration, focusConfig, description, procedure, service_description')
                 .limit(1000);
 
             if (svcError) {
@@ -120,7 +120,8 @@ export async function GET(request: Request) {
                 const item = {
                     ...i,
                     service_name: getI18nStr(svc?.nameVN || svc?.nameEN || svc?.name, `Dịch vụ ${rawSId}`),
-                    service_description: getI18nStr(svc?.description, ''),
+                    service_description: svc?.service_description || getI18nStr(svc?.description, ''),
+                    procedure: svc?.procedure || null,
                     focusConfig: svc?.focusConfig || null,
                     duration: i.duration || svc?.duration || (sId.includes('nhs0000') ? 1 : 60),
                     customerNote: customerNote,
@@ -176,55 +177,23 @@ export async function PATCH(request: Request) {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        // 🔥 XỬ LÝ RELEASE_KTV (Giải phóng KTV độc lập với Booking status)
-        if (action === 'RELEASE_KTV') {
-            if (!technicianCode) {
-                return NextResponse.json({ success: false, error: 'techCode is required for RELEASE_KTV' }, { status: 400 });
-            }
-
-            const today = new Date().toISOString().split('T')[0];
-            const { data: turn } = await supabase
-                .from('TurnQueue')
-                .select('*')
-                .eq('employee_id', technicianCode)
-                .eq('date', today)
-                .eq('current_order_id', bookingId)
-                .maybeSingle();
-
-            if (turn) {
-                const { data: allActiveTurns } = await supabase.from('TurnQueue').select('queue_position').eq('date', today);
-                let maxPos = 0;
-                allActiveTurns?.forEach(t => { if (t.queue_position > maxPos) maxPos = t.queue_position; });
-
-                const newTurns = (turn.turns_completed || 0) + 1;
-                const newPos = maxPos + 1;
-                
-                await supabase.from('TurnQueue').update({
-                    status: 'waiting',
-                    current_order_id: null,
-                    booking_item_id: null, // GIẢI PHÓNG ITEM
-                    room_id: null,
-                    bed_id: null,
-                    start_time: null,
-                    estimated_end_time: null,
-                    turns_completed: newTurns,
-                    queue_position: newPos
-                }).eq('id', turn.id);
-            }
-            return NextResponse.json({ success: true, message: 'KTV Released' });
-        }
-
         // --- Logic mới: Cập nhật song song BookingItem ---
         const today = new Date().toISOString().split('T')[0];
         const { data: turnForSync } = await supabase
             .from('TurnQueue')
-            .select('booking_item_id, last_served_at, start_time')
+            .select('id, booking_item_id, last_served_at, start_time, turns_completed')
             .eq('employee_id', technicianCode)
             .eq('date', today)
             .eq('current_order_id', bookingId)
             .maybeSingle();
 
-        const updatePayload: any = { status, updatedAt: new Date().toISOString() };
+        const updatePayload: any = { updatedAt: new Date().toISOString() };
+        // Chỉ cập nhật status của Booking tổng nếu nó thuộc danh sách hợp lệ (Enum BookingStatus)
+        const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'COMPLETED', 'FEEDBACK', 'DONE', 'CANCELLED'];
+        if (validBookingStatuses.includes(status)) {
+            updatePayload.status = status;
+        }
+
         const itemUpdatePayload: any = { status, updatedAt: new Date().toISOString() };
         
         // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
@@ -268,6 +237,12 @@ export async function PATCH(request: Request) {
             }
             updatePayload.timeStart = new Date().toISOString();
             itemUpdatePayload.timeStart = new Date().toISOString();
+        } else if (status === 'READY') {
+            // Trạng thái sẵn sàng (đã chuẩn bị xong), dùng để đồng bộ nhóm
+            itemUpdatePayload.status = 'READY';
+        } else if (status === 'CLEANING') {
+            // Trạng thái bắt đầu dọn phòng (sau khi đánh giá khách)
+            itemUpdatePayload.status = 'CLEANING';
         } else if (status === 'DONE' || status === 'COMPLETED') {
             updatePayload.timeEnd = new Date().toISOString();
             itemUpdatePayload.timeEnd = new Date().toISOString();
@@ -277,12 +252,31 @@ export async function PATCH(request: Request) {
             updatePayload.notes = 'Khách về sớm';
         }
 
-        // Cập nhật BookingItem nếu có gán ID dịch vụ
-        if (turnForSync?.booking_item_id) {
-            await supabase
+        // Cập nhật BookingItem nếu có gán ID dịch vụ HOẶC lấy dịch vụ đầu tiên làm fallback cho Co-working
+        let targetBookingItemId = turnForSync?.booking_item_id;
+        
+        if (!targetBookingItemId) {
+            // Fallback lấy dịch vụ đầu tiên của đơn hàng này
+            const { data: firstItem } = await supabase
+                .from('BookingItems')
+                .select('id')
+                .eq('bookingId', bookingId)
+                .order('id', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+                
+            if (firstItem) {
+                targetBookingItemId = firstItem.id;
+            }
+        }
+
+        if (targetBookingItemId) {
+            const { error: itemErr } = await supabase
                 .from('BookingItems')
                 .update(itemUpdatePayload)
-                .eq('id', turnForSync.booking_item_id);
+                .eq('id', targetBookingItemId);
+            
+            if (itemErr) console.error('⚠️ [KTV API] BookingItem update error (non-fatal):', itemErr);
         }
 
         const { data, error } = await supabase
@@ -290,9 +284,34 @@ export async function PATCH(request: Request) {
             .update(updatePayload)
             .eq('id', bookingId)
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
+        if (!data) throw new Error('Không tìm thấy đơn hàng để cập nhật');
+
+        // 🔥 XỬ LÝ RELEASE_KTV (Giải phóng KTV độc lập với Booking status)
+        if (action === 'RELEASE_KTV') {
+            if (technicianCode && turnForSync) {
+                const { data: allActiveTurns } = await supabase.from('TurnQueue').select('queue_position').eq('date', today);
+                let maxPos = 0;
+                allActiveTurns?.forEach(t => { if (t.queue_position > maxPos) maxPos = t.queue_position; });
+
+                const newTurns = (turnForSync.turns_completed || 0) + 1;
+                const newPos = maxPos + 1;
+                
+                await supabase.from('TurnQueue').update({
+                    status: 'waiting',
+                    current_order_id: null,
+                    booking_item_id: null, // GIẢI PHÓNG ITEM
+                    room_id: null,
+                    bed_id: null,
+                    start_time: null,
+                    estimated_end_time: null,
+                    turns_completed: newTurns,
+                    queue_position: newPos
+                }).eq('id', turnForSync.id);
+            }
+        }
 
         return NextResponse.json({ success: true, data });
     } catch (error: any) {

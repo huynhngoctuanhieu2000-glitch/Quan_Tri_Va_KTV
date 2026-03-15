@@ -4,7 +4,7 @@ import React, { useState, Suspense } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
-  CheckCircle, Play, StopCircle, Lock,
+  CheckCircle, CheckCircle2, Play, StopCircle, Lock,
   Smile, Frown, Meh, Star, Gift, ArrowRight, X,
   ClipboardList, Coffee, LogOut, Sparkles, User, Users,
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
@@ -12,55 +12,71 @@ import {
   ChevronDown, ChevronUp, Heart, MicOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import Image from 'next/image';
-import { useKTVDashboard, ScreenState } from './KTVDashboard.logic';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+import { useKTVDashboard } from './KTVDashboard.logic';
+import { useNotifications } from '@/components/NotificationProvider';
 
-// 🌿 UI CONFIGURATION - SPA THEME (RESORED)
+// 🔧 UI CONFIGURATION
 const THEME = {
-  bgBase: 'bg-[#FDFBF7]',
-  bgCard: 'bg-white',
-  textBase: 'text-slate-800',
-  textMuted: 'text-slate-500',
   primary: 'bg-emerald-600',
   primaryHover: 'hover:bg-emerald-700',
   primaryMuted: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   gold: 'text-[#D4AF37]',
   goldBg: 'bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB]',
   goldBorder: 'border-[#D4AF37]/30',
+  bgCard: 'bg-white',
+  bgBase: 'bg-[#FDFBF7]',
+  radius: 'rounded-[32px]',
   border: 'border-slate-100',
-  radius: 'rounded-2xl',
-  shadow: 'shadow-sm shadow-slate-200/50'
+  textBase: 'text-slate-800',
+  textMuted: 'text-slate-400'
 };
 
 const ANIMATION = {
   duration: 0.4,
-  initial: { opacity: 0, y: 15 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.95 }
+  initial: { opacity: 0, scale: 0.98, y: 10 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit: { opacity: 0, scale: 1.02, y: -10 }
 };
 
-function DashboardContent() {
+// ----------------------------------------------------
+// MAIN COMPONENT
+// ----------------------------------------------------
+
+function KTVDashboardContent() {
   const searchParams = useSearchParams();
   const action = searchParams.get('action');
   const bookingId = searchParams.get('bookingId');
-  
+  const { setKtvScreen } = useNotifications();
+
   const logic = useKTVDashboard({ 
     initialAction: action, 
     targetBookingId: bookingId 
   });
+
   const { 
     user, 
-    screen, 
     booking, 
     isLoading, 
+    screen,
     bonusMessage, 
-    setBonusMessage,
-    showProcedure,
+    setBonusMessage, 
+    showProcedure, 
     setShowProcedure,
     handleInteraction,
     handleEarlyExit
   } = logic;
+
+  // 📡 Đồng bộ screen cho NotificationProvider để khóa bấm thông báo khi đang dọn phòng
+  React.useEffect(() => {
+    setKtvScreen(screen);
+  }, [screen, setKtvScreen]);
+
+  // Lấy đúng dịch vụ mà KTV này được gán để truyền cho Quy trình
+  const assignedItem = booking?.assignedItemId 
+    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
+    : (booking?.BookingItems?.[0] || {});
 
   if (isLoading && !booking && screen === 'DASHBOARD') {
     return (
@@ -93,27 +109,17 @@ function DashboardContent() {
 
   return (
     <>
-      <div className={`max-w-md mx-auto min-h-screen pb-24 ${THEME.bgBase} relative`}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={screen}
-            initial={ANIMATION.initial}
-            animate={ANIMATION.animate}
-            exit={ANIMATION.exit}
-            transition={{ duration: ANIMATION.duration }}
-            className="h-full"
-          >
-            {renderScreen()}
-          </motion.div>
-        </AnimatePresence>
+      {/* Main Content Area */}
+      <div className="flex-1">
+        {renderScreen()}
       </div>
 
       {/* Procedure Modal */}
-      <ProcedureModal 
-        isOpen={showProcedure} 
-        onClose={() => setShowProcedure(false)} 
-        procedure={booking?.BookingItems?.[0]?.procedure}
-        serviceName={booking?.BookingItems?.[0]?.service_name}
+      <ProcedureModal
+        isOpen={showProcedure}
+        onClose={() => setShowProcedure(false)}
+        procedure={assignedItem?.service_description}
+        serviceName={assignedItem?.service_name}
       />
     </>
   );
@@ -128,7 +134,7 @@ export default function KTVDashboardPage() {
           <p className="mt-4 text-emerald-700 font-medium">Đang chuẩn bị dữ liệu...</p>
         </div>
       }>
-        <DashboardContent />
+        <KTVDashboardContent />
       </Suspense>
     </AppLayout>
   );
@@ -226,6 +232,9 @@ function ScreenDashboard({ logic }: { logic: any }) {
   // Xác định vị trí chặng hiện tại
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
 
+  // Lấy danh sách đồng đội cùng làm item này
+  const coWorkers = item?.technicianCodes?.filter((code: string) => code !== logic.user?.id) || [];
+
   return (
     <div className="p-2 lg:p-4 space-y-4 lg:space-y-6">
       {/* Header - Only show when NO active booking - Hidden on Mobile */}
@@ -278,20 +287,30 @@ function ScreenDashboard({ logic }: { logic: any }) {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Active Booking Card */}
+          {/* Active Booking Card - ONLY SHOW ASSIGNED ITEM */}
           <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} overflow-hidden border shadow-sm p-6 pb-0`}>
               <div className="mb-4">
-                {booking.BookingItems?.map((bi: any) => (
-                   <div key={bi.id} className="flex flex-col">
+                   <div className="flex flex-col">
                       <h3 className="font-black text-3xl text-emerald-700 leading-tight tracking-tight">
-                        {bi.service_name}
+                        {item.service_name}
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{bi.duration} phút</span>
+                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{item.duration} phút</span>
                         <span className="text-sm font-black text-slate-800">#{booking.billCode}</span>
                       </div>
+                      {coWorkers.length > 0 && (
+                        <div className="mt-3 flex items-center gap-2">
+                           <div className="flex -space-x-2">
+                              {coWorkers.map((code: string) => (
+                                 <div key={code} className="w-6 h-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-indigo-600 shadow-sm">
+                                    {code}
+                                 </div>
+                              ))}
+                           </div>
+                           <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {coWorkers.join(', ')}</p>
+                        </div>
+                      )}
                    </div>
-                ))}
               </div>
 
               <div className="flex justify-between items-end mb-6">
@@ -582,13 +601,13 @@ function ScreenTimer({ logic }: { logic: any }) {
                   onClick={handleEarlyExit} 
                   icon={<LogOut size={20} />} 
                   label="KHÁCH VỀ SỚM" 
-                  color="text-slate-400 border-slate-100" 
+                  color="text-rose-600 border-rose-50" 
                 />
                 <ActionGridButton 
-                  onClick={() => handleInteraction('WATER')} 
+                  onClick={() => handleInteraction('ORDER_DRINK')} 
                   icon={<Coffee size={20} />} 
-                  label="KHÁCH KHÁT NƯỚC" 
-                  color="text-emerald-500 border-emerald-50" 
+                  label="GỌI NƯỚC" 
+                  color="text-amber-600 border-amber-50" 
                 />
                 <ActionGridButton 
                   onClick={() => handleInteraction('BUY_MORE')} 
@@ -597,20 +616,19 @@ function ScreenTimer({ logic }: { logic: any }) {
                   color="text-emerald-600 border-emerald-50" 
                 />
                 <ActionGridButton 
-                  onClick={() => handleInteraction('SUPPORT')} 
+                  onClick={() => handleInteraction('ASK_SUPPORT')} 
                   icon={<HelpCircle size={20} />} 
-                  label="CẦN HỖ TRỢ" 
-                  color="text-indigo-500 border-indigo-50" 
+                  label="HỖ TRỢ" 
+                  color="text-blue-600 border-blue-50" 
                 />
             </div>
             
-            {/* Emergency Wide Button */}
-            <button 
+            <button
               onClick={() => handleInteraction('EMERGENCY')}
-              className="w-full h-16 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-all text-rose-600"
+              className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-200 active:scale-95 transition-all"
             >
-               <BellRing size={24} className="animate-bounce" />
-               <span className="text-sm font-black uppercase tracking-[0.1em]">KHẨN CẤP</span>
+              <ShieldAlert size={18} />
+              BÁO ĐỘNG KHẨN CẤP
             </button>
         </motion.div>
       )}
@@ -620,78 +638,115 @@ function ScreenTimer({ logic }: { logic: any }) {
 
 function ActionGridButton({ onClick, icon, label, color }: { onClick: () => void, icon: React.ReactNode, label: string, color: string }) {
   return (
-    <button 
+    <button
       onClick={onClick}
-      className={`bg-white border p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-2 active:scale-95 transition-all ${color}`}
+      className={`bg-white border border-slate-100 p-4 rounded-3xl flex flex-col items-center justify-center gap-2 shadow-sm active:scale-95 transition-all ${color}`}
     >
       <div className="opacity-80">{icon}</div>
-      <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+    </button>
+  );
+}
+
+function ChecklistItem({ label, checked, onChange }: { label: string, checked: boolean, onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      className={`w-full flex items-center justify-between p-4 ${THEME.radius} border-2 transition-all
+      ${checked ? 'border-emerald-500 bg-emerald-50' : 'border-slate-50 bg-slate-50/50 hover:border-emerald-200'}`}
+    >
+      <span className={`text-sm font-bold ${checked ? 'text-emerald-700' : 'text-slate-600'}`}>{label}</span>
+      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
+        ${checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-200 bg-white'}`}>
+        {checked && <CheckCircle size={14} />}
+      </div>
     </button>
   );
 }
 
 function ScreenReview({ logic }: { logic: any }) {
-  const [selectedPersonalities, setSelectedPersonalities] = useState<string[]>([]);
+  const { booking, handleSubmitReview, goToDashboard } = logic;
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
 
-  const assessmentItems = [
-    { id: 'DE_XOM', icon: <ShieldAlert size={24} />, title: "Khách Dê Xồm", desc: "Thiếu tôn trọng KTV" },
-    { id: 'KHO_CHIU', icon: <Frown size={24} />, title: "Khách Kỹ Tính + Khó Chịu", desc: "Yêu cầu sự tinh tế" },
-    { id: 'DE_THUONG', icon: <Heart size={24} />, title: "Khách Dễ Thương", desc: "Thân thiện, cởi mở" },
-    { id: 'HUONG_NOI', icon: <MicOff size={24} />, title: "Khách Hướng Nội", desc: "Thích yên tĩnh, ít nói" },
-    { id: 'HUONG_NGOAI', icon: <Users size={24} />, title: "Khách Hướng Ngoại", desc: "Thích giao lưu, kết nối" },
+  const PERSONALITY_TRAITS = [
+    { label: 'Khách Dê Xồm', color: 'bg-rose-50 text-rose-700 border-rose-100' },
+    { label: 'Thiếu tôn trọng KTV', color: 'bg-red-50 text-red-700 border-red-100' },
+    { label: 'Khách Kỹ Tính + Khó Chịu', color: 'bg-orange-50 text-orange-700 border-orange-100' },
+    { label: 'Yêu cầu sự tinh tế', color: 'bg-amber-50 text-amber-700 border-amber-100' },
+    { label: 'Khách Dễ Thương', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+    { label: 'Thân thiện, cởi mở', color: 'bg-teal-50 text-teal-700 border-teal-100' },
+    { label: 'Khách Hướng Nội', color: 'bg-blue-50 text-blue-700 border-blue-100' },
+    { label: 'Thích yên tĩnh, ít nói', color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+    { label: 'Khách Hướng Ngoại', color: 'bg-purple-50 text-purple-700 border-purple-100' },
+    { label: 'Thích giao lưu, kết nối', color: 'bg-pink-50 text-pink-700 border-pink-100' },
   ];
 
-  const togglePersonality = (id: string) => {
-    setSelectedPersonalities(prev => 
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+  const toggleTrait = (trait: string) => {
+    setSelectedTraits(prev => 
+      prev.includes(trait) ? prev.filter(t => t !== trait) : [...prev, trait]
     );
   };
 
   return (
-    <div className="p-5 flex flex-col h-full bg-[#fdfbf7]">
-      <div className="text-center mb-6 mt-4">
-        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle size={32} />
+    <div className="p-6 pt-10 space-y-8">
+      <div className="text-center space-y-3">
+        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto shadow-inner">
+          <CheckCircle2 className="text-emerald-600" size={40} />
         </div>
-        <h2 className="text-2xl font-bold text-slate-800">Dịch vụ hoàn tất!</h2>
-        <p className="text-slate-500 mt-2">Đánh giá hồ sơ khách hàng</p>
-      </div>
-
-      {/* 🚨 NHẮC KHÁCH TÀI SẢN */}
-      <div className="mb-6 p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-center gap-4 animate-pulse">
-        <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-rose-200">
-          <AlertTriangle size={24} className="text-white" />
+        <h2 className="text-2xl font-black text-slate-800">Dịch vụ hoàn tất!</h2>
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 text-left shadow-sm">
+           <ShieldAlert className="text-amber-600 shrink-0 mt-0.5" size={18} />
+           <p className="text-xs font-black text-amber-800 leading-relaxed uppercase tracking-tight">
+             Nhắc khách kiểm tra điện thoại, ví tiền và tư trang trước khi ra khỏi phòng!
+           </p>
         </div>
-        <p className="text-[11px] font-black text-rose-700 leading-tight uppercase tracking-wider">
-          NHẮC KHÁCH KIỂM TRA LẠI ĐIỆN THOẠI, VÍ TIỀN VÀ NỮ TRANG TRƯỚC KHI RỜI PHÒNG
-        </p>
       </div>
 
-      <div className="space-y-3 mb-8">
-        {assessmentItems.map((item) => (
-          <RatingCard
-            key={item.id}
-            icon={item.icon}
-            title={item.title}
-            desc={item.desc}
-            isSelected={selectedPersonalities.includes(item.id)}
-            onClick={() => togglePersonality(item.id)}
-          />
-        ))}
+      <div className="space-y-4">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Xác nhận công việc</h3>
+        <button
+          onClick={() => setIsCompleted(!isCompleted)}
+          className={`w-full flex items-center justify-between p-5 ${THEME.radius} border-2 transition-all
+          ${isCompleted ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-100' : 'border-slate-100 bg-white hover:border-emerald-200'}`}
+        >
+          <span className={`text-sm font-black ${isCompleted ? 'text-emerald-700' : 'text-slate-600'}`}>Tôi đã hoàn tất dịch vụ chuẩn chỉ</span>
+          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all
+            ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-200 bg-white'}`}>
+            {isCompleted && <CheckCircle size={16} strokeWidth={3} />}
+          </div>
+        </button>
       </div>
 
-      <button
-        onClick={() => {
-          const personalityNames = selectedPersonalities.map(id => 
-            assessmentItems.find(i => i.id === id)?.title
-          ).filter(Boolean);
-          logic.handleSubmitReview({ personality: personalityNames });
-        }}
-        className={`w-full py-4 mt-auto font-bold text-white ${THEME.radius} transition-colors 
-          ${selectedPersonalities.length > 0 ? THEME.primary + ' shadow-lg shadow-emerald-100' : 'bg-slate-300 pointer-events-none'}`}
-      >
-        Lưu hồ sơ {selectedPersonalities.length > 0 ? `(${selectedPersonalities.length})` : ''}
-      </button>
+      <div className="space-y-4">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Đặc điểm khách hàng</h3>
+        <div className="grid grid-cols-1 gap-2">
+          {PERSONALITY_TRAITS.map((trait) => (
+            <button
+              key={trait.label}
+              onClick={() => toggleTrait(trait.label)}
+              className={`p-4 rounded-2xl text-left border-2 transition-all font-bold text-xs flex items-center justify-between
+              ${selectedTraits.includes(trait.label) 
+                ? `${trait.color} border-current scale-[1.02] shadow-sm` 
+                : 'bg-white border-slate-50 text-slate-500 hover:border-slate-200'}`}
+            >
+              {trait.label}
+              {selectedTraits.includes(trait.label) && <Star size={14} className="fill-current" />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pb-10">
+        <button
+          onClick={() => handleSubmitReview(5, selectedTraits.join(', '))}
+          disabled={!isCompleted || logic.isLoading}
+          className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl transition-all
+          ${isCompleted ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-slate-200 text-slate-400'}`}
+        >
+          {logic.isLoading ? 'Đang lưu...' : 'Lưu & Tiếp tục dọn phòng'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -700,149 +755,128 @@ function ScreenHandover({ logic }: { logic: any }) {
   const { handoverChecklist, toggleHandoverChecklist, isHandoverComplete, handleFinishHandover } = logic;
 
   return (
-    <div className="p-5 flex flex-col h-full space-y-6 bg-[#fdfbf7]">
-      <div className="text-center mt-4">
-        <h2 className="text-xl font-bold text-slate-800">Dọn dẹp phòng</h2>
-        <p className="text-sm text-slate-500 mt-1">Xác nhận trước khi kết thúc ca</p>
+    <div className="p-6 pt-12 space-y-8">
+      <div className="text-center space-y-2">
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Sparkles className="text-blue-600" size={40} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800">Dọn dẹp phòng</h2>
+        <p className="text-slate-500 font-medium">Hoàn tất các bước vệ sinh để sẵn sàng đón khách tiếp theo.</p>
       </div>
 
-      <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} border p-4 shadow-sm`}>
-        <div className="space-y-1">
-          <ChecklistItem label="Thu dọn khăn bẩn" checked={handoverChecklist.towel} onChange={() => toggleHandoverChecklist('towel')} />
-          <ChecklistItem label="Thay ga giường & gối" checked={handoverChecklist.bed} onChange={() => toggleHandoverChecklist('bed')} />
-          <ChecklistItem label="Đổ rác & vệ sinh sàn" checked={handoverChecklist.trash} onChange={() => toggleHandoverChecklist('trash')} />
-          <ChecklistItem label="Tắt máy lạnh & quạt" checked={handoverChecklist.ac} onChange={() => toggleHandoverChecklist('ac')} />
-          <ChecklistItem label="Tắt đèn" checked={handoverChecklist.light} onChange={() => toggleHandoverChecklist('light')} />
-        </div>
+      <div className="space-y-3">
+        <ChecklistItem label="Thu gom khăn bẩn & rác" checked={handoverChecklist.laundry} onChange={() => toggleHandoverChecklist('laundry')} />
+        <ChecklistItem label="Vệ sinh bồn bệ & dụng cụ" checked={handoverChecklist.clean} onChange={() => toggleHandoverChecklist('clean')} />
+        <ChecklistItem label="Sắp xếp lại gối, nệm" checked={handoverChecklist.reset} onChange={() => toggleHandoverChecklist('reset')} />
+        <ChecklistItem label="Xịt tinh dầu khử mùi" checked={handoverChecklist.scent} onChange={() => toggleHandoverChecklist('scent')} />
       </div>
 
       <button
-        disabled={!isHandoverComplete}
+        disabled={!isHandoverComplete || logic.isLoading}
         onClick={handleFinishHandover}
-        className={`w-full py-4 mt-auto font-bold text-slate-900 ${THEME.radius} transition-all 
-          ${isHandoverComplete ? THEME.goldBg + ' shadow-lg shadow-yellow-200' : 'bg-slate-300 text-white'}`}
+        className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl transition-all
+        ${isHandoverComplete ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-slate-200 text-slate-400'}`}
       >
-        Hoàn tất dọn phòng
+        {logic.isLoading ? 'Đang xử lý...' : 'Xong & Sẵn sàng đón khách'}
       </button>
     </div>
   );
 }
 
 function ScreenReward({ logic }: { logic: any }) {
-  const { booking, commission, goToDashboard } = logic;
-  const isExcellent = Number(booking?.rating || 0) >= 4;
+  const { commission, goToDashboard } = logic;
 
   return (
-    <div className="p-5 flex flex-col items-center justify-center h-[80vh] text-center bg-[#fdfbf7]">
-      <div className="w-24 h-24 bg-yellow-50 text-yellow-500 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-yellow-100">
-        <Gift size={48} />
+    <div className="p-6 h-full flex flex-col items-center justify-center text-center space-y-6 pt-10">
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1, rotate: [0, 10, -10, 0] }}
+        className="w-24 h-24 bg-amber-100 rounded-[32px] flex items-center justify-center shadow-xl shadow-amber-100"
+      >
+        <Gift className="text-amber-600" size={48} />
+      </motion.div>
+
+      <div className="space-y-1.5">
+        <h2 className="text-xl font-black text-slate-800 tracking-tight">Chúc mừng!</h2>
+        <p className="text-sm text-slate-500 font-bold px-4">Bạn vừa nhận được tiền tua phục vụ</p>
       </div>
 
-      <h2 className="text-2xl font-bold text-slate-800 mb-2">Xin cảm ơn!</h2>
-      <p className="text-slate-500 mb-8">Bạn đã hoàn thành ca làm việc.</p>
-
-      <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} border p-6 w-full shadow-sm mb-8`}>
-        <div className="text-sm text-slate-500 uppercase tracking-widest font-bold mb-2">Tiền tua của bạn</div>
-        <div className="text-4xl font-black text-emerald-600">
-          {(commission || 0).toLocaleString()} đ
-        </div>
+      <div className="bg-white border-2 border-amber-100 rounded-[32px] p-6 w-full shadow-lg max-w-[280px]">
+        <span className="text-[9px] font-black text-amber-600 uppercase tracking-[0.2em] block mb-1">Tua bạn nhận được</span>
+        <div className="text-4xl font-black text-slate-800 tabular-nums">+{commission.toLocaleString('vi-VN')}đ</div>
       </div>
-
-      {isExcellent && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-4 mb-8 w-full">
-            <Star className="text-amber-500 fill-amber-500" size={24} />
-            <div className="text-left">
-              <p className="text-xs font-black text-amber-700 uppercase">Đánh giá xuất sắc</p>
-              <p className="text-sm font-bold text-amber-900">Đơn hàng này bạn đã được cộng 25đ nhé</p>
-            </div>
-          </div>
-      )}
 
       <button
         onClick={goToDashboard}
-        className={`w-full py-4 font-bold text-white ${THEME.primary} ${THEME.radius} flex items-center justify-center gap-2`}
+        className="w-full max-w-[280px] py-4 bg-slate-900 text-white rounded-[20px] font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
       >
-        Trở về trang chủ <ArrowRight size={20} />
+        Tiếp tục làm việc
       </button>
-    </div>
-  );
-}
-
-// ----------------------------------------------------
-// SHARED UI COMPONENTS
-// ----------------------------------------------------
-
-function ChecklistItem({ label, checked, onChange }: { label: string, checked: boolean, onChange: () => void }) {
-  return (
-    <div 
-      onClick={onChange}
-      className={`flex items-center gap-4 p-3 ${THEME.radius} cursor-pointer transition-colors ${checked ? 'bg-emerald-50' : THEME.bgCard}`}
-    >
-      <div className={`w-6 h-6 rounded flex items-center justify-center border-2 transition-colors ${checked ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
-        {checked && <CheckCircle size={14} className="text-white" />}
-      </div>
-      <span className={`font-medium ${checked ? 'text-emerald-800' : THEME.textBase}`}>{label}</span>
     </div>
   );
 }
 
 function CollapsibleRequirements({ booking }: { booking: any }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const item = booking?.BookingItems?.[0];
-  if (!item) return null;
+  const [isOpen, setIsOpen] = useState(true);
+  
+  // Lấy đúng item được gán
+  const item = booking?.assignedItemId 
+    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
+    : (booking?.BookingItems?.[0] || {});
 
-  const hasContent = item.strength || item.focus || item.avoid || item.customerNote || booking.dispatcherNote || item.noteForKtv;
-  if (!hasContent) return null;
+  if (!booking) return null;
 
   return (
-    <div className="bg-amber-50/40 border border-amber-100 rounded-[28px] overflow-hidden mb-6 transition-all duration-300">
+    <div className="border-t border-slate-50 mt-2">
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-5 text-amber-800"
+        className="w-full flex items-center justify-between py-4 group"
       >
-        <div className="flex items-center gap-2">
-          <AlertTriangle size={16} className="text-amber-600" />
-          <span className="text-[11px] font-black uppercase tracking-wider">YÊU CẦU DỊCH VỤ</span>
-        </div>
-        <div className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
-          <ChevronDown size={18} />
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-emerald-600 transition-colors">
+          Yêu cầu chi tiết
+        </span>
+        <div className="text-slate-300">
+          {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </div>
       </button>
 
-      <AnimatePresence initial={false}>
+      <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="overflow-hidden"
           >
-            <div className="px-5 pb-6 space-y-5">
-              {/* 1. Yêu cầu của khách hàng */}
-              <div className="space-y-3">
-                <span className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest px-1">Yêu cầu của khách hàng</span>
+            <div className="pb-6 space-y-5">
+              {/* 1. Yêu cầu của khách */}
+              <div className="flex flex-col gap-3">
+                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest px-1">Từ phía khách hàng</span>
                 <div className="flex flex-wrap gap-2">
-                  {/* Strength Tag */}
-                  <div className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-700 border border-orange-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                    <Dumbbell size={14} /> {item.strength || 'Vừa'}
-                  </div>
-                  {/* Focus Tag */}
-                  {item.focus && (
-                    <div className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                      <Target size={14} className="text-rose-400" /> {item.focus}
+                  {item.therapistGender && item.therapistGender !== 'Ngẫu nhiên' && (
+                    <div className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-xl text-[10px] font-black border border-purple-100 flex items-center gap-1.5">
+                      <User size={12} /> {item.therapistGender}
                     </div>
                   )}
-                  {/* Avoid Tag */}
+                  {item.strength && (
+                    <div className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-xl text-[10px] font-black border border-orange-100 flex items-center gap-1.5">
+                      <Dumbbell size={12} /> {item.strength}
+                    </div>
+                  )}
+                  {item.focus && (
+                    <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black border border-emerald-100 flex items-center gap-1.5">
+                      <Target size={12} /> {item.focus}
+                    </div>
+                  )}
                   {item.avoid && (
-                    <div className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-100 flex items-center gap-1.5 text-xs font-bold shadow-sm">
-                      <Ban size={14} /> {item.avoid}
+                    <div className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl text-[10px] font-black border border-rose-100 flex items-center gap-1.5">
+                      <Ban size={12} /> Tránh: {item.avoid}
                     </div>
                   )}
                 </div>
-
                 {item.customerNote && (
-                  <div className="bg-white/80 p-4 rounded-2xl border border-amber-100 text-sm text-amber-900 font-medium italic leading-relaxed shadow-sm">
-                    "{item.customerNote}"
+                  <div className="bg-slate-50 p-3.5 rounded-2xl text-xs text-slate-600 font-bold italic border border-slate-100 shadow-sm">
+                    &quot;{item.customerNote}&quot;
                   </div>
                 )}
               </div>
@@ -936,4 +970,3 @@ function ProcedureModal({ isOpen, onClose, procedure, serviceName }: { isOpen: b
     </div>
   );
 }
-

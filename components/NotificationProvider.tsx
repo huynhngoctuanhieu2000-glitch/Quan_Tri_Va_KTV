@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check } from 'lucide-react';
+import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check, Star, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // --- TYPES ---
@@ -25,6 +25,7 @@ interface NotificationContextType {
     setSoundEnabled: (enabled: boolean) => void;
     unlockAudio: () => void;
     playSound: (type: string) => void;
+    setKtvScreen: (screen: string) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -47,6 +48,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     const { user, role } = useAuth();
     const [toastQueue, setToastQueue] = useState<Notification[]>([]);
     const [soundEnabled, setSoundEnabled] = useState(true);
+    const [ktvScreen, setKtvScreen] = useState<string>('DASHBOARD');
     const audioUnlockedRef = useRef<boolean>(false);
     const audioInstanceRef = useRef<HTMLAudioElement | null>(null);
     const lastSoundTimeRef = useRef<number>(0);
@@ -133,7 +135,13 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             return [...prev, notif];
         });
         if (shouldPlaySound) playSound(notif.type);
-        // REMOVED: Auto-dismiss setTimeout as per user request
+        
+        // 🔥 THAY ĐỔI: Tự động ẩn cho KTV sau 7 giây
+        if (role?.id === 'ktv') {
+            setTimeout(() => {
+                removeToast(notif.id);
+            }, 7000);
+        }
     };
 
     const removeToast = (id: string) => {
@@ -172,20 +180,15 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 
                 // Logic lọc thông báo theo Role
                 if (roleId === 'admin') {
-                    // Admin chỉ nhận thông báo chung (không dành riêng cho KTV) hoặc khiếu nại
+                    // Admin nhận thông báo chung hoặc khiếu nại
                     const isGlobal = !newNotif.employeeId;
                     const isComplaint = newNotif.type === 'COMPLAINT';
-                    
-                    if (isGlobal || isComplaint) {
+                    if (isGlobal || isComplaint) addToast(newNotif);
+                } else if (isKtv) {
+                    // KTV chỉ nhận thông báo gán ĐÚNG cho mình
+                    if (newNotif.employeeId === user.id) {
                         addToast(newNotif);
                     }
-                } else if (isKtv && newNotif.employeeId === user.id) {
-                    // KTV luôn được phát âm thanh cho mọi thông báo gán cho mình
-                    playSound(newNotif.type);
-                    
-                    // 🔥 THAY ĐỔI: Không hiện Toast (cửa sổ nhỏ có nút tích/x) cho KTV nữa
-                    // KTV chỉ nhận biết qua âm thanh và thay đổi màn hình chính
-                    console.log('🔊 [NotificationProvider] KTV Sound played. UI Toast skipped.');
                 } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
                     // Lễ tân nhận thông báo không gán cho ai (thông báo chung cho quầy)
                     addToast(newNotif);
@@ -219,31 +222,80 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             soundEnabled, 
             setSoundEnabled,
             unlockAudio,
-            playSound
+            playSound,
+            setKtvScreen
         }}>
             {children}
             
             {/* TOAST UI */}
-            <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
-                <AnimatePresence>
-                    {sortedToasts.map((n) => (
-                        <Toast 
-                            key={n.id} 
-                            notification={n} 
-                            onClose={() => removeToast(n.id)} 
-                            onMarkDone={() => markAsRead(n.id)}
-                            onRedirect={() => {
-                                if (role?.id === 'admin' || role?.id === 'reception') {
-                                    router.push('/reception/dispatch');
-                                } else if (role?.id === 'ktv') {
-                                    router.push('/ktv/dashboard');
-                                }
-                            }}
-                        />
-                    ))}
-                </AnimatePresence>
-            </div>
+            {role?.id === 'ktv' ? (
+                // GIAO DIỆN TIN NHẮN CHO KTV (Trên đầu)
+                <div className="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+                    <AnimatePresence>
+                        {sortedToasts.filter(n => !n.isRead).map((n) => (
+                            <KtvMessageToast 
+                                key={n.id} 
+                                notification={n} 
+                                currentScreen={ktvScreen}
+                                onRedirect={() => router.push('/ktv/history')}
+                            />
+                        ))}
+                    </AnimatePresence>
+                </div>
+            ) : (
+                // GIAO DIỆN TOAST CHO QUẦY (Dưới góc)
+                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
+                    <AnimatePresence>
+                        {sortedToasts.map((n) => (
+                            <Toast 
+                                key={n.id} 
+                                notification={n} 
+                                onClose={() => removeToast(n.id)} 
+                                onMarkDone={() => markAsRead(n.id)}
+                                onRedirect={() => {
+                                    if (role?.id === 'admin' || role?.id === 'reception') {
+                                        if (n.type?.toUpperCase() === 'NEW_ORDER') {
+                                            router.push('/reception/ktv-hub');
+                                        } else {
+                                            router.push('/reception/dispatch');
+                                        }
+                                    }
+                                }}
+                            />
+                        ))}
+                    </AnimatePresence>
+                </div>
+            )}
         </NotificationContext.Provider>
+    );
+};
+
+const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notification: Notification, currentScreen: string, onRedirect: () => void }) => {
+    const isLocked = ['REVIEW', 'HANDOVER'].includes(currentScreen);
+    const type = notification.type?.toUpperCase();
+    const isComplaint = type === 'COMPLAINT';
+    
+    return (
+        <motion.div
+            initial={{ y: -50, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: -50, opacity: 0, scale: 0.9 }}
+            onClick={() => !isLocked && onRedirect()}
+            className={`pointer-events-auto p-4 rounded-[24px] shadow-2xl border-2 flex items-center gap-4 transition-all active:scale-95
+                ${isComplaint ? 'bg-rose-600 border-rose-500 text-white' : 'bg-white/95 backdrop-blur-md border-emerald-100 text-slate-800'}
+                ${isLocked ? 'cursor-default opacity-90' : 'cursor-pointer'}`}
+        >
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isComplaint ? 'bg-white/20' : 'bg-emerald-500'}`}>
+                {isComplaint ? <ShieldAlert size={20} /> : <Star size={20} className="text-white fill-white" />}
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className={`text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5 ${isComplaint ? 'text-rose-100' : 'text-emerald-600'}`}>
+                    {isComplaint ? 'Thông báo khẩn' : 'Phần thưởng mới'}
+                </p>
+                <p className="text-xs font-bold leading-tight truncate">{notification.message}</p>
+            </div>
+            {!isLocked && <ArrowRight size={16} className="opacity-40" />}
+        </motion.div>
     );
 };
 
