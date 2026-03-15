@@ -1,10 +1,17 @@
+export interface WorkSegment {
+  id: string;
+  roomId: string | null;
+  bedId: string | null;
+  startTime: string;
+  duration: number;
+  endTime: string;
+}
+
 export interface StaffAssignment {
   id: string; // Internal mapping ID
   ktvId: string;
   ktvName: string;
-  startTime: string;
-  duration: number;
-  endTime: string;
+  segments: WorkSegment[];
   noteForKtv: string;
 }
 
@@ -62,7 +69,12 @@ export type TurnQueueData = {
   status: 'waiting' | 'working' | 'done_turn';
   turns_completed: number;
   current_order_id?: string | null;
+  booking_item_id?: string | null;
+  room_id?: string | null;
+  bed_id?: string | null;
   estimated_end_time?: string | null;
+  start_time?: string | null;
+  last_served_at?: string | null;
 };
 
 export interface StaffNotification {

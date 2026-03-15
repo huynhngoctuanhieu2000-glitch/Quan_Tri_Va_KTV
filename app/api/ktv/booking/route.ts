@@ -17,6 +17,7 @@ export async function GET(request: Request) {
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         let bookingId = bookingIdParam;
+        let assignedItemId = null;
 
         // Nếu không có bookingId cụ thể, tìm theo KTV trong TurnQueue
         if (!bookingId) {
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
             const today = new Date().toISOString().split('T')[0];
             const { data: turn, error: tError } = await supabase
                 .from('TurnQueue')
-                .select('current_order_id')
+                .select('current_order_id, booking_item_id')
                 .eq('employee_id', technicianCode)
                 .eq('date', today)
                 .maybeSingle();
@@ -38,6 +39,22 @@ export async function GET(request: Request) {
                 return NextResponse.json({ success: true, data: null });
             }
             bookingId = turn.current_order_id;
+            assignedItemId = turn.booking_item_id;
+        }
+
+        // 1.5 Lấy thông tin từ TurnQueue để có mốc thời gian điều phối (last_served_at)
+        let turnInfo = null;
+        if (technicianCode) {
+            const today = new Date().toISOString().split('T')[0];
+            const { data: turn } = await supabase
+                .from('TurnQueue')
+                .select('last_served_at, start_time, booking_item_id, room_id, bed_id')
+                .eq('employee_id', technicianCode)
+                .eq('date', today)
+                .eq('current_order_id', bookingId)
+                .maybeSingle();
+            turnInfo = turn;
+            if (turn?.booking_item_id) assignedItemId = turn.booking_item_id;
         }
 
         // 2. Lấy đơn hàng tương ứng
@@ -123,7 +140,13 @@ export async function GET(request: Request) {
             data: {
                 ...booking,
                 dispatcherNote: booking.notes || '',
-                BookingItems: itemsWithService
+                BookingItems: itemsWithService,
+                assignedItemId: assignedItemId,
+                // Thông tin ràng buộc thời gian & Vị trí làm việc cụ thể
+                last_served_at: turnInfo?.last_served_at,
+                dispatchStartTime: turnInfo?.start_time,
+                assignedRoomId: turnInfo?.room_id,
+                assignedBedId: turnInfo?.bed_id
             }
         });
     } catch (error: any) {
@@ -179,6 +202,10 @@ export async function PATCH(request: Request) {
                 await supabase.from('TurnQueue').update({
                     status: 'waiting',
                     current_order_id: null,
+                    booking_item_id: null, // GIẢI PHÓNG ITEM
+                    room_id: null,
+                    bed_id: null,
+                    start_time: null,
                     estimated_end_time: null,
                     turns_completed: newTurns,
                     queue_position: newPos
@@ -187,8 +214,18 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ success: true, message: 'KTV Released' });
         }
 
-        // --- Logic cũ cho Status update ---
+        // --- Logic mới: Cập nhật song song BookingItem ---
+        const today = new Date().toISOString().split('T')[0];
+        const { data: turnForSync } = await supabase
+            .from('TurnQueue')
+            .select('booking_item_id, last_served_at, start_time')
+            .eq('employee_id', technicianCode)
+            .eq('date', today)
+            .eq('current_order_id', bookingId)
+            .maybeSingle();
+
         const updatePayload: any = { status, updatedAt: new Date().toISOString() };
+        const itemUpdatePayload: any = { status, updatedAt: new Date().toISOString() };
         
         // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
         if (action === 'APPEND_NOTES' && body.notes) {
@@ -203,13 +240,49 @@ export async function PATCH(request: Request) {
         }
         
         if (status === 'IN_PROGRESS') {
+            // 🔒 Server-side validation: Kiểm tra ràng buộc thời gian
+            if (turnForSync) {
+                let allowed: Date | null = null;
+                if (turnForSync.start_time) {
+                    const [h, m] = String(turnForSync.start_time).split(':').map(Number);
+                    const d = new Date();
+                    d.setHours(h, m, 0, 0);
+                    allowed = d;
+                } else if (turnForSync.last_served_at) {
+                    const { data: config } = await supabase
+                        .from('SystemConfigs')
+                        .select('value')
+                        .eq('key', 'ktv_setup_duration_minutes')
+                        .maybeSingle();
+                    
+                    const setupMin = Number(config?.value || 10);
+                    allowed = new Date(new Date(turnForSync.last_served_at).getTime() + (setupMin * 60 * 1000));
+                }
+
+                if (allowed && new Date().getTime() < (allowed.getTime() - 5000)) {
+                    return NextResponse.json({ 
+                        success: false, 
+                        error: `Chưa đến giờ được phép bắt đầu! Vui lòng đợi đến ${allowed.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` 
+                    }, { status: 403 });
+                }
+            }
             updatePayload.timeStart = new Date().toISOString();
+            itemUpdatePayload.timeStart = new Date().toISOString();
         } else if (status === 'DONE' || status === 'COMPLETED') {
             updatePayload.timeEnd = new Date().toISOString();
+            itemUpdatePayload.timeEnd = new Date().toISOString();
         }
 
         if (action === 'EARLY_EXIT') {
             updatePayload.notes = 'Khách về sớm';
+        }
+
+        // Cập nhật BookingItem nếu có gán ID dịch vụ
+        if (turnForSync?.booking_item_id) {
+            await supabase
+                .from('BookingItems')
+                .update(itemUpdatePayload)
+                .eq('id', turnForSync.booking_item_id);
         }
 
         const { data, error } = await supabase

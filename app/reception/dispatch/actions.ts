@@ -74,7 +74,7 @@ export async function getDispatchData(date: string) {
             const bookingIds = bookings.map(b => b.id);
             const { data: items, error: iError } = await supabase
                 .from('BookingItems')
-                .select('*')
+                .select('*, segments')
                 .in('bookingId', bookingIds);
 
             if (iError) {
@@ -151,8 +151,16 @@ export async function processDispatch(bookingId: string, dispatchData: {
     roomName: string | null;
     staffAssignments: any[];
     date: string;
-    notes?: string; // Ghi chú của điều phối
-    itemUpdates?: { id: string, options: any }[]; // Ghi chú cho KTV trong từng item
+    notes?: string;
+    itemUpdates?: { 
+        id: string, 
+        roomName?: string | null, 
+        bedId?: string | null, 
+        technicianCodes?: string[], 
+        status?: string,
+        segments?: any[],
+        options: any 
+    }[];
 }) {
     try {
         const supabase = getSupabaseAdmin();
@@ -165,9 +173,14 @@ export async function processDispatch(bookingId: string, dispatchData: {
                 .update({
                     status: 'working',
                     current_order_id: bookingId,
+                    booking_item_id: assignment.bookingItemId, 
+                    room_id: assignment.roomId, // Lưu phòng gán cho KTV này
+                    bed_id: assignment.bedId, // Lưu giường gán cho KTV này
                     turns_completed: assignment.turnsCompleted,
                     queue_position: assignment.queuePos,
-                    estimated_end_time: assignment.endTime
+                    start_time: assignment.startTime,
+                    estimated_end_time: assignment.endTime,
+                    last_served_at: new Date().toISOString()
                 })
                 .eq('employee_id', assignment.ktvId)
                 .eq('date', dispatchData.date);
@@ -178,7 +191,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
             }
         }
 
-        // 2. Update Booking
+        // 2. Update Booking (Dữ liệu tổng quát cho Bill)
         const { error: bError } = await supabase
             .from('Bookings')
             .update({
@@ -186,7 +199,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
                 technicianCode: dispatchData.technicianCode,
                 bedId: dispatchData.bedId,
                 roomName: dispatchData.roomName,
-                notes: dispatchData.notes, // Lưu ghi chú điều phối
+                notes: dispatchData.notes,
                 updatedAt: new Date().toISOString()
             })
             .eq('id', bookingId);
@@ -196,12 +209,19 @@ export async function processDispatch(bookingId: string, dispatchData: {
             throw bError;
         }
 
-        // 3. Update BookingItems options (Ghi chú cho KTV)
+        // 3. Update BookingItems (Dữ liệu chi tiết từng dịch vụ)
         if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
             for (const item of dispatchData.itemUpdates) {
                 await supabase
                     .from('BookingItems')
-                    .update({ options: item.options })
+                    .update({ 
+                        roomName: item.roomName,
+                        bedId: item.bedId,
+                        technicianCodes: item.technicianCodes || [],
+                        status: item.status || 'PREPARING',
+                        segments: item.segments || [],
+                        options: item.options 
+                    })
                     .eq('id', item.id);
             }
         }
@@ -248,6 +268,10 @@ export async function cancelBooking(bookingId: string, date: string) {
             .update({
                 status: 'waiting',
                 current_order_id: null,
+                booking_item_id: null,
+                room_id: null,
+                bed_id: null,
+                start_time: null,
                 estimated_end_time: null
             })
             .eq('current_order_id', bookingId)
@@ -288,8 +312,9 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 .update({
                     status: 'waiting',
                     current_order_id: null,
-                    estimated_end_time: null
-                })
+                    booking_item_id: null,
+                    start_time: null,
+                    estimated_end_time: null                })
                 .eq('current_order_id', bookingId)
                 .eq('date', date);
 

@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Plus, AlertTriangle, UserCheck, Bed as BedIcon, Trash2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Plus, AlertTriangle, UserCheck, Trash2 } from 'lucide-react';
 import { DispatchStaffRow } from './DispatchStaffRow';
 import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
 
@@ -26,8 +25,6 @@ interface DispatchServiceBlockProps {
     busyBedIds?: string[];
     availableTurns: (TurnQueueData & { staff?: StaffData })[];
     onUpdateSvc: (orderId: string, svcId: string, patch: Partial<ServiceBlock>) => void;
-    onSelectRoom: (orderId: string, svcId: string, roomId: string) => void;
-    onSelectBed: (orderId: string, svcId: string, bedId: string) => void;
     onUpdateStaff: (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => void;
     onAddStaff: (orderId: string, svcId: string) => void;
     onRemoveStaff: (orderId: string, svcId: string, rowId: string) => void;
@@ -36,7 +33,7 @@ interface DispatchServiceBlockProps {
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], availableTurns,
-    onUpdateSvc, onSelectRoom, onSelectBed, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc
+    onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc
 }: DispatchServiceBlockProps) => {
 
     return (
@@ -106,90 +103,17 @@ export const DispatchServiceBlock = ({
                     </div>
                 )}
 
-                {/* RoomSelector */}
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">
-                        Vị trí thực hiện <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="flex flex-col lg:flex-row gap-4 lg:items-start">
-                        {/* Step 1: Chọn Phòng */}
-                        <div className="flex-1 space-y-2.5">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest px-1 leading-none">Phòng</p>
-                            <div className="flex flex-wrap gap-2">
-                                {rooms.map(room => {
-                                    const rId = room.id || (room as any).room_id;
-                                    const hasBeds = beds.some(b => b.roomId === rId || (b as any).room_id === rId);
-                                    const isSelected = svc.selectedRoomId === rId;
-                                    return (
-                                        <button
-                                            key={rId}
-                                            onClick={() => onSelectRoom(orderId, svc.id, rId)}
-                                            disabled={!hasBeds}
-                                            className={`px-4 py-3 rounded-2xl border-2 text-[11px] font-black transition-all active:scale-95 ${isSelected
-                                                ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100'
-                                                : hasBeds
-                                                    ? 'border-gray-100 bg-gray-50/50 text-gray-600 hover:border-indigo-200'
-                                                    : 'border-gray-50 bg-gray-50/30 text-gray-300 cursor-not-allowed'
-                                                }`}
-                                        >
-                                            {room.name || (room as any).nameVN || rId}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Step 2: Chọn Giường */}
-                        <div className="flex-1 space-y-2.5">
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest px-1 leading-none">Giường</p>
-                            {svc.selectedRoomId ? (
-                                <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap gap-2">
-                                    {beds
-                                        .filter(b => b.roomId === svc.selectedRoomId)
-                                        .map(bed => {
-                                            const isPicked = svc.bedId === bed.id;
-                                            const isBusy = busyBedIds.includes(bed.id);
-                                            
-                                            return (
-                                                <button
-                                                    key={bed.id}
-                                                    onClick={() => !isBusy && onSelectBed(orderId, svc.id, bed.id)}
-                                                    disabled={isBusy && !isPicked}
-                                                    className={`px-3 py-3 rounded-2xl border-2 text-[11px] font-black transition-all flex items-center gap-2 active:scale-95 ${
-                                                        isPicked
-                                                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-100'
-                                                            : isBusy
-                                                                ? 'border-gray-100 bg-gray-100 text-gray-300 cursor-not-allowed opacity-50'
-                                                                : 'border-gray-100 bg-gray-50/50 text-gray-600 hover:border-emerald-200'
-                                                    }`}
-                                                >
-                                                    <BedIcon size={14} className={isBusy ? 'text-gray-200' : ''} />
-                                                    {bed.id.split('-').pop()}
-                                                    {isBusy && !isPicked && <span className="text-[8px] opacity-60">(Bận)</span>}
-                                                </button>
-                                            );
-                                        })}
-                                </motion.div>
-                            ) : (
-                                <div className="p-4 border border-dashed border-gray-200 rounded-2xl bg-slate-50/30 text-center">
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest italic leading-none py-1">Vui lòng chọn phòng</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
                 {/* Staff Selection Area */}
                 <div className="space-y-4">
                     <div className="flex items-center justify-between px-1">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                            Kỹ thuật viên <span className="text-rose-500">*</span>
+                            Nhân viên & Phòng <span className="text-rose-500">*</span>
                         </label>
                         <button
                             onClick={() => onAddStaff(orderId, svc.id)}
                             className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors flex items-center gap-1.5"
                         >
-                            <Plus size={14} strokeWidth={3} /> Thêm KTV
+                            <Plus size={14} strokeWidth={3} /> Thêm KTV/Phòng
                         </button>
                     </div>
 
@@ -202,6 +126,9 @@ export const DispatchServiceBlock = ({
                                 orderId={orderId}
                                 serviceName={svc.serviceName}
                                 availableTurns={availableTurns}
+                                rooms={rooms}
+                                beds={beds}
+                                busyBedIds={busyBedIds}
                                 onUpdate={onUpdateStaff}
                                 onRemove={onRemoveStaff}
                                 canRemove={svc.staffList.length > 1}

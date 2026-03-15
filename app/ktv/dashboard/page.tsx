@@ -4,7 +4,7 @@ import React, { useState, Suspense } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
-  CheckCircle, Play, StopCircle,
+  CheckCircle, Play, StopCircle, Lock,
   Smile, Frown, Meh, Star, Gift, ArrowRight, X,
   ClipboardList, Coffee, LogOut, Sparkles, User, Users,
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
@@ -175,12 +175,97 @@ export default function KTVDashboardPage() {
   );
 }
 
+// ─── WORKING TIMELINE ────────────────────────────────────────────────────────
+
+function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments: any[], activeIndex?: number, actualStartTime?: string | null }) {
+  if (!segments || segments.length === 0) return null;
+
+  // Helper để tính giờ tịnh tiến
+  const getShiftedTime = (offsetMins: number) => {
+    if (!actualStartTime) return null;
+    let tStart = actualStartTime;
+    if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
+        tStart = tStart.replace(' ', 'T') + 'Z';
+    }
+    const date = new Date(new Date(tStart).getTime() + (offsetMins * 60 * 1000));
+    return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  let cumulativeMins = 0;
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex justify-between">
+        <span>Lộ trình thực hiện</span>
+        {activeIndex !== undefined && <span className="text-emerald-600">Chặng {activeIndex + 1}</span>}
+      </h3>
+      <div className="space-y-2">
+        {segments.map((seg, idx) => {
+          const isActive = idx === activeIndex;
+          const isPast = activeIndex !== undefined && idx < activeIndex;
+          
+          const displayStartTime = actualStartTime ? getShiftedTime(cumulativeMins) : seg.startTime;
+          cumulativeMins += seg.duration;
+          const displayEndTime = actualStartTime ? getShiftedTime(cumulativeMins) : seg.endTime;
+
+          return (
+            <motion.div 
+              key={seg.id} 
+              animate={{ 
+                scale: isActive ? 1.02 : 1,
+                opacity: isPast ? 0.6 : 1
+              }}
+              className={`relative flex items-center gap-4 p-3 rounded-2xl border transition-all ${
+                isActive 
+                  ? 'bg-emerald-50 border-emerald-200 shadow-md shadow-emerald-100/50' 
+                  : 'bg-slate-50/50 border-slate-100/50'
+              }`}
+            >
+              <div className="flex flex-col items-center w-10">
+                <span className={`text-[10px] font-black ${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>{displayStartTime}</span>
+                <div className={`w-0.5 h-4 my-0.5 ${isActive ? 'bg-emerald-200' : 'bg-slate-200'}`} />
+                <span className={`text-[10px] font-black ${isActive ? 'text-emerald-700' : 'text-slate-400'}`}>{displayEndTime}</span>
+              </div>
+              <div className="flex-1">
+                <p className={`text-xs font-black ${isActive ? 'text-emerald-900' : 'text-slate-800'}`}>
+                  Phòng {seg.roomId}
+                  {isActive && <span className="ml-2 text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-md animate-pulse">ĐANG LÀM</span>}
+                </p>
+                <p className={`text-[10px] font-bold uppercase tracking-tighter ${isActive ? 'text-emerald-600/70' : 'text-slate-400'}`}>
+                  Giường {seg.bedId?.split('-').pop()} • {seg.duration} phút
+                </p>
+              </div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs transition-colors ${
+                isActive 
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' 
+                  : isPast ? 'bg-slate-200 text-slate-400' : 'bg-white text-slate-300 border border-slate-100'
+              }`}>
+                {isPast ? <CheckCircle size={14} /> : idx + 1}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------------------------------
 // SCREENS
 // ----------------------------------------------------
 
 function ScreenDashboard({ logic }: { logic: any }) {
-  const { booking, checklist, toggleChecklist, isChecklistComplete, handleConfirmSetup, setShowProcedure } = logic;
+  const { booking, checklist, toggleChecklist, isChecklistComplete, handleConfirmSetup, setShowProcedure, activeSegmentIndex } = logic;
+
+  // Lấy đúng dịch vụ mà KTV này được gán
+  const item = booking?.assignedItemId 
+    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
+    : (booking?.BookingItems?.[0] || {});
+    
+  const ktvSegments = item?.segments?.filter((s: any) => s.ktvId === logic.user?.id) || [];
+  
+  // Xác định vị trí chặng hiện tại
+  const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
 
   return (
     <div className="p-4 space-y-6">
@@ -237,13 +322,13 @@ function ScreenDashboard({ logic }: { logic: any }) {
           {/* Active Booking Card */}
           <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} overflow-hidden border shadow-sm p-6 pb-0`}>
               <div className="mb-4">
-                {booking.BookingItems?.map((item: any) => (
-                   <div key={item.id} className="flex flex-col">
+                {booking.BookingItems?.map((bi: any) => (
+                   <div key={bi.id} className="flex flex-col">
                       <h3 className="font-black text-3xl text-emerald-700 leading-tight tracking-tight">
-                        {item.service_name}
+                        {bi.service_name}
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{item.duration} phút</span>
+                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{bi.duration} phút</span>
                         <span className="text-sm font-black text-slate-800">#{booking.billCode}</span>
                       </div>
                    </div>
@@ -252,14 +337,16 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
               <div className="flex justify-between items-end mb-6">
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">Vị trí</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
+                    {ktvSegments.length > 1 ? `Vị trí chặng ${activeSegmentIndex + 1}` : 'Vị trí'}
+                  </span>
                   <div className="flex items-center gap-2">
                     <div className="bg-emerald-600 text-white px-4 py-2 rounded-2xl font-black text-lg shadow-lg shadow-emerald-100">
-                      Phòng {booking.roomName}
+                      Phòng {currentSeg?.roomId || booking.assignedRoomId || booking.roomName}
                     </div>
-                    {booking.bedId && (
+                    {(currentSeg?.bedId || booking.assignedBedId || booking.bedId) && (
                       <div className="bg-white border-2 border-emerald-100 text-emerald-700 px-4 py-2 rounded-2xl font-black text-lg">
-                        Giường {booking.bedId.split('-').pop()}
+                        Giường {(currentSeg?.bedId || booking.assignedBedId || booking.bedId).split('-').pop()}
                       </div>
                     )}
                   </div>
@@ -271,6 +358,17 @@ function ScreenDashboard({ logic }: { logic: any }) {
                    <ClipboardList size={14} /> Quy trình
                 </button>
               </div>
+
+              {/* Timeline Section */}
+              {ktvSegments.length > 0 && (
+                <div className="mb-6">
+                  <WorkingTimeline 
+                    segments={ktvSegments} 
+                    activeIndex={booking.status === 'IN_PROGRESS' ? activeSegmentIndex : undefined}
+                    actualStartTime={item.timeStart || booking.timeStart}
+                  />
+                </div>
+              )}
 
               {/* Special Requirements (Same as Timer Screen) */}
               <CollapsibleRequirements booking={booking} />
@@ -316,7 +414,8 @@ function ScreenTimer({ logic }: { logic: any }) {
     handleStartTimer, 
     handleFinishTimer, 
     handleEarlyExit,
-    handleInteraction 
+    handleInteraction,
+    activeSegmentIndex
   } = logic;
 
   const formatTime = (secs: number) => {
@@ -326,13 +425,56 @@ function ScreenTimer({ logic }: { logic: any }) {
   };
 
   const currentSecs = isPrepping ? prepTimeRemaining : timeRemaining;
+  
+  // Lấy đúng dịch vụ mà KTV này được gán
+  const item = booking?.assignedItemId 
+    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
+    : (booking?.BookingItems?.[0] || {});
+
   const totalDuration = isPrepping 
     ? (logic.settings?.ktv_setup_duration_minutes || 10) * 60 
-    : (booking?.BookingItems?.[0]?.duration || 60) * 60;
+    : (item.duration || 60) * 60;
   
   // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
   const progress = (currentSecs / totalDuration) * 100;
-  const item = booking?.BookingItems?.[0] || {};
+
+  const ktvSegments = item?.segments?.filter((s: any) => s.ktvId === logic.user?.id) || [];
+  const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
+  const nextSeg = ktvSegments.length > (activeSegmentIndex + 1) ? ktvSegments[activeSegmentIndex + 1] : null;
+
+  // 🔔 Stage Transition Alert Logic: Show if current segment ends in < 3 mins
+  const [showTransitionAlert, setShowTransitionAlert] = useState(false);
+  
+  React.useEffect(() => {
+    if (!isTimerRunning || !nextSeg || !item.timeStart) {
+        setShowTransitionAlert(false);
+        return;
+    }
+    
+    const checkTransition = () => {
+        let tStart = item.timeStart || booking.timeStart;
+        if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
+            tStart = tStart.replace(' ', 'T') + 'Z';
+        }
+        const actualStartMs = new Date(tStart).getTime();
+        const nowMs = new Date().getTime();
+        
+        let cumulativeMins = 0;
+        for (let i = 0; i <= activeSegmentIndex; i++) {
+            cumulativeMins += ktvSegments[i].duration;
+        }
+        
+        const currentSegEndMs = actualStartMs + (cumulativeMins * 60 * 1000);
+        const diffMins = (currentSegEndMs - nowMs) / (60 * 1000);
+        
+        // Hiện cảnh báo nếu còn dưới 3 phút
+        setShowTransitionAlert(diffMins > 0 && diffMins <= 3);
+    };
+    
+    checkTransition();
+    const interval = setInterval(checkTransition, 10000);
+    return () => clearInterval(interval);
+  }, [isTimerRunning, nextSeg, activeSegmentIndex, ktvSegments, item.timeStart]);
 
   return (
     <div className="p-4 h-full flex flex-col pt-8">
@@ -344,8 +486,13 @@ function ScreenTimer({ logic }: { logic: any }) {
           </h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-slate-800 font-black">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest">Phòng</span>
-              <span className="text-lg">{booking?.roomName}</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest">
+                {ktvSegments.length > 1 ? `Chặng ${activeSegmentIndex + 1}` : 'Phòng'}
+              </span>
+              <span className="text-lg">
+                {currentSeg?.roomId || booking?.assignedRoomId || item.roomName || booking?.roomName}
+                {(currentSeg?.bedId || booking?.assignedBedId) && ` (G: ${(currentSeg?.bedId || booking.assignedBedId).split('-').pop()})`}
+              </span>
             </div>
             <div className="w-px h-3 bg-slate-200" />
             <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs">
@@ -396,17 +543,59 @@ function ScreenTimer({ logic }: { logic: any }) {
         </div>
       </div>
 
+      {/* Timeline for multi-stage */}
+      {ktvSegments.length > 0 && (
+        <div className="px-2 mb-8">
+          <WorkingTimeline 
+            segments={ktvSegments} 
+            activeIndex={activeSegmentIndex} 
+            actualStartTime={item.timeStart || booking.timeStart}
+          />
+        </div>
+      )}
+
+      {/* Stage Transition Alert */}
+      {showTransitionAlert && nextSeg && (
+        <AnimatePresence>
+            <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="mx-2 mb-6 bg-indigo-600 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg shadow-indigo-200"
+            >
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+                    <ArrowRight size={20} className="animate-pulse" />
+                </div>
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">Sắp chuyển chặng</p>
+                    <p className="text-xs font-bold leading-tight">Chuẩn bị chuyển sang Phòng {nextSeg.roomId}</p>
+                </div>
+            </motion.div>
+        </AnimatePresence>
+      )}
+
       {/* Primary Action Button */}
       <div className="px-6 mb-10">
         {!isTimerRunning || isPrepping ? (
-          <button
-            onClick={handleStartTimer}
-            disabled={logic.isLoading || (isPrepping && prepTimeRemaining > 0)}
-            className={`w-full h-16 ${THEME.radius} bg-emerald-600 text-white font-black text-lg shadow-xl shadow-emerald-200/50 flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-40 disabled:grayscale-[0.5] disabled:active:scale-100`}
-          >
-            <Play fill="white" size={24} />
-            BẮT ĐẦU
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={handleStartTimer}
+              disabled={logic.isLoading || (isPrepping && prepTimeRemaining > 0) || !logic.canStart}
+              className={`w-full h-16 ${THEME.radius} bg-emerald-600 text-white font-black text-lg shadow-xl shadow-emerald-200/50 flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-40 disabled:grayscale-[0.5] disabled:active:scale-100`}
+            >
+              {logic.canStart ? <Play fill="white" size={24} /> : <Lock size={24} className="text-white/70" />}
+              {logic.canStart ? 'BẮT ĐẦU' : 'CHƯA ĐẾN GIỜ'}
+            </button>
+            {!logic.canStart && logic.allowedStartTime && (
+              <motion.p 
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-center text-rose-600 font-black text-[11px] bg-rose-50 py-2 rounded-xl border border-rose-100 flex items-center justify-center gap-1.5"
+              >
+                <Clock size={12} strokeWidth={3} />
+                Bạn có thể bắt đầu lúc {logic.allowedStartTime.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              </motion.p>
+            )}
+          </div>
         ) : (
           <button
             onClick={handleFinishTimer}
