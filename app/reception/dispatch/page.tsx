@@ -915,12 +915,12 @@ if (!hasPermission('dispatch_board')) {
                   // 1. Giường bận do đơn hàng khác (đang làm hoặc đang dọn)
                   const busyInOtherOrders = orders
                     .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
-                    .flatMap(o => o.services.flatMap(s => s.staffList.map(r => r.bedId)))
+                    .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                     .filter(Boolean) as string[];
 
                   // 2. Giường bận do dịch vụ khác HOẶC KTV khác TRONG CÙNG BILL
                   const busyInCurrentOrder = selectedOrder.services
-                    .flatMap(s => s.staffList.map(r => r.bedId))
+                    .flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId)))
                     .filter(Boolean) as string[];
 
                   const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
