@@ -100,7 +100,7 @@ export default function EmployeeManagementPage() {
 
   if (!hasPermission('employee_management')) {
     return (
-      <AppLayout>
+      <AppLayout title="Quản Lý KTV">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -120,9 +120,9 @@ export default function EmployeeManagementPage() {
   };
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <AppLayout title="Quản Lý KTV">
+      <div className="space-y-2 lg:space-y-6">
+        <div className="hidden lg:flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Quản Lý KTV</h1>
             <p className="text-sm text-gray-500 mt-1">Quản lý hồ sơ, kỹ năng và thông tin chi tiết của kỹ thuật viên.</p>

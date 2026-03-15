@@ -101,7 +101,7 @@ export default function DispatchBoardPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
-  const { soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
+  const { notifications, soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
   const [leftPanelTab, setLeftPanelTab] = useState<DispatchStatus>('pending');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
@@ -340,7 +340,7 @@ export default function DispatchBoardPage() {
 
 if (!hasPermission('dispatch_board')) {
     return (
-      <AppLayout>
+      <AppLayout title="Điều phối">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -673,6 +673,8 @@ if (!hasPermission('dispatch_board')) {
   };
 
   const renderSoundToggle = () => {
+    const hasUnread = notifications.some(n => !n.isRead);
+
     return (
       <div className="flex items-center gap-2">
         <button
@@ -698,50 +700,41 @@ if (!hasPermission('dispatch_board')) {
             setSoundEnabled(true);
           }}
           disabled={push.isRegistering}
-          className={`flex-shrink-0 px-4 py-2.5 rounded-2xl transition-all shadow-sm border flex items-center gap-2.5 font-black text-xs
-            ${soundEnabled 
-              ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+          className={`w-11 h-11 rounded-full transition-all shadow-sm border flex items-center justify-center
+            ${soundEnabled
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
               : (push.permission === 'denied' ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100')}`}
+          title={soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}
         >
-          <div className="relative">
+          <motion.div
+            animate={soundEnabled && hasUnread ? {
+              rotate: [0, -15, 15, -15, 15, 0],
+              transition: { repeat: Infinity, duration: 0.5 }
+            } : {}}
+          >
             {push.isRegistering ? (
               <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
             ) : soundEnabled ? (
-              <Bell size={16} />
+              <div className="relative">
+                <Bell size={20} />
+                {hasUnread && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-emerald-50 rounded-full" />}
+              </div>
             ) : (
-              <BellOff size={16} />
+              <BellOff size={20} />
             )}
-          </div>
-          <span className="whitespace-nowrap uppercase tracking-tight">
-            {push.isRegistering ? 'Kết nối...' : soundEnabled ? 'ÂM THANH: BẬT' : 'ÂM THANH: TẮT'}
-          </span>
+          </motion.div>
         </button>
-
-        {soundEnabled && (
-          <button
-            onClick={() => {
-              unlockAudio(); // Priming again just in case
-              playSound('NEW_ORDER'); // Test with a small, fast sound
-            }}
-            className="p-2.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl hover:bg-indigo-100 transition-all shadow-sm"
-            title="Thử âm thanh"
-          >
-            <Volume2 className="w-4 h-4" />
-          </button>
-        )}
       </div>
     );
   };
-
   return (
-    <AppLayout>
+    <AppLayout title="Điều phối">
       <div className="h-[calc(100dvh-3.5rem)] lg:h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-4 px-1 lg:px-0 mt-2 sm:mt-0">
-          <div className="flex items-center justify-between sm:block">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-2 lg:mb-4 px-1 lg:px-0 mt-1 sm:mt-0">
+          <div className="hidden lg:flex items-center justify-between sm:block">
             <div>
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-                <span className="lg:hidden">Điều Phối</span>
                 <span className="hidden lg:inline">Bảng Điều Phối Trung Tâm</span>
                 <div className="hidden sm:flex items-center gap-1.5 ml-2">
                   {LEFT_TABS.map(tab => (
@@ -763,9 +756,6 @@ if (!hasPermission('dispatch_board')) {
                     </button>
                   ))}
                 </div>
-                <span className="sm:hidden bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded-full font-black">
-                  {orders.length} TỔNG
-                </span>
               </h1>
               <p className="text-[10px] lg:text-xs text-gray-500 mt-1 font-medium hidden sm:block">Điều phối KTV & Phòng chuyên nghiệp</p>
             </div>

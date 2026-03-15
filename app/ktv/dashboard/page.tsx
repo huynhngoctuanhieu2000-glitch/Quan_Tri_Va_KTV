@@ -80,46 +80,6 @@ function DashboardContent() {
     );
   }
 
-  // 🔔 HEADER NOTIFICATION (Bonus Points)
-  const renderBonusNotification = () => (
-    <AnimatePresence>
-      {bonusMessage && (
-        <motion.div
-           initial={{ y: -100, opacity: 0 }}
-           animate={{ y: 0, opacity: 1 }}
-           exit={{ y: -100, opacity: 0 }}
-           drag="x"
-           dragConstraints={{ left: 0, right: 0 }}
-           dragElastic={0.7}
-           onDragEnd={(_, info) => {
-             if (Math.abs(info.offset.x) > 100) {
-               setBonusMessage(null);
-             }
-           }}
-           className="fixed top-0 left-0 right-0 z-[200] p-4 flex justify-center cursor-grab active:cursor-grabbing"
-        >
-          <div className="bg-white/95 backdrop-blur-xl border border-emerald-100 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-4 max-w-lg w-full">
-            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200">
-              <Star className="text-white fill-white" size={20} />
-            </div>
-            <div className="flex-1">
-              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Thưởng Nóng +25Đ</p>
-              <p className="text-sm font-bold text-gray-800 leading-tight">
-                {bonusMessage}
-              </p>
-            </div>
-            <button 
-              onClick={() => setBonusMessage(null)}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X size={18} className="text-gray-400" />
-            </button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
   const renderScreen = () => {
     switch (screen) {
       case 'DASHBOARD': return <ScreenDashboard logic={logic} />;
@@ -134,7 +94,6 @@ function DashboardContent() {
   return (
     <>
       <div className={`max-w-md mx-auto min-h-screen pb-24 ${THEME.bgBase} relative`}>
-        {renderBonusNotification()}
         <AnimatePresence mode="wait">
           <motion.div
             key={screen}
@@ -162,7 +121,7 @@ function DashboardContent() {
 
 export default function KTVDashboardPage() {
   return (
-    <AppLayout>
+    <AppLayout title="Dashboard">
       <Suspense fallback={
         <div className={`min-h-[80vh] flex flex-col items-center justify-center bg-[#FDFBF7]`}>
           <div className="w-8 h-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
@@ -268,10 +227,10 @@ function ScreenDashboard({ logic }: { logic: any }) {
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
 
   return (
-    <div className="p-4 space-y-6">
-      {/* Header - Only show when NO active booking */}
+    <div className="p-2 lg:p-4 space-y-4 lg:space-y-6">
+      {/* Header - Only show when NO active booking - Hidden on Mobile */}
       {!booking && (
-        <div className="flex items-center justify-between">
+        <div className="hidden lg:flex items-center justify-between">
           <div>
             <h1 className={`text-xl font-bold ${THEME.textBase}`}>
               Xin chào, <span className="text-emerald-600 ml-1">{logic.user?.id || 'Kỹ thuật viên'}</span>

@@ -183,11 +183,9 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                     // KTV luôn được phát âm thanh cho mọi thông báo gán cho mình
                     playSound(newNotif.type);
                     
-                    // Nhưng chỉ hiện Toast nếu không phải là REWARD (vì REWARD đã có UI riêng trên Dashboard)
-                    if (newNotif.type !== 'REWARD') {
-                        console.log('✅ [NotificationProvider] Matching technician! Adding toast.');
-                        addToast(newNotif, false); // false để không playSound lần 2 trong addToast
-                    }
+                    // 🔥 THAY ĐỔI: Không hiện Toast (cửa sổ nhỏ có nút tích/x) cho KTV nữa
+                    // KTV chỉ nhận biết qua âm thanh và thay đổi màn hình chính
+                    console.log('🔊 [NotificationProvider] KTV Sound played. UI Toast skipped.');
                 } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
                     // Lễ tân nhận thông báo không gán cho ai (thông báo chung cho quầy)
                     addToast(newNotif);

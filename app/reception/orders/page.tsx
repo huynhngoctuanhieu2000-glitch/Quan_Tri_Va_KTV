@@ -112,7 +112,7 @@ export default function OrderManagementPage() {
 
     if (!hasPermission('order_management')) {
         return (
-            <AppLayout>
+            <AppLayout title="Quản Lý Đơn Hàng">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -181,11 +181,11 @@ export default function OrderManagementPage() {
 
     // ── Render ───────────────────────────────────────────────────────────────
     return (
-        <AppLayout>
-            <div className="h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+        <AppLayout title="Quản Lý Đơn Hàng">
+            <div className="h-[calc(100vh-1rem)] lg:h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
 
-                {/* Header */}
-                <div className="flex items-center justify-between gap-3 shrink-0 mb-4">
+                {/* Header - Hidden on Mobile */}
+                <div className="hidden lg:flex items-center justify-between gap-3 shrink-0 mb-4">
                     <div>
                         <h1 className="text-xl font-bold text-gray-900 tracking-tight">Quản Lý Đơn Đang Phục Vụ</h1>
                         <p className="text-xs text-gray-500 mt-0.5">
