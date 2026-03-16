@@ -918,12 +918,19 @@ if (!hasPermission('dispatch_board')) {
                     .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                     .filter(Boolean) as string[];
 
-                  // 2. Giường bận do dịch vụ khác HOẶC KTV khác TRONG CÙNG BILL
+                  // 2. Giường bận do dịch vụ KHÁC trong cùng đơn (co-working cùng DV được phép chung giường)
                   const busyInCurrentOrder = selectedOrder.services
+                    .filter(s => s.id !== svc.id) // Loại trừ DV hiện tại → co-working cùng DV OK
                     .flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId)))
                     .filter(Boolean) as string[];
 
                   const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
+
+                  // 🚩 LOGIC: Xác định KTV đã gán ở DV KHÁC trong cùng đơn (không cho gán trùng)
+                  const usedKtvIdsInOtherSvc = selectedOrder.services
+                    .filter(s => s.id !== svc.id)
+                    .flatMap(s => s.staffList.map(r => r.ktvId))
+                    .filter(Boolean);
 
                   return (
                     <DispatchServiceBlock
@@ -934,6 +941,7 @@ if (!hasPermission('dispatch_board')) {
                       rooms={rooms}
                       beds={beds}
                       busyBedIds={allBusyBedIds}
+                      usedKtvIds={usedKtvIdsInOtherSvc}
                       availableTurns={turns}
                       onUpdateSvc={updateSvcField}
                       onUpdateStaff={updateStaffRow}

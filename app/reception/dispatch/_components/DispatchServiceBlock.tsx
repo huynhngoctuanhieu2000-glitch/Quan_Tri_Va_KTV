@@ -23,6 +23,7 @@ interface DispatchServiceBlockProps {
     rooms: Room[];
     beds: Bed[];
     busyBedIds?: string[];
+    usedKtvIds?: string[];
     availableTurns: (TurnQueueData & { staff?: StaffData })[];
     onUpdateSvc: (orderId: string, svcId: string, patch: Partial<ServiceBlock>) => void;
     onUpdateStaff: (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => void;
@@ -32,7 +33,7 @@ interface DispatchServiceBlockProps {
 }
 
 export const DispatchServiceBlock = ({
-    svc, svcIndex, orderId, rooms, beds, busyBedIds = [], availableTurns,
+    svc, svcIndex, orderId, rooms, beds, busyBedIds = [], usedKtvIds = [], availableTurns,
     onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc
 }: DispatchServiceBlockProps) => {
 
@@ -129,6 +130,7 @@ export const DispatchServiceBlock = ({
                                 rooms={rooms}
                                 beds={beds}
                                 busyBedIds={busyBedIds}
+                                usedKtvIds={usedKtvIds}
                                 onUpdate={onUpdateStaff}
                                 onRemove={onRemoveStaff}
                                 canRemove={svc.staffList.length > 1}

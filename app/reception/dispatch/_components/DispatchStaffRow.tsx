@@ -33,6 +33,7 @@ interface DispatchStaffRowProps {
     rooms: Room[];
     beds: Bed[];
     busyBedIds?: string[];
+    usedKtvIds?: string[];
     onUpdate: (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => void;
     onRemove: (orderId: string, svcId: string, rowId: string) => void;
     canRemove: boolean;
@@ -61,7 +62,7 @@ const calcEndTime = (start: string, duration: number): string => {
 };
 
 export const DispatchStaffRow = ({
-    row, svcId, orderId, serviceName, availableTurns, rooms, beds, busyBedIds = [], onUpdate, onRemove, canRemove
+    row, svcId, orderId, serviceName, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -136,12 +137,18 @@ export const DispatchStaffRow = ({
                             {availableTurns.map(turn => {
                                 const hasSkill = targetSkill ? (turn.staff?.skills?.[targetSkill] === 'expert' || turn.staff?.skills?.[targetSkill] === 'basic') : true;
                                 const isExpert = targetSkill && turn.staff?.skills?.[targetSkill] === 'expert';
+                                const isUsedInOtherSvc = usedKtvIds.includes(turn.employee_id);
                                 
                                 return (
-                                    <option key={turn.employee_id} value={turn.employee_id} className={!hasSkill ? 'text-gray-300' : ''}>
+                                    <option 
+                                        key={turn.employee_id} 
+                                        value={turn.employee_id} 
+                                        disabled={isUsedInOtherSvc}
+                                        className={isUsedInOtherSvc ? 'text-gray-300' : (!hasSkill ? 'text-gray-300' : '')}
+                                    >
                                         #{turn.check_in_order} [{turn.employee_id}] {turn.staff?.full_name}
                                         {isExpert ? ' (⭐)' : ''}
-                                        {turn.status === 'working' ? ` (⌛ Bận đến ${turn.estimated_end_time})` : ' (✅ Rảnh)'}
+                                        {isUsedInOtherSvc ? ' (🚫 Đã gán DV khác)' : (turn.status === 'working' ? ` (⌛ Bận đến ${turn.estimated_end_time})` : ' (✅ Rảnh)')}
                                     </option>
                                 );
                             })}

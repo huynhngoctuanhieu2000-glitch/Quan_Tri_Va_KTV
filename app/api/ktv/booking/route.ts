@@ -188,13 +188,10 @@ export async function PATCH(request: Request) {
             .maybeSingle();
 
         const updatePayload: any = { updatedAt: new Date().toISOString() };
-        // Chỉ cập nhật status của Booking tổng nếu nó thuộc danh sách hợp lệ (Enum BookingStatus)
+        // 🚀 SMART BOOKING STATUS: Không set trực tiếp, tính toán dựa trên trạng thái tất cả items
         const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'COMPLETED', 'FEEDBACK', 'DONE', 'CANCELLED'];
-        if (validBookingStatuses.includes(status)) {
-            updatePayload.status = status;
-        }
 
-        const itemUpdatePayload: any = { status, updatedAt: new Date().toISOString() };
+        const itemUpdatePayload: any = { status }; // BookingItems không có column updatedAt
         
         // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
         if (action === 'APPEND_NOTES' && body.notes) {
@@ -205,6 +202,24 @@ export async function PATCH(request: Request) {
                 updatePayload.notes = oldNotes ? `${oldNotes} | ${body.notes}` : body.notes;
             } else {
                 updatePayload.notes = oldNotes;
+            }
+        }
+        
+        // 🔧 Xác định targetBookingItemId TRƯỚC khi dùng trong các status blocks
+        let targetBookingItemId = turnForSync?.booking_item_id;
+        
+        if (!targetBookingItemId) {
+            // Fallback lấy dịch vụ đầu tiên của đơn hàng này
+            const { data: firstItem } = await supabase
+                .from('BookingItems')
+                .select('id')
+                .eq('bookingId', bookingId)
+                .order('id', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+                
+            if (firstItem) {
+                targetBookingItemId = firstItem.id;
             }
         }
         
@@ -237,6 +252,10 @@ export async function PATCH(request: Request) {
             }
             updatePayload.timeStart = new Date().toISOString();
             itemUpdatePayload.timeStart = new Date().toISOString();
+
+            // 🚀 IN_PROGRESS: Set ngay cho Booking → giao diện khách hàng cập nhật
+            // Frontend KTV đã xử lý độc lập (chỉ fallback cho single-service/co-working)
+            updatePayload.status = 'IN_PROGRESS';
         } else if (status === 'READY') {
             // Trạng thái sẵn sàng (đã chuẩn bị xong), dùng để đồng bộ nhóm
             itemUpdatePayload.status = 'READY';
@@ -246,37 +265,39 @@ export async function PATCH(request: Request) {
         } else if (status === 'DONE' || status === 'COMPLETED') {
             updatePayload.timeEnd = new Date().toISOString();
             itemUpdatePayload.timeEnd = new Date().toISOString();
+
+            // 🚀 SMART: Chỉ set Booking.status = DONE khi TẤT CẢ items đã xong
+            const { data: allItems } = await supabase
+                .from('BookingItems')
+                .select('id, status')
+                .eq('bookingId', bookingId);
+            
+            const otherItems = (allItems || []).filter(i => i.id !== targetBookingItemId);
+            const allOthersDone = otherItems.length === 0 || otherItems.every(i => 
+                ['COMPLETED', 'DONE', 'CLEANING'].includes(i.status)
+            );
+            
+            if (allOthersDone) {
+                updatePayload.status = status;
+            }
+        } else if (validBookingStatuses.includes(status)) {
+            updatePayload.status = status;
         }
 
         if (action === 'EARLY_EXIT') {
             updatePayload.notes = 'Khách về sớm';
         }
 
-        // Cập nhật BookingItem nếu có gán ID dịch vụ HOẶC lấy dịch vụ đầu tiên làm fallback cho Co-working
-        let targetBookingItemId = turnForSync?.booking_item_id;
-        
-        if (!targetBookingItemId) {
-            // Fallback lấy dịch vụ đầu tiên của đơn hàng này
-            const { data: firstItem } = await supabase
-                .from('BookingItems')
-                .select('id')
-                .eq('bookingId', bookingId)
-                .order('id', { ascending: true })
-                .limit(1)
-                .maybeSingle();
-                
-            if (firstItem) {
-                targetBookingItemId = firstItem.id;
-            }
-        }
-
+        let _itemResult: any = { attempted: false };
         if (targetBookingItemId) {
-            const { error: itemErr } = await supabase
+            const { error: itemErr, data: itemData } = await supabase
                 .from('BookingItems')
                 .update(itemUpdatePayload)
-                .eq('id', targetBookingItemId);
+                .eq('id', targetBookingItemId)
+                .select();
             
-            if (itemErr) console.error('⚠️ [KTV API] BookingItem update error (non-fatal):', itemErr);
+            _itemResult = { attempted: true, error: itemErr?.message, updatedStatus: itemData?.[0]?.status };
+            if (itemErr) console.error('⚠️ [KTV API] BookingItem update error:', itemErr);
         }
 
         const { data, error } = await supabase

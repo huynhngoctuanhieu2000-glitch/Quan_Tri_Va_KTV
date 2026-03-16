@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { bookingId, type } = body;
+        const { bookingId, type, techCode } = body;
 
         if (!bookingId || !type) {
             return NextResponse.json({ success: false, error: 'bookingId and type are required' }, { status: 400 });
@@ -18,15 +18,39 @@ export async function POST(request: Request) {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        // 1. Lấy thông tin chi tiết đơn hàng (Phòng, Giường)
-        const { data: booking, error: bError } = await supabase
-            .from('Bookings')
-            .select('roomName, bedId')
-            .eq('id', bookingId)
-            .single();
+        // 1. Lấy phòng chính xác: ưu tiên TurnQueue (phòng KTV đang ở), fallback Booking
+        let roomName = '???';
+        let bedId = '';
+        
+        if (techCode) {
+            const today = new Date().toISOString().split('T')[0];
+            const { data: turn } = await supabase
+                .from('TurnQueue')
+                .select('room_id, bed_id')
+                .eq('employee_id', techCode)
+                .eq('date', today)
+                .eq('current_order_id', bookingId)
+                .maybeSingle();
+            
+            if (turn?.room_id) {
+                roomName = turn.room_id;
+                bedId = turn.bed_id || '';
+            }
+        }
+        
+        // Fallback: lấy từ Booking nếu TurnQueue không có
+        if (roomName === '???') {
+            const { data: booking } = await supabase
+                .from('Bookings')
+                .select('roomName, bedId')
+                .eq('id', bookingId)
+                .single();
+            roomName = booking?.roomName || '???';
+            bedId = booking?.bedId || '';
+        }
 
-        const roomInfo = booking ? `phòng ${booking.roomName || '???'}${booking.bedId ? ` giường ${booking.bedId}` : ''}` : `phòng (không rõ)`;
-        const roomUpper = booking ? `Phòng ${booking.roomName || '???'}${booking.bedId ? ` giường ${booking.bedId}` : ''}` : `Phòng (không rõ)`;
+        const roomInfo = `phòng ${roomName}${bedId ? ` giường ${bedId}` : ''}`;
+        const roomUpper = `Phòng ${roomName}${bedId ? ` giường ${bedId}` : ''}`;
 
         // 2. Map template tin nhắn theo yêu cầu của User
         const messageMap: Record<string, string> = {
