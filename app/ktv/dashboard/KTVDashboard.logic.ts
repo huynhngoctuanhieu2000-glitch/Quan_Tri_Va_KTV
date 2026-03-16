@@ -223,51 +223,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
         }
         else if (currentStatus === 'DONE') {
-            if (currentScreen === 'HANDOVER') {
-                // Tính tiền tua theo dịch vụ KTV này được gán
-                const coworkItem = booking.assignedItemId 
-                    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
-                    : booking.BookingItems?.[0];
-                const totalMins = coworkItem?.duration || 60;
-                
-                const milestones = settings.ktv_commission_milestones || {
-                    '1': 2000, '30': 50000, '45': 75000, '60': 100000, '70': 117000, 
-                    '90': 150000, '120': 200000, '180': 300000, '300': 500000
-                };
-                
-                let calculatedCommission = 0;
-                const minsStr = String(totalMins);
-
-                if (milestones[minsStr]) {
-                    calculatedCommission = Number(milestones[minsStr]);
-                } else {
-                    const rate = Number(settings.ktv_commission_per_60min || 100000);
-                    const rawCommission = (totalMins / 60) * rate;
-                    calculatedCommission = Math.round(rawCommission / 1000) * 1000;
-                }
-                
-                setCommission(calculatedCommission);
-
-                 setScreen('REWARD');
-                 setIsPrepping(false);
-                 setPrepTimeRemaining(0);
-                 
-                 if (user?.id) {
-                     fetch('/api/ktv/booking', {
-                         method: 'PATCH',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify({ 
-                             bookingId: booking.id, 
-                             status: 'DONE', 
-                             action: 'RELEASE_KTV',
-                             techCode: user.id 
-                         })
-                     }).catch(err => console.error('Auto release error:', err));
-                 }
-            } else if ((currentScreen === 'DASHBOARD' || currentScreen === 'TIMER') && !hasSubmittedReview) {
+            // 🔑 Mỗi KTV phải TỰ đi qua REVIEW → HANDOVER → REWARD
+            // KHÔNG auto-release khi co-worker bấm dọn xong
+            if ((currentScreen === 'DASHBOARD' || currentScreen === 'TIMER') && !hasSubmittedReview) {
+                // KTV chưa review → chuyển REVIEW trước
                 setScreen('REVIEW');
                 setIsTimerRunning(false);
             }
+            // Nếu KTV đang ở HANDOVER → handleFinishHandover sẽ tính commission và chuyển REWARD
+            // → KHÔNG tự động chuyển ở đây
         }
     }, [booking, settings.ktv_setup_duration_minutes, hasSubmittedReview, user?.id]);
 
