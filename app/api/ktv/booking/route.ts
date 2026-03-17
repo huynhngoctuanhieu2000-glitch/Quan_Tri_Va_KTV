@@ -227,11 +227,21 @@ export async function PATCH(request: Request) {
             // 🔒 Server-side validation: Kiểm tra ràng buộc thời gian
             if (turnForSync) {
                 let allowed: Date | null = null;
+
                 if (turnForSync.start_time) {
+                    // ⚠️ FIX TIMEZONE: start_time là giờ VN (HH:MM).
+                    // Server Vercel chạy UTC+0, nên KHÔNG dùng setHours() (sẽ sai 7h).
+                    // Giải pháp: build timestamp UTC từ "HH:MM" VN bằng cách trừ 7h offset.
                     const [h, m] = String(turnForSync.start_time).split(':').map(Number);
-                    const d = new Date();
-                    d.setHours(h, m, 0, 0);
-                    allowed = d;
+                    const nowUtc = new Date(); // UTC time on server
+                    // Lấy ngày VN hiện tại (UTC+7)
+                    const vnOffsetMs = 7 * 60 * 60 * 1000;
+                    const nowVnMs = nowUtc.getTime() + vnOffsetMs;
+                    const nowVn = new Date(nowVnMs);
+                    const [ynVn, mnVn, dnVn] = [nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate()];
+                    // Build Date UTC tương ứng với HH:MM giờ VN hôm nay
+                    const allowedUtc = new Date(Date.UTC(ynVn, mnVn, dnVn, h, m, 0) - vnOffsetMs);
+                    allowed = allowedUtc;
                 } else if (turnForSync.last_served_at) {
                     const { data: config } = await supabase
                         .from('SystemConfigs')
@@ -244,12 +254,18 @@ export async function PATCH(request: Request) {
                 }
 
                 if (allowed && new Date().getTime() < (allowed.getTime() - 5000)) {
+                    // Hiển thị giờ VN cho user
+                    const vnOffsetMs = 7 * 60 * 60 * 1000;
+                    const allowedVn = new Date(allowed.getTime() + vnOffsetMs);
+                    const hh = String(allowedVn.getUTCHours()).padStart(2, '0');
+                    const mm = String(allowedVn.getUTCMinutes()).padStart(2, '0');
                     return NextResponse.json({ 
                         success: false, 
-                        error: `Chưa đến giờ được phép bắt đầu! Vui lòng đợi đến ${allowed.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` 
+                        error: `Chưa đến giờ được phép bắt đầu! Vui lòng đợi đến ${hh}:${mm}` 
                     }, { status: 403 });
                 }
             }
+
             updatePayload.timeStart = new Date().toISOString();
             itemUpdatePayload.timeStart = new Date().toISOString();
 
