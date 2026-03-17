@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check, Star, ArrowRight } from 'lucide-react';
+import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check, Star, ArrowRight, MapPin } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // --- TYPES ---
@@ -41,6 +41,7 @@ const SOUND_MAP: Record<string, string> = {
     'NEW_ORDER': '/sounds/quay-don-hang-moi.wav', // Mặc định cho quầy
     'KTV_NEW_ORDER': '/sounds/ktv-don-hang-moi.wav',
     'REWARD': '/sounds/ktv-nhan-thuong.wav',
+    'CHECK_IN': '/sounds/reception-notification.wav', // KTV điểm danh
     'default': '/sounds/reception-notification.wav'
 };
 
@@ -254,11 +255,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                                 onMarkDone={() => markAsRead(n.id)}
                                 onRedirect={() => {
                                     if (role?.id === 'admin' || role?.id === 'reception') {
-                                        if (n.type?.toUpperCase() === 'NEW_ORDER') {
-                                            router.push('/reception/ktv-hub');
-                                        } else {
-                                            router.push('/reception/dispatch');
-                                        }
+                                        router.push('/reception/dispatch');
                                     }
                                 }}
                             />
@@ -317,6 +314,7 @@ const Toast = ({
     const isBuyMore = type === 'BUY_MORE';
     const isReward = type === 'REWARD';
     const isNewOrder = type === 'NEW_ORDER';
+    const isCheckIn = type === 'CHECK_IN';
 
     let bgColor = notification.isRead ? 'bg-gray-50/90' : 'bg-white';
     let borderColor = notification.isRead ? 'border-gray-200' : 'border-slate-200';
@@ -353,6 +351,11 @@ const Toast = ({
         borderColor = 'border-blue-200';
         icon = <Bell className="text-blue-600" size={20} />;
         title = '📋 Đơn hàng mới';
+    } else if (isCheckIn) {
+        bgColor = notification.isRead ? 'bg-violet-100/40' : 'bg-violet-50';
+        borderColor = 'border-violet-200';
+        icon = <MapPin className="text-violet-600" size={20} />;
+        title = '📍 KTV điểm danh';
     }
 
     return (
@@ -400,6 +403,7 @@ const Toast = ({
                         onClick={(e) => {
                             e.stopPropagation();
                             onMarkDone();
+                            onClose();
                         }}
                         className={`p-2 rounded-xl transition-all hover:scale-110 shadow-sm ${isCritical ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}
                         title="Đánh dấu hoàn thành"
