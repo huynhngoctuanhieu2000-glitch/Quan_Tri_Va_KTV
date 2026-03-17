@@ -1,36 +1,118 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import Image from 'next/image';
-import { ShieldAlert, Camera, MapPin, Clock, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import {
+  ShieldAlert, MapPin, Clock, CheckCircle2,
+  ExternalLink, Loader2, XCircle, LogOut, LogIn
+} from 'lucide-react';
 import { format } from 'date-fns';
 
 // 🔧 UI CONFIGURATION
-const PHOTO_QUALITY = 0.85;
-const CAMERA_FACING_MODE = 'user';
+const GPS_TIMEOUT_MS = 10000;
+const GPS_HIGH_ACCURACY = true;
 
-export default function KTVAttendancePage() {
+type CheckStatus = 'IDLE' | 'LOADING_GPS' | 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CHECKED_OUT';
+
+interface AttendanceRecord {
+  id: string;
+  checkType: string;
+  status: string;
+  latitude: number | null;
+  longitude: number | null;
+  locationText: string | null;
+  checkedAt: string;
+}
+
+const KTVAttendancePage = () => {
   const { hasPermission, user } = useAuth();
 
-  const [photo, setPhoto] = useState<string | null>(null);
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
-  const [locationText, setLocationText] = useState<string | null>(null);
-  const [timestamp, setTimestamp] = useState<Date | null>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [checkStatus, setCheckStatus] = useState<CheckStatus>('IDLE');
+  const [currentRecord, setCurrentRecord] = useState<AttendanceRecord | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => { setMounted(true); }, []);
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  // ─── Realtime: lắng nghe KTVAttendance record của mình ─────────────
+  useEffect(() => {
+    if (!user?.id || !currentRecord?.id) return;
+
+    const channel = supabase
+      .channel(`attendance_${currentRecord.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'KTVAttendance',
+        filter: `id=eq.${currentRecord.id}`,
+      }, (payload) => {
+        const updated = payload.new as AttendanceRecord;
+        setCurrentRecord(updated);
+
+        if (updated.status === 'CONFIRMED') {
+          setCheckStatus(updated.checkType === 'CHECK_OUT' ? 'CHECKED_OUT' : 'CONFIRMED');
+        } else if (updated.status === 'REJECTED') {
+          setCheckStatus('REJECTED');
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, currentRecord?.id]);
+
+  // ─── Get GPS ────────────────────────────────────────────────────────
+  const getGPS = (): Promise<{ latitude: number; longitude: number; locationText: string }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Trình duyệt không hỗ trợ GPS'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          locationText: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
+        }),
+        (err) => reject(new Error(err.code === 1
+          ? 'Bạn chưa cấp quyền GPS. Vào cài đặt trình duyệt để cho phép.'
+          : 'Không lấy được vị trí GPS. Thử lại sau.'
+        )),
+        { enableHighAccuracy: GPS_HIGH_ACCURACY, timeout: GPS_TIMEOUT_MS }
+      );
+    });
+  };
+
+  // ─── Handle check-in or check-out ───────────────────────────────────
+  const handleAttendance = useCallback(async (checkType: 'CHECK_IN' | 'CHECK_OUT') => {
+    setErrorMsg(null);
+    setCheckStatus('LOADING_GPS');
+
+    try {
+      const gps = await getGPS();
+
+      const res = await fetch('/api/ktv/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: user?.id,
+          employeeName: user?.id || 'KTV',
+          checkType,
+          ...gps,
+        }),
+      });
+
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Lỗi gửi điểm danh');
+
+      setCurrentRecord(result.data);
+      setCheckStatus('PENDING');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Lỗi không xác định');
+      setCheckStatus(checkType === 'CHECK_IN' ? 'IDLE' : 'CONFIRMED');
+    }
+  }, [user?.id]);
 
   if (!mounted) return null;
 
@@ -45,279 +127,148 @@ export default function KTVAttendancePage() {
     );
   }
 
-  const openCamera = async () => {
-    setSubmitSuccess(false);
-    setSubmitError(null);
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Trình duyệt không hỗ trợ camera hoặc không dùng HTTPS.');
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: CAMERA_FACING_MODE, width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setIsCameraOpen(true);
-      }
-
-      // Lấy GPS song song với mở camera
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            setLatitude(lat);
-            setLongitude(lng);
-            setLocationText(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-          },
-          (err) => {
-            console.warn('GPS error:', err);
-            setLocationText('Không lấy được vị trí');
-          },
-          { timeout: 10000, enableHighAccuracy: true }
-        );
-      }
-    } catch (err: any) {
-      if (err.name === 'NotAllowedError') {
-        alert('Quyền camera bị từ chối. Kiểm tra cài đặt trình duyệt và thử lại.');
-      } else {
-        alert('Không thể mở camera: ' + err.message);
-      }
-    }
-  };
-
-  const takePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Watermark: timestamp + location
-    const now = new Date();
-    setTimestamp(now);
-    const timeStr = format(now, 'dd/MM/yyyy HH:mm:ss');
-    const locStr = locationText || 'Đang lấy vị trí...';
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(0, canvas.height - 64, canvas.width, 64);
-    ctx.font = 'bold 15px Arial';
-    ctx.fillStyle = 'white';
-    ctx.fillText(timeStr, 12, canvas.height - 38);
-    ctx.font = '13px Arial';
-    ctx.fillText(locStr, 12, canvas.height - 16);
-
-    const dataUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
-    setPhoto(dataUrl);
-
-    // Stop camera stream
-    const stream = video.srcObject as MediaStream;
-    stream?.getTracks().forEach(t => t.stop());
-    setIsCameraOpen(false);
-  };
-
-  const submitAttendance = async () => {
-    if (!photo) return;
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      const res = await fetch('/api/ktv/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          employeeId: user?.id,
-          employeeName: user?.id || 'KTV',
-          photoBase64: photo,
-          latitude,
-          longitude,
-          locationText,
-        }),
-      });
-
-      const result = await res.json();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Lỗi không xác định');
-      }
-
-      setSubmitSuccess(true);
-      setPhoto(null);
-      setTimestamp(null);
-    } catch (err: any) {
-      setSubmitError(err.message || 'Gửi thất bại. Vui lòng thử lại.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const mapsUrl = latitude && longitude
-    ? `https://maps.google.com/?q=${latitude},${longitude}`
+  const mapsUrl = currentRecord?.latitude && currentRecord?.longitude
+    ? `https://maps.google.com/?q=${currentRecord.latitude},${currentRecord.longitude}`
     : null;
 
   return (
     <AppLayout>
-      <div className="max-w-md mx-auto space-y-6">
+      <div className="max-w-sm mx-auto px-4 py-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Chấm Công</h1>
-          <p className="text-sm text-gray-500 mt-1">Chụp ảnh xác thực để bắt đầu ca làm việc.</p>
+          <p className="text-sm text-gray-500 mt-1">Bấm nút để ghi nhận vị trí và thông báo quản lý.</p>
         </div>
 
-        {/* Success state */}
-        {submitSuccess && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex flex-col items-center text-center gap-3">
-            <CheckCircle2 size={40} className="text-emerald-500" />
-            <div>
-              <p className="font-bold text-emerald-800 text-lg">Điểm danh thành công!</p>
-              <p className="text-sm text-emerald-600 mt-1">Bạn đã được thêm vào Sổ Tua hôm nay.</p>
-            </div>
-            {mapsUrl && (
-              <a
-                href={mapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-emerald-700 underline underline-offset-2 hover:text-emerald-900"
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-8 flex flex-col items-center gap-6">
+
+          {/* ─── IDLE: Nút Điểm Danh ─── */}
+          {checkStatus === 'IDLE' && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center">
+                <LogIn size={40} className="text-emerald-600" />
+              </div>
+              <div className="text-center">
+                <p className="font-semibold text-gray-800">Bắt đầu ca làm việc</p>
+                <p className="text-sm text-gray-400 mt-1">Hệ thống sẽ ghi nhận vị trí GPS của bạn</p>
+              </div>
+              <button
+                onClick={() => handleAttendance('CHECK_IN')}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-emerald-200"
               >
-                <MapPin size={14} />
-                Xem vị trí của bạn trên Maps
-                <ExternalLink size={12} />
-              </a>
-            )}
-            <button
-              onClick={() => { setSubmitSuccess(false); setLatitude(null); setLongitude(null); setLocationText(null); }}
-              className="mt-1 text-xs text-emerald-500 hover:text-emerald-700"
-            >
-              Chấm công lần nữa
-            </button>
-          </div>
-        )}
+                ĐIỂM DANH
+              </button>
+            </>
+          )}
 
-        {!submitSuccess && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6">
-            {/* Step 1: Idle */}
-            {!photo && !isCameraOpen && (
-              <div className="text-center py-8">
-                <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Camera size={32} className="text-indigo-600" />
-                </div>
-                <h3 className="text-gray-900 font-medium mb-2">Yêu cầu chụp ảnh</h3>
-                <p className="text-sm text-gray-500 mb-6 px-4">
-                  Hệ thống ghi nhận ảnh, thời gian và vị trí GPS của bạn.
-                </p>
-                <button
-                  onClick={openCamera}
-                  className="w-full py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
-                >
-                  Mở Camera
-                </button>
+          {/* ─── LOADING GPS ─── */}
+          {checkStatus === 'LOADING_GPS' && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center">
+                <MapPin size={40} className="text-blue-400 animate-bounce" />
               </div>
-            )}
-
-            {/* Step 2: Camera live */}
-            {isCameraOpen && (
-              <div className="space-y-4">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-[3/4]">
-                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                  <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white">
-                    <div className="flex items-center gap-2 text-sm mb-1">
-                      <Clock size={14} />
-                      {format(new Date(), 'dd/MM/yyyy HH:mm:ss')}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin size={14} />
-                      {locationText || 'Đang lấy vị trí GPS...'}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={takePhoto}
-                  className="w-full py-4 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Camera size={20} />
-                  Chụp Ảnh
-                </button>
+              <div className="flex items-center gap-2 text-blue-600 font-medium">
+                <Loader2 size={18} className="animate-spin" />
+                Đang lấy vị trí GPS...
               </div>
-            )}
+            </>
+          )}
 
-            {/* Step 3: Preview & confirm */}
-            {photo && !isCameraOpen && (
-              <div className="space-y-6">
-                <div className="rounded-xl overflow-hidden border border-gray-200 relative min-h-[300px]">
-                  <Image
-                    src={photo}
-                    alt="Attendance"
-                    width={600}
-                    height={800}
-                    className="w-full h-auto"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 space-y-1.5">
-                  <div className="flex items-center gap-2 text-emerald-700 font-medium">
-                    <CheckCircle2 size={18} />
-                    Ảnh hợp lệ
-                  </div>
-                  <p className="text-sm text-emerald-600">
-                    ⏰ {timestamp ? format(timestamp, 'dd/MM/yyyy HH:mm:ss') : ''}
-                  </p>
-                  {locationText && (
-                    <div className="flex items-center gap-1.5 text-sm text-emerald-600">
-                      <MapPin size={13} />
-                      {locationText}
-                      {mapsUrl && (
-                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="ml-1">
-                          <ExternalLink size={12} className="inline text-emerald-400 hover:text-emerald-700" />
-                        </a>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {submitError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-                    ❌ {submitError}
-                  </div>
+          {/* ─── PENDING: Chờ Admin ─── */}
+          {checkStatus === 'PENDING' && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-amber-50 flex items-center justify-center">
+                <Clock size={40} className="text-amber-500 animate-pulse" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="font-bold text-amber-700 text-lg">Đang chờ xác nhận</p>
+                <p className="text-sm text-gray-500">Admin đang kiểm tra vị trí GPS của bạn</p>
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700 mt-2">
+                    <MapPin size={13} /> Vị trí của bạn <ExternalLink size={11} />
+                  </a>
                 )}
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setPhoto(null); openCamera(); }}
-                    disabled={isSubmitting}
-                    className="flex-1 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-50"
-                  >
-                    Chụp Lại
-                  </button>
-                  <button
-                    onClick={submitAttendance}
-                    disabled={isSubmitting}
-                    className="flex-1 py-3 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-70 flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Đang gửi...
-                      </>
-                    ) : 'Xác Nhận'}
-                  </button>
-                </div>
+                {currentRecord?.checkedAt && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Gửi lúc: {format(new Date(currentRecord.checkedAt), 'HH:mm:ss dd/MM/yyyy')}
+                  </p>
+                )}
               </div>
-            )}
+            </>
+          )}
 
-            <canvas ref={canvasRef} className="hidden" />
-          </div>
-        )}
+          {/* ─── CONFIRMED: Vào ca thành công → nút Tan Ca ─── */}
+          {checkStatus === 'CONFIRMED' && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center">
+                <CheckCircle2 size={40} className="text-emerald-600" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="font-bold text-emerald-700 text-lg">✅ Đã điểm danh</p>
+                <p className="text-sm text-gray-500">Admin đã xác nhận vị trí của bạn</p>
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700">
+                    <MapPin size={13} /> Xem vị trí <ExternalLink size={11} />
+                  </a>
+                )}
+                {currentRecord?.checkedAt && (
+                  <p className="text-xs text-gray-400">
+                    Vào ca: {format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy')}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => handleAttendance('CHECK_OUT')}
+                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2"
+              >
+                <LogOut size={22} /> TAN CA
+              </button>
+            </>
+          )}
+
+          {/* ─── REJECTED: Admin từ chối ─── */}
+          {checkStatus === 'REJECTED' && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-red-50 flex items-center justify-center">
+                <XCircle size={40} className="text-red-500" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="font-bold text-red-700 text-lg">❌ Admin đã từ chối</p>
+                <p className="text-sm text-gray-500">Vui lòng liên hệ quản lý để được hỗ trợ</p>
+              </div>
+              <button
+                onClick={() => { setCheckStatus('IDLE'); setCurrentRecord(null); setErrorMsg(null); }}
+                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-2xl transition-all"
+              >
+                Thử lại
+              </button>
+            </>
+          )}
+
+          {/* ─── CHECKED_OUT: Tan ca thành công ─── */}
+          {checkStatus === 'CHECKED_OUT' && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center">
+                <LogOut size={40} className="text-slate-500" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="font-bold text-slate-700 text-lg">Đã tan ca</p>
+                <p className="text-sm text-gray-400">Cảm ơn bạn đã làm việc hôm nay!</p>
+              </div>
+            </>
+          )}
+
+          {/* Error message */}
+          {errorMsg && (
+            <div className="w-full bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 text-center">
+              {errorMsg}
+            </div>
+          )}
+        </div>
       </div>
     </AppLayout>
   );
-}
+};
+
+export default KTVAttendancePage;

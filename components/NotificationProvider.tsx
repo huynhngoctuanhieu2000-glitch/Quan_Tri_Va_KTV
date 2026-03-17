@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check, Star, ArrowRight, MapPin } from 'lucide-react';
+import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check, Star, ArrowRight, MapPin, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 // --- TYPES ---
@@ -307,6 +307,9 @@ const Toast = ({
     onMarkDone: () => void,
     onRedirect: () => void
 }) => {
+    const { role } = useAuth();
+    const [confirmLoading, setConfirmLoading] = React.useState<'confirm' | 'reject' | null>(null);
+
     const type = notification.type?.toUpperCase();
     const isCritical = type === 'EMERGENCY' || type === 'COMPLAINT';
     const isEarlyExit = type === 'EARLY_EXIT';
@@ -315,6 +318,25 @@ const Toast = ({
     const isReward = type === 'REWARD';
     const isNewOrder = type === 'NEW_ORDER';
     const isCheckIn = type === 'CHECK_IN';
+    // Admin sees confirm/reject buttons on CHECK_IN toasts that have an attendanceId (stored in bookingId)
+    const isAdminCheckIn = isCheckIn && !!notification.bookingId && (role?.id === 'admin' || role?.id === 'reception');
+
+    const handleAttendanceAction = async (action: 'CONFIRM' | 'REJECT') => {
+        setConfirmLoading(action === 'CONFIRM' ? 'confirm' : 'reject');
+        try {
+            await fetch('/api/ktv/attendance/confirm', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ attendanceId: notification.bookingId, action }),
+            });
+        } catch (e) {
+            console.error('[Toast] Confirm error:', e);
+        } finally {
+            setConfirmLoading(null);
+            onMarkDone();
+            onClose();
+        }
+    };
 
     let bgColor = notification.isRead ? 'bg-gray-50/90' : 'bg-white';
     let borderColor = notification.isRead ? 'border-gray-200' : 'border-slate-200';
@@ -398,7 +420,29 @@ const Toast = ({
             </div>
 
             <div className="flex flex-col gap-2">
-                {!notification.isRead && (
+                {/* CHECK_IN: admin xác nhận / từ chối */}
+                {isAdminCheckIn && !notification.isRead && (
+                    <>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleAttendanceAction('CONFIRM'); }}
+                            disabled={!!confirmLoading}
+                            className="p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all hover:scale-110 shadow-sm disabled:opacity-50"
+                            title="Xác nhận điểm danh"
+                        >
+                            {confirmLoading === 'confirm' ? <Loader2 size={15} className="animate-spin" /> : <Check size={16} strokeWidth={3} />}
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleAttendanceAction('REJECT'); }}
+                            disabled={!!confirmLoading}
+                            className="p-2 rounded-xl bg-rose-50 text-rose-500 hover:bg-rose-100 transition-all hover:scale-110 shadow-sm disabled:opacity-50"
+                            title="Từ chối điểm danh"
+                        >
+                            {confirmLoading === 'reject' ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}
+                        </button>
+                    </>
+                )}
+                {/* Normal notifications: tích xanh */}
+                {!isAdminCheckIn && !notification.isRead && (
                     <button 
                         onClick={(e) => {
                             e.stopPropagation();
