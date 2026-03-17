@@ -270,31 +270,44 @@ export async function PATCH(request: Request) {
             itemUpdatePayload.timeStart = new Date().toISOString();
 
             // 🚀 IN_PROGRESS: Set ngay cho Booking → giao diện khách hàng cập nhật
-            // Frontend KTV đã xử lý độc lập (chỉ fallback cho single-service/co-working)
             updatePayload.status = 'IN_PROGRESS';
         } else if (status === 'READY') {
-            // Trạng thái sẵn sàng (đã chuẩn bị xong), dùng để đồng bộ nhóm
             itemUpdatePayload.status = 'READY';
         } else if (status === 'CLEANING') {
-            // Trạng thái bắt đầu dọn phòng (sau khi đánh giá khách)
             itemUpdatePayload.status = 'CLEANING';
         } else if (status === 'DONE' || status === 'COMPLETED') {
+            // ✅ NEW FLOW: KTV hoàn thành → chỉ update BookingItem.status = COMPLETED
+            // Booking-level status sẽ được update sau khi tất cả items được RATED bởi khách
             updatePayload.timeEnd = new Date().toISOString();
             itemUpdatePayload.timeEnd = new Date().toISOString();
+            // itemUpdatePayload.status đã = 'COMPLETED' từ dòng khởi tạo ở trên
 
-            // 🚀 SMART: Chỉ set Booking.status = DONE khi TẤT CẢ items đã xong
-            const { data: allItems } = await supabase
+            // 🔑 FIX RACE CONDITION: Update item TRƯỚC, re-query SAU để check
+            // (không set Booking.status ở đây — sẽ do journey API xử lý sau khi khách rate)
+            if (targetBookingItemId) {
+                await supabase
+                    .from('BookingItems')
+                    .update(itemUpdatePayload)
+                    .eq('id', targetBookingItemId);
+                // Đánh dấu đã update để skip block update item ở dưới
+                targetBookingItemId = null;
+            }
+
+            // Re-query SAU khi đã update để check trạng thái thực tế
+            const { data: allItemsAfterUpdate } = await supabase
                 .from('BookingItems')
                 .select('id, status')
                 .eq('bookingId', bookingId);
-            
-            const otherItems = (allItems || []).filter(i => i.id !== targetBookingItemId);
-            const allOthersDone = otherItems.length === 0 || otherItems.every(i => 
-                ['COMPLETED', 'DONE', 'CLEANING'].includes(i.status)
-            );
-            
-            if (allOthersDone) {
-                updatePayload.status = status;
+
+            const allItemsCompleted = (allItemsAfterUpdate || []).length > 0 
+                && (allItemsAfterUpdate || []).every(i =>
+                    ['COMPLETED', 'DONE', 'CLEANING'].includes(i.status)
+                );
+
+            if (allItemsCompleted) {
+                // Tất cả KTV đã xong → Booking giữ IN_PROGRESS (chờ khách rate)
+                // Không cần set booking.status ở đây — chờ tất cả itemRating được lưu
+                console.log(`[KTV API] All items completed for booking ${bookingId}. Waiting for customer ratings.`);
             }
         } else if (validBookingStatuses.includes(status)) {
             updatePayload.status = status;

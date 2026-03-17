@@ -3,10 +3,128 @@
 import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { ShieldAlert, ListOrdered, Clock, User, CheckCircle2, Timer } from 'lucide-react';
-import { motion } from 'motion/react';
+import { ShieldAlert, ListOrdered, Clock, User, CheckCircle2, Timer, MapPin, Check, X, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { useTurnsLogic } from './turns.logic';
+
+// ─── Attendance Pending Section ───────────────────────────────────────────────
+interface PendingRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  checkType: string;
+  latitude: number | null;
+  longitude: number | null;
+  locationText: string | null;
+  checkedAt: string;
+}
+
+const AttendancePendingSection = () => {
+  const [records, setRecords] = React.useState<PendingRecord[]>([]);
+  const [loading, setLoading] = React.useState<Record<string, 'confirm' | 'reject'>>({});
+
+  const fetchPending = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/ktv/attendance/pending');
+      const json = await res.json();
+      if (json.success) setRecords(json.data);
+    } catch { /* silent */ }
+  }, []);
+
+  React.useEffect(() => {
+    fetchPending();
+    const interval = setInterval(fetchPending, 15000); // Poll every 15s
+    return () => clearInterval(interval);
+  }, [fetchPending]);
+
+  const handleAction = async (id: string, action: 'CONFIRM' | 'REJECT') => {
+    setLoading(prev => ({ ...prev, [id]: action === 'CONFIRM' ? 'confirm' : 'reject' }));
+    try {
+      await fetch('/api/ktv/attendance/confirm', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendanceId: id, action }),
+      });
+      setRecords(prev => prev.filter(r => r.id !== id));
+    } catch { /* silent */ }
+    setLoading(prev => { const next = { ...prev }; delete next[id]; return next; });
+  };
+
+  if (records.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-amber-50 border border-amber-200 rounded-3xl overflow-hidden"
+    >
+      <div className="px-6 py-4 border-b border-amber-100 flex items-center gap-2">
+        <MapPin size={18} className="text-amber-600 animate-pulse" />
+        <h2 className="font-bold text-amber-800">Điểm Danh Chờ Xác Nhận</h2>
+        <span className="ml-auto bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+          {records.length}
+        </span>
+      </div>
+      <AnimatePresence>
+        {records.map((rec) => {
+          const mapsUrl = rec.latitude && rec.longitude
+            ? `https://maps.google.com/?q=${rec.latitude},${rec.longitude}`
+            : null;
+          const isCheckIn = rec.checkType === 'CHECK_IN';
+          const loadState = loading[rec.id];
+
+          return (
+            <motion.div
+              key={rec.id}
+              exit={{ opacity: 0, height: 0 }}
+              className="px-6 py-4 flex items-center justify-between gap-4 border-b border-amber-100 last:border-0"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-900">{rec.employeeName || rec.employeeId}</span>
+                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isCheckIn ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                    {isCheckIn ? 'VÀO CA' : 'TAN CA'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-xs text-gray-400">
+                    {new Date(rec.checkedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {mapsUrl && (
+                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-0.5 underline">
+                      <MapPin size={10} /> Xem GPS
+                    </a>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => handleAction(rec.id, 'CONFIRM')}
+                  disabled={!!loadState}
+                  className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50 shadow-sm"
+                  title="Xác nhận"
+                >
+                  {loadState === 'confirm' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} strokeWidth={3} />}
+                </button>
+                <button
+                  onClick={() => handleAction(rec.id, 'REJECT')}
+                  disabled={!!loadState}
+                  className="p-2.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-xl transition-all disabled:opacity-50"
+                  title="Từ chối"
+                >
+                  {loadState === 'reject' ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
+                </button>
+              </div>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
 
 export default function TurnTrackingPage() {
   const { hasPermission } = useAuth();
@@ -40,6 +158,9 @@ export default function TurnTrackingPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        {/* ─── Section điểm danh chờ xác nhận ─── */}
+        <AttendancePendingSection />
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
@@ -48,6 +169,7 @@ export default function TurnTrackingPage() {
             </h1>
             <p className="text-sm text-gray-500 mt-1">Quản lý thứ tự phục vụ của kỹ thuật viên.</p>
           </div>
+
           <div className="flex gap-2">
             <button 
               onClick={refresh}

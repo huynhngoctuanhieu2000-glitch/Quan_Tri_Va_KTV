@@ -44,22 +44,39 @@ export async function POST(request: Request) {
             : '';
 
         const isCheckIn = checkType === 'CHECK_IN';
+        // Encode attendanceId into message as [AID:uuid] tag so the toast can extract it
+        // NOTE: cannot use bookingId column — it's a FK to Bookings table
         const notifMessage = isCheckIn
-            ? `📍 ${employeeName || employeeId} yêu cầu điểm danh${mapsLink}`
-            : `🏁 ${employeeName || employeeId} yêu cầu tan ca${mapsLink}`;
+            ? `📍 ${employeeName || employeeId} yêu cầu điểm danh${mapsLink} [AID:${record.id}]`
+            : `🏁 ${employeeName || employeeId} yêu cầu tan ca${mapsLink} [AID:${record.id}]`;
 
-        // Store attendanceId in bookingId field for confirm API to use
-        await supabase.from('StaffNotifications').insert({
-            type: 'CHECK_IN',
-            message: notifMessage,
-            bookingId: record.id,    // dùng bookingId để truyền attendanceId
-            employeeId: null,        // broadcast to admin/reception
-            isRead: false,
-        });
+        const { data: notifData, error: notifError } = await supabase
+            .from('StaffNotifications')
+            .insert({
+                type: 'CHECK_IN',
+                message: notifMessage,
+                // bookingId intentionally omitted — it's a FK to Bookings table
+                // employeeId omitted → null = broadcast to admin/reception
+            })
+            .select()
+            .single();
+
+        if (notifError) {
+            // Non-fatal but log clearly for debugging
+            console.error('❌ [Attendance] StaffNotifications insert FAILED:', JSON.stringify(notifError));
+        } else {
+            console.log('✅ [Attendance] StaffNotifications inserted, id:', notifData?.id);
+        }
 
         console.log(`✅ [Attendance] ${employeeName} requested ${checkType}. lat: ${latitude}, lng: ${longitude}`);
 
-        return NextResponse.json({ success: true, data: record });
+        return NextResponse.json({
+            success: true,
+            data: record,
+            notifSent: !notifError,
+            notifError: notifError?.message ?? null,
+        });
+
 
     } catch (error: any) {
         console.error('❌ [Attendance POST] Unhandled error:', error);

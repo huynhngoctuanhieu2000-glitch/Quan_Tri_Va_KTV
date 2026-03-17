@@ -318,8 +318,14 @@ const Toast = ({
     const isReward = type === 'REWARD';
     const isNewOrder = type === 'NEW_ORDER';
     const isCheckIn = type === 'CHECK_IN';
-    // Admin sees confirm/reject buttons on CHECK_IN toasts that have an attendanceId (stored in bookingId)
-    const isAdminCheckIn = isCheckIn && !!notification.bookingId && (role?.id === 'admin' || role?.id === 'reception');
+
+    // Parse attendanceId from message tag [AID:uuid] — bookingId FK cannot be used
+    const aidMatch = notification.message?.match(/\[AID:([a-f0-9-]+)\]/i);
+    const attendanceId = aidMatch?.[1] ?? null;
+    // Clean message: hide the [AID:...] tag from UI
+    const displayMessage = notification.message?.replace(/\s*\[AID:[a-f0-9-]+\]/i, '') ?? '';
+
+    const isAdminCheckIn = isCheckIn && !!attendanceId && (role?.id === 'admin' || role?.id === 'reception');
 
     const handleAttendanceAction = async (action: 'CONFIRM' | 'REJECT') => {
         setConfirmLoading(action === 'CONFIRM' ? 'confirm' : 'reject');
@@ -327,7 +333,7 @@ const Toast = ({
             await fetch('/api/ktv/attendance/confirm', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ attendanceId: notification.bookingId, action }),
+                body: JSON.stringify({ attendanceId, action }),
             });
         } catch (e) {
             console.error('[Toast] Confirm error:', e);
@@ -407,7 +413,7 @@ const Toast = ({
                     )}
                 </div>
                 <p className={`text-sm font-bold leading-tight ${isCritical ? 'text-white' : 'text-slate-800'} ${notification.isRead ? 'line-through opacity-70' : ''} break-words`}>
-                    {notification.message}
+                    {displayMessage}
                 </p>
                 <div className="flex items-center gap-2 mt-1.5">
                     <p className={`text-[9px] font-bold opacity-60 ${isCritical ? 'text-rose-100' : 'text-slate-400'}`}>
