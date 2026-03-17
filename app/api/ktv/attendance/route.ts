@@ -2,16 +2,15 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // 🔧 CONFIG
-const STORAGE_BUCKET = 'ktv-attendance-photos';
-const CHECK_IN_SOUND_TYPE = 'CHECK_IN';
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, photoBase64, latitude, longitude, locationText } = body;
+        const { employeeId, employeeName, checkType = 'CHECK_IN', latitude, longitude, locationText } = body;
 
-        if (!employeeId || !photoBase64) {
-            return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+        if (!employeeId) {
+            return NextResponse.json({ success: false, error: 'Missing employeeId' }, { status: 400 });
         }
 
         const supabase = getSupabaseAdmin();
@@ -19,117 +18,51 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        // ─── Step 1: Upload photo to Supabase Storage ───────────────────
-        let photoUrl: string | null = null;
-        try {
-            // Convert base64 to buffer
-            const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '');
-            const photoBuffer = Buffer.from(base64Data, 'base64');
-            const fileName = `${employeeId}_${Date.now()}.jpg`;
-
-            const { error: uploadError } = await supabase.storage
-                .from(STORAGE_BUCKET)
-                .upload(fileName, photoBuffer, {
-                    contentType: 'image/jpeg',
-                    upsert: false,
-                });
-
-            if (uploadError) {
-                console.error('❌ [Attendance] Storage upload error:', uploadError);
-                // Non-fatal: continue without photo URL
-            } else {
-                const { data: urlData } = supabase.storage
-                    .from(STORAGE_BUCKET)
-                    .getPublicUrl(fileName);
-                photoUrl = urlData?.publicUrl ?? null;
-            }
-        } catch (storageErr) {
-            console.error('❌ [Attendance] Storage exception:', storageErr);
-        }
-
-        // ─── Step 2: Insert into KTVAttendance ──────────────────────────
-        const { data: attendanceRecord, error: attendanceError } = await supabase
+        // ─── Step 1: Insert KTVAttendance (status = PENDING) ────────────
+        const { data: record, error: insertError } = await supabase
             .from('KTVAttendance')
             .insert({
                 employeeId,
                 employeeName,
-                photoUrl,
+                checkType,
                 latitude: latitude ?? null,
                 longitude: longitude ?? null,
                 locationText: locationText ?? null,
+                status: 'PENDING',
             })
             .select()
             .single();
 
-        if (attendanceError) {
-            console.error('❌ [Attendance] Insert error:', attendanceError);
-            return NextResponse.json({ success: false, error: attendanceError.message }, { status: 500 });
+        if (insertError) {
+            console.error('❌ [Attendance POST] Insert error:', insertError);
+            return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
 
-        // ─── Step 3: Upsert into TurnQueue (Sổ Tua) ────────────────────
-        const today = new Date().toISOString().split('T')[0];
+        // ─── Step 2: Push notification to admin with GPS link ───────────
+        const mapsLink = latitude && longitude
+            ? ` — https://maps.google.com/?q=${latitude},${longitude}`
+            : '';
 
-        const { data: existingTurn } = await supabase
-            .from('TurnQueue')
-            .select('id')
-            .eq('employee_id', employeeId)
-            .eq('date', today)
-            .maybeSingle();
+        const isCheckIn = checkType === 'CHECK_IN';
+        const notifMessage = isCheckIn
+            ? `📍 ${employeeName || employeeId} yêu cầu điểm danh${mapsLink}`
+            : `🏁 ${employeeName || employeeId} yêu cầu tan ca${mapsLink}`;
 
-        if (!existingTurn) {
-            // Get current max queue_position for today
-            const { data: maxPosRow } = await supabase
-                .from('TurnQueue')
-                .select('queue_position')
-                .eq('date', today)
-                .order('queue_position', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            const nextPosition = (maxPosRow?.queue_position ?? 0) + 1;
-
-            const { error: turnError } = await supabase
-                .from('TurnQueue')
-                .insert({
-                    employee_id: employeeId,
-                    date: today,
-                    queue_position: nextPosition,
-                    status: 'waiting',
-                    turns_completed: 0,
-                });
-
-            if (turnError) {
-                console.warn('⚠️ [Attendance] TurnQueue upsert failed:', turnError.message);
-                // Non-fatal: attendance still recorded
-            }
-        }
-
-        // ─── Step 4: Push notification to admin/reception ───────────────
-        const notifMessage = `📍 ${employeeName || employeeId} đã điểm danh${locationText ? ` — ${locationText}` : ''}`;
-
-        const { error: notifError } = await supabase
-            .from('StaffNotifications')
-            .insert({
-                type: CHECK_IN_SOUND_TYPE,
-                message: notifMessage,
-                employeeId: null, // broadcast to all reception/admin
-                isRead: false,
-            });
-
-        if (notifError) {
-            console.warn('⚠️ [Attendance] Notification insert failed:', notifError.message);
-        }
-
-        console.log(`✅ [Attendance] ${employeeName} checked in. photoUrl: ${photoUrl}, lat: ${latitude}, lng: ${longitude}`);
-
-        return NextResponse.json({
-            success: true,
-            data: attendanceRecord,
-            photoUrl,
+        // Store attendanceId in bookingId field for confirm API to use
+        await supabase.from('StaffNotifications').insert({
+            type: 'CHECK_IN',
+            message: notifMessage,
+            bookingId: record.id,    // dùng bookingId để truyền attendanceId
+            employeeId: null,        // broadcast to admin/reception
+            isRead: false,
         });
 
+        console.log(`✅ [Attendance] ${employeeName} requested ${checkType}. lat: ${latitude}, lng: ${longitude}`);
+
+        return NextResponse.json({ success: true, data: record });
+
     } catch (error: any) {
-        console.error('❌ [Attendance] Unhandled error:', error);
+        console.error('❌ [Attendance POST] Unhandled error:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
