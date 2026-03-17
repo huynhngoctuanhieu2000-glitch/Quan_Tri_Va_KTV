@@ -136,13 +136,20 @@ export async function GET(request: Request) {
             });
         }
 
+        // Parse multi-item IDs (1 KTV + 2 DV → booking_item_id = "id1,id2")
+        const assignedItemIds = assignedItemId 
+            ? String(assignedItemId).split(',').map(s => s.trim()).filter(Boolean)
+            : [];
+        const primaryItemId = assignedItemIds[0] || assignedItemId;
+
         return NextResponse.json({
             success: true,
             data: {
                 ...booking,
                 dispatcherNote: booking.notes || '',
                 BookingItems: itemsWithService,
-                assignedItemId: assignedItemId,
+                assignedItemId: primaryItemId,
+                assignedItemIds: assignedItemIds,
                 // Thông tin ràng buộc thời gian & Vị trí làm việc cụ thể
                 last_served_at: turnInfo?.last_served_at,
                 dispatchStartTime: turnInfo?.start_time,
@@ -205,22 +212,47 @@ export async function PATCH(request: Request) {
             }
         }
         
-        // 🔧 Xác định targetBookingItemId TRƯỚC khi dùng trong các status blocks
+        // 🔧 Xác định targetBookingItemId(s) — hỗ trợ 1 KTV nhiều DV
         let targetBookingItemId = turnForSync?.booking_item_id;
-        
-        if (!targetBookingItemId) {
-            // Fallback lấy dịch vụ đầu tiên của đơn hàng này
-            const { data: firstItem } = await supabase
+        let allItemIdsForThisKTV: string[] = [];
+
+        // Tìm TẤT CẢ items được gán cho KTV này trong đơn
+        if (technicianCode) {
+            const { data: ktvItems } = await supabase
                 .from('BookingItems')
-                .select('id')
-                .eq('bookingId', bookingId)
-                .order('id', { ascending: true })
-                .limit(1)
-                .maybeSingle();
-                
-            if (firstItem) {
-                targetBookingItemId = firstItem.id;
+                .select('id, "technicianCodes"')
+                .eq('bookingId', bookingId);
+
+            allItemIdsForThisKTV = (ktvItems || [])
+                .filter((item: any) => {
+                    const codes = item.technicianCodes;
+                    return Array.isArray(codes) && codes.includes(technicianCode);
+                })
+                .map((item: any) => item.id);
+        }
+
+        // Fallback: nếu không tìm được qua technicianCodes → dùng TurnQueue hoặc item đầu tiên
+        if (allItemIdsForThisKTV.length === 0) {
+            if (targetBookingItemId) {
+                allItemIdsForThisKTV = [targetBookingItemId];
+            } else {
+                const { data: firstItem } = await supabase
+                    .from('BookingItems')
+                    .select('id')
+                    .eq('bookingId', bookingId)
+                    .order('id', { ascending: true })
+                    .limit(1)
+                    .maybeSingle();
+                if (firstItem) {
+                    allItemIdsForThisKTV = [firstItem.id];
+                    targetBookingItemId = firstItem.id;
+                }
             }
+        }
+
+        // Nếu TurnQueue chỉ link 1 item, dùng item đó cho backward compat
+        if (!targetBookingItemId && allItemIdsForThisKTV.length > 0) {
+            targetBookingItemId = allItemIdsForThisKTV[0];
         }
         
         if (status === 'IN_PROGRESS') {
@@ -269,7 +301,16 @@ export async function PATCH(request: Request) {
             updatePayload.timeStart = new Date().toISOString();
             itemUpdatePayload.timeStart = new Date().toISOString();
 
-            // 🚀 IN_PROGRESS: Set ngay cho Booking → giao diện khách hàng cập nhật
+            // 🚀 IN_PROGRESS: Update TẤT CẢ items của KTV này
+            if (allItemIdsForThisKTV.length > 0) {
+                await supabase
+                    .from('BookingItems')
+                    .update(itemUpdatePayload)
+                    .in('id', allItemIdsForThisKTV);
+                // Đánh dấu đã update batch → skip single update ở dưới
+                targetBookingItemId = null;
+            }
+
             updatePayload.status = 'IN_PROGRESS';
         } else if (status === 'READY') {
             itemUpdatePayload.status = 'READY';
@@ -282,14 +323,19 @@ export async function PATCH(request: Request) {
             itemUpdatePayload.timeEnd = new Date().toISOString();
             // itemUpdatePayload.status đã = 'COMPLETED' từ dòng khởi tạo ở trên
 
-            // 🔑 FIX RACE CONDITION: Update item TRƯỚC, re-query SAU để check
-            // (không set Booking.status ở đây — sẽ do journey API xử lý sau khi khách rate)
-            if (targetBookingItemId) {
+            // 🔑 FIX RACE CONDITION: Update TẤT CẢ items của KTV này
+            if (allItemIdsForThisKTV.length > 0) {
+                await supabase
+                    .from('BookingItems')
+                    .update(itemUpdatePayload)
+                    .in('id', allItemIdsForThisKTV);
+                // Đánh dấu đã update batch → skip single update ở dưới
+                targetBookingItemId = null;
+            } else if (targetBookingItemId) {
                 await supabase
                     .from('BookingItems')
                     .update(itemUpdatePayload)
                     .eq('id', targetBookingItemId);
-                // Đánh dấu đã update để skip block update item ở dưới
                 targetBookingItemId = null;
             }
 

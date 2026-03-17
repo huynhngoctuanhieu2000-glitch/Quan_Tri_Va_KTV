@@ -73,10 +73,14 @@ function KTVDashboardContent() {
     setKtvScreen(screen);
   }, [screen, setKtvScreen]);
 
-  // Lấy đúng dịch vụ mà KTV này được gán để truyền cho Quy trình
-  const assignedItem = booking?.assignedItemId 
-    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
-    : (booking?.BookingItems?.[0] || {});
+  // Lấy tất cả dịch vụ mà KTV này được gán (hỗ trợ multi-item)
+  const assignedItemIds: string[] = booking?.assignedItemIds?.length > 0
+    ? booking.assignedItemIds
+    : (booking?.assignedItemId ? [booking.assignedItemId] : []);
+  const assignedItems = assignedItemIds.length > 0
+    ? booking?.BookingItems?.filter((i: any) => assignedItemIds.includes(i.id)) || []
+    : [booking?.BookingItems?.[0]].filter(Boolean);
+  const assignedItem = assignedItems[0] || {};
 
   if (isLoading && !booking && screen === 'DASHBOARD') {
     return (
@@ -222,12 +226,23 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments:
 function ScreenDashboard({ logic }: { logic: any }) {
   const { booking, checklist, toggleChecklist, isChecklistComplete, handleConfirmSetup, setShowProcedure, activeSegmentIndex } = logic;
 
-  // Lấy đúng dịch vụ mà KTV này được gán
-  const item = booking?.assignedItemId 
-    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
-    : (booking?.BookingItems?.[0] || {});
-    
-  const ktvSegments = item?.segments?.filter((s: any) => s.ktvId === logic.user?.id) || [];
+  // Lấy tất cả dịch vụ mà KTV này được gán (hỗ trợ multi-item)
+  const allItemIds: string[] = booking?.assignedItemIds?.length > 0
+    ? booking.assignedItemIds
+    : (booking?.assignedItemId ? [booking.assignedItemId] : []);
+  const allItems = allItemIds.length > 0
+    ? booking?.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+    : [booking?.BookingItems?.[0]].filter(Boolean);
+  const item = allItems[0] || {};
+  
+  // Tên tất cả DV
+  const allServiceNames = allItems.map((i: any) => i.service_name).filter(Boolean);
+  // Tổng thời gian các segments admin gán cho KTV
+  const allKtvSegments = allItems.flatMap((i: any) => 
+    (i?.segments || []).filter((s: any) => s.ktvId === logic.user?.id)
+  );
+  const totalAssignedMins = allKtvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
+  const ktvSegments = allKtvSegments;
   
   // Xác định vị trí chặng hiện tại
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
@@ -292,10 +307,11 @@ function ScreenDashboard({ logic }: { logic: any }) {
               <div className="mb-4">
                    <div className="flex flex-col">
                       <h3 className="font-black text-3xl text-emerald-700 leading-tight tracking-tight">
-                        {item.service_name}
+                        {allServiceNames.length > 1 ? allServiceNames.join(' + ') : item.service_name}
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{item.duration} phút</span>
+                        <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{totalAssignedMins || item.duration} phút</span>
+                        {allServiceNames.length > 1 && <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-lg">{allServiceNames.length} DV</span>}
                         <span className="text-sm font-black text-slate-800">#{booking.billCode}</span>
                       </div>
                       {coWorkers.length > 0 && (
@@ -404,19 +420,29 @@ function ScreenTimer({ logic }: { logic: any }) {
 
   const currentSecs = isPrepping ? prepTimeRemaining : timeRemaining;
   
-  // Lấy đúng dịch vụ mà KTV này được gán
-  const item = booking?.assignedItemId 
-    ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
-    : (booking?.BookingItems?.[0] || {});
+  // Lấy tất cả DV mà KTV này được gán (hỗ trợ multi-item)
+  const allTimerItemIds: string[] = booking?.assignedItemIds?.length > 0
+    ? booking.assignedItemIds
+    : (booking?.assignedItemId ? [booking.assignedItemId] : []);
+  const allTimerItems = allTimerItemIds.length > 0
+    ? booking?.BookingItems?.filter((i: any) => allTimerItemIds.includes(i.id)) || []
+    : [booking?.BookingItems?.[0]].filter(Boolean);
+  const item = allTimerItems[0] || {};
+  const allTimerServiceNames = allTimerItems.map((i: any) => i.service_name).filter(Boolean);
+  
+  // Gộp tất cả segments của KTV này
+  const ktvSegments = allTimerItems.flatMap((i: any) => 
+    (i?.segments || []).filter((s: any) => s.ktvId === logic.user?.id)
+  );
+  const totalAssignedMins = ktvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
+  const displayDuration = totalAssignedMins || item.duration || 60;
 
   const totalDuration = isPrepping 
     ? (logic.settings?.ktv_setup_duration_minutes || 10) * 60 
-    : (item.duration || 60) * 60;
+    : displayDuration * 60;
   
   // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
   const progress = (currentSecs / totalDuration) * 100;
-
-  const ktvSegments = item?.segments?.filter((s: any) => s.ktvId === logic.user?.id) || [];
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
   const nextSeg = ktvSegments.length > (activeSegmentIndex + 1) ? ktvSegments[activeSegmentIndex + 1] : null;
 
@@ -460,7 +486,7 @@ function ScreenTimer({ logic }: { logic: any }) {
       <div className="flex justify-between items-start mb-6 px-2">
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-black text-emerald-700 leading-tight tracking-tight">
-            {item.service_name}
+            {allTimerServiceNames.length > 1 ? allTimerServiceNames.join(' + ') : item.service_name}
           </h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-slate-800 font-black">
@@ -475,7 +501,7 @@ function ScreenTimer({ logic }: { logic: any }) {
             <div className="w-px h-3 bg-slate-200" />
             <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs">
               <Clock size={14} />
-              <span>{item.duration} phút</span>
+              <span>{displayDuration} phút</span>
             </div>
           </div>
         </div>
@@ -578,10 +604,23 @@ function ScreenTimer({ logic }: { logic: any }) {
           <button
             onClick={handleFinishTimer}
             disabled={logic.isLoading}
-            className={`w-full h-16 ${THEME.radius} bg-slate-900 text-white font-black text-lg shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-[0.98] transition-all`}
+            className={`w-full h-16 ${THEME.radius} ${
+              ktvSegments.length > 1 && activeSegmentIndex < ktvSegments.length - 1
+                ? 'bg-indigo-600 shadow-indigo-200'
+                : 'bg-slate-900 shadow-slate-200'
+            } text-white font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-[0.98] transition-all`}
           >
-            <CheckCircle size={24} />
-            HOÀN THÀNH
+            {ktvSegments.length > 1 && activeSegmentIndex < ktvSegments.length - 1 ? (
+              <>
+                <ArrowRight size={24} />
+                XONG CHẶNG {activeSegmentIndex + 1} → CHẶNG {activeSegmentIndex + 2}
+              </>
+            ) : (
+              <>
+                <CheckCircle size={24} />
+                HOÀN THÀNH
+              </>
+            )}
           </button>
         )}
       </div>

@@ -79,7 +79,7 @@ export async function GET(request: Request) {
         console.log('🔍 [DEBUG] bookingIds:', JSON.stringify(bookingIds));
         const { data: items, error: iErr } = await supabase
             .from('BookingItems')
-            .select('id, bookingId, serviceId, technicianCodes, tip, timeStart, timeEnd')
+            .select('id, bookingId, serviceId, technicianCodes, tip, segments')
             .in('bookingId', bookingIds);
         console.log('🔍 [DEBUG] BookingItems error:', iErr, 'count:', items?.length);
 
@@ -138,10 +138,24 @@ export async function GET(request: Request) {
 
             console.log(`🔍 [DEBUG] Booking ${b.billCode}: myItems=${myItems.length}, relevant=${relevantItems.length}, tips=${relevantItems.map((i: any) => i.tip)}`);
 
-            // Duration: lấy từ bảng Services theo serviceId
-            const totalDuration = relevantItems.reduce((sum: number, i: any) => {
-                return sum + (svcDurationMap[String(i.serviceId)] || 60);
-            }, 0);
+            // Duration: lấy từ segments mà admin gán cho KTV này
+            let totalDuration = 0;
+            for (const item of relevantItems) {
+                let segs: any[] = [];
+                try {
+                    segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []);
+                } catch { segs = []; }
+                // Tìm segments gán cho KTV này
+                const mySegs = segs.filter((seg: any) =>
+                    seg.ktvId && seg.ktvId.toLowerCase().includes(techCode.toLowerCase())
+                );
+                if (mySegs.length > 0) {
+                    totalDuration += mySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
+                } else {
+                    // Fallback: dùng service duration nếu không có segments
+                    totalDuration += svcDurationMap[String(item.serviceId)] || 60;
+                }
+            }
             const commission = calcCommission(totalDuration || 60, milestones, rate);
 
             const serviceNames = relevantItems

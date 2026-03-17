@@ -119,6 +119,12 @@ export default function DispatchBoardPage() {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
+  // 🛡️ Ref to track if admin is actively editing dispatch form
+  const selectedOrderIdRef = useRef(selectedOrderId);
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrderId;
+  }, [selectedOrderId]);
+
   // 📡 Realtime Subscriptions
   useEffect(() => {
     setMounted(true);
@@ -143,7 +149,11 @@ export default function DispatchBoardPage() {
             : o
         ));
 
-        // Refetch in background to sync everything else
+        // 🛡️ Skip full refetch if admin is editing dispatch form — avoid losing unsaved changes
+        if (selectedOrderIdRef.current) {
+          console.log('🛡️ [Dispatch] Skipping fetchData — admin editing form');
+          return;
+        }
         fetchData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, (payload: any) => {
@@ -153,13 +163,14 @@ export default function DispatchBoardPage() {
         if (payload.eventType === 'UPDATE') {
           setTurns(prev => prev.map(t => t.employee_id === payload.new.employee_id ? { ...t, ...payload.new } : t));
         } else {
-          // INSERT or DELETE: full sync to maintain order/length
-          fetchData();
+          // INSERT or DELETE: full sync — but skip if editing
+          if (!selectedOrderIdRef.current) fetchData();
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'StaffNotifications' }, (payload) => {
         console.log("📡 [Dispatch] New StaffNotification", payload.new.type);
-        fetchData();
+        // 🛡️ Skip refetch if editing form
+        if (!selectedOrderIdRef.current) fetchData();
       })
       .subscribe();
 
@@ -556,6 +567,21 @@ if (!hasPermission('dispatch_board')) {
         }
       }
 
+      // ✅ Gộp assignments cùng KTV (1 KTV + 2 DV) → lưu tất cả item IDs
+      const mergedAssignments: typeof allStaffAssignments = [];
+      const ktvMap = new Map<string, typeof allStaffAssignments[0]>();
+      for (const a of allStaffAssignments) {
+        const existing = ktvMap.get(a.ktvId);
+        if (existing) {
+          // Gộp: nối bookingItemId, lấy endTime muộn nhất
+          existing.bookingItemId = `${existing.bookingItemId},${a.bookingItemId}`;
+          if (a.endTime > (existing.endTime || '')) existing.endTime = a.endTime;
+        } else {
+          ktvMap.set(a.ktvId, { ...a });
+        }
+      }
+      mergedAssignments.push(...ktvMap.values());
+
       const combinedTechCodes = Array.from(techCodesSet).join(', ');
       
       const primaryService = selectedOrder.services[0];
@@ -591,7 +617,7 @@ if (!hasPermission('dispatch_board')) {
         technicianCode: combinedTechCodes,
         bedId: primarySeg?.bedId || null,
         roomName: primarySeg?.roomId || null,
-        staffAssignments: allStaffAssignments,
+        staffAssignments: mergedAssignments,
         date: selectedDate,
         notes: primaryService?.adminNote || '',
         itemUpdates: itemUpdates
@@ -918,19 +944,18 @@ if (!hasPermission('dispatch_board')) {
                     .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                     .filter(Boolean) as string[];
 
-                  // 2. Giường bận do dịch vụ KHÁC trong cùng đơn (co-working cùng DV được phép chung giường)
+                  // 2. Giường bận do DV KHÁC trong cùng đơn — nhưng CHO PHÉP nếu cùng KTV
+                  const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
                   const busyInCurrentOrder = selectedOrder.services
-                    .filter(s => s.id !== svc.id) // Loại trừ DV hiện tại → co-working cùng DV OK
-                    .flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId)))
+                    .filter(s => s.id !== svc.id)
+                    .flatMap(s => s.staffList
+                      .filter(r => !currentSvcKtvIds.includes(r.ktvId)) // Cùng KTV → cho chung giường
+                      .flatMap(r => r.segments.map(seg => seg.bedId)))
                     .filter(Boolean) as string[];
 
                   const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
 
-                  // 🚩 LOGIC: Xác định KTV đã gán ở DV KHÁC trong cùng đơn (không cho gán trùng)
-                  const usedKtvIdsInOtherSvc = selectedOrder.services
-                    .filter(s => s.id !== svc.id)
-                    .flatMap(s => s.staffList.map(r => r.ktvId))
-                    .filter(Boolean);
+                  // ✅ Cho phép 1 KTV gán cho nhiều DV trong cùng đơn (1KH + 2DV + 1KTV)
 
                   return (
                     <DispatchServiceBlock
@@ -941,7 +966,7 @@ if (!hasPermission('dispatch_board')) {
                       rooms={rooms}
                       beds={beds}
                       busyBedIds={allBusyBedIds}
-                      usedKtvIds={usedKtvIdsInOtherSvc}
+                      usedKtvIds={[]}
                       availableTurns={turns}
                       onUpdateSvc={updateSvcField}
                       onUpdateStaff={updateStaffRow}

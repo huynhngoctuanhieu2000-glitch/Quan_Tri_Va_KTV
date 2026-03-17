@@ -61,6 +61,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const bookingRef = useRef<any>(null);
     const isPreppingRef = useRef<boolean>(false);
     const isTimerRunningRef = useRef<boolean>(false);
+    const manualSegmentOverrideRef = useRef<boolean>(false);
 
     useEffect(() => { screenRef.current = screen; }, [screen]);
     useEffect(() => { bookingRef.current = booking; }, [booking]);
@@ -110,11 +111,16 @@ export function useKTVDashboard(config?: DashboardConfig) {
     // 🕒 Active Segment & Shifting Logic
     useEffect(() => {
         if (!booking || booking.status !== 'IN_PROGRESS') {
-            setActiveSegmentIndex(0);
+            if (!manualSegmentOverrideRef.current) setActiveSegmentIndex(0);
             return;
         }
 
+        // Skip auto-calc khi KTV đã bấm chuyển chặng thủ công
+        if (manualSegmentOverrideRef.current) return;
+
         const updateActiveSegment = () => {
+            if (manualSegmentOverrideRef.current) return;
+
             // 1. Tìm dịch vụ được gán cho KTV này
             const assignedItem = booking.assignedItemId 
                 ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
@@ -139,7 +145,6 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const segStartMs = actualStartMs + currentOffsetMs;
                 const segEndMs = segStartMs + (seg.duration * 60 * 1000);
                 
-                // Nếu thời gian hiện tại đã vượt qua điểm bắt đầu chặng này
                 if (nowMs >= segStartMs) {
                     foundIdx = idx;
                 }
@@ -151,7 +156,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         };
 
         updateActiveSegment();
-        const interval = setInterval(updateActiveSegment, 10000); // Check mỗi 10s
+        const interval = setInterval(updateActiveSegment, 10000);
         return () => clearInterval(interval);
     }, [booking]);
 
@@ -374,25 +379,51 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             // Lưu trạng thái tính toán vào object để so sánh lần sau
                             res.data.currentStatus = currentStatus;
                             
-                            // Tính thời gian cho item được gán
-                            const duration = assignedItem?.duration || 60;
-
-                            // Luôn cập nhật thời gian nếu đơn mới hoặc đang chạy để đồng bộ với Database
-                            if (isNew || (currentStatus === 'IN_PROGRESS' && (assignedItem?.timeStart || res.data.timeStart))) {
-                                const totalSecs = duration * 60;
-                                let tStart = assignedItem?.timeStart || res.data.timeStart;
+                            // Tính thời gian cho TẤT CẢ items được gán (multi-item support)
+                            const allItemIds: string[] = res.data.assignedItemIds?.length > 0
+                                ? res.data.assignedItemIds
+                                : (res.data.assignedItemId ? [res.data.assignedItemId] : []);
+                            const allAssignedItems = allItemIds.length > 0
+                                ? res.data.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+                                : [assignedItem].filter(Boolean);
+                            
+                            // Tổng segment duration admin gán cho KTV này
+                            let totalSegMins = 0;
+                            for (const ai of allAssignedItems) {
+                                let segs: any[] = [];
+                                try {
+                                    segs = typeof ai?.segments === 'string' 
+                                        ? JSON.parse(ai.segments) 
+                                        : (Array.isArray(ai?.segments) ? ai.segments : []);
+                                } catch { segs = []; }
                                 
-                                if (currentStatus === 'IN_PROGRESS' && tStart) {
-                                    if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
-                                        tStart = tStart.replace(' ', 'T') + 'Z';
-                                    }
-                                    const start = new Date(tStart).getTime();
-                                    const now = new Date().getTime();
-                                    const elapsed = Math.floor((now - start) / 1000);
-                                    setTimeRemaining(Math.max(0, totalSecs - elapsed));
+                                const mySegs = segs.filter((seg: any) => 
+                                    seg.ktvId && user?.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
+                                );
+                                if (mySegs.length > 0) {
+                                    totalSegMins += mySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
                                 } else {
-                                    setTimeRemaining(totalSecs);
+                                    totalSegMins += ai?.duration || 60;
                                 }
+                            }
+                            const duration = totalSegMins || assignedItem?.duration || 60;
+                            console.log("⏱️ [Timer] totalSegMins:", totalSegMins, "duration:", duration, "items:", allAssignedItems.length);
+
+                            // Luôn cập nhật thời gian khi data thay đổi
+                            const totalSecs = duration * 60;
+                            let tStart = assignedItem?.timeStart || res.data.timeStart;
+                            
+                            if (currentStatus === 'IN_PROGRESS' && tStart) {
+                                if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
+                                    tStart = tStart.replace(' ', 'T') + 'Z';
+                                }
+                                const start = new Date(tStart).getTime();
+                                const now = new Date().getTime();
+                                const elapsed = Math.floor((now - start) / 1000);
+                                setTimeRemaining(Math.max(0, totalSecs - elapsed));
+                            } else if (!isTimerRunningRef.current) {
+                                // Chỉ reset timer khi CHƯA chạy (tránh nhảy số khi đang đếm ngược)
+                                setTimeRemaining(totalSecs);
                             }
 
                             return res.data;
@@ -572,6 +603,44 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     const handleFinishTimer = async () => {
         if (!booking || !user?.id) return;
+
+        // Lấy tất cả segments của KTV này (multi-item support)
+        const allItemIds: string[] = booking.assignedItemIds?.length > 0
+            ? booking.assignedItemIds
+            : (booking.assignedItemId ? [booking.assignedItemId] : []);
+        const allItems = allItemIds.length > 0
+            ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+            : [booking.BookingItems?.[0]].filter(Boolean);
+        
+        let allMySegs: any[] = [];
+        for (const ai of allItems) {
+            let segs: any[] = [];
+            try {
+                segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
+            } catch { segs = []; }
+            const mySegs = segs.filter((seg: any) => seg.ktvId && user.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase()));
+            allMySegs.push(...mySegs);
+        }
+
+        const totalSegs = allMySegs.length;
+        const currentIdx = activeSegmentIndex;
+
+        // 🚩 Nếu còn chặng tiếp → chuyển sang chặng mới, reset timer
+        if (totalSegs > 1 && currentIdx < totalSegs - 1) {
+            const nextIdx = currentIdx + 1;
+            const nextSeg = allMySegs[nextIdx];
+            const nextDuration = Number(nextSeg?.duration) || 60;
+            
+            console.log(`⏭️ [KTV] Completing segment ${currentIdx + 1}/${totalSegs}, moving to segment ${nextIdx + 1} (${nextDuration} min)`);
+            
+            manualSegmentOverrideRef.current = true; // Ngăn auto-calc ghi đè
+            setActiveSegmentIndex(nextIdx);
+            setTimeRemaining(nextDuration * 60);
+            // Timer tiếp tục chạy — không stop
+            return;
+        }
+
+        // 🏁 Chặng cuối → COMPLETED toàn bộ
         setIsLoading(true);
         const response = await fetch('/api/ktv/booking', {
             method: 'PATCH',
@@ -631,13 +700,39 @@ export function useKTVDashboard(config?: DashboardConfig) {
         if (!booking || !user?.id) return;
         setIsLoading(true);
         try {
-            // 🔥 TÍNH TIỀN TUA CHÍNH XÁC: Chỉ tính theo dịch vụ KTV này đảm nhận
-            const assignedItem = booking.assignedItemId 
-                ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
-                : booking.BookingItems?.[0];
+            // 🔥 TÍNH TIỀN TUA CHÍNH XÁC: Theo thời gian admin gán trong segments
+            // Hỗ trợ multi-item: 1 KTV + 2 DV → assignedItemIds = ["id1", "id2"]
+            const itemIds: string[] = booking.assignedItemIds?.length > 0
+                ? booking.assignedItemIds
+                : (booking.assignedItemId ? [booking.assignedItemId] : []);
             
-            const totalMins = assignedItem?.duration || 60;
-            console.log("💰 [Commission] Calculating for item:", assignedItem?.id, "Duration:", totalMins);
+            const assignedItems = itemIds.length > 0
+                ? booking.BookingItems?.filter((i: any) => itemIds.includes(i.id)) || []
+                : [booking.BookingItems?.[0]].filter(Boolean);
+            
+            // Tổng tất cả segment duration của KTV này across all assigned items
+            let totalMins = 0;
+            for (const item of assignedItems) {
+                if (item?.segments) {
+                    try {
+                        const segs = typeof item.segments === 'string' 
+                            ? JSON.parse(item.segments) 
+                            : (item.segments || []);
+                        const mySegs = segs.filter((seg: any) => 
+                            seg.ktvId && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
+                        );
+                        if (mySegs.length > 0) {
+                            totalMins += mySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
+                        } else {
+                            totalMins += item.duration || 60;
+                        }
+                    } catch { totalMins += item.duration || 60; }
+                } else {
+                    totalMins += item?.duration || 60;
+                }
+            }
+            if (totalMins === 0) totalMins = 60; // fallback
+            console.log("💰 [Commission] Items:", itemIds.length, "Total Duration:", totalMins);
 
             // 1. Giải phóng KTV khỏi TurnQueue
             const response = await fetch('/api/ktv/booking', {
