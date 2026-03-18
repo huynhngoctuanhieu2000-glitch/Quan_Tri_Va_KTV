@@ -601,27 +601,23 @@ function ScreenTimer({ logic }: { logic: any }) {
             )}
           </div>
         ) : (
-          <button
-            onClick={handleFinishTimer}
-            disabled={logic.isLoading}
-            className={`w-full h-16 ${THEME.radius} ${
-              ktvSegments.length > 1 && activeSegmentIndex < ktvSegments.length - 1
-                ? 'bg-indigo-600 shadow-indigo-200'
-                : 'bg-slate-900 shadow-slate-200'
-            } text-white font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-[0.98] transition-all`}
-          >
-            {ktvSegments.length > 1 && activeSegmentIndex < ktvSegments.length - 1 ? (
-              <>
-                <ArrowRight size={24} />
-                XONG CHẶNG {activeSegmentIndex + 1} → CHẶNG {activeSegmentIndex + 2}
-              </>
-            ) : (
-              <>
-                <CheckCircle size={24} />
-                HOÀN THÀNH
-              </>
-            )}
-          </button>
+          ktvSegments.length > 1 && activeSegmentIndex < ktvSegments.length - 1 ? (
+            /* Multi-segment: nút chuyển chặng thủ công */
+            <button
+              onClick={handleFinishTimer}
+              disabled={logic.isLoading}
+              className={`w-full h-16 ${THEME.radius} bg-indigo-600 shadow-indigo-200 text-white font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-[0.98] transition-all`}
+            >
+              <ArrowRight size={24} />
+              XONG CHẶNG {activeSegmentIndex + 1} → CHẶNG {activeSegmentIndex + 2}
+            </button>
+          ) : (
+            /* Chặng cuối / đơn chặng: tự động hoàn tất khi hết giờ */
+            <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+              <Clock size={16} className="text-emerald-600 animate-pulse" />
+              <span className="text-sm font-bold text-emerald-700">Hệ thống tự động hoàn tất khi hết giờ</span>
+            </div>
+          )
         )}
       </div>
 
@@ -704,86 +700,120 @@ function ChecklistItem({ label, checked, onChange }: { label: string, checked: b
 }
 
 function ScreenReview({ logic }: { logic: any }) {
-  const { booking, handleSubmitReview, goToDashboard } = logic;
-  const [isCompleted, setIsCompleted] = useState(false);
+  const { booking, handleSubmitReview } = logic;
   const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
 
-  const PERSONALITY_TRAITS = [
-    { label: 'Khách Dê Xồm', color: 'bg-rose-50 text-rose-700 border-rose-100' },
-    { label: 'Thiếu tôn trọng KTV', color: 'bg-red-50 text-red-700 border-red-100' },
-    { label: 'Khách Kỹ Tính + Khó Chịu', color: 'bg-orange-50 text-orange-700 border-orange-100' },
-    { label: 'Yêu cầu sự tinh tế', color: 'bg-amber-50 text-amber-700 border-amber-100' },
-    { label: 'Khách Dễ Thương', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-    { label: 'Thân thiện, cởi mở', color: 'bg-teal-50 text-teal-700 border-teal-100' },
-    { label: 'Khách Hướng Nội', color: 'bg-blue-50 text-blue-700 border-blue-100' },
-    { label: 'Thích yên tĩnh, ít nói', color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
-    { label: 'Khách Hướng Ngoại', color: 'bg-purple-50 text-purple-700 border-purple-100' },
-    { label: 'Thích giao lưu, kết nối', color: 'bg-pink-50 text-pink-700 border-pink-100' },
+  // 🔧 UI CONFIGURATION — Personality categories matching mockup
+  const PERSONALITY_CATEGORIES = [
+    {
+      id: 'de_xom',
+      label: 'Khách Dê Xồm',
+      subtitle: 'Thiếu tôn trọng KTV',
+      icon: <AlertTriangle size={20} />,
+      selectedStyle: 'bg-rose-50 border-rose-400 text-rose-700',
+      iconBg: 'bg-rose-100 text-rose-600',
+    },
+    {
+      id: 'ky_tinh',
+      label: 'Khách Kỹ Tính + Khó Chịu',
+      subtitle: 'Yêu cầu sự tinh tế',
+      icon: <AlertCircle size={20} />,
+      selectedStyle: 'bg-emerald-50 border-emerald-400 text-emerald-700',
+      iconBg: 'bg-slate-100 text-slate-500',
+    },
+    {
+      id: 'de_thuong',
+      label: 'Khách Dễ Thương',
+      subtitle: 'Thân thiện, cởi mở',
+      icon: <Heart size={20} />,
+      selectedStyle: 'bg-emerald-50 border-emerald-400 text-emerald-700',
+      iconBg: 'bg-slate-100 text-slate-500',
+    },
+    {
+      id: 'huong_noi',
+      label: 'Khách Hướng Nội',
+      subtitle: 'Thích yên tĩnh, ít nói',
+      icon: <MicOff size={20} />,
+      selectedStyle: 'bg-emerald-50 border-emerald-400 text-emerald-700',
+      iconBg: 'bg-slate-100 text-slate-500',
+    },
+    {
+      id: 'huong_ngoai',
+      label: 'Khách Hướng Ngoại',
+      subtitle: 'Thích giao lưu, kết nối',
+      icon: <Users size={20} />,
+      selectedStyle: 'bg-emerald-50 border-emerald-400 text-emerald-700',
+      iconBg: 'bg-slate-100 text-slate-500',
+    },
   ];
 
-  const toggleTrait = (trait: string) => {
-    setSelectedTraits(prev => 
-      prev.includes(trait) ? prev.filter(t => t !== trait) : [...prev, trait]
+  const toggleTrait = (label: string) => {
+    setSelectedTraits(prev =>
+      prev.includes(label) ? prev.filter(t => t !== label) : [...prev, label]
     );
   };
 
   return (
-    <div className="p-6 pt-10 space-y-8">
-      <div className="text-center space-y-3">
-        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto shadow-inner">
-          <CheckCircle2 className="text-emerald-600" size={40} />
+    <div className="p-5 pt-10 space-y-6 max-w-lg mx-auto">
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+          <CheckCircle2 className="text-emerald-500" size={36} />
         </div>
         <h2 className="text-2xl font-black text-slate-800">Dịch vụ hoàn tất!</h2>
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 text-left shadow-sm">
-           <ShieldAlert className="text-amber-600 shrink-0 mt-0.5" size={18} />
-           <p className="text-xs font-black text-amber-800 leading-relaxed uppercase tracking-tight">
-             Nhắc khách kiểm tra điện thoại, ví tiền và tư trang trước khi ra khỏi phòng!
-           </p>
+        <p className="text-sm text-slate-400 font-medium">Đánh giá hồ sơ khách hàng</p>
+      </div>
+
+      {/* Warning Banner */}
+      <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
+        <div className="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+          <AlertTriangle className="text-rose-500" size={16} />
         </div>
+        <p className="text-xs font-black text-rose-700 leading-relaxed uppercase tracking-tight">
+          Nhắc khách kiểm tra lại điện thoại, ví tiền và nữ trang trước khi rời phòng
+        </p>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Xác nhận công việc</h3>
-        <button
-          onClick={() => setIsCompleted(!isCompleted)}
-          className={`w-full flex items-center justify-between p-5 ${THEME.radius} border-2 transition-all
-          ${isCompleted ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-100' : 'border-slate-100 bg-white hover:border-emerald-200'}`}
-        >
-          <span className={`text-sm font-black ${isCompleted ? 'text-emerald-700' : 'text-slate-600'}`}>Tôi đã hoàn tất dịch vụ chuẩn chỉ</span>
-          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all
-            ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-200 bg-white'}`}>
-            {isCompleted && <CheckCircle size={16} strokeWidth={3} />}
-          </div>
-        </button>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Đặc điểm khách hàng</h3>
-        <div className="grid grid-cols-1 gap-2">
-          {PERSONALITY_TRAITS.map((trait) => (
+      {/* Personality Categories */}
+      <div className="space-y-3">
+        {PERSONALITY_CATEGORIES.map((cat) => {
+          const isSelected = selectedTraits.includes(cat.label);
+          return (
             <button
-              key={trait.label}
-              onClick={() => toggleTrait(trait.label)}
-              className={`p-4 rounded-2xl text-left border-2 transition-all font-bold text-xs flex items-center justify-between
-              ${selectedTraits.includes(trait.label) 
-                ? `${trait.color} border-current scale-[1.02] shadow-sm` 
-                : 'bg-white border-slate-50 text-slate-500 hover:border-slate-200'}`}
+              key={cat.id}
+              onClick={() => toggleTrait(cat.label)}
+              className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all active:scale-[0.98] ${
+                isSelected
+                  ? cat.selectedStyle
+                  : 'bg-white border-slate-100 text-slate-700 hover:border-slate-200'
+              }`}
             >
-              {trait.label}
-              {selectedTraits.includes(trait.label) && <Star size={14} className="fill-current" />}
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                isSelected
+                  ? (cat.id === 'de_xom' ? 'bg-rose-200 text-rose-600' : 'bg-emerald-200 text-emerald-600')
+                  : cat.iconBg
+              }`}>
+                {cat.icon}
+              </div>
+              <div className="text-left flex-1">
+                <p className="font-black text-sm">{cat.label}</p>
+                <p className={`text-xs font-medium mt-0.5 ${isSelected ? 'opacity-80' : 'text-slate-400'}`}>
+                  {cat.subtitle}
+                </p>
+              </div>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      <div className="pb-10">
+      {/* Submit Button */}
+      <div className="pb-10 pt-2">
         <button
-          onClick={() => handleSubmitReview(5, selectedTraits.join(', '))}
-          disabled={!isCompleted || logic.isLoading}
-          className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl transition-all
-          ${isCompleted ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-slate-200 text-slate-400'}`}
+          onClick={() => handleSubmitReview({ personality: selectedTraits })}
+          disabled={logic.isLoading}
+          className="w-full py-4 rounded-2xl font-black text-base shadow-lg transition-all active:scale-[0.97] bg-emerald-600 text-white shadow-emerald-200 hover:bg-emerald-700 disabled:opacity-50"
         >
-          {logic.isLoading ? 'Đang lưu...' : 'Lưu & Tiếp tục dọn phòng'}
+          {logic.isLoading ? 'Đang lưu...' : `Lưu hồ sơ${selectedTraits.length > 0 ? ` (${selectedTraits.length})` : ''}`}
         </button>
       </div>
     </div>

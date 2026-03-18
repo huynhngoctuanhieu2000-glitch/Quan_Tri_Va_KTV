@@ -62,6 +62,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const isPreppingRef = useRef<boolean>(false);
     const isTimerRunningRef = useRef<boolean>(false);
     const manualSegmentOverrideRef = useRef<boolean>(false);
+    const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
 
     useEffect(() => { screenRef.current = screen; }, [screen]);
     useEffect(() => { bookingRef.current = booking; }, [booking]);
@@ -529,9 +530,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
         } else if (isTimerRunning && timeRemaining > 0) {
             timer = setInterval(() => {
                 setTimeRemaining(prev => {
-                    if (prev <= 1 && settings.auto_finish_on_timer_end) {
-                        // Tự động kết thúc nếu hết giờ
-                        handleFinishTimer();
+                    if (prev <= 1) {
+                        // Auto-finish: tự động hoàn tất khi hết giờ (dùng ref tránh stale closure)
+                        handleFinishTimerRef.current();
                         return 0;
                     }
                     return prev - 1;
@@ -539,7 +540,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }, 1000);
         }
         return () => clearInterval(timer);
-    }, [isPrepping, prepTimeRemaining, isTimerRunning, timeRemaining, settings.auto_finish_on_timer_end]);
+    }, [isPrepping, prepTimeRemaining, isTimerRunning, timeRemaining]);
 
     const toggleChecklist = (key: keyof typeof checklist) => {
         setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
@@ -661,6 +662,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
         }
         setIsLoading(false);
     };
+
+    // Keep ref up-to-date so timer callback always calls latest version
+    handleFinishTimerRef.current = handleFinishTimer;
 
     const handleSubmitReview = async (customerProfile: any) => {
         if (!booking || !user?.id) return;
