@@ -49,23 +49,24 @@ export async function GET(request: Request) {
             } catch { /* use default */ }
         }
 
-        // ─── Build date range (VN → UTC) ────────────────────────────────
+        // ─── Build date range ────────────────────────────────────────────
         const nowVn = new Date(Date.now() + VN_OFFSET_MS);
         const todayVn = nowVn.toISOString().split('T')[0];
         const fromDate = dateFrom || todayVn;
         const toDate = dateTo || todayVn;
 
-        // VN midnight → UTC: subtract 7h
-        const fromUtc = new Date(`${fromDate}T00:00:00+07:00`).toISOString();
-        const toUtc = new Date(`${toDate}T23:59:59+07:00`).toISOString();
+        // createdAt có thể là timestamp (VN local) hoặc timestamptz (UTC)
+        // Dùng VN midnight trực tiếp — PostgreSQL sẽ cast chính xác cho cả 2 kiểu
+        const fromFilter = `${fromDate}T00:00:00`;
+        const toFilter = `${toDate}T23:59:59`;
 
         // ─── Fetch Bookings ──────────────────────────────────────────────
         const { data: bookings, error: bErr } = await supabase
             .from('Bookings')
             .select('id, billCode, createdAt, status, rating, tip, technicianCode')
             .ilike('technicianCode', `%${techCode}%`)
-            .gte('createdAt', fromUtc)
-            .lte('createdAt', toUtc)
+            .gte('createdAt', fromFilter)
+            .lte('createdAt', toFilter)
             .order('createdAt', { ascending: false })
             .limit(100);
 
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
         console.log('🔍 [DEBUG] bookingIds:', JSON.stringify(bookingIds));
         const { data: items, error: iErr } = await supabase
             .from('BookingItems')
-            .select('id, bookingId, serviceId, technicianCodes, tip, segments')
+            .select('id, bookingId, serviceId, technicianCodes, tip, segments, itemRating')
             .in('bookingId', bookingIds);
         console.log('🔍 [DEBUG] BookingItems error:', iErr, 'count:', items?.length);
 
@@ -165,9 +166,15 @@ export async function GET(request: Request) {
                 ? `${serviceNames.length} dịch vụ`
                 : (serviceNames[0] || '—');
 
+            // ─── Rating: lấy từ BookingItems (item-level) thay vì Bookings ────
+            const itemRating = relevantItems.reduce((best: number, i: any) => {
+                const r = Number(i.itemRating) || 0;
+                return r > best ? r : best;
+            }, 0) || null;
+
             // ─── Bonus points: 25đ ÷ số KTV khi rating ≥ 4 ─────────────
             let bonusPoints = 0;
-            if (b.rating && b.rating >= 4 && b.technicianCode) {
+            if (itemRating && itemRating >= 4 && b.technicianCode) {
                 const numTechs = b.technicianCode.split(',').filter((t: string) => t.trim()).length;
                 bonusPoints = numTechs > 0 ? Math.round(25 / numTechs) : 0;
             }
@@ -180,7 +187,7 @@ export async function GET(request: Request) {
                 billCode: b.billCode,
                 createdAt: b.createdAt,
                 status: b.status,
-                rating: b.rating ?? null,
+                rating: itemRating,
                 tip: ktvTip,
                 commission,
                 serviceName,
