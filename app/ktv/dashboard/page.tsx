@@ -319,16 +319,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                         <span className="text-sm font-black text-slate-800">#{booking.billCode}</span>
                       </div>
                       {coWorkers.length > 0 && (
-                        <div className="mt-3 flex items-center gap-2">
-                           <div className="flex -space-x-2">
-                              {coWorkers.map((code: string) => (
-                                 <div key={code} className="w-6 h-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-indigo-600 shadow-sm">
-                                    {code}
-                                 </div>
-                              ))}
-                           </div>
-                           <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {coWorkers.join(', ')}</p>
-                        </div>
+                        <p className="mt-2 text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {coWorkers.join(', ')}</p>
                       )}
                    </div>
               </div>
@@ -508,6 +499,17 @@ function ScreenTimer({ logic }: { logic: any }) {
               <span>{displayDuration} phút</span>
             </div>
           </div>
+          {/* CoWorkers display in Timer */}
+          {(() => {
+            const timerTechCodes = new Set<string>();
+            (booking?.BookingItems || []).forEach((bi: any) => {
+              (bi.technicianCodes || []).forEach((code: string) => timerTechCodes.add(code));
+            });
+            const timerCoWorkers = Array.from(timerTechCodes).filter(code => code !== logic.user?.id);
+            return timerCoWorkers.length > 0 ? (
+              <p className="mt-1 text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {timerCoWorkers.join(', ')}</p>
+            ) : null;
+          })()}
         </div>
         {!isTimerRunning && (
           <button 
