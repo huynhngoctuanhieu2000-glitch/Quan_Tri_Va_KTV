@@ -596,8 +596,9 @@ if (!hasPermission('dispatch_board')) {
 
           return {
               id: svc.id,
-              roomName: primarySeg?.roomId, 
-              bedId: primarySeg?.bedId,
+              // Lấy room/bed riêng cho service này từ segment đầu tiên của nó
+              roomName: allSegments[0]?.roomId || primarySeg?.roomId, 
+              bedId: allSegments[0]?.bedId || primarySeg?.bedId,
               technicianCodes: svc.staffList.map(r => r.ktvId).filter(Boolean),
               status: 'PREPARING', 
               segments: allSegments,
