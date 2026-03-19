@@ -298,8 +298,11 @@ export async function PATCH(request: Request) {
                 }
             }
 
-            updatePayload.timeStart = new Date().toISOString();
-            itemUpdatePayload.timeStart = new Date().toISOString();
+            // 🔧 FIX: Dùng 1 timestamp duy nhất cho cả Booking + BookingItem
+            // Tránh lệch giây giữa timer KTV và khách hàng
+            const sharedTimeStart = new Date().toISOString();
+            updatePayload.timeStart = sharedTimeStart;
+            itemUpdatePayload.timeStart = sharedTimeStart;
 
             // 🚀 IN_PROGRESS: Update TẤT CẢ items của KTV này
             if (allItemIdsForThisKTV.length > 0) {
