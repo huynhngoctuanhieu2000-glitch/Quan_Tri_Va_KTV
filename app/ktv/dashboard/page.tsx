@@ -247,8 +247,12 @@ function ScreenDashboard({ logic }: { logic: any }) {
   // Xác định vị trí chặng hiện tại
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
 
-  // Lấy danh sách đồng đội cùng làm item này
-  const coWorkers = item?.technicianCodes?.filter((code: string) => code !== logic.user?.id) || [];
+  // Lấy danh sách đồng đội cùng làm đơn này (gộp từ TẤT CẢ BookingItems)
+  const allTechCodesSet = new Set<string>();
+  (booking?.BookingItems || []).forEach((bi: any) => {
+      (bi.technicianCodes || []).forEach((code: string) => allTechCodesSet.add(code));
+  });
+  const coWorkers = Array.from(allTechCodesSet).filter(code => code !== logic.user?.id);
 
   return (
     <div className="p-2 lg:p-4 space-y-4 lg:space-y-6">

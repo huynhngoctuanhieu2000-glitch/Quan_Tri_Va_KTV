@@ -106,7 +106,11 @@ export async function GET(request: Request) {
                 
                 const opts = i.options || {};
                 const customerNote = opts.note || i.customerNote || '';
-                const noteForKtv = opts.noteForKtv || '';
+                // Per-KTV notes: ưu tiên lấy note riêng từ notesForKtvs[techCode], fallback về noteForKtv chung
+                const notesForKtvs = opts.notesForKtvs || {};
+                const noteForKtv = (technicianCode && notesForKtvs[technicianCode]) 
+                    ? notesForKtvs[technicianCode] 
+                    : (opts.noteForKtv || '');
                 const focusAreas = Array.isArray(opts.focus) ? opts.focus.join(', ') : (i.focus || opts.focusArea || '');
                 const avoidAreas = Array.isArray(opts.avoid) ? opts.avoid.join(', ') : (opts.avoid || '');
                 const strength = opts.strength || '';

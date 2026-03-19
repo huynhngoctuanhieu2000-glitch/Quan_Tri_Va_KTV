@@ -607,7 +607,12 @@ if (!hasPermission('dispatch_board')) {
                   strength: svc.strength,
                   focus: svc.focus.split(',').map(f => f.trim()).filter(Boolean),
                   avoid: svc.avoid.split(',').map(a => a.trim()).filter(Boolean),
-                  noteForKtv: svc.staffList?.[0]?.noteForKtv || '' 
+                  noteForKtv: svc.staffList?.[0]?.noteForKtv || '',
+                  notesForKtvs: Object.fromEntries(
+                      svc.staffList
+                          .filter(r => r.ktvId && r.noteForKtv)
+                          .map(r => [r.ktvId, r.noteForKtv])
+                  )
               }
           };
       });
