@@ -665,7 +665,7 @@ if (!hasPermission('dispatch_board')) {
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
     if (newStatus === 'COMPLETED') {
-      confirmMsg = `Xác nhận HOÀN THÀNH dịch vụ và chuyển sang giai đoạn DỌN PHÒNG cho KTV?`;
+      confirmMsg = `Xác nhận HOÀN THÀNH dịch vụ? Khách hàng sẽ được chuyển sang kiểm tra đồ → đánh giá.`;
     } else if (newStatus === 'DONE') {
       confirmMsg = `Xác nhận HOÀN TẤT TOÀN BỘ đơn hàng và giải phóng KTV?`;
     }
@@ -1096,11 +1096,11 @@ if (!hasPermission('dispatch_board')) {
               if (order.dispatchStatus === 'cleaning' || order.dispatchStatus === 'waiting_rating') {
                 return (
                   <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
                     className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
                   >
                     <CheckCircle2 size={18} />
-                    Hoàn tất toàn bộ đơn
+                    Hoàn tất → Kiểm tra đồ & Đánh giá
                   </button>
                 );
               }
