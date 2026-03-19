@@ -247,12 +247,11 @@ function ScreenDashboard({ logic }: { logic: any }) {
   // Xác định vị trí chặng hiện tại
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
 
-  // Lấy danh sách đồng đội cùng làm đơn này (gộp từ TẤT CẢ BookingItems)
-  const allTechCodesSet = new Set<string>();
-  (booking?.BookingItems || []).forEach((bi: any) => {
-      (bi.technicianCodes || []).forEach((code: string) => allTechCodesSet.add(code));
-  });
-  const coWorkers = Array.from(allTechCodesSet).filter(code => code !== logic.user?.id);
+  // Lấy danh sách đồng đội cùng làm CÙNG 1 DỊCH VỤ (chỉ từ item được gán cho KTV này)
+  const assignedItem = booking?.assignedItemId
+    ? booking.BookingItems?.find((bi: any) => bi.id === booking.assignedItemId)
+    : null;
+  const coWorkers = (assignedItem?.technicianCodes || []).filter((code: string) => code !== logic.user?.id);
 
   return (
     <div className="p-2 lg:p-4 space-y-4 lg:space-y-6">
@@ -499,13 +498,12 @@ function ScreenTimer({ logic }: { logic: any }) {
               <span>{displayDuration} phút</span>
             </div>
           </div>
-          {/* CoWorkers display in Timer */}
+          {/* CoWorkers display in Timer - chỉ khi cùng 1 dịch vụ */}
           {(() => {
-            const timerTechCodes = new Set<string>();
-            (booking?.BookingItems || []).forEach((bi: any) => {
-              (bi.technicianCodes || []).forEach((code: string) => timerTechCodes.add(code));
-            });
-            const timerCoWorkers = Array.from(timerTechCodes).filter(code => code !== logic.user?.id);
+            const timerAssignedItem = booking?.assignedItemId
+              ? booking.BookingItems?.find((bi: any) => bi.id === booking.assignedItemId)
+              : null;
+            const timerCoWorkers = (timerAssignedItem?.technicianCodes || []).filter((code: string) => code !== logic.user?.id);
             return timerCoWorkers.length > 0 ? (
               <p className="mt-1 text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {timerCoWorkers.join(', ')}</p>
             ) : null;
