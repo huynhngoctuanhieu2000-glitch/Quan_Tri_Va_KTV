@@ -26,3 +26,31 @@ Before editing ANY file in this project, you MUST:
 - This coordination is project-wide and applies to ALL conversations working on this codebase.
 - If `.agents/coordination.md` does not exist, create it using the template.
 - Always check coordination BEFORE making any file edits, not after.
+
+---
+
+# 📊 DATABASE SCHEMA REFERENCE (CRITICAL)
+
+## Rule: Luôn đọc schema trước khi thay đổi liên quan DB
+
+Khi code có thay đổi liên quan đến **database** (Supabase), bạn **BẮT BUỘC** phải:
+
+1. **ĐỌC** file [`TableInSupabase.md`](file:///c:/Users/ADMIN/OneDrive/Desktop/Ngan%20Ha/Quan_Tri_Va_KTV/TableInSupabase.md) **TRƯỚC KHI** viết code.
+2. **XÁC NHẬN** tên bảng, tên cột, kiểu dữ liệu, constraints từ file này.
+3. **KHÔNG** giả định cột/bảng nào tồn tại — phải kiểm tra trong file trước.
+
+## Khi nào áp dụng rule này?
+- Viết / sửa **API routes** có `.from('TableName').select(...)` hoặc `.update(...)` hoặc `.insert(...)`
+- Viết / sửa **Supabase migrations** (SQL files)
+- Viết / sửa **Supabase triggers / functions**
+- Viết / sửa **Realtime subscriptions** (`.on('postgres_changes', ...)`）
+- Thêm cột mới → phải tạo migration SQL + cập nhật `TableInSupabase.md`
+
+## Các bảng chính (tóm tắt)
+| Nhóm | Bảng |
+|------|------|
+| Core Booking | `Bookings`, `BookingItems`, `Services` |
+| KTV Management | `TurnQueue`, `KTVAttendance`, `Staff` |
+| Notification & Config | `StaffNotifications`, `SystemConfigs` |
+| Infra & CRM | `Rooms`, `Beds`, `Customers` |
+| Auth & Push | `Users`, `StaffPushSubscriptions` |
