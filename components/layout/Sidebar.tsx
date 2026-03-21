@@ -30,6 +30,7 @@ import {
   Home,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Bell,
   LogOut
 } from 'lucide-react';
@@ -85,6 +86,9 @@ const PATHS: Record<string, string> = {
   settings: '/settings',
 };
 
+// 🔧 UI CONFIGURATION
+const GROUP_ORDER = ['Vận Hành', 'Tài Chính & Kế Toán', 'Thiết Lập Nội Dung', 'Kỹ Thuật Viên', 'Hệ Thống'];
+
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -95,46 +99,65 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: SidebarProps) {
   const { hasPermission, user, role, logout } = useAuth();
   const pathname = usePathname();
-  // const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({}); // Removed
+  const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({});
 
-  // Group modules by their group property // Removed
-  // const groupedModules = MODULES.reduce((acc, module) => { // Removed
-  //   if (!acc[module.group]) { // Removed
-  //     acc[module.group] = []; // Removed
-  //   } // Removed
-  //   acc[module.group].push(module); // Removed
-  //   return acc; // Removed
-  // }, {} as Record<string, typeof MODULES>); // Removed
+  // Group modules by their group property
+  const groupedModules = React.useMemo(() => {
+    return MODULES
+      .filter(m => m.id !== 'settings' && hasPermission(m.id as any))
+      .reduce((acc, module) => {
+        if (!acc[module.group]) {
+          acc[module.group] = [];
+        }
+        acc[module.group].push(module);
+        return acc;
+      }, {} as Record<string, typeof MODULES>);
+  }, [hasPermission]);
 
-  // Mở sẵn các group có chứa link đang active // Removed
-  // React.useEffect(() => { // Removed
-  //   const newExpanded = { ...expandedGroups }; // Removed
-  //   let hasChanges = false; // Removed
+  // Auto-expand groups that contain the active link
+  React.useEffect(() => {
+    const newExpanded: Record<string, boolean> = {};
+    Object.entries(groupedModules).forEach(([groupName, modules]) => {
+      const hasActiveLink = modules.some(m => {
+        const path = PATHS[m.id];
+        return pathname === path || pathname.startsWith(path + '/');
+      });
+      if (hasActiveLink) {
+        newExpanded[groupName] = true;
+      }
+    });
+    setExpandedGroups(prev => ({ ...prev, ...newExpanded }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
-  //   Object.entries(groupedModules).forEach(([groupName, modules]) => { // Removed
-  //     const hasActiveLink = modules.some(m => { // Removed
-  //       const path = PATHS[m.id]; // Removed
-  //       return pathname === path || pathname.startsWith(path + '/'); // Removed
-  //     }); // Removed
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
 
-  //     if (hasActiveLink && !newExpanded[groupName]) { // Removed
-  //       newExpanded[groupName] = true; // Removed
-  //       hasChanges = true; // Removed
-  //     } // Removed
-  //   }); // Removed
-
-  //   if (hasChanges) { // Removed
-  //     setExpandedGroups(newExpanded); // Removed
-  //   } // Removed
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps // Removed
-  // }, [pathname]); // Removed
-
-  // const toggleGroup = (groupName: string) => { // Removed
-  //   setExpandedGroups(prev => ({ // Removed
-  //     ...prev, // Removed
-  //     [groupName]: !prev[groupName] // Removed
-  //   })); // Removed
-  // }; // Removed
+  const renderLink = (module: typeof MODULES[0], showLabel: boolean) => {
+    const path = PATHS[module.id];
+    const isActive = pathname === path || pathname.startsWith(path + '/');
+    return (
+      <Link
+        key={module.id}
+        href={path}
+        onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+        title={!showLabel ? module.name : undefined}
+        className={`flex items-center ${showLabel ? 'gap-3 px-3' : 'justify-center px-0'} py-2 rounded-xl transition-all duration-200 ${isActive
+          ? 'bg-indigo-50 text-indigo-700 font-medium shadow-sm border border-indigo-100/50'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+        }`}
+      >
+        <span className={isActive ? 'text-indigo-600' : 'text-gray-400'}>
+          {ICONS[module.id]}
+        </span>
+        {showLabel && <span className="text-sm truncate">{module.name}</span>}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -155,29 +178,24 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
       <aside
         className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-gray-200 shadow-xl lg:shadow-none lg:translate-x-0 lg:static flex flex-col h-screen transition-all duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} ${isExpanded ? 'w-64' : 'w-20'}`}
       >
-        {/* Header: User Info (replaces MENU text) */}
+        {/* Header: User Info */}
         <div className={`border-b border-gray-100 h-[69px] flex items-center ${isExpanded ? 'px-4 gap-3' : 'justify-center'}`}>
           {isExpanded ? (
             <>
-              {/* Avatar */}
               <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shrink-0">
                 {user?.name?.charAt(0)}
               </div>
-              {/* Name + Role */}
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm text-gray-900 truncate">{user?.name}</p>
                 <p className="text-[10px] text-gray-500 font-medium truncate">{role?.name}</p>
               </div>
-              {/* Actions */}
               <div className="flex items-center gap-0.5 shrink-0">
                 <button onClick={logout} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Đăng xuất">
                   <LogOut size={16} />
                 </button>
-                {/* Mobile close */}
                 <button onClick={onClose} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg lg:hidden">
                   <X size={16} />
                 </button>
-                {/* Desktop collapse toggle */}
                 {onToggleExpand && (
                   <button onClick={onToggleExpand} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg hidden lg:flex" title="Thu gọn">
                     <ChevronLeft size={16} />
@@ -187,11 +205,9 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
             </>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              {/* Avatar only when collapsed */}
               <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm cursor-pointer" title={user?.name}>
                 {user?.name?.charAt(0)}
               </div>
-              {/* Expand toggle */}
               {onToggleExpand && (
                 <button onClick={onToggleExpand} className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg hidden lg:flex" title="Mở rộng">
                   <ChevronRight size={14} />
@@ -201,31 +217,59 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
           )}
         </div>
 
-        <div className={`py-6 space-y-2 flex-1 overflow-y-auto w-full overflow-x-hidden ${isExpanded ? 'px-4' : 'px-3'}`}>
-          {MODULES.filter(m => m.id !== 'settings' && hasPermission(m.id as any)).map(module => {
-            const path = PATHS[module.id];
-            const isActive = pathname === path || pathname.startsWith(path + '/');
+        {/* Navigation */}
+        <div className={`py-4 space-y-1 flex-1 overflow-y-auto w-full overflow-x-hidden ${isExpanded ? 'px-3' : 'px-3'}`}>
+          {isExpanded ? (
+            // Expanded: Grouped dropdown navigation
+            GROUP_ORDER.filter(g => groupedModules[g]?.length > 0).map(groupName => {
+              const modules = groupedModules[groupName];
+              const isGroupExpanded = expandedGroups[groupName];
+              const hasActiveInGroup = modules.some(m => {
+                const path = PATHS[m.id];
+                return pathname === path || pathname.startsWith(path + '/');
+              });
 
-            return (
-              <Link
-                key={module.id}
-                href={path}
-                onClick={() => {
-                  if (window.innerWidth < 1024) onClose();
-                }}
-                title={!isExpanded ? module.name : undefined}
-                className={`flex items-center ${isExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2.5 rounded-xl transition-all duration-200 ${isActive
-                  ? 'bg-indigo-50 text-indigo-700 font-medium shadow-sm border border-indigo-100/50'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-              >
-                <span className={isActive ? 'text-indigo-600' : 'text-gray-400'}>
-                  {ICONS[module.id]}
-                </span>
-                {isExpanded && <span className="text-sm truncate">{module.name}</span>}
-              </Link>
-            );
-          })}
+              return (
+                <div key={groupName} className="mb-0.5">
+                  {/* Group Header */}
+                  <button
+                    onClick={() => toggleGroup(groupName)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      hasActiveInGroup ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                  >
+                    <span>{groupName}</span>
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform duration-200 ${isGroupExpanded ? 'rotate-0' : '-rotate-90'}`}
+                    />
+                  </button>
+
+                  {/* Group Items with animation */}
+                  <AnimatePresence initial={false}>
+                    {isGroupExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: 'easeInOut' }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-0.5 mt-0.5 ml-1">
+                          {modules.map(module => renderLink(module, true))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })
+          ) : (
+            // Collapsed: Icons only (flat)
+            MODULES.filter(m => m.id !== 'settings' && hasPermission(m.id as any)).map(module =>
+              renderLink(module, false)
+            )
+          )}
         </div>
 
         {/* Bottom Section for Settings */}
@@ -241,7 +285,7 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
                 className={`flex items-center ${isExpanded ? 'gap-3 px-3' : 'justify-center px-0'} py-2.5 rounded-xl transition-all duration-200 ${pathname === PATHS.settings
                   ? 'bg-indigo-50 text-indigo-700 font-medium shadow-sm border border-indigo-100/50'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
+                }`}
               >
                 <span className={pathname === PATHS.settings ? 'text-indigo-600' : 'text-gray-400'}>
                   {ICONS.settings}
@@ -250,8 +294,6 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
               </Link>
             </div>
           )}
-
-
         </div>
       </aside>
     </>

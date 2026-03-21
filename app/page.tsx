@@ -4,7 +4,8 @@
 const SYSTEM_CONFIG = {
   spa_name: 'Ngan Ha Spa',
   spa_address: '123 Đường ABC, Quận 1, TP. HCM',
-  internal_qr_url: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://nganha-internal.com',
+  // Fallback, actual URL loaded from SystemConfigs API
+  default_booking_url: 'https://nganha.vercel.app/',
 };
 
 import React, { useState, useEffect } from 'react';
@@ -21,10 +22,20 @@ export default function HomePage() {
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [orderStatus, setOrderStatus] = useState<'pending' | 'in_progress' | 'completed'>('pending');
   const [mounted, setMounted] = useState(false);
+  const [webBookingUrl, setWebBookingUrl] = useState(SYSTEM_CONFIG.default_booking_url);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
+    // Fetch web booking URL from SystemConfigs
+    fetch('/api/system/config')
+      .then(r => r.json())
+      .then(json => {
+        if (json.success && json.data?.web_booking_url) {
+          setWebBookingUrl(json.data.web_booking_url);
+        }
+      })
+      .catch(() => { /* use fallback */ });
   }, []);
 
   const isKTV = role?.id === 'ktv';
@@ -77,7 +88,7 @@ export default function HomePage() {
             <div className="p-6 border-b border-gray-50 bg-gray-50/30 flex items-center justify-between">
               <h2 className="font-bold text-gray-900 flex items-center gap-2">
                 <QrCode size={20} className="text-indigo-600" />
-                QR Truy Cập Nội Bộ
+                QR Menu Khách Hàng
               </h2>
             </div>
             <div className="p-8 flex flex-col items-center justify-center flex-1 space-y-6">
@@ -85,8 +96,8 @@ export default function HomePage() {
                 <div className="absolute -inset-4 bg-indigo-100 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative bg-white p-4 rounded-2xl shadow-lg border border-gray-100">
                   <Image
-                    src={SYSTEM_CONFIG.internal_qr_url}
-                    alt="Internal QR Code"
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(webBookingUrl)}`}
+                    alt="Web Booking QR Code"
                     width={200}
                     height={200}
                     className="rounded-lg"
@@ -95,8 +106,8 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="text-center space-y-2">
-                <p className="text-sm font-medium text-gray-900">Quét mã để truy cập nhanh</p>
-                <p className="text-xs text-gray-400 max-w-[200px]">Dành cho nhân viên truy cập hệ thống trên thiết bị di động</p>
+                <p className="text-sm font-medium text-gray-900">Khách quét để xem menu</p>
+                <p className="text-xs text-gray-400 max-w-[200px]">Quét mã QR để truy cập menu dịch vụ & đặt lịch trên web</p>
               </div>
               <button className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">
                 Tải mã QR <ExternalLink size={14} />

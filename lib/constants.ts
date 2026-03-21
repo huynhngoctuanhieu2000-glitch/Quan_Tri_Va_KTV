@@ -1,7 +1,7 @@
 import { ModuleId, ModuleDefinition } from './types';
 
 export const MODULES: ModuleDefinition[] = [
-  { id: 'dashboard', name: 'Dashboard', group: 'Hệ Thống' },
+  { id: 'dashboard', name: 'Dashboard', group: 'Vận Hành' },
   { id: 'dispatch_board', name: 'Điều Phối', group: 'Vận Hành' },
   { id: 'order_management', name: 'Đơn Hàng', group: 'Vận Hành' },
   { id: 'staff_notifications', name: 'Thông Báo', group: 'Vận Hành' },
@@ -19,7 +19,6 @@ export const MODULES: ModuleDefinition[] = [
   { id: 'ktv_performance', name: 'Hiệu Suất', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_history', name: 'Lịch Sử', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_hub', name: 'Quản Lý KTV', group: 'Vận Hành' },
-  { id: 'turn_tracking', name: 'Quản Lý Lượt', group: 'Vận Hành' },
   { id: 'service_handbook', name: 'Sổ Tay Dịch Vụ', group: 'Kỹ Thuật Viên' },
   { id: 'ai_features', name: 'AI Assistant', group: 'Hệ Thống' },
   { id: 'settings', name: 'Cài Đặt', group: 'Hệ Thống' },

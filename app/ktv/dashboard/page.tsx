@@ -40,6 +40,36 @@ const ANIMATION = {
   exit: { opacity: 0, scale: 1.02, y: -10 }
 };
 
+// Fallback URL for QR
+const DEFAULT_BOOKING_URL = 'https://nganha.vercel.app/';
+
+// ─── WebBookingQR Component ─────────────────────────────────────────────────
+const WebBookingQR = () => {
+  const [url, setUrl] = React.useState(DEFAULT_BOOKING_URL);
+
+  React.useEffect(() => {
+    fetch('/api/system/config')
+      .then(r => r.json())
+      .then(json => {
+        if (json.success && json.data?.web_booking_url) {
+          setUrl(json.data.web_booking_url);
+        }
+      })
+      .catch(() => { /* use fallback */ });
+  }, []);
+
+  return (
+    <Image
+      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`}
+      alt="Web Booking QR Code"
+      width={160}
+      height={160}
+      className="rounded-2xl"
+      referrerPolicy="no-referrer"
+    />
+  );
+};
+
 // ----------------------------------------------------
 // MAIN COMPONENT
 // ----------------------------------------------------
@@ -272,27 +302,20 @@ function ScreenDashboard({ logic }: { logic: any }) {
       {!booking ? (
         <div className="space-y-6">
           <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} p-8 text-center border shadow-sm`}>
-            {/* QR Code Section - Internal Access / Identity (MOVED TO TOP) */}
+            {/* QR Code Section - Web Booking for Customers */}
             <div className="flex flex-col items-center mb-8">
                <div className="relative group mb-4">
                   <div className="absolute -inset-2 bg-emerald-50 rounded-[2rem] blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative p-3 bg-white rounded-[2rem] shadow-xl border border-emerald-100/50 transition-transform active:scale-95 duration-300">
-                     <Image 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://nganhaspa.vn/ktv/${(logic.user as any)?.id || 'profile'}`}
-                        alt="QR Code"
-                        width={160}
-                        height={160}
-                        className="rounded-2xl"
-                        referrerPolicy="no-referrer"
-                     />
+                     <WebBookingQR />
                   </div>
                </div>
                <div className="space-y-1">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center justify-center gap-2">
                     <QrCode size={12} className="text-emerald-500" />
-                    QR TRUY CẬP NHANH
+                    QR MENU KHÁCH HÀNG
                   </p>
-                  <p className="text-[9px] text-slate-300 font-medium">Quản lý định danh cá nhân</p>
+                  <p className="text-[9px] text-slate-300 font-medium">Khách quét để xem menu & đặt lịch</p>
                </div>
             </div>
 

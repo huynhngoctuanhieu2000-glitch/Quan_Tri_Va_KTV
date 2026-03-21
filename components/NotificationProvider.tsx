@@ -254,7 +254,12 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                                 onClose={() => removeToast(n.id)} 
                                 onMarkDone={() => markAsRead(n.id)}
                                 onRedirect={() => {
-                                    if (role?.id === 'admin' || role?.id === 'reception') {
+                                    const t = (n.type || '').toUpperCase();
+                                    if (t === 'CHECK_IN') {
+                                        router.push('/reception/ktv-hub');
+                                    } else if (t === 'REWARD') {
+                                        router.push('/ktv/history');
+                                    } else {
                                         router.push('/reception/dispatch');
                                     }
                                 }}
