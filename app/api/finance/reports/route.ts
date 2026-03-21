@@ -81,11 +81,13 @@ export async function GET(request: Request) {
         }
 
         // ─── 4. Fetch new customers in date range ────────────────────────
-        const { count: newCustomerCount } = await supabase
+        const { data: newCustomerList, count: newCustomerCount } = await supabase
             .from('Customers')
-            .select('id', { count: 'exact', head: true })
+            .select('id, fullName, phone, email, createdAt', { count: 'exact' })
             .gte('createdAt', `${dateFrom}T00:00:00`)
-            .lte('createdAt', `${dateTo}T23:59:59`);
+            .lte('createdAt', `${dateTo}T23:59:59`)
+            .order('createdAt', { ascending: false })
+            .limit(50);
 
         // ─── 5. Fetch Beds count for occupancy calculation ───────────────
         const { count: totalBeds } = await supabase
@@ -315,6 +317,13 @@ export async function GET(request: Request) {
             languageBreakdown,
             topKTV: topKTV.map(k => ({ ...k, name: employeeMap[k.code] || k.code })),
             peakHours,
+            newCustomerList: (newCustomerList || []).map((c: any) => ({
+                id: c.id,
+                name: c.fullName || 'Khách',
+                phone: c.phone || '',
+                email: c.email || '',
+                createdAt: c.createdAt,
+            })),
             // Filter data for client-side filtering
             serviceList: Object.values(svcBreakdown).map(s => s.name),
             ktvList: topKTV.map(k => ({ code: k.code, name: employeeMap[k.code] || k.code })),

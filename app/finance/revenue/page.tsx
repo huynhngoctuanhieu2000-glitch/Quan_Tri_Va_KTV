@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import {
     ShieldAlert, TrendingUp, TrendingDown, DollarSign, Users, Calendar,
-    Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe
+    Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe, X, Phone, Mail
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -58,7 +58,7 @@ const FilterChipBar = ({ label, icon, options, selected, onSelect }: {
 );
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
-const KPICard = ({ title, value, subtitle, change, icon, color, href }: {
+const KPICard = ({ title, value, subtitle, change, icon, color, href, onClick }: {
     title: string;
     value: string;
     subtitle?: string;
@@ -66,15 +66,20 @@ const KPICard = ({ title, value, subtitle, change, icon, color, href }: {
     icon: React.ReactNode;
     color: string;
     href?: string;
+    onClick?: () => void;
 }) => {
     const isPositive = (change || 0) >= 0;
+    const isClickable = !!(href || onClick);
+    const handleClick = (e: React.MouseEvent) => {
+        if (onClick) { e.preventDefault(); onClick(); }
+    };
     const Wrapper = href ? 'a' : 'div';
     return (
-        <Wrapper href={href || undefined} className={`bg-white p-5 rounded-2xl border border-gray-100 shadow-sm block ${href ? 'cursor-pointer active:scale-[0.98] transition-transform hover:shadow-md' : ''}`}>
+        <Wrapper href={href || undefined} onClick={isClickable ? handleClick : undefined} className={`bg-white p-5 rounded-2xl border border-gray-100 shadow-sm block ${isClickable ? 'cursor-pointer active:scale-[0.98] transition-transform hover:shadow-md' : ''}`}>
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-gray-500">{title}</h3>
                 <div className="flex items-center gap-1.5">
-                    {href && <ChevronRight size={14} className="text-gray-300" />}
+                    {isClickable && <ChevronRight size={14} className="text-gray-300" />}
                     <div className={`p-2 ${color} rounded-xl`}>
                         {icon}
                     </div>
@@ -114,6 +119,7 @@ export default function RevenueReportsPage() {
     const [mounted, setMounted] = React.useState(false);
     const report = useRevenueReport();
     const [filterLang, setFilterLang] = React.useState('all');
+    const [showNewCustomers, setShowNewCustomers] = React.useState(false);
 
     React.useEffect(() => { setMounted(true); }, []);
     if (!mounted) return null;
@@ -240,7 +246,7 @@ export default function RevenueReportsPage() {
                                 change={summary.customersChange}
                                 icon={<Users size={18} />}
                                 color="bg-purple-50 text-purple-600"
-                                href="/reception/crm"
+                                onClick={() => setShowNewCustomers(true)}
                             />
                             <KPICard
                                 title="TB / Đơn"
@@ -386,36 +392,41 @@ export default function RevenueReportsPage() {
                                 <h3 className="text-base font-bold text-gray-900 mb-4">Top Kỹ Thuật Viên</h3>
                                 {report.data.topKTV.length > 0 ? (
                                     <>
-                                        <div className="space-y-3">
+                                        <div className="space-y-2.5">
                                             {report.data.topKTV.slice(0, 5).map((ktv, idx) => {
                                                 const maxRevenue = report.data.topKTV[0]?.revenue || 1;
                                                 const pct = Math.round((ktv.revenue / maxRevenue) * 100);
+                                                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
                                                 return (
-                                                    <div key={ktv.code} className="flex items-center gap-3">
-                                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
-                                                            idx === 0 ? 'bg-amber-100 text-amber-700' :
-                                                            idx === 1 ? 'bg-gray-100 text-gray-600' :
-                                                            idx === 2 ? 'bg-orange-100 text-orange-600' :
-                                                            'bg-gray-50 text-gray-400'
-                                                        }`}>
-                                                            {idx + 1}
+                                                    <div key={ktv.code} className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
+                                                        {/* Row 1: Name + Orders */}
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                {medal ? (
+                                                                    <span className="text-base">{medal}</span>
+                                                                ) : (
+                                                                    <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500">{idx + 1}</span>
+                                                                )}
+                                                                <span className="text-sm font-bold text-gray-800">{ktv.name}</span>
+                                                            </div>
+                                                            <span className="text-[11px] text-gray-400 font-medium">{ktv.orders} đơn</span>
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex justify-between items-baseline mb-1">
-                                                                <span className="text-sm font-bold text-gray-800 truncate">{ktv.name}</span>
-                                                                <div className="flex items-center gap-2 shrink-0 ml-2">
-                                                                    <span className="text-xs font-bold text-indigo-600">
-                                                                        {report.formatVND(ktv.revenue)}
-                                                                    </span>
-                                                                    <span className="text-[10px] text-cyan-600 bg-cyan-50 px-1.5 py-0.5 rounded-md font-bold">
-                                                                        🪙 {report.formatVND(ktv.commission || 0)}
-                                                                    </span>
-                                                                </div>
+                                                        {/* Progress bar */}
+                                                        <div className="h-1.5 bg-gray-200 rounded-full mb-2.5">
+                                                            <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                        </div>
+                                                        {/* Row 2: Revenue + Commission */}
+                                                        <div className="flex items-center justify-between text-xs">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <DollarSign size={12} className="text-emerald-500" />
+                                                                <span className="text-gray-500">Doanh thu:</span>
+                                                                <span className="font-bold text-indigo-600">{report.formatVND(ktv.revenue)}</span>
                                                             </div>
-                                                            <div className="h-1.5 bg-gray-100 rounded-full">
-                                                                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Coins size={12} className="text-cyan-500" />
+                                                                <span className="text-gray-500">Tua:</span>
+                                                                <span className="font-bold text-cyan-600">{report.formatVND(ktv.commission || 0)}</span>
                                                             </div>
-                                                            <p className="text-[10px] text-gray-400 mt-0.5">{ktv.orders} đơn</p>
                                                         </div>
                                                     </div>
                                                 );
@@ -470,6 +481,72 @@ export default function RevenueReportsPage() {
                     </>
                 )}
             </div>
+            {/* New Customer Modal */}
+            <NewCustomerModal
+                isOpen={showNewCustomers}
+                onClose={() => setShowNewCustomers(false)}
+                customers={report.data.newCustomerList}
+                formatDate={(d: string) => {
+                    try { return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+                    catch { return d; }
+                }}
+            />
         </AppLayout>
     );
 }
+
+// ─── New Customer Modal (iOS-style bottom sheet) ─────────────────────────
+const NewCustomerModal = ({ isOpen, onClose, customers, formatDate }: {
+    isOpen: boolean;
+    onClose: () => void;
+    customers: { id: string; name: string; phone: string; email: string; createdAt: string }[];
+    formatDate: (d: string) => string;
+}) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl max-h-[80vh] flex flex-col shadow-2xl">
+                {/* Handle */}
+                <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 sm:hidden" />
+                {/* Header */}
+                <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                    <div>
+                        <h2 className="text-lg font-black text-gray-900">Khách Hàng Mới</h2>
+                        <p className="text-xs text-gray-400 mt-0.5">{customers.length} khách trong kỳ</p>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:scale-90 transition-transform">
+                        <X size={16} className="text-gray-500" />
+                    </button>
+                </div>
+                {/* List */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {customers.length === 0 ? (
+                        <div className="py-12 text-center text-gray-300 text-sm">Chưa có khách hàng mới</div>
+                    ) : (
+                        customers.map((c, idx) => (
+                            <div key={c.id || idx} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-bold text-gray-800">{c.name}</span>
+                                    <span className="text-[10px] text-gray-400">{formatDate(c.createdAt)}</span>
+                                </div>
+                                <div className="flex items-center gap-4 mt-2">
+                                    {c.phone && !c.phone.startsWith('GUEST') && (
+                                        <a href={`tel:${c.phone}`} className="flex items-center gap-1 text-xs text-indigo-600">
+                                            <Phone size={11} /> {c.phone}
+                                        </a>
+                                    )}
+                                    {c.email && !c.email.includes('no-email') && (
+                                        <span className="flex items-center gap-1 text-xs text-gray-500 truncate">
+                                            <Mail size={11} /> {c.email}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};

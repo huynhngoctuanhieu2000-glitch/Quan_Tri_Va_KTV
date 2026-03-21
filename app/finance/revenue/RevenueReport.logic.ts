@@ -63,6 +63,14 @@ export interface KTVOption {
     name: string;
 }
 
+export interface NewCustomer {
+    id: string;
+    name: string;
+    phone: string;
+    email: string;
+    createdAt: string;
+}
+
 export interface ReportData {
     summary: ReportSummary;
     dailyRevenue: DailyRevenue[];
@@ -72,6 +80,7 @@ export interface ReportData {
     peakHours: PeakHour[];
     serviceList: string[];
     ktvList: KTVOption[];
+    newCustomerList: NewCustomer[];
 }
 
 const EMPTY_SUMMARY: ReportSummary = {
@@ -95,6 +104,7 @@ export const useRevenueReport = () => {
         peakHours: [],
         serviceList: [],
         ktvList: [],
+        newCustomerList: [],
     });
 
     const fetchReport = useCallback(async (from: string, to: string) => {
@@ -112,6 +122,7 @@ export const useRevenueReport = () => {
                     peakHours: json.peakHours || [],
                     serviceList: json.serviceList || [],
                     ktvList: json.ktvList || [],
+                    newCustomerList: json.newCustomerList || [],
                 });
             }
         } catch (err) {
