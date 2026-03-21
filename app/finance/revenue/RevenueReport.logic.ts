@@ -44,6 +44,7 @@ export interface TopKTV {
     name: string;
     orders: number;
     revenue: number;
+    commission: number;
 }
 
 export interface PeakHour {

@@ -58,21 +58,26 @@ const FilterChipBar = ({ label, icon, options, selected, onSelect }: {
 );
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
-const KPICard = ({ title, value, subtitle, change, icon, color }: {
+const KPICard = ({ title, value, subtitle, change, icon, color, href }: {
     title: string;
     value: string;
     subtitle?: string;
     change?: number;
     icon: React.ReactNode;
     color: string;
+    href?: string;
 }) => {
     const isPositive = (change || 0) >= 0;
+    const Wrapper = href ? 'a' : 'div';
     return (
-        <div className={`bg-white p-5 rounded-2xl border border-gray-100 shadow-sm`}>
+        <Wrapper href={href || undefined} className={`bg-white p-5 rounded-2xl border border-gray-100 shadow-sm block ${href ? 'cursor-pointer active:scale-[0.98] transition-transform hover:shadow-md' : ''}`}>
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-                <div className={`p-2 ${color} rounded-xl`}>
-                    {icon}
+                <div className="flex items-center gap-1.5">
+                    {href && <ChevronRight size={14} className="text-gray-300" />}
+                    <div className={`p-2 ${color} rounded-xl`}>
+                        {icon}
+                    </div>
                 </div>
             </div>
             <div className="text-3xl font-black text-gray-900 tracking-tight">{value}</div>
@@ -83,7 +88,7 @@ const KPICard = ({ title, value, subtitle, change, icon, color }: {
                     {isPositive ? '+' : ''}{change}% so với kỳ trước
                 </p>
             )}
-        </div>
+        </Wrapper>
     );
 };
 
@@ -227,6 +232,7 @@ export default function RevenueReportsPage() {
                                 change={summary.ordersChange}
                                 icon={<BarChart3 size={18} />}
                                 color="bg-indigo-50 text-indigo-600"
+                                href="/reception/orders"
                             />
                             <KPICard
                                 title="Khách Hàng Mới"
@@ -234,6 +240,7 @@ export default function RevenueReportsPage() {
                                 change={summary.customersChange}
                                 icon={<Users size={18} />}
                                 color="bg-purple-50 text-purple-600"
+                                href="/reception/crm"
                             />
                             <KPICard
                                 title="TB / Đơn"
@@ -247,19 +254,13 @@ export default function RevenueReportsPage() {
                                 subtitle={summary.avgRating >= 4 ? 'Xuất sắc' : summary.avgRating >= 3 ? 'Tốt' : ''}
                                 icon={<Star size={18} />}
                                 color="bg-yellow-50 text-yellow-600"
+                                href="/reception/orders"
                             />
                             <KPICard
                                 title="Tổng Tip"
                                 value={summary.totalTip > 0 ? report.formatVND(summary.totalTip) : '0đ'}
                                 icon={<Award size={18} />}
                                 color="bg-rose-50 text-rose-600"
-                            />
-                            <KPICard
-                                title="Tổng Tiền Tua"
-                                value={summary.totalCommission > 0 ? report.formatVND(summary.totalCommission) : '0đ'}
-                                subtitle={summary.totalCommission > 0 ? report.formatFullVND(summary.totalCommission) : undefined}
-                                icon={<Coins size={18} />}
-                                color="bg-cyan-50 text-cyan-600"
                             />
                         </div>
 
@@ -384,36 +385,58 @@ export default function RevenueReportsPage() {
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                                 <h3 className="text-base font-bold text-gray-900 mb-4">Top Kỹ Thuật Viên</h3>
                                 {report.data.topKTV.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {report.data.topKTV.slice(0, 5).map((ktv, idx) => {
-                                            const maxRevenue = report.data.topKTV[0]?.revenue || 1;
-                                            const pct = Math.round((ktv.revenue / maxRevenue) * 100);
-                                            return (
-                                                <div key={ktv.code} className="flex items-center gap-3">
-                                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
-                                                        idx === 0 ? 'bg-amber-100 text-amber-700' :
-                                                        idx === 1 ? 'bg-gray-100 text-gray-600' :
-                                                        idx === 2 ? 'bg-orange-100 text-orange-600' :
-                                                        'bg-gray-50 text-gray-400'
-                                                    }`}>
-                                                        {idx + 1}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-baseline mb-1">
-                                                            <span className="text-sm font-bold text-gray-800 truncate">{ktv.name}</span>
-                                                            <span className="text-xs font-bold text-indigo-600 shrink-0 ml-2">
-                                                                {report.formatVND(ktv.revenue)}
-                                                            </span>
+                                    <>
+                                        <div className="space-y-3">
+                                            {report.data.topKTV.slice(0, 5).map((ktv, idx) => {
+                                                const maxRevenue = report.data.topKTV[0]?.revenue || 1;
+                                                const pct = Math.round((ktv.revenue / maxRevenue) * 100);
+                                                return (
+                                                    <div key={ktv.code} className="flex items-center gap-3">
+                                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0 ${
+                                                            idx === 0 ? 'bg-amber-100 text-amber-700' :
+                                                            idx === 1 ? 'bg-gray-100 text-gray-600' :
+                                                            idx === 2 ? 'bg-orange-100 text-orange-600' :
+                                                            'bg-gray-50 text-gray-400'
+                                                        }`}>
+                                                            {idx + 1}
                                                         </div>
-                                                        <div className="h-1.5 bg-gray-100 rounded-full">
-                                                            <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex justify-between items-baseline mb-1">
+                                                                <span className="text-sm font-bold text-gray-800 truncate">{ktv.name}</span>
+                                                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                                    <span className="text-xs font-bold text-indigo-600">
+                                                                        {report.formatVND(ktv.revenue)}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-cyan-600 bg-cyan-50 px-1.5 py-0.5 rounded-md font-bold">
+                                                                        🪙 {report.formatVND(ktv.commission || 0)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="h-1.5 bg-gray-100 rounded-full">
+                                                                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                            </div>
+                                                            <p className="text-[10px] text-gray-400 mt-0.5">{ktv.orders} đơn</p>
                                                         </div>
-                                                        <p className="text-[10px] text-gray-400 mt-0.5">{ktv.orders} đơn</p>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {/* Tổng Tiền Tua ở dưới cùng */}
+                                        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <Coins size={16} className="text-cyan-600" />
+                                                <span className="text-sm font-bold text-gray-700">Tổng Tiền Tua</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-lg font-black text-cyan-600">
+                                                    {report.formatVND(summary.totalCommission)}
+                                                </span>
+                                                {summary.totalCommission > 0 && (
+                                                    <p className="text-[10px] text-gray-400">{report.formatFullVND(summary.totalCommission)}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
                                 ) : (
                                     <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
                                 )}

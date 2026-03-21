@@ -217,15 +217,30 @@ export async function GET(request: Request) {
             .sort((a, b) => b.revenue - a.revenue);
 
         // ─── 10. Top KTV ─────────────────────────────────────────────────
-        const ktvMap: Record<string, { code: string; orders: number; revenue: number }> = {};
+        const ktvMap: Record<string, { code: string; orders: number; revenue: number; commission: number }> = {};
         completedBookings.forEach(b => {
             if (!b.technicianCode) return;
             const codes = b.technicianCode.split(',').map((c: string) => c.trim()).filter(Boolean);
             const share = codes.length > 0 ? (Number(b.totalAmount) || 0) / codes.length : 0;
             codes.forEach((code: string) => {
-                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0 };
+                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0 };
                 ktvMap[code].orders += 1;
                 ktvMap[code].revenue += share;
+            });
+        });
+        // Calculate commission per KTV from their BookingItems
+        items.forEach(i => {
+            const techs = Array.isArray(i.technicianCodes) ? i.technicianCodes : [];
+            if (techs.length === 0) return;
+            const dur = svcDurationMap[String(i.serviceId)] || 60;
+            const qty = Number(i.quantity) || 1;
+            const itemCommission = calcCommission(dur) * qty;
+            const perKtvCommission = itemCommission / techs.length;
+            techs.forEach((tc: string) => {
+                const code = tc.trim();
+                if (!code) return;
+                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0 };
+                ktvMap[code].commission += perKtvCommission;
             });
         });
         const topKTV = Object.values(ktvMap)
