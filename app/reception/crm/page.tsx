@@ -36,7 +36,7 @@ export default function CRMPage() {
 
   if (!hasPermission('customer_management')) {
     return (
-      <AppLayout title="Quản Lý Khách Hàng">
+      <AppLayout title="Khách Hàng">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -54,7 +54,7 @@ export default function CRMPage() {
   const formatVND = (n?: number) => n ? new Intl.NumberFormat('vi-VN').format(n) + 'đ' : '0đ';
 
   return (
-    <AppLayout title="Quản Lý Khách Hàng">
+    <AppLayout title="Khách Hàng">
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <p className="text-sm text-gray-500">Lưu trữ thông tin, lịch sử dịch vụ và phân hạng thành viên.</p>

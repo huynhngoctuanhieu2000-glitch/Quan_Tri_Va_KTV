@@ -3,7 +3,7 @@
  */
 export const t = {
     // Page
-    pageTitle: 'Quản Lý KTV',
+    pageTitle: 'Nhân Viên',
     pageSubtitle: 'Quản lý hồ sơ, kỹ năng và thông tin chi tiết của kỹ thuật viên.',
 
     // Permission

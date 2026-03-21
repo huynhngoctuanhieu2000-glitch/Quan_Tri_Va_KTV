@@ -360,7 +360,7 @@ export default function DispatchBoardPage() {
 
 if (!hasPermission('dispatch_board')) {
     return (
-      <AppLayout title="Điều phối">
+      <AppLayout title="Điều Phối">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -824,7 +824,7 @@ if (!hasPermission('dispatch_board')) {
     );
   };
   return (
-    <AppLayout title="Điều phối">
+    <AppLayout title="Điều Phối">
       <div className="h-[calc(100dvh-3.5rem)] lg:h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-2 lg:mb-4 px-1 lg:px-0 mt-1 sm:mt-0">

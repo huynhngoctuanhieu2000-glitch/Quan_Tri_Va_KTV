@@ -126,7 +126,7 @@ export default function RevenueReportsPage() {
 
     if (!hasPermission('revenue_reports')) {
         return (
-            <AppLayout title="Báo Cáo Doanh Thu">
+            <AppLayout title="Báo Cáo">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -142,7 +142,7 @@ export default function RevenueReportsPage() {
     };
 
     return (
-        <AppLayout title="Báo Cáo Doanh Thu">
+        <AppLayout title="Báo Cáo">
             <div className="space-y-6 max-w-5xl mx-auto">
                 {/* ─── Header ─────────────────────────────────────────── */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
