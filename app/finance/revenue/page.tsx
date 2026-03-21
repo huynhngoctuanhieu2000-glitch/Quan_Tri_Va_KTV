@@ -5,7 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import {
     ShieldAlert, TrendingUp, TrendingDown, DollarSign, Users, Calendar,
-    Star, Activity, ChevronRight, Loader2, BarChart3, Award
+    Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -21,6 +21,41 @@ const DATE_PRESETS = [
     { key: 'month', label: 'Tháng này' },
     { key: 'custom', label: 'Tuỳ chọn' },
 ] as const;
+
+// Language Display Labels
+const LANG_DISPLAY: Record<string, { label: string; flag: string }> = {
+    'vi': { label: 'Việt', flag: '🇻🇳' },
+    'en': { label: 'English', flag: '🇬🇧' },
+    'ko': { label: '한국어', flag: '🇰🇷' },
+    'zh': { label: '中文', flag: '🇨🇳' },
+    'jp': { label: '日本語', flag: '🇯🇵' },
+};
+
+// ─── Filter Chip Bar ──────────────────────────────────────────────────────────
+const FilterChipBar = ({ label, icon, options, selected, onSelect }: {
+    label: string;
+    icon: React.ReactNode;
+    options: { key: string; label: string }[];
+    selected: string;
+    onSelect: (key: string) => void;
+}) => (
+    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <span className="text-xs text-gray-400 shrink-0 flex items-center gap-1">{icon}{label}</span>
+        {options.map(o => (
+            <button
+                key={o.key}
+                onClick={() => onSelect(o.key)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                    selected === o.key
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                }`}
+            >
+                {o.label}
+            </button>
+        ))}
+    </div>
+);
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 const KPICard = ({ title, value, subtitle, change, icon, color }: {
@@ -73,6 +108,7 @@ export default function RevenueReportsPage() {
     const { hasPermission } = useAuth();
     const [mounted, setMounted] = React.useState(false);
     const report = useRevenueReport();
+    const [filterLang, setFilterLang] = React.useState('all');
 
     React.useEffect(() => { setMounted(true); }, []);
     if (!mounted) return null;
@@ -156,6 +192,25 @@ export default function RevenueReportsPage() {
 
                 {!report.isLoading && (
                     <>
+                        {/* ─── Filter Chips ───────────────────────── */}
+                        {report.data.languageBreakdown.length > 0 && (
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 space-y-2">
+                                <FilterChipBar
+                                    label="Ngôn ngữ"
+                                    icon={<Globe size={12} />}
+                                    options={[
+                                        { key: 'all', label: 'Tất cả' },
+                                        ...report.data.languageBreakdown.map(lb => ({
+                                            key: lb.lang,
+                                            label: lb.lang,
+                                        }))
+                                    ]}
+                                    selected={filterLang}
+                                    onSelect={setFilterLang}
+                                />
+                            </div>
+                        )}
+
                         {/* ─── KPI Cards ─────────────────────────────── */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                             <KPICard
@@ -198,6 +253,13 @@ export default function RevenueReportsPage() {
                                 value={summary.totalTip > 0 ? report.formatVND(summary.totalTip) : '0đ'}
                                 icon={<Award size={18} />}
                                 color="bg-rose-50 text-rose-600"
+                            />
+                            <KPICard
+                                title="Tổng Tiền Tua"
+                                value={summary.totalCommission > 0 ? report.formatVND(summary.totalCommission) : '0đ'}
+                                subtitle={summary.totalCommission > 0 ? report.formatFullVND(summary.totalCommission) : undefined}
+                                icon={<Coins size={18} />}
+                                color="bg-cyan-50 text-cyan-600"
                             />
                         </div>
 
@@ -265,8 +327,59 @@ export default function RevenueReportsPage() {
                             </div>
                         </div>
 
-                        {/* ─── Charts Row 2 ──────────────────────────── */}
+                        {/* ─── Charts Row 2: Language + Top KTV ────── */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Language Breakdown Donut */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <Globe size={16} className="text-indigo-500" />
+                                    Cơ Cấu Khách Theo Ngôn Ngữ
+                                </h3>
+                                {report.data.languageBreakdown.length > 0 ? (
+                                    <>
+                                        <div className="h-52 w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={report.data.languageBreakdown}
+                                                        cx="50%" cy="50%"
+                                                        innerRadius={55} outerRadius={90}
+                                                        paddingAngle={3}
+                                                        dataKey="orders"
+                                                        nameKey="lang"
+                                                    >
+                                                        {report.data.languageBreakdown.map((_, idx) => (
+                                                            <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip content={<ChartTooltip />} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="space-y-2 mt-2">
+                                            {report.data.languageBreakdown.map((lb, idx) => {
+                                                const totalOrders = report.data.languageBreakdown.reduce((s, l) => s + l.orders, 0);
+                                                const pct = totalOrders > 0 ? Math.round((lb.orders / totalOrders) * 100) : 0;
+                                                return (
+                                                    <div key={idx} className="flex items-center justify-between text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                                                            <span className="text-gray-700 font-medium">{lb.lang}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs text-gray-400">{lb.orders} đơn</span>
+                                                            <span className="text-xs font-bold text-indigo-600">{pct}%</span>
+                                                            <span className="text-xs text-gray-500">{report.formatVND(lb.revenue)}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                                )}
+                            </div>
                             {/* Top KTV */}
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                                 <h3 className="text-base font-bold text-gray-900 mb-4">Top Kỹ Thuật Viên</h3>

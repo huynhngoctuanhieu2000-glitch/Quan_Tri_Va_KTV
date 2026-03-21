@@ -21,6 +21,7 @@ export interface ReportSummary {
     occupancy: number;
     avgPerOrder: number;
     totalTip: number;
+    totalCommission: number;
     revenueChange: number;
     ordersChange: number;
     customersChange: number;
@@ -50,17 +51,31 @@ export interface PeakHour {
     count: number;
 }
 
+export interface LanguageBreakdown {
+    lang: string;
+    revenue: number;
+    orders: number;
+}
+
+export interface KTVOption {
+    code: string;
+    name: string;
+}
+
 export interface ReportData {
     summary: ReportSummary;
     dailyRevenue: DailyRevenue[];
     serviceBreakdown: ServiceBreakdown[];
+    languageBreakdown: LanguageBreakdown[];
     topKTV: TopKTV[];
     peakHours: PeakHour[];
+    serviceList: string[];
+    ktvList: KTVOption[];
 }
 
 const EMPTY_SUMMARY: ReportSummary = {
     revenue: 0, orders: 0, newCustomers: 0, avgRating: 0,
-    occupancy: 0, avgPerOrder: 0, totalTip: 0,
+    occupancy: 0, avgPerOrder: 0, totalTip: 0, totalCommission: 0,
     revenueChange: 0, ordersChange: 0, customersChange: 0,
 };
 
@@ -74,8 +89,11 @@ export const useRevenueReport = () => {
         summary: EMPTY_SUMMARY,
         dailyRevenue: [],
         serviceBreakdown: [],
+        languageBreakdown: [],
         topKTV: [],
         peakHours: [],
+        serviceList: [],
+        ktvList: [],
     });
 
     const fetchReport = useCallback(async (from: string, to: string) => {
@@ -88,8 +106,11 @@ export const useRevenueReport = () => {
                     summary: json.summary || EMPTY_SUMMARY,
                     dailyRevenue: json.dailyRevenue || [],
                     serviceBreakdown: json.serviceBreakdown || [],
+                    languageBreakdown: json.languageBreakdown || [],
                     topKTV: json.topKTV || [],
                     peakHours: json.peakHours || [],
+                    serviceList: json.serviceList || [],
+                    ktvList: json.ktvList || [],
                 });
             }
         } catch (err) {

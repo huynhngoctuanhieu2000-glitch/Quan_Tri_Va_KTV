@@ -29,7 +29,7 @@ export async function GET(request: Request) {
         // ─── 1. Fetch completed bookings in date range ───────────────────
         const { data: bookings, error: bErr } = await supabase
             .from('Bookings')
-            .select('id, billCode, bookingDate, createdAt, status, totalAmount, tip, technicianCode, customerId')
+            .select('id, billCode, bookingDate, createdAt, status, totalAmount, tip, technicianCode, customerId, customerLang')
             .in('status', COMPLETED_STATUSES)
             .gte('bookingDate', `${dateFrom} 00:00:00`)
             .lte('bookingDate', `${dateTo} 23:59:59`)
@@ -118,7 +118,47 @@ export async function GET(request: Request) {
             .gte('createdAt', `${prevFromStr}T00:00:00`)
             .lte('createdAt', `${prevToStr}T23:59:59`);
 
-        // ─── 7. Calculate Summaries ──────────────────────────────────────
+        // ─── 7. Fetch SystemConfigs for commission calculation ────────────
+        const { data: configs } = await supabase
+            .from('SystemConfigs')
+            .select('key, value')
+            .in('key', ['ktv_commission_per_60min', 'ktv_commission_milestones']);
+
+        const configMap: Record<string, any> = {};
+        (configs || []).forEach((c: any) => { configMap[c.key] = c.value; });
+        const commissionRate = Number(configMap['ktv_commission_per_60min'] || 100000);
+        const DEFAULT_MILESTONES: Record<string, number> = {
+            '1': 2000, '30': 50000, '45': 75000, '60': 100000,
+            '70': 117000, '90': 150000, '120': 200000, '180': 300000, '300': 500000
+        };
+        let milestones: Record<string, number> = DEFAULT_MILESTONES;
+        if (configMap['ktv_commission_milestones']) {
+            try { milestones = typeof configMap['ktv_commission_milestones'] === 'string'
+                ? JSON.parse(configMap['ktv_commission_milestones'])
+                : configMap['ktv_commission_milestones'];
+            } catch { /* use default */ }
+        }
+
+        const calcCommission = (durationMins: number): number => {
+            const key = String(durationMins);
+            if (milestones[key]) return Number(milestones[key]);
+            return Math.round((durationMins / 60) * commissionRate / 1000) * 1000;
+        };
+
+        // ─── 8. Fetch Services with duration for commission calc ──────────
+        let svcDurationMap: Record<string, number> = {};
+        if (serviceIds.length > 0) {
+            const { data: svcsWithDur } = await supabase
+                .from('Services')
+                .select('id, code, duration')
+                .in('id', serviceIds);
+            (svcsWithDur || []).forEach((s: any) => {
+                if (s.id) svcDurationMap[String(s.id)] = Number(s.duration) || 60;
+                if (s.code) svcDurationMap[String(s.code)] = Number(s.duration) || 60;
+            });
+        }
+
+        // ─── Calculate Summaries ──────────────────────────────────────
         const revenue = completedBookings.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
         const orders = completedBookings.length;
         const avgPerOrder = orders > 0 ? Math.round(revenue / orders) : 0;
@@ -134,6 +174,14 @@ export async function GET(request: Request) {
         const totalServiceMins = items.reduce((sum, i) => sum + (Number(i.quantity) || 1) * 60, 0); // Fallback 60 min
         const maxCapacityMins = (totalBeds || 1) * OPERATING_HOURS_PER_DAY * 60 * periodDays;
         const occupancy = Math.min(100, Math.round((totalServiceMins / maxCapacityMins) * 100));
+
+        // Total Commission (Tiền tua) — tính từ duration dịch vụ × số lượng items
+        let totalCommission = 0;
+        items.forEach(i => {
+            const dur = svcDurationMap[String(i.serviceId)] || 60;
+            const qty = Number(i.quantity) || 1;
+            totalCommission += calcCommission(dur) * qty;
+        });
 
         // Previous period
         const prevRevenue = (prevBookings || []).reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
@@ -199,6 +247,26 @@ export async function GET(request: Request) {
             count: hourMap[h] || 0,
         })).filter(h => h.count > 0 || (parseInt(h.hour) >= 8 && parseInt(h.hour) <= 22));
 
+        // ─── Language Breakdown ───────────────────────────────────────
+        const langMap: Record<string, { lang: string; revenue: number; orders: number }> = {};
+        const LANG_LABELS: Record<string, string> = {
+            'vi': '🇻🇳 Tiếng Việt', 'vn': '🇻🇳 Tiếng Việt',
+            'en': '🇬🇧 English',
+            'ko': '🇰🇷 한국어', 'kr': '🇰🇷 한국어',
+            'zh': '🇨🇳 中文', 'cn': '🇨🇳 中文',
+            'jp': '🇯🇵 日本語',
+        };
+        completedBookings.forEach(b => {
+            const rawLang = (b.customerLang || 'vi').toLowerCase();
+            // Normalize aliases
+            const normalizedLang = rawLang === 'vn' ? 'vi' : rawLang === 'kr' ? 'ko' : rawLang === 'cn' ? 'zh' : rawLang;
+            const label = LANG_LABELS[normalizedLang] || normalizedLang.toUpperCase();
+            if (!langMap[normalizedLang]) langMap[normalizedLang] = { lang: label, revenue: 0, orders: 0 };
+            langMap[normalizedLang].revenue += Number(b.totalAmount) || 0;
+            langMap[normalizedLang].orders += 1;
+        });
+        const languageBreakdown = Object.values(langMap).sort((a, b) => b.orders - a.orders);
+
         // ─── 12. Employees lookup for KTV names ──────────────────────────
         const ktvCodes = topKTV.map(k => k.code);
         let employeeMap: Record<string, string> = {};
@@ -222,14 +290,19 @@ export async function GET(request: Request) {
                 occupancy,
                 avgPerOrder,
                 totalTip,
+                totalCommission,
                 revenueChange,
                 ordersChange,
                 customersChange,
             },
             dailyRevenue,
             serviceBreakdown,
+            languageBreakdown,
             topKTV: topKTV.map(k => ({ ...k, name: employeeMap[k.code] || k.code })),
             peakHours,
+            // Filter data for client-side filtering
+            serviceList: Object.values(svcBreakdown).map(s => s.name),
+            ktvList: topKTV.map(k => ({ code: k.code, name: employeeMap[k.code] || k.code })),
             _meta: { dateFrom, dateTo, prevFrom: prevFromStr, prevTo: prevToStr, periodDays },
         });
 
