@@ -126,6 +126,7 @@ export const DispatchServiceBlock = ({
                                 svcId={svc.id}
                                 orderId={orderId}
                                 serviceName={svc.serviceName}
+                                svcDuration={svc.duration}
                                 availableTurns={availableTurns}
                                 rooms={rooms}
                                 beds={beds}

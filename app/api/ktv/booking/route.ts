@@ -206,11 +206,17 @@ export async function PATCH(request: Request) {
         
         // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
         if (action === 'APPEND_NOTES' && body.notes) {
-            const { data: currentB } = await supabase.from('Bookings').select('notes').eq('id', bookingId).single();
+            const { data: currentB } = await supabase.from('Bookings').select('notes, billCode').eq('id', bookingId).single();
             const oldNotes = currentB?.notes || '';
             // Nối thêm nếu chưa có nội dung tương tự (tránh lặp lại khi refresh)
             if (!oldNotes.includes(body.notes)) {
                 updatePayload.notes = oldNotes ? `${oldNotes} | ${body.notes}` : body.notes;
+                
+                // Báo về cho quầy Lễ Tân / Admin
+                await supabase.from('StaffNotifications').insert({
+                    type: 'SYSTEM',
+                    message: `📢 KTV ${technicianCode || 'N/A'} vừa đánh giá khách hàng đơn ${currentB?.billCode || bookingId}: ${body.notes}`
+                });
             } else {
                 updatePayload.notes = oldNotes;
             }
@@ -304,9 +310,12 @@ export async function PATCH(request: Request) {
 
             // 🔧 FIX: Dùng 1 timestamp duy nhất cho cả Booking + BookingItem
             // Tránh lệch giây giữa timer KTV và khách hàng
-            const sharedTimeStart = new Date().toISOString();
-            updatePayload.timeStart = sharedTimeStart;
-            itemUpdatePayload.timeStart = sharedTimeStart;
+            // KHÔNG GHI ĐÈ timeStart NẾU là Resume (Chặng 2+)
+            if (action !== 'RESUME_TIMER') {
+                const sharedTimeStart = new Date().toISOString();
+                updatePayload.timeStart = sharedTimeStart;
+                itemUpdatePayload.timeStart = sharedTimeStart;
+            }
 
             // 🚀 IN_PROGRESS: Update TẤT CẢ items của KTV này
             if (allItemIdsForThisKTV.length > 0) {

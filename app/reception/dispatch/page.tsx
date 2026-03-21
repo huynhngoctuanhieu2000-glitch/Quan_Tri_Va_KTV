@@ -70,7 +70,7 @@ const calcEndTime = (start: string, duration: number): string => {
   if (!start || !duration) return '';
   const [h, m] = start.split(':').map(Number);
   const end = new Date();
-  end.setHours(h, m + duration, 0, 0);
+  end.setHours(h, m + Math.floor(duration), Math.floor((duration % 1) * 60), 0);
   return `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
 };
 
@@ -107,6 +107,7 @@ export default function DispatchBoardPage() {
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
+  const [roomTransitionTime, setRoomTransitionTime] = useState(5);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
@@ -218,7 +219,8 @@ export default function DispatchBoardPage() {
       setRooms(rData);
       setBeds(bdData);
       if (res.data.allServices) setAllServices(res.data.allServices);
-      console.log(`✅ [Dispatch] Loaded ${rData.length} rooms and ${bdData.length} beds`);
+      if (res.data.roomTransitionTime !== undefined) setRoomTransitionTime(res.data.roomTransitionTime);
+      console.log(`✅ [Dispatch] Loaded ${rData.length} rooms and ${bdData.length} beds, Transition: ${res.data.roomTransitionTime}m`);
 
         // 4. Set Bookings
       if (bData) {
@@ -249,7 +251,11 @@ export default function DispatchBoardPage() {
             rawStatus: b.status,
             hasAssignedKtv,
             services: (b.BookingItems || []).map((bi: any) => {
-              const itemTurns = assignedTurns.filter((t: any) => t.booking_item_id === bi.id);
+              const itemTurns = assignedTurns.filter((t: any) => {
+                  if (!t.booking_item_id) return false;
+                  if (typeof t.booking_item_id === 'string') return t.booking_item_id.includes(bi.id);
+                  return t.booking_item_id === bi.id;
+              });
               const finalItemTurns = (itemTurns.length === 0 && (b.BookingItems || []).length === 1) ? assignedTurns : itemTurns;
 
               const staffList = (finalItemTurns.length > 0) 
@@ -257,9 +263,12 @@ export default function DispatchBoardPage() {
                     const staff = (sData as StaffData[])?.find((s: any) => s.id === t.employee_id);
                     
                     // Reconstruct segments
-                    let segments: WorkSegment[] = bi.segments && Array.isArray(bi.segments) 
-                        ? bi.segments.filter((s: any) => s.ktvId === t.employee_id)
-                        : [];
+                    let parsedSegments: any[] = [];
+                    try {
+                        parsedSegments = typeof bi.segments === 'string' ? JSON.parse(bi.segments) : (Array.isArray(bi.segments) ? bi.segments : []);
+                    } catch(e) { parsedSegments = []; }
+
+                    let segments: WorkSegment[] = parsedSegments.filter((s: any) => s.ktvId === t.employee_id);
                     
                     if (segments.length === 0) {
                         const st = formatTime(t.start_time) || b.timeBooking || getCurrentTime();
@@ -401,14 +410,67 @@ if (!hasPermission('dispatch_board')) {
     }));
   };
 
+  const autoAlignStaffRow = (order: PendingOrder, svcId: string, rowId: string, ktvId: string, roomTransitionTime: number): PendingOrder => {
+    let lastEndTime = '';
+    let lastRoomId = '';
+    
+    // Tìm segment cuối cùng của KTV này CÓ TRƯỚC hàng hiện tại
+    for (const svc of order.services) {
+      for (const r of svc.staffList) {
+        if (r.id === rowId) break; 
+        if (r.ktvId === ktvId && r.segments.length > 0) {
+          const lastSeg = r.segments[r.segments.length - 1];
+          lastEndTime = lastSeg.endTime;
+          lastRoomId = lastSeg.roomId || '';
+        }
+      }
+      if (svc.id === svcId) break;
+    }
+
+    if (!lastEndTime) return order;
+
+    const cloned = JSON.parse(JSON.stringify(order)) as PendingOrder;
+    const targetSvc = cloned.services.find(s => s.id === svcId);
+    const targetRow = targetSvc?.staffList.find(r => r.id === rowId);
+    
+    if (targetRow && targetRow.segments.length > 0) {
+      const firstSeg = targetRow.segments[0];
+      const isSameRoom = lastRoomId === firstSeg.roomId;
+      const gap = isSameRoom ? 0 : roomTransitionTime;
+      
+      const start = calcEndTime(lastEndTime, gap);
+      firstSeg.startTime = start;
+      firstSeg.endTime = calcEndTime(start, firstSeg.duration);
+      
+      for(let i = 1; i < targetRow.segments.length; i++) {
+         const p = targetRow.segments[i-1];
+         const c = targetRow.segments[i];
+         const g = p.roomId === c.roomId ? 0 : roomTransitionTime;
+         c.startTime = calcEndTime(p.endTime, g);
+         c.endTime = calcEndTime(c.startTime, c.duration);
+      }
+    }
+    
+    return cloned;
+  };
+
   const updateStaffRow = (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => {
-    updateOrder(orderId, o => ({
-      ...o,
-      services: o.services.map(s => s.id === svcId
-        ? { ...s, staffList: s.staffList.map(r => r.id === rowId ? { ...r, ...patch } : r) }
-        : s
-      ),
-    }));
+    updateOrder(orderId, o => {
+      let updatedOrder = {
+        ...o,
+        services: o.services.map(s => s.id === svcId
+          ? { ...s, staffList: s.staffList.map(r => r.id === rowId ? { ...r, ...patch } : r) }
+          : s
+        ),
+      };
+
+      // Tự động nối giờ nếu KTV được chọn và đã có phục vụ chặng trước đó
+      if (patch.ktvId) {
+        updatedOrder = autoAlignStaffRow(updatedOrder, svcId, rowId, patch.ktvId, roomTransitionTime);
+      }
+
+      return updatedOrder;
+    });
   };
 
   const addStaffRow = (orderId: string, svcId: string) => {
@@ -527,10 +589,12 @@ if (!hasPermission('dispatch_board')) {
     }
 
     try {
+      const clonedOrder = JSON.parse(JSON.stringify(selectedOrder)) as PendingOrder;
+
       const allStaffAssignments = [];
       const techCodesSet = new Set<string>();
 
-      for (const svc of selectedOrder.services) {
+      for (const svc of clonedOrder.services) {
         for (const row of svc.staffList) {
           if (!row.ktvId) continue;
           
@@ -550,7 +614,7 @@ if (!hasPermission('dispatch_board')) {
             queuePos = currentMax + addedCount + 1;
           }
           
-          // Với đa chặng, TurnQueue sẽ lưu thông tin của CHẶNG ĐẦU TIÊN
+          // Với đa chặng, TurnQueue theo chặng đầu tiên
           const firstSeg = row.segments[0];
           const lastSeg = row.segments[row.segments.length - 1];
 
@@ -584,11 +648,11 @@ if (!hasPermission('dispatch_board')) {
 
       const combinedTechCodes = Array.from(techCodesSet).join(', ');
       
-      const primaryService = selectedOrder.services[0];
+      const primaryService = clonedOrder.services[0];
       const primaryStaff = primaryService?.staffList[0];
       const primarySeg = primaryStaff?.segments[0];
       
-      const itemUpdates = selectedOrder.services.map(svc => {
+      const itemUpdates = clonedOrder.services.map(svc => {
           // Lưu toàn bộ lộ trình của tất cả KTV trong dịch vụ này
           const allSegments = svc.staffList.flatMap(r => 
             r.segments.map(seg => ({ ...seg, ktvId: r.ktvId }))
@@ -618,7 +682,7 @@ if (!hasPermission('dispatch_board')) {
           };
       });
 
-      const res = await processDispatch(selectedOrder.id, {
+      const res = await processDispatch(clonedOrder.id, {
         status: 'PREPARING',
         technicianCode: combinedTechCodes,
         bedId: primarySeg?.bedId || null,
@@ -631,7 +695,7 @@ if (!hasPermission('dispatch_board')) {
 
       if (res.success) {
         setOrders(prev => prev.map(o =>
-          o.id === selectedOrder.id ? { ...o, dispatchStatus: 'dispatched' } : o
+          o.id === clonedOrder.id ? { ...o, dispatchStatus: 'dispatched' } : o
         ));
         setSelectedOrderId(null);
         setLeftPanelTab('dispatched');

@@ -31,7 +31,7 @@ const calcEndTime = (start: string, duration: number): string => {
     if (!start || !duration) return '';
     const [h, m] = start.split(':').map(Number);
     const end = new Date();
-    end.setHours(h, m + duration, 0, 0);
+    end.setHours(h, m + Math.floor(duration), Math.floor((duration % 1) * 60), 0);
     return `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
 };
 
@@ -144,9 +144,9 @@ export const DispatchSegmentRow = ({
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Phút</label>
                     <input
                         type="number"
-                        min={5} max={300} step={5}
+                        min={0.1} max={300} step={0.1}
                         value={segment.duration}
-                        onChange={e => handleChange({ duration: parseInt(e.target.value) || 30 })}
+                        onChange={e => handleChange({ duration: parseFloat(e.target.value) || 0.5 })}
                         className="w-full px-2 py-2.5 border-2 border-gray-50 rounded-xl text-[11px] font-black text-center focus:border-indigo-500 outline-none bg-gray-50/30 transition-all"
                     />
                 </div>

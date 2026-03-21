@@ -29,6 +29,7 @@ interface DispatchStaffRowProps {
     svcId: string;
     orderId: string;
     serviceName: string;
+    svcDuration: number;
     availableTurns: (TurnQueueData & { staff?: StaffData })[];
     rooms: Room[];
     beds: Bed[];
@@ -57,12 +58,12 @@ const calcEndTime = (start: string, duration: number): string => {
     if (!start || !duration) return '';
     const [h, m] = start.split(':').map(Number);
     const end = new Date();
-    end.setHours(h, m + duration, 0, 0);
+    end.setHours(h, m + Math.floor(duration), Math.floor((duration % 1) * 60), 0);
     return `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
 };
 
 export const DispatchStaffRow = ({
-    row, svcId, orderId, serviceName, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove
+    row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -83,7 +84,11 @@ export const DispatchStaffRow = ({
     const addSegment = () => {
         const lastSegment = row.segments[row.segments.length - 1];
         const startTime = lastSegment ? lastSegment.endTime : '08:00';
-        const duration = 30;
+        
+        const currentTotalMins = row.segments.reduce((sum, seg) => sum + (Number(seg.duration) || 0), 0);
+        let duration = svcDuration - currentTotalMins;
+        if (duration <= 0) duration = Math.min(15, svcDuration || 15); // Hỗ trợ test 1 phút
+        
         const newSegment: WorkSegment = {
             id: genId(),
             roomId: null,

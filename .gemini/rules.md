@@ -54,3 +54,12 @@ Khi code có thay đổi liên quan đến **database** (Supabase), bạn **BẮ
 | Notification & Config | `StaffNotifications`, `SystemConfigs` |
 | Infra & CRM | `Rooms`, `Beds`, `Customers` |
 | Auth & Push | `Users`, `StaffPushSubscriptions` |
+
+---
+
+# 📝 KNOWLEDGE & PLAN RETENTION (CRITICAL)
+
+## Rule: Lưu Phân Tích & Kế Hoạch Vào File
+1. **Phân tích hướng phát triển (Development Analysis):** Mỗi khi phân tích một hướng đi mới, ưu nhược điểm kỹ thuật hoặc kiến trúc, bạn BẮT BUỘC phải tạo/lưu một Markdown artifact để lưu trữ toàn bộ nội dung phân tích đó.
+2. **Kế hoạch triển khai (Implementation Plan):** Khi một bản kế hoạch (plan) được user ĐỒNG Ý / CHẤP NHẬN để tiến hành code, bạn BẮT BUỘC phải lưu lại bản kế hoạch đó vào một file lấy theo **Tên nhiệm vụ** (ví dụ: `plan_tao_api_dat_lich.md`).
+3. **Mục đích:** Đảm bảo không bị mất bối cảnh (context) khi chat dài, dễ dàng cho user đọc lại tiến trình làm việc và các quyết định kỹ thuật đã chốt.

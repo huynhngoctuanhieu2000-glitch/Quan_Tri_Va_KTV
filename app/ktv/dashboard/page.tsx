@@ -443,36 +443,11 @@ function ScreenTimer({ logic }: { logic: any }) {
   // 🔔 Stage Transition Alert Logic: Show if current segment ends in < 3 mins
   const [showTransitionAlert, setShowTransitionAlert] = useState(false);
   
+  // KIỂM TRA ĐIỀU KIỆN MỚI: Bỏ đi cái TransitionAlert nhưng vẫn giữ State phòng khi hệ thống có thêm config mới
   React.useEffect(() => {
-    if (!isTimerRunning || !nextSeg || !item.timeStart) {
-        setShowTransitionAlert(false);
-        return;
-    }
-    
-    const checkTransition = () => {
-        let tStart = item.timeStart || booking.timeStart;
-        if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
-            tStart = tStart.replace(' ', 'T') + 'Z';
-        }
-        const actualStartMs = new Date(tStart).getTime();
-        const nowMs = new Date().getTime();
-        
-        let cumulativeMins = 0;
-        for (let i = 0; i <= activeSegmentIndex; i++) {
-            cumulativeMins += ktvSegments[i].duration;
-        }
-        
-        const currentSegEndMs = actualStartMs + (cumulativeMins * 60 * 1000);
-        const diffMins = (currentSegEndMs - nowMs) / (60 * 1000);
-        
-        // Hiện cảnh báo nếu còn dưới 3 phút
-        setShowTransitionAlert(diffMins > 0 && diffMins <= 3);
-    };
-    
-    checkTransition();
-    const interval = setInterval(checkTransition, 10000);
-    return () => clearInterval(interval);
-  }, [isTimerRunning, nextSeg, activeSegmentIndex, ktvSegments, item.timeStart]);
+    // Current user request: "khi qua chặng 2 thì hk cần thông báo cho ktv đâu nhé"
+    setShowTransitionAlert(false);
+  }, []);
 
   return (
     <div className="p-4 h-full flex flex-col pt-8">
