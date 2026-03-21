@@ -36,7 +36,7 @@ export default function CRMPage() {
 
   if (!hasPermission('customer_management')) {
     return (
-      <AppLayout>
+      <AppLayout title="Quản Lý Khách Hàng">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -54,13 +54,10 @@ export default function CRMPage() {
   const formatVND = (n?: number) => n ? new Intl.NumberFormat('vi-VN').format(n) + 'đ' : '0đ';
 
   return (
-    <AppLayout>
+    <AppLayout title="Quản Lý Khách Hàng">
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Quản Lý Khách Hàng</h1>
-            <p className="text-sm text-gray-500 mt-1">Lưu trữ thông tin, lịch sử dịch vụ và phân hạng thành viên.</p>
-          </div>
+          <p className="text-sm text-gray-500">Lưu trữ thông tin, lịch sử dịch vụ và phân hạng thành viên.</p>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm transition-colors">
             <Plus size={16} />
             Thêm Khách Hàng

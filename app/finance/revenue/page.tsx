@@ -126,7 +126,7 @@ export default function RevenueReportsPage() {
 
     if (!hasPermission('revenue_reports')) {
         return (
-            <AppLayout>
+            <AppLayout title="Báo Cáo Doanh Thu">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -142,13 +142,12 @@ export default function RevenueReportsPage() {
     };
 
     return (
-        <AppLayout>
+        <AppLayout title="Báo Cáo Doanh Thu">
             <div className="space-y-6 max-w-5xl mx-auto">
                 {/* ─── Header ─────────────────────────────────────────── */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Doanh Thu & Báo Cáo</h1>
-                        <p className="text-sm text-gray-500 mt-1">Tổng quan tình hình kinh doanh của Spa.</p>
+                        <p className="text-sm text-gray-500">Tổng quan tình hình kinh doanh của Spa.</p>
                     </div>
                 </div>
 
@@ -241,18 +240,18 @@ export default function RevenueReportsPage() {
                                 href="/reception/orders"
                             />
                             <KPICard
+                                title="TB / Đơn"
+                                value={report.formatVND(summary.avgPerOrder)}
+                                icon={<Activity size={18} />}
+                                color="bg-amber-50 text-amber-600"
+                            />
+                            <KPICard
                                 title="Khách Hàng Mới"
                                 value={String(summary.newCustomers)}
                                 change={summary.customersChange}
                                 icon={<Users size={18} />}
                                 color="bg-purple-50 text-purple-600"
                                 onClick={() => setShowNewCustomers(true)}
-                            />
-                            <KPICard
-                                title="TB / Đơn"
-                                value={report.formatVND(summary.avgPerOrder)}
-                                icon={<Activity size={18} />}
-                                color="bg-amber-50 text-amber-600"
                             />
                             <KPICard
                                 title="Đánh Giá TB"

@@ -22,7 +22,7 @@ export default function KTVLeavePage() {
 
     if (!canAccessPage) {
         return (
-            <AppLayout>
+            <AppLayout title="Nghỉ Phép">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">{t.noAccess}</h2>
@@ -32,11 +32,10 @@ export default function KTVLeavePage() {
     }
 
     return (
-        <AppLayout>
+        <AppLayout title="Nghỉ Phép">
             <div className="max-w-md mx-auto space-y-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t.pageTitle}</h1>
-                    <p className="text-sm text-gray-500 mt-1">{t.pageSubtitle}</p>
+                    <p className="text-sm text-gray-500">{t.pageSubtitle}</p>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden p-6">

@@ -230,7 +230,7 @@ export default function KTVHistoryPage() {
 
   if (!hasPermission('ktv_history')) {
     return (
-      <AppLayout>
+      <AppLayout title="Lịch Sử">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -240,16 +240,12 @@ export default function KTVHistoryPage() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout title="Lịch Sử">
       <div className="space-y-4 max-w-xl mx-auto">
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <History className="text-indigo-600" size={24} />
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Lịch Sử Ca Làm</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Bấm vào đơn để xem chi tiết & nhập tip</p>
-          </div>
+        <div>
+            <p className="text-xs text-gray-400">Bấm vào đơn để xem chi tiết & nhập tip</p>
         </div>
 
         {/* Summary Cards */}

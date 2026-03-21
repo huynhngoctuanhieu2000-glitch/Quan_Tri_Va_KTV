@@ -42,10 +42,9 @@ export default function SettingsPage() {
     if (!mounted) return null;
 
     return (
-        <AppLayout>
+        <AppLayout title="Cài Đặt">
             <div className="max-w-4xl mx-auto space-y-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{t.pageTitle}</h1>
                     <p className="text-gray-500 mt-1">{t.pageSubtitle}</p>
                 </div>
 

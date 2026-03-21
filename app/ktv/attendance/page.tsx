@@ -26,7 +26,7 @@ const KTVAttendancePage = () => {
 
     if (!canAccessPage) {
         return (
-            <AppLayout>
+            <AppLayout title="Chấm Công">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">{t.noAccess}</h2>
@@ -36,11 +36,10 @@ const KTVAttendancePage = () => {
     }
 
     return (
-        <AppLayout>
+        <AppLayout title="Chấm Công">
             <div className="max-w-sm mx-auto px-4 py-8 space-y-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t.pageTitle}</h1>
-                    <p className="text-sm text-gray-500 mt-1">{t.pageSubtitle}</p>
+                    <p className="text-sm text-gray-500">{t.pageSubtitle}</p>
                 </div>
 
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-8 flex flex-col items-center gap-6">

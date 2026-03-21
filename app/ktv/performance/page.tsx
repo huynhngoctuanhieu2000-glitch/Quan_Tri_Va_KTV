@@ -14,7 +14,7 @@ export default function KTVPerformancePage() {
 
     if (!canAccessPage) {
         return (
-            <AppLayout>
+            <AppLayout title="Hiệu Suất">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">{t.noAccess}</h2>
@@ -24,12 +24,11 @@ export default function KTVPerformancePage() {
     }
 
     return (
-        <AppLayout>
+        <AppLayout title="Hiệu Suất">
             <div className="space-y-6 max-w-4xl mx-auto">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{t.pageTitle}</h1>
-                        <p className="text-sm text-gray-500 mt-1">{t.pageSubtitle}</p>
+                        <p className="text-sm text-gray-500">{t.pageSubtitle}</p>
                     </div>
                     <div className="flex gap-2">
                         <button className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors flex items-center gap-2">

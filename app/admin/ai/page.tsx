@@ -40,7 +40,7 @@ export default function AIFeaturesPage() {
 
     if (!canAccessPage) {
         return (
-            <AppLayout>
+            <AppLayout title="AI Assistant">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">{t.noAccess}</h2>
@@ -50,14 +50,10 @@ export default function AIFeaturesPage() {
     }
 
     return (
-        <AppLayout>
+        <AppLayout title="AI Assistant">
             <div className="space-y-6 max-w-4xl mx-auto">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-                        <Wand2 className="text-indigo-600" />
-                        {t.pageTitle}
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">{t.pageSubtitle}</p>
+                    <p className="text-sm text-gray-500">{t.pageSubtitle}</p>
                 </div>
 
                 <Tabs.Root defaultValue="image" className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">

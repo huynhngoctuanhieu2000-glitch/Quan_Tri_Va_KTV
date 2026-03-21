@@ -45,19 +45,13 @@ export default function NotificationHistoryPage() {
     } = useNotificationHistory();
 
     return (
-        <AppLayout>
+        <AppLayout title="Thông Báo">
             <div className="min-h-screen bg-slate-50/50 p-4 lg:p-8">
                 {/* Header */}
                 <div className="max-w-6xl mx-auto space-y-8">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                         <div>
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-                                    <Bell className="text-white" size={20} />
-                                </div>
-                                <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">{t.pageTitle}</h1>
-                            </div>
-                            <p className="text-gray-500 font-medium ml-13">{t.pageSubtitle}</p>
+                            <p className="text-gray-500 font-medium">{t.pageSubtitle}</p>
                         </div>
 
                         <div className="flex items-center gap-3">

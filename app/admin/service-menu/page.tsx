@@ -40,7 +40,7 @@ export default function ServiceMenuPage() {
 
   if (!hasPermission('service_menu')) {
     return (
-      <AppLayout>
+      <AppLayout title="Menu Dịch Vụ">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -56,12 +56,11 @@ export default function ServiceMenuPage() {
     : services.filter(s => s.category === activeCategory);
 
   return (
-    <AppLayout>
+    <AppLayout title="Menu Dịch Vụ">
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Quản Lý Menu Dịch Vụ</h1>
-            <p className="text-sm text-gray-500 mt-1">Thiết lập danh sách dịch vụ, giá tiền và thời lượng.</p>
+            <p className="text-sm text-gray-500">Thiết lập danh sách dịch vụ, giá tiền và thời lượng.</p>
           </div>
           <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm transition-colors">
             <Plus size={16} />

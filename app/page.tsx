@@ -40,7 +40,7 @@ export default function HomePage() {
 
   if (isKTV) {
     return (
-      <AppLayout>
+      <AppLayout title="Dashboard">
         <div className="min-h-[80vh] flex flex-col items-center justify-center bg-[#FDFBF7]">
           <div className="w-8 h-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
           <p className="mt-4 text-emerald-700 font-medium">Đang chuyển hướng đến bảng điều khiển...</p>
@@ -51,7 +51,7 @@ export default function HomePage() {
 
 
   return (
-    <AppLayout>
+    <AppLayout title="Dashboard">
       <div className="max-w-5xl mx-auto space-y-8">
         {/* Welcome Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

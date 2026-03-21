@@ -32,7 +32,7 @@ export default function ServiceHandbookPage() {
 
     if (!canAccessPage) {
         return (
-            <AppLayout>
+            <AppLayout title="Sổ Tay Dịch Vụ">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <ShieldAlert size={48} className="text-red-500 mb-4" />
                     <h2 className="text-xl font-bold text-gray-900">{t.noAccess}</h2>
@@ -42,14 +42,10 @@ export default function ServiceHandbookPage() {
     }
 
     return (
-        <AppLayout>
+        <AppLayout title="Sổ Tay Dịch Vụ">
             <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-                            <BookOpen className="text-indigo-600" />
-                            {t.pageTitle}
-                        </h1>
                         <p className="text-sm text-gray-500 mt-1">{t.pageSubtitle}</p>
                     </div>
                     <div className="flex items-center gap-3">

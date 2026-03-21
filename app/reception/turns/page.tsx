@@ -140,7 +140,7 @@ export default function TurnTrackingPage() {
 
   if (!hasPermission('turn_tracking')) {
     return (
-      <AppLayout>
+      <AppLayout title="Quản Lý Lượt">
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
@@ -156,18 +156,14 @@ export default function TurnTrackingPage() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout title="Quản Lý Lượt">
       <div className="space-y-6">
         {/* ─── Section điểm danh chờ xác nhận ─── */}
         <AttendancePendingSection />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <ListOrdered className="text-indigo-600" />
-              Theo Dõi Thứ Tự Tua
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">Quản lý thứ tự phục vụ của kỹ thuật viên.</p>
+            <p className="text-sm text-gray-500">Quản lý thứ tự phục vụ của kỹ thuật viên.</p>
           </div>
 
           <div className="flex gap-2">
