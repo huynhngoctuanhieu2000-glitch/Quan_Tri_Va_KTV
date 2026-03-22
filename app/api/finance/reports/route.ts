@@ -8,13 +8,16 @@ const COMPLETED_STATUSES = ['COMPLETED', 'DONE', 'FEEDBACK'];
 const OPERATING_HOURS_PER_DAY = 12; // Spa mở cửa 12h/ngày
 
 /**
- * GET /api/finance/reports?dateFrom=2026-03-01&dateTo=2026-03-31
+ * GET /api/finance/reports?dateFrom=2026-03-01&dateTo=2026-03-31&groupBy=day&hourFrom=10&hourTo=14
  * Returns comprehensive revenue & reports data
  */
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+    const groupBy = (searchParams.get('groupBy') || 'day') as 'hour' | 'day' | 'week' | 'month';
+    const hourFrom = searchParams.get('hourFrom') ? parseInt(searchParams.get('hourFrom')!, 10) : null;
+    const hourTo = searchParams.get('hourTo') ? parseInt(searchParams.get('hourTo')!, 10) : null;
 
     if (!dateFrom || !dateTo) {
         return NextResponse.json({ success: false, error: 'dateFrom and dateTo are required' }, { status: 400 });
@@ -166,6 +169,10 @@ export async function GET(request: Request) {
         const avgPerOrder = orders > 0 ? Math.round(revenue / orders) : 0;
         const totalTip = items.reduce((sum, i) => sum + (Number(i.tip) || 0), 0);
 
+        // #2 Total service count + #3 Total service revenue
+        const totalServiceCount = items.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+        const totalServiceRevenue = items.reduce((sum, i) => sum + (Number(i.price) || 0), 0);
+
         // Average rating
         const ratedItems = items.filter(i => i.itemRating && Number(i.itemRating) > 0);
         const avgRating = ratedItems.length > 0
@@ -184,6 +191,19 @@ export async function GET(request: Request) {
             const qty = Number(i.quantity) || 1;
             totalCommission += calcCommission(dur) * qty;
         });
+
+        // #4 Cost per Service = commission / service count
+        const costPerService = totalServiceCount > 0 ? Math.round(totalCommission / totalServiceCount) : 0;
+
+        // #5 Cost Ratio = commission / revenue × 100%
+        const costRatio = revenue > 0 ? Math.round((totalCommission / revenue) * 1000) / 10 : 0;
+
+        // #6 Unique customers from completed bookings
+        const uniqueCustomerIds = new Set(completedBookings.map(b => b.customerId).filter(Boolean));
+        const uniqueCustomers = uniqueCustomerIds.size;
+
+        // #7 Average bill per customer
+        const avgBillPerCustomer = uniqueCustomers > 0 ? Math.round(revenue / uniqueCustomers) : 0;
 
         // Previous period
         const prevRevenue = (prevBookings || []).reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
@@ -206,6 +226,60 @@ export async function GET(request: Request) {
         });
         const dailyRevenue = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
 
+        // ─── 8b. Hourly Revenue (with optional hour filter) ──────────────
+        const hourlyRevenueMap: Record<number, { hour: number; revenue: number; orders: number }> = {};
+        completedBookings.forEach(b => {
+            const time = b.bookingDate || b.createdAt || '';
+            const match = time.match(/(\d{2}):\d{2}/);
+            if (match) {
+                const hour = parseInt(match[1], 10);
+                // Apply hour filter if provided
+                if (hourFrom !== null && hour < hourFrom) return;
+                if (hourTo !== null && hour > hourTo) return;
+                if (!hourlyRevenueMap[hour]) hourlyRevenueMap[hour] = { hour, revenue: 0, orders: 0 };
+                hourlyRevenueMap[hour].revenue += Number(b.totalAmount) || 0;
+                hourlyRevenueMap[hour].orders += 1;
+            }
+        });
+        const hourlyRevenue = Array.from({ length: 24 }, (_, h) => ({
+            hour: h,
+            label: `${h}:00`,
+            revenue: hourlyRevenueMap[h]?.revenue || 0,
+            orders: hourlyRevenueMap[h]?.orders || 0,
+        })).filter(h => {
+            if (hourFrom !== null && hourTo !== null) return h.hour >= hourFrom && h.hour <= hourTo;
+            return h.revenue > 0 || (h.hour >= 8 && h.hour <= 22);
+        });
+
+        // ─── 8c. Weekly Revenue ──────────────────────────────────────────
+        const weeklyMap: Record<string, { week: string; revenue: number; orders: number }> = {};
+        completedBookings.forEach(b => {
+            const day = (b.bookingDate || b.createdAt || '').split(' ')[0].split('T')[0];
+            if (!day) return;
+            const d = new Date(day);
+            // ISO week: get Monday of the week
+            const dayOfWeek = d.getDay() || 7; // Sunday = 7
+            const monday = new Date(d);
+            monday.setDate(d.getDate() - dayOfWeek + 1);
+            const weekKey = monday.toISOString().split('T')[0];
+            if (!weeklyMap[weekKey]) weeklyMap[weekKey] = { week: weekKey, revenue: 0, orders: 0 };
+            weeklyMap[weekKey].revenue += Number(b.totalAmount) || 0;
+            weeklyMap[weekKey].orders += 1;
+        });
+        const weeklyRevenue = Object.values(weeklyMap).sort((a, b) => a.week.localeCompare(b.week));
+
+        // ─── 8d. Monthly Revenue ─────────────────────────────────────────
+        const monthlyMap: Record<string, { month: string; revenue: number; orders: number }> = {};
+        completedBookings.forEach(b => {
+            const day = (b.bookingDate || b.createdAt || '').split(' ')[0].split('T')[0];
+            if (!day) return;
+            const monthKey = day.substring(0, 7); // YYYY-MM
+            if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { month: monthKey, revenue: 0, orders: 0 };
+            monthlyMap[monthKey].revenue += Number(b.totalAmount) || 0;
+            monthlyMap[monthKey].orders += 1;
+        });
+        const monthlyRevenue = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
+
         // ─── 9. Service Breakdown ────────────────────────────────────────
         const svcBreakdown: Record<string, { name: string; revenue: number; count: number }> = {};
         items.forEach(i => {
@@ -219,18 +293,18 @@ export async function GET(request: Request) {
             .sort((a, b) => b.revenue - a.revenue);
 
         // ─── 10. Top KTV ─────────────────────────────────────────────────
-        const ktvMap: Record<string, { code: string; orders: number; revenue: number; commission: number }> = {};
+        const ktvMap: Record<string, { code: string; orders: number; revenue: number; commission: number; totalTip: number; ratingSum: number; ratingCount: number }> = {};
         completedBookings.forEach(b => {
             if (!b.technicianCode) return;
             const codes = b.technicianCode.split(',').map((c: string) => c.trim()).filter(Boolean);
             const share = codes.length > 0 ? (Number(b.totalAmount) || 0) / codes.length : 0;
             codes.forEach((code: string) => {
-                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0 };
+                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0, totalTip: 0, ratingSum: 0, ratingCount: 0 };
                 ktvMap[code].orders += 1;
                 ktvMap[code].revenue += share;
             });
         });
-        // Calculate commission per KTV from their BookingItems
+        // Calculate commission + tip + rating per KTV from their BookingItems
         items.forEach(i => {
             const techs = Array.isArray(i.technicianCodes) ? i.technicianCodes : [];
             if (techs.length === 0) return;
@@ -238,16 +312,23 @@ export async function GET(request: Request) {
             const qty = Number(i.quantity) || 1;
             const itemCommission = calcCommission(dur) * qty;
             const perKtvCommission = itemCommission / techs.length;
+            const perKtvTip = (Number(i.tip) || 0) / techs.length;
+            const hasRating = i.itemRating && Number(i.itemRating) > 0;
             techs.forEach((tc: string) => {
                 const code = tc.trim();
                 if (!code) return;
-                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0 };
+                if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0, totalTip: 0, ratingSum: 0, ratingCount: 0 };
                 ktvMap[code].commission += perKtvCommission;
+                ktvMap[code].totalTip += perKtvTip;
+                if (hasRating) {
+                    ktvMap[code].ratingSum += Number(i.itemRating);
+                    ktvMap[code].ratingCount += 1;
+                }
             });
         });
-        const topKTV = Object.values(ktvMap)
-            .sort((a, b) => b.revenue - a.revenue)
-            .slice(0, 10);
+        // Return ALL KTVs sorted by revenue (no top-10 limit)
+        const allKTV = Object.values(ktvMap)
+            .sort((a, b) => b.revenue - a.revenue);
 
         // ─── 11. Peak Hours ──────────────────────────────────────────────
         const hourMap: Record<number, number> = {};
@@ -285,16 +366,21 @@ export async function GET(request: Request) {
         const languageBreakdown = Object.values(langMap).sort((a, b) => b.orders - a.orders);
 
         // ─── 12. Employees lookup for KTV names ──────────────────────────
-        const ktvCodes = topKTV.map(k => k.code);
+        const ktvCodes = allKTV.map(k => k.code);
         let employeeMap: Record<string, string> = {};
         if (ktvCodes.length > 0) {
-            const { data: employees } = await supabase
-                .from('Employees')
-                .select('code, name')
-                .in('code', ktvCodes);
-            (employees || []).forEach((e: any) => {
-                if (e.code) employeeMap[e.code] = e.name || e.code;
-            });
+            // Batch lookup if many KTVs
+            const batchSize = 50;
+            for (let i = 0; i < ktvCodes.length; i += batchSize) {
+                const batch = ktvCodes.slice(i, i + batchSize);
+                const { data: employees } = await supabase
+                    .from('Employees')
+                    .select('code, name')
+                    .in('code', batch);
+                (employees || []).forEach((e: any) => {
+                    if (e.code) employeeMap[e.code] = e.name || e.code;
+                });
+            }
         }
 
         return NextResponse.json({
@@ -308,14 +394,34 @@ export async function GET(request: Request) {
                 avgPerOrder,
                 totalTip,
                 totalCommission,
+                // New KPIs
+                totalServiceCount,
+                totalServiceRevenue,
+                costPerService,
+                costRatio,
+                uniqueCustomers,
+                avgBillPerCustomer,
+                // Comparisons
                 revenueChange,
                 ordersChange,
                 customersChange,
             },
             dailyRevenue,
+            hourlyRevenue,
+            weeklyRevenue,
+            monthlyRevenue,
             serviceBreakdown,
             languageBreakdown,
-            topKTV: topKTV.map(k => ({ ...k, name: employeeMap[k.code] || k.code })),
+            topKTV: allKTV.map(k => ({
+                code: k.code,
+                name: employeeMap[k.code] || k.code,
+                orders: k.orders,
+                revenue: Math.round(k.revenue),
+                commission: Math.round(k.commission),
+                totalTip: Math.round(k.totalTip),
+                avgRating: k.ratingCount > 0 ? Math.round((k.ratingSum / k.ratingCount) * 10) / 10 : 0,
+                ratingCount: k.ratingCount,
+            })),
             peakHours,
             newCustomerList: (newCustomerList || []).map((c: any) => ({
                 id: c.id,
@@ -326,8 +432,8 @@ export async function GET(request: Request) {
             })),
             // Filter data for client-side filtering
             serviceList: Object.values(svcBreakdown).map(s => s.name),
-            ktvList: topKTV.map(k => ({ code: k.code, name: employeeMap[k.code] || k.code })),
-            _meta: { dateFrom, dateTo, prevFrom: prevFromStr, prevTo: prevToStr, periodDays },
+            ktvList: allKTV.map(k => ({ code: k.code, name: employeeMap[k.code] || k.code })),
+            _meta: { dateFrom, dateTo, prevFrom: prevFromStr, prevTo: prevToStr, periodDays, groupBy },
         });
 
     } catch (err: any) {

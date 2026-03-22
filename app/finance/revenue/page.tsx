@@ -5,13 +5,14 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import {
     ShieldAlert, TrendingUp, TrendingDown, DollarSign, Users, Calendar,
-    Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe, X, Phone, Mail
+    Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe, X, Phone, Mail,
+    Package, Receipt, Calculator, PieChart as PieChartIcon, Clock, Crown
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
-import { useRevenueReport } from './RevenueReport.logic';
+import { useRevenueReport, GroupBy } from './RevenueReport.logic';
 
 // 🔧 UI CONFIGURATION
 const PIE_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
@@ -19,17 +20,20 @@ const DATE_PRESETS = [
     { key: 'today', label: 'Hôm nay' },
     { key: 'week', label: 'Tuần này' },
     { key: 'month', label: 'Tháng này' },
+    { key: 'year', label: 'Năm này' },
     { key: 'custom', label: 'Tuỳ chọn' },
 ] as const;
 
-// Language Display Labels
-const LANG_DISPLAY: Record<string, { label: string; flag: string }> = {
-    'vi': { label: 'Việt', flag: '🇻🇳' },
-    'en': { label: 'English', flag: '🇬🇧' },
-    'ko': { label: '한국어', flag: '🇰🇷' },
-    'zh': { label: '中文', flag: '🇨🇳' },
-    'jp': { label: '日本語', flag: '🇯🇵' },
-};
+const GROUP_BY_OPTIONS: { key: GroupBy; label: string }[] = [
+    { key: 'hour', label: 'Giờ' },
+    { key: 'day', label: 'Ngày' },
+    { key: 'week', label: 'Tuần' },
+    { key: 'month', label: 'Tháng' },
+];
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${i}:00` }));
+
+const KTV_DISPLAY_LIMIT = 5;
 
 // ─── Filter Chip Bar ──────────────────────────────────────────────────────────
 const FilterChipBar = ({ label, icon, options, selected, onSelect }: {
@@ -120,6 +124,7 @@ export default function RevenueReportsPage() {
     const report = useRevenueReport();
     const [filterLang, setFilterLang] = React.useState('all');
     const [showNewCustomers, setShowNewCustomers] = React.useState(false);
+    const [showAllKTV, setShowAllKTV] = React.useState(false);
 
     React.useEffect(() => { setMounted(true); }, []);
     if (!mounted) return null;
@@ -140,6 +145,50 @@ export default function RevenueReportsPage() {
         const parts = d.split('-');
         return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d;
     };
+
+    // Get chart data based on groupBy
+    const getRevenueChartData = () => {
+        switch (report.groupBy) {
+            case 'hour':
+                return report.data.hourlyRevenue.map(h => ({
+                    label: h.label,
+                    revenue: h.revenue,
+                    revenueK: Math.round(h.revenue / 1000),
+                    orders: h.orders,
+                }));
+            case 'week':
+                return report.data.weeklyRevenue.map(w => ({
+                    label: formatDate(w.week),
+                    revenue: w.revenue,
+                    revenueK: Math.round(w.revenue / 1000),
+                    orders: w.orders,
+                }));
+            case 'month':
+                return report.data.monthlyRevenue.map(m => ({
+                    label: m.month.substring(5), // MM from YYYY-MM
+                    revenue: m.revenue,
+                    revenueK: Math.round(m.revenue / 1000),
+                    orders: m.orders,
+                }));
+            default: // day
+                return report.data.dailyRevenue.map(d => ({
+                    label: formatDate(d.date),
+                    revenue: d.revenue,
+                    revenueK: Math.round(d.revenue / 1000),
+                    orders: d.orders,
+                }));
+        }
+    };
+
+    const revenueChartData = getRevenueChartData();
+    const chartTitle = { hour: 'Doanh Thu Theo Giờ', day: 'Doanh Thu Theo Ngày', week: 'Doanh Thu Theo Tuần', month: 'Doanh Thu Theo Tháng' }[report.groupBy];
+
+    // Find KTV with highest tip
+    const topTipKTV = report.data.topKTV.length > 0
+        ? report.data.topKTV.reduce((max, k) => k.totalTip > max.totalTip ? k : max, report.data.topKTV[0])
+        : null;
+
+    const displayedKTV = showAllKTV ? report.data.topKTV : report.data.topKTV.slice(0, KTV_DISPLAY_LIMIT);
 
     return (
         <AppLayout title="Báo Cáo">
@@ -221,8 +270,9 @@ export default function RevenueReportsPage() {
                             </div>
                         )}
 
-                        {/* ─── KPI Cards ─────────────────────────────── */}
+                        {/* ─── KPI Cards (10 chỉ số) ──────────────────── */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {/* #1 Tổng Doanh Thu */}
                             <KPICard
                                 title="Tổng Doanh Thu"
                                 value={report.formatVND(summary.revenue)}
@@ -231,69 +281,138 @@ export default function RevenueReportsPage() {
                                 icon={<DollarSign size={18} />}
                                 color="bg-emerald-50 text-emerald-600"
                             />
+                            {/* #2 Số Lượng DV */}
                             <KPICard
-                                title="Số Đơn Hàng"
-                                value={String(summary.orders)}
-                                change={summary.ordersChange}
-                                icon={<BarChart3 size={18} />}
-                                color="bg-indigo-50 text-indigo-600"
-                                href="/reception/orders"
+                                title="Số Lượng DV"
+                                value={String(summary.totalServiceCount)}
+                                subtitle={`${summary.orders} đơn`}
+                                icon={<Package size={18} />}
+                                color="bg-blue-50 text-blue-600"
                             />
+                            {/* #3 Tổng Giá Trị DV */}
                             <KPICard
-                                title="TB / Đơn"
-                                value={report.formatVND(summary.avgPerOrder)}
-                                icon={<Activity size={18} />}
-                                color="bg-amber-50 text-amber-600"
+                                title="Tổng Giá Trị DV"
+                                value={report.formatVND(summary.totalServiceRevenue)}
+                                subtitle={report.formatFullVND(summary.totalServiceRevenue)}
+                                icon={<Receipt size={18} />}
+                                color="bg-teal-50 text-teal-600"
                             />
+                            {/* #4 CP TB / DV */}
                             <KPICard
-                                title="Khách Hàng Mới"
-                                value={String(summary.newCustomers)}
+                                title="CP TB / DV"
+                                value={report.formatVND(summary.costPerService)}
+                                subtitle="Tiền tua TB / dịch vụ"
+                                icon={<Calculator size={18} />}
+                                color="bg-orange-50 text-orange-600"
+                            />
+                            {/* #5 Tỷ Lệ Chi Phí */}
+                            <KPICard
+                                title="Tỷ Lệ Chi Phí"
+                                value={`${summary.costRatio}%`}
+                                subtitle="Tua / Doanh thu"
+                                icon={<PieChartIcon size={18} />}
+                                color="bg-rose-50 text-rose-600"
+                            />
+                            {/* #6 Số Khách */}
+                            <KPICard
+                                title="Số Khách"
+                                value={String(summary.uniqueCustomers)}
+                                subtitle={`${summary.newCustomers} khách mới`}
                                 change={summary.customersChange}
                                 icon={<Users size={18} />}
                                 color="bg-purple-50 text-purple-600"
                                 onClick={() => setShowNewCustomers(true)}
                             />
+                            {/* #7 TB / Khách */}
+                            <KPICard
+                                title="TB / Khách"
+                                value={report.formatVND(summary.avgBillPerCustomer)}
+                                subtitle={`TB/đơn: ${report.formatVND(summary.avgPerOrder)}`}
+                                icon={<Activity size={18} />}
+                                color="bg-amber-50 text-amber-600"
+                            />
+                            {/* Đánh Giá TB */}
                             <KPICard
                                 title="Đánh Giá TB"
                                 value={summary.avgRating > 0 ? `${summary.avgRating} ★` : '—'}
                                 subtitle={summary.avgRating >= 4 ? 'Xuất sắc' : summary.avgRating >= 3 ? 'Tốt' : ''}
                                 icon={<Star size={18} />}
                                 color="bg-yellow-50 text-yellow-600"
-                                href="/reception/orders"
                             />
+                            {/* Tổng Tip */}
                             <KPICard
                                 title="Tổng Tip"
                                 value={summary.totalTip > 0 ? report.formatVND(summary.totalTip) : '0đ'}
                                 icon={<Award size={18} />}
-                                color="bg-rose-50 text-rose-600"
+                                color="bg-pink-50 text-pink-600"
                             />
                         </div>
 
-                        {/* ─── Charts Row 1 ──────────────────────────── */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {/* Daily Revenue Bar Chart */}
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                <h3 className="text-base font-bold text-gray-900 mb-4">Doanh Thu Theo Ngày</h3>
-                                {report.data.dailyRevenue.length > 0 ? (
-                                    <div className="h-64 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={report.data.dailyRevenue.map(d => ({
-                                                ...d, label: formatDate(d.date),
-                                                revenueK: Math.round(d.revenue / 1000),
-                                            }))}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                                <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `${v}K`} />
-                                                <Tooltip content={<ChartTooltip />} />
-                                                <Bar dataKey="revenueK" name="Doanh thu (K)" fill="#4f46e5" radius={[6, 6, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                ) : (
-                                    <div className="h-64 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
-                                )}
+                        {/* ─── Revenue Chart + Group By ─────────────────── */}
+                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                                <h3 className="text-base font-bold text-gray-900">{chartTitle}</h3>
+                                <div className="flex items-center gap-1">
+                                    {GROUP_BY_OPTIONS.map(o => (
+                                        <button
+                                            key={o.key}
+                                            onClick={() => report.applyGroupBy(o.key)}
+                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                                                report.groupBy === o.key
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'bg-gray-100 text-gray-500 active:bg-gray-200'
+                                            }`}
+                                        >
+                                            {o.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
+                            {/* Hour range picker — only visible when groupBy = 'hour' */}
+                            {report.groupBy === 'hour' && (
+                                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                                    <Clock size={14} className="text-gray-400" />
+                                    <span className="text-xs text-gray-500">Từ</span>
+                                    <select
+                                        value={report.hourFrom}
+                                        onChange={e => report.applyHourFilter(Number(e.target.value), report.hourTo)}
+                                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                    >
+                                        {HOUR_OPTIONS.map(h => (
+                                            <option key={h.value} value={h.value}>{h.label}</option>
+                                        ))}
+                                    </select>
+                                    <span className="text-xs text-gray-500">đến</span>
+                                    <select
+                                        value={report.hourTo}
+                                        onChange={e => report.applyHourFilter(report.hourFrom, Number(e.target.value))}
+                                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                    >
+                                        {HOUR_OPTIONS.map(h => (
+                                            <option key={h.value} value={h.value}>{h.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {revenueChartData.length > 0 ? (
+                                <div className="h-64 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={revenueChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `${v}K`} />
+                                            <Tooltip content={<ChartTooltip />} />
+                                            <Bar dataKey="revenueK" name="Doanh thu (K)" fill="#4f46e5" radius={[6, 6, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-64 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                            )}
+                        </div>
 
+                        {/* ─── Charts Row: Service + Language ──────────── */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {/* Service Breakdown Pie */}
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                                 <h3 className="text-base font-bold text-gray-900 mb-4">Cơ Cấu Dịch Vụ</h3>
@@ -331,10 +450,7 @@ export default function RevenueReportsPage() {
                                     <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
                                 )}
                             </div>
-                        </div>
 
-                        {/* ─── Charts Row 2: Language + Top KTV ────── */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {/* Language Breakdown Donut */}
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                                 <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -386,19 +502,24 @@ export default function RevenueReportsPage() {
                                     <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
                                 )}
                             </div>
+                        </div>
+
+                        {/* ─── KTV Section (#8 #9 #10) ──────────────────── */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {/* Top KTV */}
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                <h3 className="text-base font-bold text-gray-900 mb-4">Top Kỹ Thuật Viên</h3>
+                                <h3 className="text-base font-bold text-gray-900 mb-4">Bảng Xếp Hạng KTV</h3>
                                 {report.data.topKTV.length > 0 ? (
                                     <>
                                         <div className="space-y-2.5">
-                                            {report.data.topKTV.slice(0, 5).map((ktv, idx) => {
+                                            {displayedKTV.map((ktv, idx) => {
                                                 const maxRevenue = report.data.topKTV[0]?.revenue || 1;
                                                 const pct = Math.round((ktv.revenue / maxRevenue) * 100);
                                                 const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                                                const isTopTip = topTipKTV && ktv.code === topTipKTV.code && ktv.totalTip > 0;
                                                 return (
                                                     <div key={ktv.code} className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
-                                                        {/* Row 1: Name + Orders */}
+                                                        {/* Row 1: Name + Orders + Rating */}
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex items-center gap-2">
                                                                 {medal ? (
@@ -407,18 +528,30 @@ export default function RevenueReportsPage() {
                                                                     <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500">{idx + 1}</span>
                                                                 )}
                                                                 <span className="text-sm font-bold text-gray-800">{ktv.name}</span>
+                                                                {isTopTip && (
+                                                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black flex items-center gap-0.5">
+                                                                        <Crown size={9} /> Top Tip
+                                                                    </span>
+                                                                )}
                                                             </div>
-                                                            <span className="text-[11px] text-gray-400 font-medium">{ktv.orders} đơn</span>
+                                                            <div className="flex items-center gap-2">
+                                                                {ktv.avgRating > 0 && (
+                                                                    <span className="px-1.5 py-0.5 rounded-md bg-yellow-50 text-yellow-700 text-[10px] font-bold">
+                                                                        {ktv.avgRating} ★ <span className="text-gray-400 font-normal">({ktv.ratingCount})</span>
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-[11px] text-gray-400 font-medium">{ktv.orders} đơn</span>
+                                                            </div>
                                                         </div>
                                                         {/* Progress bar */}
                                                         <div className="h-1.5 bg-gray-200 rounded-full mb-2.5">
                                                             <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
                                                         </div>
-                                                        {/* Row 2: Revenue + Commission */}
-                                                        <div className="flex items-center justify-between text-xs">
+                                                        {/* Row 2: Revenue + Commission + Tip */}
+                                                        <div className="flex items-center justify-between text-xs flex-wrap gap-1">
                                                             <div className="flex items-center gap-1.5">
                                                                 <DollarSign size={12} className="text-emerald-500" />
-                                                                <span className="text-gray-500">Doanh thu:</span>
+                                                                <span className="text-gray-500">DT:</span>
                                                                 <span className="font-bold text-indigo-600">{report.formatVND(ktv.revenue)}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1.5">
@@ -426,12 +559,28 @@ export default function RevenueReportsPage() {
                                                                 <span className="text-gray-500">Tua:</span>
                                                                 <span className="font-bold text-cyan-600">{report.formatVND(ktv.commission || 0)}</span>
                                                             </div>
+                                                            {ktv.totalTip > 0 && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Award size={12} className="text-pink-500" />
+                                                                    <span className="text-gray-500">Tip:</span>
+                                                                    <span className="font-bold text-pink-600">{report.formatVND(ktv.totalTip)}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
-                                        {/* Tổng Tiền Tua ở dưới cùng */}
+                                        {/* Show all / Show less */}
+                                        {report.data.topKTV.length > KTV_DISPLAY_LIMIT && (
+                                            <button
+                                                onClick={() => setShowAllKTV(!showAllKTV)}
+                                                className="w-full mt-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-xl active:bg-indigo-100 transition-all"
+                                            >
+                                                {showAllKTV ? 'Thu gọn' : `Xem tất cả ${report.data.topKTV.length} KTV`}
+                                            </button>
+                                        )}
+                                        {/* Tổng Tiền Tua */}
                                         <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                 <Coins size={16} className="text-cyan-600" />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { format, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear } from 'date-fns';
 
 // 🔧 CONFIG
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -11,7 +11,8 @@ const getTodayVn = () => {
     return d.toISOString().split('T')[0];
 };
 
-export type DatePreset = 'today' | 'week' | 'month' | 'custom';
+export type DatePreset = 'today' | 'week' | 'month' | 'year' | 'custom';
+export type GroupBy = 'hour' | 'day' | 'week' | 'month';
 
 export interface ReportSummary {
     revenue: number;
@@ -22,6 +23,14 @@ export interface ReportSummary {
     avgPerOrder: number;
     totalTip: number;
     totalCommission: number;
+    // New KPIs
+    totalServiceCount: number;
+    totalServiceRevenue: number;
+    costPerService: number;
+    costRatio: number;
+    uniqueCustomers: number;
+    avgBillPerCustomer: number;
+    // Comparisons
     revenueChange: number;
     ordersChange: number;
     customersChange: number;
@@ -29,6 +38,25 @@ export interface ReportSummary {
 
 export interface DailyRevenue {
     date: string;
+    revenue: number;
+    orders: number;
+}
+
+export interface HourlyRevenue {
+    hour: number;
+    label: string;
+    revenue: number;
+    orders: number;
+}
+
+export interface WeeklyRevenue {
+    week: string;
+    revenue: number;
+    orders: number;
+}
+
+export interface MonthlyRevenue {
+    month: string;
     revenue: number;
     orders: number;
 }
@@ -45,6 +73,9 @@ export interface TopKTV {
     orders: number;
     revenue: number;
     commission: number;
+    totalTip: number;
+    avgRating: number;
+    ratingCount: number;
 }
 
 export interface PeakHour {
@@ -74,6 +105,9 @@ export interface NewCustomer {
 export interface ReportData {
     summary: ReportSummary;
     dailyRevenue: DailyRevenue[];
+    hourlyRevenue: HourlyRevenue[];
+    weeklyRevenue: WeeklyRevenue[];
+    monthlyRevenue: MonthlyRevenue[];
     serviceBreakdown: ServiceBreakdown[];
     languageBreakdown: LanguageBreakdown[];
     topKTV: TopKTV[];
@@ -86,6 +120,9 @@ export interface ReportData {
 const EMPTY_SUMMARY: ReportSummary = {
     revenue: 0, orders: 0, newCustomers: 0, avgRating: 0,
     occupancy: 0, avgPerOrder: 0, totalTip: 0, totalCommission: 0,
+    totalServiceCount: 0, totalServiceRevenue: 0,
+    costPerService: 0, costRatio: 0,
+    uniqueCustomers: 0, avgBillPerCustomer: 0,
     revenueChange: 0, ordersChange: 0, customersChange: 0,
 };
 
@@ -94,10 +131,16 @@ export const useRevenueReport = () => {
     const [datePreset, setDatePreset] = useState<DatePreset>('month');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [groupBy, setGroupBy] = useState<GroupBy>('day');
+    const [hourFrom, setHourFrom] = useState<number>(0);
+    const [hourTo, setHourTo] = useState<number>(23);
     const [isLoading, setIsLoading] = useState(false);
     const [data, setData] = useState<ReportData>({
         summary: EMPTY_SUMMARY,
         dailyRevenue: [],
+        hourlyRevenue: [],
+        weeklyRevenue: [],
+        monthlyRevenue: [],
         serviceBreakdown: [],
         languageBreakdown: [],
         topKTV: [],
@@ -107,15 +150,24 @@ export const useRevenueReport = () => {
         newCustomerList: [],
     });
 
-    const fetchReport = useCallback(async (from: string, to: string) => {
+    const fetchReport = useCallback(async (from: string, to: string, gb?: GroupBy, hFrom?: number, hTo?: number) => {
         setIsLoading(true);
         try {
-            const res = await fetch(`/api/finance/reports?dateFrom=${from}&dateTo=${to}`);
+            const params = new URLSearchParams({ dateFrom: from, dateTo: to, groupBy: gb || groupBy });
+            // Only add hour filter when groupBy is 'hour'
+            if ((gb || groupBy) === 'hour') {
+                params.set('hourFrom', String(hFrom ?? hourFrom));
+                params.set('hourTo', String(hTo ?? hourTo));
+            }
+            const res = await fetch(`/api/finance/reports?${params.toString()}`);
             const json = await res.json();
             if (json.success) {
                 setData({
                     summary: json.summary || EMPTY_SUMMARY,
                     dailyRevenue: json.dailyRevenue || [],
+                    hourlyRevenue: json.hourlyRevenue || [],
+                    weeklyRevenue: json.weeklyRevenue || [],
+                    monthlyRevenue: json.monthlyRevenue || [],
                     serviceBreakdown: json.serviceBreakdown || [],
                     languageBreakdown: json.languageBreakdown || [],
                     topKTV: json.topKTV || [],
@@ -130,7 +182,7 @@ export const useRevenueReport = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [groupBy, hourFrom, hourTo]);
 
     // Apply preset
     useEffect(() => {
@@ -149,6 +201,10 @@ export const useRevenueReport = () => {
             const now = new Date();
             from = format(startOfMonth(now), 'yyyy-MM-dd');
             to = format(endOfMonth(now), 'yyyy-MM-dd');
+        } else if (datePreset === 'year') {
+            const now = new Date();
+            from = format(startOfYear(now), 'yyyy-MM-dd');
+            to = format(endOfYear(now), 'yyyy-MM-dd');
         } else {
             // custom — user picks manually
             return;
@@ -160,6 +216,18 @@ export const useRevenueReport = () => {
     }, [datePreset, fetchReport]);
 
     const applyCustomDate = () => fetchReport(dateFrom, dateTo);
+
+    // Re-fetch when groupBy or hour range changes (only if we already have dates)
+    const applyGroupBy = (newGroupBy: GroupBy) => {
+        setGroupBy(newGroupBy);
+        if (dateFrom && dateTo) fetchReport(dateFrom, dateTo, newGroupBy);
+    };
+
+    const applyHourFilter = (newFrom: number, newTo: number) => {
+        setHourFrom(newFrom);
+        setHourTo(newTo);
+        if (dateFrom && dateTo) fetchReport(dateFrom, dateTo, 'hour', newFrom, newTo);
+    };
 
     // Format helpers
     const formatVND = (amount: number): string => {
@@ -177,6 +245,8 @@ export const useRevenueReport = () => {
         datePreset, setDatePreset,
         dateFrom, setDateFrom,
         dateTo, setDateTo,
+        groupBy, applyGroupBy,
+        hourFrom, hourTo, applyHourFilter,
         applyCustomDate,
         isLoading,
         data,
