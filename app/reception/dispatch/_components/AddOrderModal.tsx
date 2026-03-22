@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Phone, Sparkles, Loader2, Plus, Search, Clock, Tag, Image as ImageIcon } from 'lucide-react';
+import { X, User, Phone, Sparkles, Loader2, Plus, Search, Clock, Tag, Image as ImageIcon, Globe } from 'lucide-react';
 
 interface ServiceOption {
   id: string;
@@ -20,9 +20,18 @@ interface AddOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   services: ServiceOption[];
-  onConfirm: (data: { customerName: string; customerPhone: string; serviceId: string }) => Promise<void>;
+  onConfirm: (data: { customerName: string; customerPhone: string; serviceId: string; customerLang: string }) => Promise<void>;
   selectedDate: string;
 }
+
+// 🌐 LANGUAGE OPTIONS
+const LANG_OPTIONS = [
+  { code: 'vi', flag: '🇻🇳', label: 'VN' },
+  { code: 'en', flag: '🇺🇸', label: 'EN' },
+  { code: 'kr', flag: '🇰🇷', label: 'KR' },
+  { code: 'jp', flag: '🇯🇵', label: 'JP' },
+  { code: 'cn', flag: '🇨🇳', label: 'CN' },
+];
 
 // 🔧 UI CONFIGURATION
 const ANIMATION_DURATION = 0.3;
@@ -31,6 +40,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [serviceId, setServiceId] = useState('');
+  const [customerLang, setCustomerLang] = useState('vi');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Tất cả');
@@ -62,11 +72,12 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
 
     setLoading(true);
     try {
-      await onConfirm({ customerName, customerPhone, serviceId });
-      // Reset form but not name/phone if you want but usually reset all
+      await onConfirm({ customerName, customerPhone, serviceId, customerLang });
+      // Reset form
       setCustomerName('');
       setCustomerPhone('');
       setServiceId('');
+      setCustomerLang('vi');
       setSearchTerm('');
       onClose();
     } catch (error) {
@@ -127,17 +138,47 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1">Số điện thoại</label>
-                  <div className="relative">
-                    <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="tel"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="09xxx..."
-                      className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
-                    />
+                <div className="flex gap-3">
+                  {/* Phone */}
+                  <div className="space-y-1.5 flex-1">
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1">Số điện thoại</label>
+                    <div className="relative">
+                      <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="tel"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="09xxx..."
+                        className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Language Selector */}
+                  <div className="space-y-1.5 shrink-0">
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-1">
+                      <Globe size={10} /> Ngôn ngữ
+                    </label>
+                    <div className="flex gap-1">
+                      {LANG_OPTIONS.map(opt => (
+                        <button
+                          key={opt.code}
+                          type="button"
+                          onClick={() => setCustomerLang(opt.code)}
+                          className={`w-[52px] h-[52px] rounded-xl text-center transition-all border-2 flex flex-col items-center justify-center gap-0.5 ${
+                            customerLang === opt.code
+                              ? 'bg-rose-50 border-rose-500 shadow-md shadow-rose-100'
+                              : 'bg-gray-50 border-transparent hover:border-gray-200'
+                          }`}
+                          title={opt.label}
+                        >
+                          <span className="text-lg leading-none">{opt.flag}</span>
+                          <span className={`text-[9px] font-black uppercase ${
+                            customerLang === opt.code ? 'text-rose-600' : 'text-gray-400'
+                          }`}>{opt.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -340,6 +340,7 @@ export async function createQuickBooking(data: {
     customerPhone?: string;
     serviceId: string;
     bookingDate: string; // "YYYY-MM-DD"
+    customerLang?: string; // Language code: vi, en, kr, jp, cn
 }) {
     try {
         const supabase = getSupabaseAdmin();
@@ -367,6 +368,7 @@ export async function createQuickBooking(data: {
                 customerPhone: data.customerPhone || '',
                 billCode,
                 status: 'NEW',
+                customerLang: data.customerLang || 'vi',
                 bookingDate: `${data.bookingDate} ${new Date().toLocaleTimeString('en-GB')}`,
                 totalAmount: svc.priceVND || 0,
                 paymentMethod: 'Tiền mặt', // Mặc định
