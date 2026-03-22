@@ -338,6 +338,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 export async function createQuickBooking(data: {
     customerName: string;
     customerPhone?: string;
+    customerEmail?: string;
     serviceId: string;
     bookingDate: string; // "YYYY-MM-DD"
     customerLang?: string; // Language code: vi, en, kr, jp, cn
@@ -366,6 +367,7 @@ export async function createQuickBooking(data: {
             .insert({
                 customerName: data.customerName,
                 customerPhone: data.customerPhone || '',
+                customerEmail: data.customerEmail || '',
                 billCode,
                 status: 'NEW',
                 customerLang: data.customerLang || 'vi',

@@ -751,7 +751,7 @@ if (!hasPermission('dispatch_board')) {
     }
   };
 
-  const handleCreateQuickBooking = async (data: { customerName: string; customerPhone: string; serviceId: string; customerLang: string }) => {
+  const handleCreateQuickBooking = async (data: { customerName: string; customerPhone: string; customerEmail: string; serviceId: string; customerLang: string }) => {
     try {
       const res = await createQuickBooking({
         ...data,

@@ -168,42 +168,82 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 
         console.log(`📡 [NotificationProvider] Listening for ${roleId}...`);
 
-        // 1. Lắng nghe thông báo chung (StaffNotifications)
-        const channel = supabase
-            .channel('global_notifications')
-            .on('postgres_changes', { 
-                event: 'INSERT', 
-                schema: 'public', 
-                table: 'StaffNotifications' 
-            }, (payload) => {
-                const newNotif = payload.new as Notification;
-                console.log('🔔 [NotificationProvider] New notification received:', newNotif);
-                
-                // Logic lọc thông báo theo Role
-                if (roleId === 'admin') {
-                    // Admin nhận thông báo chung hoặc khiếu nại
-                    const isGlobal = !newNotif.employeeId;
-                    const isComplaint = newNotif.type === 'COMPLAINT';
-                    if (isGlobal || isComplaint) addToast(newNotif);
-                } else if (isKtv) {
-                    // KTV chỉ nhận thông báo gán ĐÚNG cho mình
-                    if (newNotif.employeeId === user.id) {
-                        addToast(newNotif);
-                    }
-                } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
-                    // Lễ tân nhận thông báo không gán cho ai (thông báo chung cho quầy)
+        // Handler for incoming realtime notifications
+        const handleRealtimePayload = (payload: { new: unknown }) => {
+            const newNotif = payload.new as Notification;
+            console.log('🔔 [NotificationProvider] New notification received:', newNotif);
+
+            if (roleId === 'admin') {
+                const isGlobal = !newNotif.employeeId;
+                const isComplaint = newNotif.type === 'COMPLAINT';
+                if (isGlobal || isComplaint) addToast(newNotif);
+            } else if (isKtv) {
+                if (newNotif.employeeId === user.id) {
                     addToast(newNotif);
-                } else {
-                    console.log('⏭️ [NotificationProvider] Notification ignored by filter:', { 
-                        roleId, 
-                        userId: user.id, 
-                        notifTech: newNotif.employeeId 
-                    });
                 }
-            })
-            .subscribe();
+            } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
+                addToast(newNotif);
+            } else {
+                console.log('⏭️ [NotificationProvider] Notification ignored by filter:', {
+                    roleId,
+                    userId: user.id,
+                    notifTech: newNotif.employeeId
+                });
+            }
+        };
+
+        // Create and subscribe to the Supabase Realtime channel
+        const createChannel = () => {
+            const ch = supabase
+                .channel('global_notifications_' + Date.now()) // unique name to avoid stale channels
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'StaffNotifications'
+                }, handleRealtimePayload)
+                .subscribe((status) => {
+                    console.log(`📡 [NotificationProvider] Channel status: ${status}`);
+                });
+            return ch;
+        };
+
+        let channel = createChannel();
+
+        // 🔄 RECONNECT: Re-subscribe when tab becomes visible again (after background / OS kill)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log('👁️ [NotificationProvider] Tab became visible — reconnecting Realtime...');
+                // Remove old channel and create a fresh one
+                supabase.removeChannel(channel);
+                channel = createChannel();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // 💓 HEARTBEAT: Ping Supabase every 30s to keep the connection alive
+        const heartbeat = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                supabase.channel('heartbeat_ping').subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        supabase.removeChannel(supabase.channel('heartbeat_ping'));
+                    }
+                });
+            }
+        }, 30_000);
+
+        // 📲 Register Periodic Sync for SW keep-alive (if supported)
+        if ('serviceWorker' in navigator && 'periodicSync' in (navigator as unknown as Record<string, unknown>)) {
+            navigator.serviceWorker.ready.then((sw) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (sw as any).periodicSync?.register('keep-alive', { minInterval: 60_000 }).catch(() => {
+                    console.debug('[NotificationProvider] periodicSync not granted');
+                });
+            });
+        }
 
         return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            clearInterval(heartbeat);
             supabase.removeChannel(channel);
         };
     }, [user, role]);

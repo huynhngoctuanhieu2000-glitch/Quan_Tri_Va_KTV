@@ -20,7 +20,7 @@ interface AddOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   services: ServiceOption[];
-  onConfirm: (data: { customerName: string; customerPhone: string; serviceId: string; customerLang: string }) => Promise<void>;
+  onConfirm: (data: { customerName: string; customerPhone: string; customerEmail: string; serviceId: string; customerLang: string }) => Promise<void>;
   selectedDate: string;
 }
 
@@ -38,7 +38,8 @@ const ANIMATION_DURATION = 0.3;
 
 export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDate }: AddOrderModalProps) => {
   const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [contactType, setContactType] = useState<'phone' | 'email'>('phone');
+  const [contactValue, setContactValue] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [customerLang, setCustomerLang] = useState('vi');
   const [loading, setLoading] = useState(false);
@@ -72,10 +73,17 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
 
     setLoading(true);
     try {
-      await onConfirm({ customerName, customerPhone, serviceId, customerLang });
+      await onConfirm({
+        customerName,
+        customerPhone: contactType === 'phone' ? contactValue : '',
+        customerEmail: contactType === 'email' ? contactValue : '',
+        serviceId,
+        customerLang
+      });
       // Reset form
       setCustomerName('');
-      setCustomerPhone('');
+      setContactType('phone');
+      setContactValue('');
       setServiceId('');
       setCustomerLang('vi');
       setSearchTerm('');
@@ -119,66 +127,98 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col p-8 gap-6">
-              {/* Customer Info Row */}
+            <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col p-8 gap-5">
+              {/* Row 1: Customer Name */}
+              <div className="space-y-1.5 shrink-0">
+                <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1">Tên khách hàng *</label>
+                <div className="relative">
+                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Nhập tên khách..."
+                    className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Language + Contact side by side */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
+                {/* Language Selector */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1">Tên khách hàng *</label>
-                  <div className="relative">
-                    <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      autoFocus
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Nhập tên khách..."
-                      className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
-                      required
-                    />
+                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                    <Globe size={11} /> Ngôn ngữ
+                  </label>
+                  <div className="flex gap-1.5">
+                    {LANG_OPTIONS.map(opt => (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        onClick={() => setCustomerLang(opt.code)}
+                        className={`flex-1 py-2.5 rounded-xl text-center transition-all border-2 flex flex-col items-center justify-center gap-0.5 ${
+                          customerLang === opt.code
+                            ? 'bg-rose-50 border-rose-500 shadow-sm'
+                            : 'bg-gray-50 border-transparent hover:border-gray-200'
+                        }`}
+                        title={opt.label}
+                      >
+                        <span className="text-base leading-none">{opt.flag}</span>
+                        <span className={`text-[9px] font-black uppercase ${
+                          customerLang === opt.code ? 'text-rose-600' : 'text-gray-400'
+                        }`}>{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="flex gap-3">
-                  {/* Phone */}
-                  <div className="space-y-1.5 flex-1">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1">Số điện thoại</label>
-                    <div className="relative">
-                      <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="tel"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        placeholder="09xxx..."
-                        className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
-                      />
-                    </div>
+                {/* Contact: Phone / Email Toggle + Shared Input */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                    Liên hệ
+                  </label>
+                  {/* Toggle Buttons */}
+                  <div className="flex gap-2 mb-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setContactType('phone'); setContactValue(''); }}
+                      className={`flex-1 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all border-2 ${
+                        contactType === 'phone'
+                          ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
+                          : 'bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-300'
+                      }`}
+                    >
+                      {contactType === 'phone' && <Phone size={14} />}
+                      Phone
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setContactType('email'); setContactValue(''); }}
+                      className={`flex-1 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all border-2 ${
+                        contactType === 'email'
+                          ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
+                          : 'bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-300'
+                      }`}
+                    >
+                      {contactType === 'email' && <Tag size={14} />}
+                      Email
+                    </button>
                   </div>
-
-                  {/* Language Selector */}
-                  <div className="space-y-1.5 shrink-0">
-                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-1">
-                      <Globe size={10} /> Ngôn ngữ
-                    </label>
-                    <div className="flex gap-1">
-                      {LANG_OPTIONS.map(opt => (
-                        <button
-                          key={opt.code}
-                          type="button"
-                          onClick={() => setCustomerLang(opt.code)}
-                          className={`w-[52px] h-[52px] rounded-xl text-center transition-all border-2 flex flex-col items-center justify-center gap-0.5 ${
-                            customerLang === opt.code
-                              ? 'bg-rose-50 border-rose-500 shadow-md shadow-rose-100'
-                              : 'bg-gray-50 border-transparent hover:border-gray-200'
-                          }`}
-                          title={opt.label}
-                        >
-                          <span className="text-lg leading-none">{opt.flag}</span>
-                          <span className={`text-[9px] font-black uppercase ${
-                            customerLang === opt.code ? 'text-rose-600' : 'text-gray-400'
-                          }`}>{opt.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                  {/* Shared Input */}
+                  <div className="relative">
+                    {contactType === 'phone'
+                      ? <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                      : <Tag size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                    }
+                    <input
+                      type={contactType === 'phone' ? 'tel' : 'email'}
+                      value={contactValue}
+                      onChange={(e) => setContactValue(e.target.value)}
+                      placeholder={contactType === 'phone' ? '+84 123 456 789' : 'abc@gmail.com'}
+                      className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300 text-sm"
+                    />
                   </div>
                 </div>
               </div>

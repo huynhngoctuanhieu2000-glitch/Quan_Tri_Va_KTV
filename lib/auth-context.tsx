@@ -23,9 +23,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
 
   useEffect(() => {
-    // 🔄 Restore session from SessionStorage on mount
-    const savedUser = sessionStorage.getItem('spa_auth_user');
-    const savedRole = sessionStorage.getItem('spa_auth_role');
+    // 🔄 Restore session from localStorage on mount (persists across tab kills)
+    const savedUser = localStorage.getItem('spa_auth_user');
+    const savedRole = localStorage.getItem('spa_auth_role');
 
     if (savedUser && savedRole) {
       try {
@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(JSON.parse(savedRole));
       } catch (e) {
         console.error('Failed to parse saved auth session', e);
-        sessionStorage.removeItem('spa_auth_user');
-        sessionStorage.removeItem('spa_auth_role');
+        localStorage.removeItem('spa_auth_user');
+        localStorage.removeItem('spa_auth_role');
       }
     }
   }, []);
@@ -88,14 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setRole(finalRole);
 
-        // 💾 Save to sessionStorage for persistence
-        sessionStorage.setItem('spa_auth_user', JSON.stringify(finalUser));
-        sessionStorage.setItem('spa_auth_role', JSON.stringify(finalRole));
+        // 💾 Save to localStorage for persistence (survives tab kill / background)
+        localStorage.setItem('spa_auth_user', JSON.stringify(finalUser));
+        localStorage.setItem('spa_auth_role', JSON.stringify(finalRole));
 
         return true;
       }
-      return false;
-
       return false;
     } catch (err) {
       console.error('Login error:', err);
@@ -106,8 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setUser(null);
     setRole(null);
-    sessionStorage.removeItem('spa_auth_user');
-    sessionStorage.removeItem('spa_auth_role');
+    localStorage.removeItem('spa_auth_user');
+    localStorage.removeItem('spa_auth_role');
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
