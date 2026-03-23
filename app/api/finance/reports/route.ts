@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const groupBy = (searchParams.get('groupBy') || 'day') as 'hour' | 'day' | 'week' | 'month';
     const hourFrom = searchParams.get('hourFrom') ? parseInt(searchParams.get('hourFrom')!, 10) : null;
     const hourTo = searchParams.get('hourTo') ? parseInt(searchParams.get('hourTo')!, 10) : null;
+    const lang = searchParams.get('lang') || 'all';
 
     if (!dateFrom || !dateTo) {
         return NextResponse.json({ success: false, error: 'dateFrom and dateTo are required' }, { status: 400 });
@@ -39,7 +40,30 @@ export async function GET(request: Request) {
             .order('bookingDate', { ascending: true });
 
         if (bErr) throw bErr;
-        const completedBookings = bookings || [];
+        const allBookings = bookings || [];
+
+        // ─── 1b. Fetch CANCELLED bookings for cancellation rate ──────────
+        const { count: cancelledCount } = await supabase
+            .from('Bookings')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'CANCELLED')
+            .gte('bookingDate', `${dateFrom} 00:00:00`)
+            .lte('bookingDate', `${dateTo} 23:59:59`);
+
+        // Apply language filter if specified
+        const LANG_ALIASES: Record<string, string[]> = {
+            'vi': ['vi', 'vn'], 'ko': ['ko', 'kr'], 'zh': ['zh', 'cn'],
+            'en': ['en'], 'jp': ['jp', 'ja'],
+        };
+        let completedBookings = allBookings;
+        if (lang && lang !== 'all') {
+            const aliases = Object.entries(LANG_ALIASES).find(([, v]) => v.includes(lang.toLowerCase()));
+            const matchLangs = aliases ? aliases[1] : [lang.toLowerCase()];
+            completedBookings = completedBookings.filter(b => {
+                const bLang = (b.customerLang || 'vi').toLowerCase();
+                return matchLangs.includes(bLang);
+            });
+        }
 
         // ─── 2. Fetch BookingItems for these bookings ────────────────────
         const bookingIds = completedBookings.map(b => b.id);
@@ -212,6 +236,33 @@ export async function GET(request: Request) {
         // #7 Average bill per customer
         const avgBillPerCustomer = uniqueCustomers > 0 ? Math.round(revenue / uniqueCustomers) : 0;
 
+        // ─── Cancellation Rate ─────────────────────────────────────────
+        const cancelledOrders = cancelledCount || 0;
+        const totalAllOrders = orders + cancelledOrders;
+        const cancellationRate = totalAllOrders > 0 ? Math.round((cancelledOrders / totalAllOrders) * 1000) / 10 : 0;
+
+        // ─── Retention Rate (returning customers) ──────────────────────
+        // Count customers with ≥ 2 completed bookings EVER
+        let retentionRate = 0;
+        let returningCustomers = 0;
+        if (uniqueCustomerIds.size > 0) {
+            const customerIdArr = Array.from(uniqueCustomerIds);
+            // Query all completed bookings for these customers to check history
+            const { data: historyBookings } = await supabase
+                .from('Bookings')
+                .select('customerId')
+                .in('status', COMPLETED_STATUSES)
+                .in('customerId', customerIdArr);
+
+            // Count how many bookings each customer has
+            const customerBookingCount: Record<string, number> = {};
+            (historyBookings || []).forEach(b => {
+                if (b.customerId) customerBookingCount[b.customerId] = (customerBookingCount[b.customerId] || 0) + 1;
+            });
+            returningCustomers = Object.values(customerBookingCount).filter(c => c >= 2).length;
+            retentionRate = uniqueCustomers > 0 ? Math.round((returningCustomers / uniqueCustomers) * 1000) / 10 : 0;
+        }
+
         // Previous period
         const prevRevenue = (prevBookings || []).reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
         const prevOrders = (prevBookings || []).length;
@@ -352,8 +403,8 @@ export async function GET(request: Request) {
             count: hourMap[h] || 0,
         })).filter(h => h.count > 0 || (parseInt(h.hour) >= 8 && parseInt(h.hour) <= 22));
 
-        // ─── Language Breakdown ───────────────────────────────────────
-        const langMap: Record<string, { lang: string; revenue: number; orders: number }> = {};
+        // ─── Language Breakdown (always from ALL bookings so chips stay visible) ──
+        const langMap: Record<string, { key: string; lang: string; revenue: number; orders: number }> = {};
         const LANG_LABELS: Record<string, string> = {
             'vi': '🇻🇳 Tiếng Việt', 'vn': '🇻🇳 Tiếng Việt',
             'en': '🇬🇧 English',
@@ -361,12 +412,11 @@ export async function GET(request: Request) {
             'zh': '🇨🇳 中文', 'cn': '🇨🇳 中文',
             'jp': '🇯🇵 日本語',
         };
-        completedBookings.forEach(b => {
+        allBookings.forEach(b => {
             const rawLang = (b.customerLang || 'vi').toLowerCase();
-            // Normalize aliases
             const normalizedLang = rawLang === 'vn' ? 'vi' : rawLang === 'kr' ? 'ko' : rawLang === 'cn' ? 'zh' : rawLang;
             const label = LANG_LABELS[normalizedLang] || normalizedLang.toUpperCase();
-            if (!langMap[normalizedLang]) langMap[normalizedLang] = { lang: label, revenue: 0, orders: 0 };
+            if (!langMap[normalizedLang]) langMap[normalizedLang] = { key: normalizedLang, lang: label, revenue: 0, orders: 0 };
             langMap[normalizedLang].revenue += Number(b.totalAmount) || 0;
             langMap[normalizedLang].orders += 1;
         });
@@ -412,6 +462,11 @@ export async function GET(request: Request) {
                 revenuePerBed,
                 bedOccupancy,
                 totalBeds: bedCount,
+                // Cancellation & Retention
+                cancellationRate,
+                cancelledOrders,
+                retentionRate,
+                returningCustomers,
                 // Comparisons
                 revenueChange,
                 ordersChange,

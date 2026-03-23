@@ -6,7 +6,8 @@ import { useAuth } from '@/lib/auth-context';
 import {
     ShieldAlert, TrendingUp, TrendingDown, DollarSign, Users, Calendar,
     Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe, X, Phone, Mail,
-    Package, Receipt, Calculator, PieChart as PieChartIcon, Clock, Crown, Download, BedDouble, Gauge
+    Package, Receipt, Calculator, PieChart as PieChartIcon, Clock, Crown, Download, BedDouble, Gauge, HelpCircle,
+    XCircle, Ban, UserCheck, FileSpreadsheet, Check
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -94,7 +95,7 @@ const KPICard = ({ title, value, subtitle, change, icon, color, href, onClick }:
             {change !== undefined && change !== 0 && (
                 <p className={`text-xs font-bold mt-2 flex items-center gap-1 ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {isPositive ? '+' : ''}{change}% so với kỳ trước
+                    {isPositive ? '+' : ''}{change}%
                 </p>
             )}
         </Wrapper>
@@ -122,9 +123,15 @@ export default function RevenueReportsPage() {
     const { hasPermission } = useAuth();
     const [mounted, setMounted] = React.useState(false);
     const report = useRevenueReport();
-    const [filterLang, setFilterLang] = React.useState('all');
     const [showNewCustomers, setShowNewCustomers] = React.useState(false);
     const [showAllKTV, setShowAllKTV] = React.useState(false);
+    const [showMetricsHelp, setShowMetricsHelp] = React.useState(false);
+    const [showExportModal, setShowExportModal] = React.useState(false);
+    const [exportSections, setExportSections] = React.useState<Record<string, boolean>>({
+        kpi: true, services: true, languages: true, ktv: true, peakHours: true, revenue: true,
+    });
+    const [exportFrom, setExportFrom] = React.useState('');
+    const [exportTo, setExportTo] = React.useState('');
 
     React.useEffect(() => { setMounted(true); }, []);
     if (!mounted) return null;
@@ -199,15 +206,6 @@ export default function RevenueReportsPage() {
                         <h1 className="text-2xl font-black text-gray-900 tracking-tight">Báo Cáo Doanh Thu</h1>
                         <p className="text-sm text-gray-500">Tổng quan tình hình kinh doanh của Spa.</p>
                     </div>
-                    {!report.isLoading && report.data.summary.orders > 0 && (
-                        <button
-                            onClick={report.exportToCSV}
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-bold shadow-sm transition-all active:scale-95"
-                        >
-                            <Download size={16} />
-                            Xuất Excel
-                        </button>
-                    )}
                 </div>
 
                 {/* ─── Date Picker ────────────────────────────────────── */}
@@ -227,6 +225,26 @@ export default function RevenueReportsPage() {
                                 {b.label}
                             </button>
                         ))}
+                        {/* Excel + ? buttons */}
+                        {!report.isLoading && report.data.summary.orders > 0 && (
+                            <>
+                                <div className="w-px h-5 bg-gray-200 mx-0.5" />
+                                <button
+                                    onClick={() => { setExportFrom(report.dateFrom); setExportTo(report.dateTo); setShowExportModal(true); }}
+                                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all active:scale-95 flex items-center gap-1.5"
+                                >
+                                    <FileSpreadsheet size={12} />
+                                    Excel
+                                </button>
+                                <button
+                                    onClick={() => setShowMetricsHelp(true)}
+                                    className="w-7 h-7 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-400 transition-all active:scale-95"
+                                    title="Giải thích thông số"
+                                >
+                                    <HelpCircle size={14} />
+                                </button>
+                            </>
+                        )}
                     </div>
                     {report.datePreset === 'custom' && (
                         <div className="flex items-center gap-2 flex-wrap">
@@ -270,48 +288,53 @@ export default function RevenueReportsPage() {
                                     options={[
                                         { key: 'all', label: 'Tất cả' },
                                         ...report.data.languageBreakdown.map(lb => ({
-                                            key: lb.lang,
+                                            key: lb.key || lb.lang,
                                             label: lb.lang,
                                         }))
                                     ]}
-                                    selected={filterLang}
-                                    onSelect={setFilterLang}
+                                    selected={report.filterLang}
+                                    onSelect={report.applyLangFilter}
                                 />
                             </div>
                         )}
 
                         {/* ─── KPI Cards (10 chỉ số) ──────────────────── */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            {/* #1 Tổng Doanh Thu */}
-                            <KPICard
-                                title="Tổng Doanh Thu"
-                                value={report.formatVND(summary.revenue)}
-                                subtitle={report.formatFullVND(summary.revenue)}
-                                change={summary.revenueChange}
-                                icon={<DollarSign size={18} />}
-                                color="bg-emerald-50 text-emerald-600"
-                            />
-                            {/* #2 Số Lượng DV */}
-                            <KPICard
-                                title="Số Lượng DV"
-                                value={String(summary.totalServiceCount)}
-                                subtitle={`${summary.orders} đơn`}
-                                icon={<Package size={18} />}
-                                color="bg-blue-50 text-blue-600"
-                            />
-                            {/* #3 Tổng Giá Trị DV */}
-                            <KPICard
-                                title="Tổng Giá Trị DV"
-                                value={report.formatVND(summary.totalServiceRevenue)}
-                                subtitle={report.formatFullVND(summary.totalServiceRevenue)}
-                                icon={<Receipt size={18} />}
-                                color="bg-teal-50 text-teal-600"
-                            />
+                            {/* Tổng Doanh Thu (gộp DV + Đơn) */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-sm font-medium text-gray-500">Tổng Doanh Thu</h3>
+                                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                                        <DollarSign size={18} />
+                                    </div>
+                                </div>
+                                <div className="text-3xl font-black text-gray-900 tracking-tight">{report.formatVND(summary.revenue)}</div>
+                                <p className="text-xs text-gray-400 mt-1">{report.formatFullVND(summary.revenue)}</p>
+                                {summary.revenueChange !== 0 && (
+                                    <p className={`text-xs font-bold mt-1.5 flex items-center gap-1 ${summary.revenueChange >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {summary.revenueChange >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                        {summary.revenueChange >= 0 ? '+' : ''}{summary.revenueChange}%
+                                    </p>
+                                )}
+                                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                                    <div className="flex items-center gap-1">
+                                        <Package size={12} className="text-blue-500" />
+                                        <span className="text-xs font-bold text-gray-700">{summary.totalServiceCount}</span>
+                                        <span className="text-[10px] text-gray-400">DV</span>
+                                    </div>
+                                    <div className="w-px h-3 bg-gray-200" />
+                                    <div className="flex items-center gap-1">
+                                        <Receipt size={12} className="text-indigo-500" />
+                                        <span className="text-xs font-bold text-gray-700">{summary.orders}</span>
+                                        <span className="text-[10px] text-gray-400">đơn</span>
+                                    </div>
+                                </div>
+                            </div>
                             {/* #4 CP TB / DV */}
                             <KPICard
-                                title="CP TB / DV"
+                                title="Chi Phí TB / Dịch Vụ"
                                 value={report.formatVND(summary.costPerService)}
-                                subtitle="Tiền tua TB / dịch vụ"
+                                subtitle="Tiền tua trung bình / dịch vụ"
                                 icon={<Calculator size={18} />}
                                 color="bg-orange-50 text-orange-600"
                             />
@@ -327,23 +350,23 @@ export default function RevenueReportsPage() {
                             <KPICard
                                 title="Số Khách"
                                 value={String(summary.uniqueCustomers)}
-                                subtitle={`${summary.newCustomers} khách mới`}
+                                subtitle={`${summary.newCustomers} đăng ký mới`}
                                 change={summary.customersChange}
                                 icon={<Users size={18} />}
                                 color="bg-purple-50 text-purple-600"
                                 onClick={() => setShowNewCustomers(true)}
                             />
-                            {/* #7 TB / Khách */}
+                            {/* #7 Chi Tiêu TB / Khách */}
                             <KPICard
-                                title="TB / Khách"
+                                title="Chi Tiêu TB / Khách"
                                 value={report.formatVND(summary.avgBillPerCustomer)}
-                                subtitle={`TB/đơn: ${report.formatVND(summary.avgPerOrder)}`}
+                                subtitle={`Trung bình/đơn: ${report.formatVND(summary.avgPerOrder)}`}
                                 icon={<Activity size={18} />}
                                 color="bg-amber-50 text-amber-600"
                             />
                             {/* Đánh Giá TB */}
                             <KPICard
-                                title="Đánh Giá TB"
+                                title="Đánh Giá Trung Bình"
                                 value={summary.avgRating > 0 ? `${summary.avgRating} ★` : '—'}
                                 subtitle={summary.avgRating >= 4 ? 'Xuất sắc' : summary.avgRating >= 3 ? 'Tốt' : ''}
                                 icon={<Star size={18} />}
@@ -358,7 +381,7 @@ export default function RevenueReportsPage() {
                             />
                             {/* DT / Giường */}
                             <KPICard
-                                title="DT / Giường"
+                                title="Doanh Thu / Giường"
                                 value={report.formatVND(summary.revenuePerBed)}
                                 subtitle={`${summary.totalBeds} giường`}
                                 icon={<BedDouble size={18} />}
@@ -372,7 +395,166 @@ export default function RevenueReportsPage() {
                                 icon={<Gauge size={18} />}
                                 color={summary.bedOccupancy >= 80 ? 'bg-red-50 text-red-600' : summary.bedOccupancy >= 50 ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}
                             />
+                            {/* Tỷ lệ hủy đơn */}
+                            <KPICard
+                                title="Tỷ Lệ Hủy Đơn"
+                                value={`${summary.cancellationRate}%`}
+                                subtitle={`${summary.cancelledOrders} đơn hủy`}
+                                icon={<Ban size={18} />}
+                                color={summary.cancellationRate >= 20 ? 'bg-red-50 text-red-600' : summary.cancellationRate >= 10 ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}
+                            />
+                            {/* Khách quay lại */}
+                            <KPICard
+                                title="Khách Quay Lại"
+                                value={`${summary.retentionRate}%`}
+                                subtitle={`${summary.returningCustomers}/${summary.uniqueCustomers} khách`}
+                                icon={<UserCheck size={18} />}
+                                color={summary.retentionRate >= 50 ? 'bg-emerald-50 text-emerald-600' : summary.retentionRate >= 30 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'}
+                            />
                         </div>
+
+                        {/* ─── Metrics Help Modal ─────────────────────── */}
+                        {showMetricsHelp && (
+                            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowMetricsHelp(false)}>
+                                <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                                        <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                            <HelpCircle size={18} className="text-indigo-500" />
+                                            Giải thích thông số
+                                        </h3>
+                                        <button onClick={() => setShowMetricsHelp(false)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+                                            <XCircle size={20} className="text-gray-400" />
+                                        </button>
+                                    </div>
+                                    <div className="overflow-y-auto max-h-[calc(80vh-60px)] p-5">
+                                        <table className="w-full text-xs">
+                                            <thead>
+                                                <tr className="border-b border-gray-100">
+                                                    <th className="text-left py-2.5 pr-3 font-semibold text-gray-500 whitespace-nowrap">Thông số</th>
+                                                    <th className="text-left py-2.5 pr-3 font-semibold text-gray-500">Công thức</th>
+                                                    <th className="text-left py-2.5 font-semibold text-gray-500">Ý nghĩa</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Tổng Doanh Thu</td><td className="py-2 pr-3 text-gray-500">Σ totalAmount (đơn hoàn thành)</td><td className="py-2 text-gray-500">Tổng tiền thu từ khách hàng trong kỳ</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Số Dịch Vụ</td><td className="py-2 pr-3 text-gray-500">Σ quantity (BookingItems)</td><td className="py-2 text-gray-500">Tổng số lượt dịch vụ đã thực hiện</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Số Đơn</td><td className="py-2 pr-3 text-gray-500">Count (Bookings hoàn thành)</td><td className="py-2 text-gray-500">Tổng số đơn hàng đã hoàn thành</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Chi Phí TB / Dịch Vụ</td><td className="py-2 pr-3 text-gray-500">Tổng tiền tua ÷ Số dịch vụ</td><td className="py-2 text-gray-500">Trung bình tiền tua trả cho KTV mỗi dịch vụ</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Tỷ Lệ Chi Phí</td><td className="py-2 pr-3 text-gray-500">Tổng tiền tua ÷ Doanh thu × 100%</td><td className="py-2 text-gray-500">% doanh thu dành trả cho KTV (càng thấp càng tốt)</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Số Khách</td><td className="py-2 pr-3 text-gray-500">Count distinct (customerId)</td><td className="py-2 text-gray-500">Số khách hàng duy nhất có đơn hoàn thành</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Đăng ký mới</td><td className="py-2 pr-3 text-gray-500">Count (Customers created trong kỳ)</td><td className="py-2 text-gray-500">Số tài khoản khách tạo mới, chưa chắc đã đặt lịch</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Chi Tiêu TB / Khách</td><td className="py-2 pr-3 text-gray-500">Doanh thu ÷ Số khách duy nhất</td><td className="py-2 text-gray-500">Trung bình mỗi khách chi tiêu bao nhiêu trong kỳ</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Đánh Giá Trung Bình</td><td className="py-2 pr-3 text-gray-500">Σ itemRating ÷ Số lượt đánh giá</td><td className="py-2 text-gray-500">Điểm hài lòng trung bình từ khách (thang 5 sao)</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Tổng Tip</td><td className="py-2 pr-3 text-gray-500">Σ tip (BookingItems)</td><td className="py-2 text-gray-500">Tổng tiền tip khách thưởng KTV</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Doanh Thu / Giường</td><td className="py-2 pr-3 text-gray-500">Doanh thu ÷ Tổng số giường</td><td className="py-2 text-gray-500">Hiệu quả kinh doanh trên mỗi giường</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Lấp đầy Giường</td><td className="py-2 pr-3 text-gray-500">Tổng phút DV ÷ (Giường × Giờ mở cửa × Ngày) × 100%</td><td className="py-2 text-gray-500">% thời gian giường được sử dụng (≥80% là cao tải)</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Tỷ Lệ Hủy Đơn</td><td className="py-2 pr-3 text-gray-500">Đơn hủy ÷ Tổng đơn (hoàn thành + hủy) × 100%</td><td className="py-2 text-gray-500">% đơn bị hủy, giúp phát hiện vấn đề vận hành</td></tr>
+                                                <tr><td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">Khách Quay Lại</td><td className="py-2 pr-3 text-gray-500">Khách có ≥ 2 đơn ÷ Tổng khách × 100%</td><td className="py-2 text-gray-500">% khách quay lại, đánh giá mức giữ chân khách</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ─── Export Modal ────────────────────────────── */}
+                        {showExportModal && (() => {
+                            const EXPORT_OPTIONS = [
+                                { key: 'kpi', label: 'Tóm tắt KPI', desc: '14 thông số chính' },
+                                { key: 'services', label: 'Cơ cấu dịch vụ', desc: 'Breakdown theo tên DV' },
+                                { key: 'languages', label: 'Phân tích ngôn ngữ', desc: 'Doanh thu & đơn theo ngôn ngữ' },
+                                { key: 'ktv', label: 'Bảng KTV', desc: 'Commission, tip, rating từng KTV' },
+                                { key: 'peakHours', label: 'Giờ cao điểm', desc: 'Lượng đơn theo giờ' },
+                                { key: 'revenue', label: 'Doanh thu theo thời gian', desc: 'Dữ liệu chart (ngày/tuần/tháng)' },
+                            ];
+                            const selectedCount = Object.values(exportSections).filter(Boolean).length;
+                            return (
+                                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowExportModal(false)}>
+                                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                                            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                                                <FileSpreadsheet size={18} className="text-emerald-600" />
+                                                Xuất Excel
+                                            </h3>
+                                            <button onClick={() => setShowExportModal(false)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+                                                <XCircle size={20} className="text-gray-400" />
+                                            </button>
+                                        </div>
+                                        <div className="p-5 space-y-4">
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-500 mb-2">Khoảng thời gian</p>
+                                                <div className="flex items-center gap-2">
+                                                    <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)}
+                                                        className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-300 flex-1 min-w-0" />
+                                                    <ChevronRight size={14} className="text-gray-300 shrink-0" />
+                                                    <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)}
+                                                        className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-300 flex-1 min-w-0" />
+                                                    <button
+                                                        onClick={() => {
+                                                            report.setDatePreset('custom');
+                                                            report.setDateFrom(exportFrom);
+                                                            report.setDateTo(exportTo);
+                                                            setTimeout(() => report.applyCustomDate(), 50);
+                                                            setShowExportModal(false);
+                                                        }}
+                                                        className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold whitespace-nowrap active:scale-95 transition-all"
+                                                    >
+                                                        Xem trước
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-xs font-semibold text-gray-500">Chọn loại dữ liệu ({selectedCount}/{EXPORT_OPTIONS.length})</p>
+                                                    <button
+                                                        onClick={() => {
+                                                            const allChecked = selectedCount === EXPORT_OPTIONS.length;
+                                                            const newState: Record<string, boolean> = {};
+                                                            EXPORT_OPTIONS.forEach(o => { newState[o.key] = !allChecked; });
+                                                            setExportSections(newState);
+                                                        }}
+                                                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800"
+                                                    >
+                                                        {selectedCount === EXPORT_OPTIONS.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    {EXPORT_OPTIONS.map(o => (
+                                                        <label key={o.key} className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-colors ${exportSections[o.key] ? 'bg-emerald-50 border border-emerald-200' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100'}`}>
+                                                            <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-colors ${exportSections[o.key] ? 'bg-emerald-600' : 'bg-white border-2 border-gray-300'}`}>
+                                                                {exportSections[o.key] && <Check size={12} className="text-white" />}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-semibold text-gray-800">{o.label}</p>
+                                                                <p className="text-[10px] text-gray-400">{o.desc}</p>
+                                                            </div>
+                                                            <input type="checkbox" checked={exportSections[o.key]} onChange={() => setExportSections(prev => ({ ...prev, [o.key]: !prev[o.key] }))} className="sr-only" />
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 px-5 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+                                            <button onClick={() => setShowExportModal(false)} className="flex-1 py-2.5 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-all active:scale-95">
+                                                Đóng
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const sections = Object.entries(exportSections).filter(([, v]) => v).map(([k]) => k);
+                                                    report.exportToCSV({ sections, exportFrom, exportTo });
+                                                    setShowExportModal(false);
+                                                }}
+                                                disabled={selectedCount === 0}
+                                                className="flex-1 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            >
+                                                <Download size={14} />
+                                                Xuất Excel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* ─── Revenue Chart + Group By ─────────────────── */}
                         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">

@@ -34,6 +34,11 @@ export interface ReportSummary {
     revenuePerBed: number;
     bedOccupancy: number;
     totalBeds: number;
+    // Cancellation & Retention
+    cancellationRate: number;
+    cancelledOrders: number;
+    retentionRate: number;
+    returningCustomers: number;
     // Comparisons
     revenueChange: number;
     ordersChange: number;
@@ -88,6 +93,7 @@ export interface PeakHour {
 }
 
 export interface LanguageBreakdown {
+    key: string;
     lang: string;
     revenue: number;
     orders: number;
@@ -128,6 +134,7 @@ const EMPTY_SUMMARY: ReportSummary = {
     costPerService: 0, costRatio: 0,
     uniqueCustomers: 0, avgBillPerCustomer: 0,
     revenuePerBed: 0, bedOccupancy: 0, totalBeds: 0,
+    cancellationRate: 0, cancelledOrders: 0, retentionRate: 0, returningCustomers: 0,
     revenueChange: 0, ordersChange: 0, customersChange: 0,
 };
 
@@ -139,6 +146,7 @@ export const useRevenueReport = () => {
     const [groupBy, setGroupBy] = useState<GroupBy>('day');
     const [hourFrom, setHourFrom] = useState<number>(0);
     const [hourTo, setHourTo] = useState<number>(23);
+    const [filterLang, setFilterLang] = useState('all');
     const [isLoading, setIsLoading] = useState(false);
     const [data, setData] = useState<ReportData>({
         summary: EMPTY_SUMMARY,
@@ -155,7 +163,7 @@ export const useRevenueReport = () => {
         newCustomerList: [],
     });
 
-    const fetchReport = useCallback(async (from: string, to: string, gb?: GroupBy, hFrom?: number, hTo?: number) => {
+    const fetchReport = useCallback(async (from: string, to: string, gb?: GroupBy, hFrom?: number, hTo?: number, langFilter?: string) => {
         setIsLoading(true);
         try {
             const params = new URLSearchParams({ dateFrom: from, dateTo: to, groupBy: gb || groupBy });
@@ -163,6 +171,10 @@ export const useRevenueReport = () => {
             if ((gb || groupBy) === 'hour') {
                 params.set('hourFrom', String(hFrom ?? hourFrom));
                 params.set('hourTo', String(hTo ?? hourTo));
+            }
+            const activeLang = langFilter ?? filterLang;
+            if (activeLang && activeLang !== 'all') {
+                params.set('lang', activeLang);
             }
             const res = await fetch(`/api/finance/reports?${params.toString()}`);
             const json = await res.json();
@@ -187,7 +199,7 @@ export const useRevenueReport = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [groupBy, hourFrom, hourTo]);
+    }, [groupBy, hourFrom, hourTo, filterLang]);
 
     // Apply preset
     useEffect(() => {
@@ -234,6 +246,11 @@ export const useRevenueReport = () => {
         if (dateFrom && dateTo) fetchReport(dateFrom, dateTo, 'hour', newFrom, newTo);
     };
 
+    const applyLangFilter = (newLang: string) => {
+        setFilterLang(newLang);
+        if (dateFrom && dateTo) fetchReport(dateFrom, dateTo, undefined, undefined, undefined, newLang);
+    };
+
     // Format helpers
     const formatVND = (amount: number): string => {
         if (amount >= 1_000_000_000) return `${(amount / 1_000_000_000).toFixed(1)} tỷ`;
@@ -246,45 +263,100 @@ export const useRevenueReport = () => {
         return amount.toLocaleString('vi-VN') + 'đ';
     };
 
-    const exportToCSV = () => {
+    const exportToCSV = (options?: { sections?: string[]; exportFrom?: string; exportTo?: string }) => {
         if (!data.summary) return;
 
+        const sections = options?.sections || ['kpi', 'services', 'languages', 'ktv', 'peakHours', 'revenue'];
+        const exportFrom = options?.exportFrom || dateFrom;
+        const exportTo = options?.exportTo || dateTo;
+
         const BOM = '\uFEFF';
-        let csv = 'DANH MỤC,CHỈ SỐ,GIÁ TRỊ\n';
+        let csv = '';
 
         // 1. Tóm tắt KPI
-        csv += `Tóm tắt,Tổng doanh thu,"${data.summary.revenue}"\n`;
-        csv += `Tóm tắt,Số lượng dịch vụ,"${data.summary.totalServiceCount}"\n`;
-        csv += `Tóm tắt,Tổng giá trị dịch vụ,"${data.summary.totalServiceRevenue}"\n`;
-        csv += `Tóm tắt,Số khách hàng,"${data.summary.uniqueCustomers}"\n`;
-        csv += `Tóm tắt,Tiền tua TB/Dịch vụ,"${data.summary.costPerService}"\n`;
-        csv += `Tóm tắt,Tỷ lệ chi phí (%)","${data.summary.costRatio}"\n`;
-        csv += `Tóm tắt,Điểm đánh giá TB,"${data.summary.avgRating}"\n`;
-        csv += `Tóm tắt,Tổng tiền tip,"${data.summary.totalTip}"\n`;
-        csv += `Tóm tắt,Tổng tiền tua,"${data.summary.totalCommission}"\n`;
-        csv += `Tóm tắt,DT / Giường,"${data.summary.revenuePerBed}"\n`;
-        csv += `Tóm tắt,Tỷ lệ lấp đầy giường (%),"${data.summary.bedOccupancy}"\n`;
-        csv += `Tóm tắt,Tổng số giường,"${data.summary.totalBeds}"\n`;
-        csv += '\n';
+        if (sections.includes('kpi')) {
+            csv += 'DANH MỤC,CHỈ SỐ,GIÁ TRỊ\n';
+            csv += `Tóm tắt,Tổng doanh thu,"${data.summary.revenue}"\n`;
+            csv += `Tóm tắt,Số lượng dịch vụ,"${data.summary.totalServiceCount}"\n`;
+            csv += `Tóm tắt,Tổng giá trị dịch vụ,"${data.summary.totalServiceRevenue}"\n`;
+            csv += `Tóm tắt,Số khách hàng,"${data.summary.uniqueCustomers}"\n`;
+            csv += `Tóm tắt,Tiền tua TB/Dịch vụ,"${data.summary.costPerService}"\n`;
+            csv += `Tóm tắt,Tỷ lệ chi phí (%),"${data.summary.costRatio}"\n`;
+            csv += `Tóm tắt,Điểm đánh giá TB,"${data.summary.avgRating}"\n`;
+            csv += `Tóm tắt,Tổng tiền tip,"${data.summary.totalTip}"\n`;
+            csv += `Tóm tắt,Tổng tiền tua,"${data.summary.totalCommission}"\n`;
+            csv += `Tóm tắt,DT / Giường,"${data.summary.revenuePerBed}"\n`;
+            csv += `Tóm tắt,Tỷ lệ lấp đầy giường (%),"${data.summary.bedOccupancy}"\n`;
+            csv += `Tóm tắt,Tổng số giường,"${data.summary.totalBeds}"\n`;
+            csv += `Tóm tắt,Tỷ lệ hủy đơn (%),"${data.summary.cancellationRate}"\n`;
+            csv += `Tóm tắt,Đơn bị hủy,"${data.summary.cancelledOrders}"\n`;
+            csv += `Tóm tắt,Tỷ lệ khách quay lại (%),"${data.summary.retentionRate}"\n`;
+            csv += `Tóm tắt,Khách quay lại,"${data.summary.returningCustomers}"\n`;
+            csv += '\n';
+        }
 
         // 2. Cơ cấu dịch vụ
-        csv += 'CƠ CẤU DỊCH VỤ,Số lượng,Doanh thu\n';
-        data.serviceBreakdown.forEach(s => {
-            csv += `"${s.name}","${s.count}","${s.revenue}"\n`;
-        });
-        csv += '\n';
+        if (sections.includes('services')) {
+            csv += 'CƠ CẤU DỊCH VỤ,Số lượng,Doanh thu\n';
+            data.serviceBreakdown.forEach(s => {
+                csv += `"${s.name}","${s.count}","${s.revenue}"\n`;
+            });
+            csv += '\n';
+        }
 
-        // 3. Bảng xếp hạng KTV
-        csv += 'BẢNG XẾP HẠNG KTV,Số đơn,Doanh thu,Tiền tua,Tiền tip,Rating\n';
-        data.topKTV.forEach(k => {
-            csv += `"${k.name}","${k.orders}","${k.revenue}","${k.commission}","${k.totalTip}","${k.avgRating}"\n`;
-        });
+        // 3. Phân tích ngôn ngữ
+        if (sections.includes('languages')) {
+            csv += 'PHÂN TÍCH NGÔN NGỮ,Số đơn,Doanh thu\n';
+            data.languageBreakdown.forEach(l => {
+                csv += `"${l.lang}","${l.orders}","${l.revenue}"\n`;
+            });
+            csv += '\n';
+        }
+
+        // 4. Bảng KTV + dòng tổng
+        if (sections.includes('ktv')) {
+            csv += 'BẢNG KTV,Số đơn,Doanh thu,Tiền tua,Tiền tip,Rating\n';
+            let totalOrders = 0, totalRevenue = 0, totalCommission = 0, totalTip = 0;
+            data.topKTV.forEach(k => {
+                csv += `"${k.name}","${k.orders}","${k.revenue}","${k.commission}","${k.totalTip}","${k.avgRating}"\n`;
+                totalOrders += k.orders;
+                totalRevenue += k.revenue;
+                totalCommission += k.commission;
+                totalTip += k.totalTip;
+            });
+            csv += `"TỔNG CỘNG","${totalOrders}","${totalRevenue}","${totalCommission}","${totalTip}",""\n`;
+            csv += '\n';
+        }
+
+        // 5. Giờ cao điểm
+        if (sections.includes('peakHours')) {
+            csv += 'GIỜ CAO ĐIỂM,Số đơn\n';
+            data.peakHours.forEach(h => {
+                csv += `"${h.hour}","${h.count}"\n`;
+            });
+            csv += '\n';
+        }
+
+        // 6. Doanh thu theo thời gian
+        if (sections.includes('revenue')) {
+            const revenueData = groupBy === 'hour' ? data.hourlyRevenue
+                : groupBy === 'week' ? data.weeklyRevenue
+                : groupBy === 'month' ? data.monthlyRevenue
+                : data.dailyRevenue;
+            const label = groupBy === 'hour' ? 'GIỜ' : groupBy === 'week' ? 'TUẦN' : groupBy === 'month' ? 'THÁNG' : 'NGÀY';
+            csv += `DOANH THU THEO ${label},Doanh thu,Số đơn\n`;
+            revenueData.forEach((r: { revenue: number; orders: number; date?: string; hour?: string; week?: string; month?: string }) => {
+                const key = (r as unknown as Record<string, string>).date || (r as unknown as Record<string, string>).hour || (r as unknown as Record<string, string>).week || (r as unknown as Record<string, string>).month || '';
+                csv += `"${key}","${r.revenue}","${r.orders}"\n`;
+            });
+            csv += '\n';
+        }
 
         const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `Bao_Cao_Doanh_Thu_${dateFrom}_den_${dateTo}.csv`);
+        link.setAttribute('download', `Bao_Cao_Doanh_Thu_${exportFrom}_den_${exportTo}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -297,6 +369,7 @@ export const useRevenueReport = () => {
         dateTo, setDateTo,
         groupBy, applyGroupBy,
         hourFrom, hourTo, applyHourFilter,
+        filterLang, applyLangFilter,
         applyCustomDate,
         isLoading,
         data,
