@@ -345,8 +345,9 @@ export const useRevenueReport = () => {
                 : data.dailyRevenue;
             const label = groupBy === 'hour' ? 'GIỜ' : groupBy === 'week' ? 'TUẦN' : groupBy === 'month' ? 'THÁNG' : 'NGÀY';
             csv += `DOANH THU THEO ${label},Doanh thu,Số đơn\n`;
-            revenueData.forEach((r: { revenue: number; orders: number; date?: string; hour?: string; week?: string; month?: string }) => {
-                const key = (r as unknown as Record<string, string>).date || (r as unknown as Record<string, string>).hour || (r as unknown as Record<string, string>).week || (r as unknown as Record<string, string>).month || '';
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (revenueData as any[]).forEach((r) => {
+                const key = r.date || r.hour || r.week || r.month || '';
                 csv += `"${key}","${r.revenue}","${r.orders}"\n`;
             });
             csv += '\n';
