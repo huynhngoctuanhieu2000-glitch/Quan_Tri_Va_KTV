@@ -179,10 +179,17 @@ export async function GET(request: Request) {
             ? Math.round((ratedItems.reduce((sum, i) => sum + Number(i.itemRating), 0) / ratedItems.length) * 10) / 10
             : 0;
 
-        // Occupancy: total service hours / (beds × operating hours × days)
-        const totalServiceMins = items.reduce((sum, i) => sum + (Number(i.quantity) || 1) * 60, 0); // Fallback 60 min
-        const maxCapacityMins = (totalBeds || 1) * OPERATING_HOURS_PER_DAY * 60 * periodDays;
+        // Bed Occupancy: total service minutes (from real durations) / (beds × operating hours × days)
+        const totalServiceMins = items.reduce((sum, i) => {
+            const dur = svcDurationMap[String(i.serviceId)] || 60;
+            const qty = Number(i.quantity) || 1;
+            return sum + dur * qty;
+        }, 0);
+        const bedCount = totalBeds || 1;
+        const maxCapacityMins = bedCount * OPERATING_HOURS_PER_DAY * 60 * periodDays;
         const occupancy = Math.min(100, Math.round((totalServiceMins / maxCapacityMins) * 100));
+        const bedOccupancy = occupancy; // alias for clarity
+        const revenuePerBed = bedCount > 0 ? Math.round(revenue / bedCount) : 0;
 
         // Total Commission (Tiền tua) — tính từ duration dịch vụ × số lượng items
         let totalCommission = 0;
@@ -401,6 +408,10 @@ export async function GET(request: Request) {
                 costRatio,
                 uniqueCustomers,
                 avgBillPerCustomer,
+                // Bed KPIs
+                revenuePerBed,
+                bedOccupancy,
+                totalBeds: bedCount,
                 // Comparisons
                 revenueChange,
                 ordersChange,

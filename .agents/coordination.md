@@ -7,17 +7,15 @@
 
 ## 📡 Active Conversations
 
-<!-- 
-  Format mỗi entry:
-  ### [Tên công việc]
-  - **Conversation**: [ID hoặc mô tả]
-  - **Đang sửa**: `path/to/file.tsx`
-  - **Trạng thái**: 🟢 Đang làm | 🟡 Tạm dừng | 🔴 Xong
--->
+### Báo cáo tiến độ trang báo cáo
+- **Conversation**: `9a73d883-85c4-4884-b88a-a14163ae7980`
+- **Đang sửa**: _Không sửa file, chỉ đọc để báo cáo tiến độ_
+- **Trạng thái**: 🟢 Đang làm
 
-### Conversation A - (Trống)
-- **Đang sửa**: _Chưa có file nào_
-- **Trạng thái**: 🟡 Chờ giao việc
+### Triển khai Xuất Excel Báo cáo
+- **Conversation**: `9a73d883-85c4-4884-b88a-a14163ae7980`
+- **Đang sửa**: `app/finance/revenue/RevenueReport.logic.ts`, `app/finance/revenue/page.tsx`
+- **Trạng thái**: 🔴 Xong
 
 ---
 
@@ -34,4 +32,4 @@
 
 | Thời gian | Conversation | Hành động | File |
 |-----------|-------------|-----------|------|
-| _Chưa có_ | - | - | - |
+| 2026-03-23 | `9a73d883` | Kiểm tra tiến độ | `RevenueReport.logic.ts`, `page.tsx`, `api/finance/reports/route.ts` |

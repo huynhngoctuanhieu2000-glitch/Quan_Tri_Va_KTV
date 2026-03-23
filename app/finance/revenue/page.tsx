@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
     ShieldAlert, TrendingUp, TrendingDown, DollarSign, Users, Calendar,
     Star, Activity, ChevronRight, Loader2, BarChart3, Award, Coins, Globe, X, Phone, Mail,
-    Package, Receipt, Calculator, PieChart as PieChartIcon, Clock, Crown
+    Package, Receipt, Calculator, PieChart as PieChartIcon, Clock, Crown, Download, BedDouble, Gauge
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -196,8 +196,18 @@ export default function RevenueReportsPage() {
                 {/* ─── Header ─────────────────────────────────────────── */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">Báo Cáo Doanh Thu</h1>
                         <p className="text-sm text-gray-500">Tổng quan tình hình kinh doanh của Spa.</p>
                     </div>
+                    {!report.isLoading && report.data.summary.orders > 0 && (
+                        <button
+                            onClick={report.exportToCSV}
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-bold shadow-sm transition-all active:scale-95"
+                        >
+                            <Download size={16} />
+                            Xuất Excel
+                        </button>
+                    )}
                 </div>
 
                 {/* ─── Date Picker ────────────────────────────────────── */}
@@ -345,6 +355,22 @@ export default function RevenueReportsPage() {
                                 value={summary.totalTip > 0 ? report.formatVND(summary.totalTip) : '0đ'}
                                 icon={<Award size={18} />}
                                 color="bg-pink-50 text-pink-600"
+                            />
+                            {/* DT / Giường */}
+                            <KPICard
+                                title="DT / Giường"
+                                value={report.formatVND(summary.revenuePerBed)}
+                                subtitle={`${summary.totalBeds} giường`}
+                                icon={<BedDouble size={18} />}
+                                color="bg-indigo-50 text-indigo-600"
+                            />
+                            {/* Lấp đầy Giường */}
+                            <KPICard
+                                title="Lấp đầy Giường"
+                                value={`${summary.bedOccupancy}%`}
+                                subtitle={summary.bedOccupancy >= 80 ? 'Cao tải' : summary.bedOccupancy >= 50 ? 'Ổn định' : 'Còn trống nhiều'}
+                                icon={<Gauge size={18} />}
+                                color={summary.bedOccupancy >= 80 ? 'bg-red-50 text-red-600' : summary.bedOccupancy >= 50 ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}
                             />
                         </div>
 
