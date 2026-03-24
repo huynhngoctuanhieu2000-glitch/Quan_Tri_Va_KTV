@@ -62,8 +62,41 @@ const FilterChipBar = ({ label, icon, options, selected, onSelect }: {
     </div>
 );
 
+// ─── Help Tooltip (inline) ────────────────────────────────────────────────────
+const HelpTooltip = ({ text }: { text: string }) => {
+    const [open, setOpen] = React.useState(false);
+    const ref = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        if (!open) return;
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    return (
+        <div ref={ref} className="relative inline-flex">
+            <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }}
+                className="w-4 h-4 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors shrink-0"
+                title="Giải thích"
+            >
+                <HelpCircle size={10} className="text-gray-400" />
+            </button>
+            {open && (
+                <div className="absolute left-0 top-6 z-50 w-56 bg-gray-900 text-white text-[11px] leading-relaxed rounded-xl px-3 py-2.5 shadow-xl border border-gray-700 whitespace-normal">
+                    <div className="absolute -top-1.5 left-2 w-3 h-3 bg-gray-900 rotate-45 border-l border-t border-gray-700" />
+                    {text}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
-const KPICard = ({ title, value, subtitle, change, icon, color, href, onClick }: {
+const KPICard = ({ title, value, subtitle, change, icon, color, href, onClick, helpText }: {
     title: string;
     value: string;
     subtitle?: string;
@@ -72,6 +105,7 @@ const KPICard = ({ title, value, subtitle, change, icon, color, href, onClick }:
     color: string;
     href?: string;
     onClick?: () => void;
+    helpText?: string;
 }) => {
     const isPositive = (change || 0) >= 0;
     const isClickable = !!(href || onClick);
@@ -82,7 +116,10 @@ const KPICard = ({ title, value, subtitle, change, icon, color, href, onClick }:
     return (
         <Wrapper href={href || undefined} onClick={isClickable ? handleClick : undefined} className={`bg-white p-5 rounded-2xl border border-gray-100 shadow-sm block ${isClickable ? 'cursor-pointer active:scale-[0.98] transition-transform hover:shadow-md' : ''}`}>
             <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-500">{title}</h3>
+                <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-medium text-gray-500">{title}</h3>
+                    {helpText && <HelpTooltip text={helpText} />}
+                </div>
                 <div className="flex items-center gap-1.5">
                     {isClickable && <ChevronRight size={14} className="text-gray-300" />}
                     <div className={`p-2 ${color} rounded-xl`}>
@@ -303,7 +340,10 @@ export default function RevenueReportsPage() {
                             {/* Tổng Doanh Thu (gộp DV + Đơn) */}
                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-medium text-gray-500">Tổng Doanh Thu</h3>
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-sm font-medium text-gray-500">Tổng Doanh Thu</h3>
+                                        <HelpTooltip text="Σ totalAmount (đơn hoàn thành). Tổng tiền thu từ khách hàng trong kỳ." />
+                                    </div>
                                     <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
                                         <DollarSign size={18} />
                                     </div>
@@ -337,6 +377,7 @@ export default function RevenueReportsPage() {
                                 subtitle="Tiền tua trung bình / dịch vụ"
                                 icon={<Calculator size={18} />}
                                 color="bg-orange-50 text-orange-600"
+                                helpText="Tổng tiền tua ÷ Số dịch vụ. Trung bình tiền tua trả cho KTV mỗi dịch vụ."
                             />
                             {/* #5 Tỷ Lệ Chi Phí */}
                             <KPICard
@@ -345,6 +386,7 @@ export default function RevenueReportsPage() {
                                 subtitle="Tua / Doanh thu"
                                 icon={<PieChartIcon size={18} />}
                                 color="bg-rose-50 text-rose-600"
+                                helpText="Tổng tiền tua ÷ Doanh thu × 100%. % doanh thu dành trả cho KTV (càng thấp càng tốt)."
                             />
                             {/* #6 Số Khách */}
                             <KPICard
@@ -355,6 +397,7 @@ export default function RevenueReportsPage() {
                                 icon={<Users size={18} />}
                                 color="bg-purple-50 text-purple-600"
                                 onClick={() => setShowNewCustomers(true)}
+                                helpText="Count distinct (customerId). Số khách hàng duy nhất có đơn hoàn thành."
                             />
                             {/* #7 Chi Tiêu TB / Khách */}
                             <KPICard
@@ -363,6 +406,7 @@ export default function RevenueReportsPage() {
                                 subtitle={`Trung bình/đơn: ${report.formatVND(summary.avgPerOrder)}`}
                                 icon={<Activity size={18} />}
                                 color="bg-amber-50 text-amber-600"
+                                helpText="Doanh thu ÷ Số khách duy nhất. Trung bình mỗi khách chi tiêu bao nhiêu trong kỳ."
                             />
                             {/* Đánh Giá TB */}
                             <KPICard
@@ -371,6 +415,7 @@ export default function RevenueReportsPage() {
                                 subtitle={summary.avgRating >= 4 ? 'Xuất sắc' : summary.avgRating >= 3 ? 'Tốt' : ''}
                                 icon={<Star size={18} />}
                                 color="bg-yellow-50 text-yellow-600"
+                                helpText="Σ itemRating ÷ Số lượt đánh giá. Điểm hài lòng trung bình từ khách (thang 5 sao)."
                             />
                             {/* Tổng Tip */}
                             <KPICard
@@ -378,6 +423,7 @@ export default function RevenueReportsPage() {
                                 value={summary.totalTip > 0 ? report.formatVND(summary.totalTip) : '0đ'}
                                 icon={<Award size={18} />}
                                 color="bg-pink-50 text-pink-600"
+                                helpText="Σ tip (BookingItems). Tổng tiền tip khách thưởng cho KTV."
                             />
                             {/* DT / Giường */}
                             <KPICard
@@ -386,6 +432,7 @@ export default function RevenueReportsPage() {
                                 subtitle={`${summary.totalBeds} giường`}
                                 icon={<BedDouble size={18} />}
                                 color="bg-indigo-50 text-indigo-600"
+                                helpText="Doanh thu ÷ Tổng số giường. Hiệu quả kinh doanh trên mỗi giường."
                             />
                             {/* Lấp đầy Giường */}
                             <KPICard
@@ -394,6 +441,7 @@ export default function RevenueReportsPage() {
                                 subtitle={summary.bedOccupancy >= 80 ? 'Cao tải' : summary.bedOccupancy >= 50 ? 'Ổn định' : 'Còn trống nhiều'}
                                 icon={<Gauge size={18} />}
                                 color={summary.bedOccupancy >= 80 ? 'bg-red-50 text-red-600' : summary.bedOccupancy >= 50 ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}
+                                helpText="Tổng phút DV ÷ (Giường × Giờ mở cửa × Ngày) × 100%. ≥80% là cao tải."
                             />
                             {/* Tỷ lệ hủy đơn */}
                             <KPICard
@@ -402,6 +450,7 @@ export default function RevenueReportsPage() {
                                 subtitle={`${summary.cancelledOrders} đơn hủy`}
                                 icon={<Ban size={18} />}
                                 color={summary.cancellationRate >= 20 ? 'bg-red-50 text-red-600' : summary.cancellationRate >= 10 ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}
+                                helpText="Đơn hủy ÷ Tổng đơn (hoàn thành + hủy) × 100%. Giúp phát hiện vấn đề vận hành."
                             />
                             {/* Khách quay lại */}
                             <KPICard
@@ -410,6 +459,7 @@ export default function RevenueReportsPage() {
                                 subtitle={`${summary.returningCustomers}/${summary.uniqueCustomers} khách`}
                                 icon={<UserCheck size={18} />}
                                 color={summary.retentionRate >= 50 ? 'bg-emerald-50 text-emerald-600' : summary.retentionRate >= 30 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500'}
+                                helpText="Khách có ≥ 2 đơn ÷ Tổng khách × 100%. Đánh giá mức giữ chân khách."
                             />
                         </div>
 
