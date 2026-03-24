@@ -570,6 +570,80 @@ export function useKTVDashboard(config?: DashboardConfig) {
         return () => clearInterval(timer);
     }, [isPrepping, prepTimeRemaining, isTimerRunning, timeRemaining]);
 
+    // 📱 BACKGROUND RECOVERY: Khi KTV mở lại app sau khi tắt màn hình / chuyển app khác
+    // Browser mobile sẽ freeze setInterval → timer bị dừng.
+    // Fix: dùng visibilitychange + focus → tính lại timeRemaining từ server timeStart.
+    useEffect(() => {
+        const recalcTimerFromServer = () => {
+            const currentBooking = bookingRef.current;
+            if (!currentBooking || !isTimerRunningRef.current) return;
+
+            const assignedItem = currentBooking.assignedItemId 
+                ? currentBooking.BookingItems?.find((i: any) => i.id === currentBooking.assignedItemId)
+                : currentBooking.BookingItems?.[0];
+            
+            let tStart = assignedItem?.timeStart || currentBooking.timeStart;
+            if (!tStart) return;
+
+            if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
+                tStart = tStart.replace(' ', 'T') + 'Z';
+            }
+
+            // Lấy tất cả segments gán cho KTV
+            const allItemIds: string[] = currentBooking.assignedItemIds?.length > 0
+                ? currentBooking.assignedItemIds
+                : (currentBooking.assignedItemId ? [currentBooking.assignedItemId] : []);
+            const allItems = allItemIds.length > 0
+                ? currentBooking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+                : [assignedItem].filter(Boolean);
+            
+            let allMySegs: any[] = [];
+            for (const ai of allItems) {
+                let segs: any[] = [];
+                try {
+                    segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
+                } catch { segs = []; }
+                const mySegs = segs.filter((seg: any) => seg.ktvId && user?.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase()));
+                allMySegs.push(...mySegs);
+            }
+
+            const segIdx = activeSegmentIndex;
+            const currentSegDuration = allMySegs.length > 0
+                ? (Number(allMySegs[segIdx]?.duration) || allMySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0) || 60)
+                : (assignedItem?.duration || 60);
+
+            const totalSecs = currentSegDuration * 60;
+            const start = new Date(tStart).getTime();
+            const now = new Date().getTime();
+            const elapsed = Math.floor((now - start) / 1000);
+
+            // Trừ đi thời gian các chặng trước
+            let previousSegsDuration = 0;
+            for (let i = 0; i < segIdx; i++) {
+                previousSegsDuration += (allMySegs[i]?.duration || 0);
+            }
+            const adjustedElapsed = elapsed - (previousSegsDuration * 60);
+            const newRemaining = Math.max(0, totalSecs - adjustedElapsed);
+
+            console.log(`📱 [BackgroundRecovery] Recalculated timer: ${newRemaining}s remaining (elapsed: ${adjustedElapsed}s)`);
+            setTimeRemaining(newRemaining);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                recalcTimerFromServer();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', recalcTimerFromServer);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', recalcTimerFromServer);
+        };
+    }, [activeSegmentIndex, user?.id]);
+
     // 🏁 Auto-finish: trigger khi timer đạt 0 (tách riêng khỏi countdown để React xử lý đúng)
     useEffect(() => {
         if (isTimerRunning && !isPrepping && timeRemaining === 0) {
