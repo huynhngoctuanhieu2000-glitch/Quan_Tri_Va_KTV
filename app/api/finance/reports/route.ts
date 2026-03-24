@@ -412,6 +412,17 @@ export async function GET(request: Request) {
             'zh': '🇨🇳 中文', 'cn': '🇨🇳 中文',
             'jp': '🇯🇵 日本語',
         };
+        // Pre-seed all 5 languages so they always appear
+        const ALL_LANGUAGES = [
+            { key: 'vi', lang: '🇻🇳 Tiếng Việt' },
+            { key: 'en', lang: '🇬🇧 English' },
+            { key: 'ko', lang: '🇰🇷 한국어' },
+            { key: 'zh', lang: '🇨🇳 中文' },
+            { key: 'jp', lang: '🇯🇵 日本語' },
+        ];
+        ALL_LANGUAGES.forEach(l => {
+            langMap[l.key] = { key: l.key, lang: l.lang, revenue: 0, orders: 0 };
+        });
         allBookings.forEach(b => {
             const rawLang = (b.customerLang || 'vi').toLowerCase();
             const normalizedLang = rawLang === 'vn' ? 'vi' : rawLang === 'kr' ? 'ko' : rawLang === 'cn' ? 'zh' : rawLang;

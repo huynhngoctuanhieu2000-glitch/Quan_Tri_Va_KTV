@@ -34,7 +34,8 @@ const GROUP_BY_OPTIONS: { key: GroupBy; label: string }[] = [
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${i}:00` }));
 
-const KTV_DISPLAY_LIMIT = 5;
+const KTV_DISPLAY_LIMIT = 3;
+const SERVICE_DISPLAY_LIMIT = 3;
 
 // ─── Filter Chip Bar ──────────────────────────────────────────────────────────
 const FilterChipBar = ({ label, icon, options, selected, onSelect }: {
@@ -162,6 +163,7 @@ export default function RevenueReportsPage() {
     const report = useRevenueReport();
     const [showNewCustomers, setShowNewCustomers] = React.useState(false);
     const [showAllKTV, setShowAllKTV] = React.useState(false);
+    const [showAllServices, setShowAllServices] = React.useState(false);
     const [showMetricsHelp, setShowMetricsHelp] = React.useState(false);
     const [showExportModal, setShowExportModal] = React.useState(false);
     const [exportSections, setExportSections] = React.useState<Record<string, boolean>>({
@@ -334,6 +336,305 @@ export default function RevenueReportsPage() {
                                 />
                             </div>
                         )}
+
+                        {/* ─── Revenue Chart + Group By ─────────────────── */}
+                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                                <h3 className="text-base font-bold text-gray-900">{chartTitle}</h3>
+                                <div className="flex items-center gap-1">
+                                    {GROUP_BY_OPTIONS.map(o => (
+                                        <button
+                                            key={o.key}
+                                            onClick={() => report.applyGroupBy(o.key)}
+                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                                                report.groupBy === o.key
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'bg-gray-100 text-gray-500 active:bg-gray-200'
+                                            }`}
+                                        >
+                                            {o.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {/* Hour range picker — only visible when groupBy = 'hour' */}
+                            {report.groupBy === 'hour' && (
+                                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                                    <Clock size={14} className="text-gray-400" />
+                                    <span className="text-xs text-gray-500">Từ</span>
+                                    <select
+                                        value={report.hourFrom}
+                                        onChange={e => report.applyHourFilter(Number(e.target.value), report.hourTo)}
+                                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                    >
+                                        {HOUR_OPTIONS.map(h => (
+                                            <option key={h.value} value={h.value}>{h.label}</option>
+                                        ))}
+                                    </select>
+                                    <span className="text-xs text-gray-500">đến</span>
+                                    <select
+                                        value={report.hourTo}
+                                        onChange={e => report.applyHourFilter(report.hourFrom, Number(e.target.value))}
+                                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                    >
+                                        {HOUR_OPTIONS.map(h => (
+                                            <option key={h.value} value={h.value}>{h.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {revenueChartData.length > 0 ? (
+                                <div className="h-64 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={revenueChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `${v}K`} />
+                                            <Tooltip content={<ChartTooltip />} />
+                                            <Bar dataKey="revenueK" name="Doanh thu (K)" fill="#4f46e5" radius={[6, 6, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-64 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                            )}
+                        </div>
+
+                        {/* ─── Charts Row: Service + Language ──────────── */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Top Selling Services — Horizontal Bar */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <Package size={16} className="text-blue-500" />
+                                    Dịch Vụ Bán Chạy Nhất
+                                </h3>
+                                {(() => {
+                                    const sortedServices = [...report.data.serviceBreakdown].sort((a, b) => b.count - a.count);
+                                    const displayedServices = showAllServices ? sortedServices : sortedServices.slice(0, SERVICE_DISPLAY_LIMIT);
+                                    const maxCount = sortedServices.length > 0 ? sortedServices[0].count : 1;
+                                    return sortedServices.length > 0 ? (
+                                        <>
+                                            <div className="space-y-2.5">
+                                                {displayedServices.map((svc, idx) => {
+                                                    const pct = Math.round((svc.count / maxCount) * 100);
+                                                    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                                                    return (
+                                                        <div key={`svc-${idx}`} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    {medal ? (
+                                                                        <span className="text-base shrink-0">{medal}</span>
+                                                                    ) : (
+                                                                        <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-black text-gray-500 shrink-0">{idx + 1}</span>
+                                                                    )}
+                                                                    <span className="text-sm font-bold text-gray-800 truncate">{svc.name}</span>
+                                                                </div>
+                                                                <span className="text-xs font-bold text-indigo-600 whitespace-nowrap ml-2">{svc.count} lượt</span>
+                                                            </div>
+                                                            <div className="h-1.5 bg-gray-200 rounded-full mb-1.5">
+                                                                <div
+                                                                    className="h-full rounded-full transition-all"
+                                                                    style={{ width: `${pct}%`, backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center justify-between text-[11px] text-gray-400">
+                                                                <span>Doanh thu: <span className="font-bold text-gray-600">{report.formatVND(svc.revenue)}</span></span>
+                                                                <span>TB/lượt: <span className="font-bold text-gray-600">{svc.count > 0 ? report.formatVND(Math.round(svc.revenue / svc.count)) : '—'}</span></span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            {sortedServices.length > SERVICE_DISPLAY_LIMIT && (
+                                                <button
+                                                    onClick={() => setShowAllServices(!showAllServices)}
+                                                    className="w-full mt-3 py-2 text-xs font-bold text-blue-600 bg-blue-50 rounded-xl active:bg-blue-100 transition-all"
+                                                >
+                                                    {showAllServices ? 'Thu gọn' : `Xem tất cả ${sortedServices.length} dịch vụ`}
+                                                </button>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Language Breakdown Donut */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                    <Globe size={16} className="text-indigo-500" />
+                                    Lượt Khách Theo Ngôn Ngữ
+                                </h3>
+                                {report.data.languageBreakdown.length > 0 ? (
+                                    <>
+                                        <div className="h-52 w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={report.data.languageBreakdown}
+                                                        cx="50%" cy="50%"
+                                                        innerRadius={55} outerRadius={90}
+                                                        paddingAngle={3}
+                                                        dataKey="orders"
+                                                        nameKey="lang"
+                                                    >
+                                                        {report.data.languageBreakdown.map((_, idx) => (
+                                                            <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip content={<ChartTooltip />} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="space-y-2 mt-2">
+                                            {report.data.languageBreakdown.map((lb, idx) => {
+                                                const totalOrders = report.data.languageBreakdown.reduce((s, l) => s + l.orders, 0);
+                                                const pct = totalOrders > 0 ? Math.round((lb.orders / totalOrders) * 100) : 0;
+                                                return (
+                                                    <div key={idx} className="flex items-center justify-between text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                                                            <span className="text-gray-700 font-medium">{lb.lang}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs text-gray-400">{lb.orders} lượt khách</span>
+                                                            <span className="text-xs font-bold text-indigo-600">{pct}%</span>
+                                                            <span className="text-xs text-gray-500">{report.formatVND(lb.revenue)}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ─── KTV Section (#8 #9 #10) ──────────────────── */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Top KTV */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <h3 className="text-base font-bold text-gray-900 mb-4">Bảng Xếp Hạng KTV</h3>
+                                {report.data.topKTV.length > 0 ? (
+                                    <>
+                                        <div className="space-y-2.5">
+                                            {displayedKTV.map((ktv, idx) => {
+                                                const maxRevenue = report.data.topKTV[0]?.revenue || 1;
+                                                const pct = Math.round((ktv.revenue / maxRevenue) * 100);
+                                                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                                                const isTopTip = topTipKTV && ktv.code === topTipKTV.code && ktv.totalTip > 0;
+                                                return (
+                                                    <div key={ktv.code} className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
+                                                        {/* Row 1: Name + Orders + Rating */}
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                {medal ? (
+                                                                    <span className="text-base">{medal}</span>
+                                                                ) : (
+                                                                    <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500">{idx + 1}</span>
+                                                                )}
+                                                                <span className="text-sm font-bold text-gray-800">{ktv.name}</span>
+                                                                {isTopTip && (
+                                                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black flex items-center gap-0.5">
+                                                                        <Crown size={9} /> Top Tip
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {ktv.avgRating > 0 && (
+                                                                    <span className="px-1.5 py-0.5 rounded-md bg-yellow-50 text-yellow-700 text-[10px] font-bold">
+                                                                        {ktv.avgRating} ★ <span className="text-gray-400 font-normal">({ktv.ratingCount})</span>
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-[11px] text-gray-400 font-medium">{ktv.orders} đơn</span>
+                                                            </div>
+                                                        </div>
+                                                        {/* Progress bar */}
+                                                        <div className="h-1.5 bg-gray-200 rounded-full mb-2.5">
+                                                            <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                        </div>
+                                                        {/* Row 2: Revenue + Commission + Tip */}
+                                                        <div className="flex items-center justify-between text-xs flex-wrap gap-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <DollarSign size={12} className="text-emerald-500" />
+                                                                <span className="text-gray-500">DT:</span>
+                                                                <span className="font-bold text-indigo-600">{report.formatVND(ktv.revenue)}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Coins size={12} className="text-cyan-500" />
+                                                                <span className="text-gray-500">Tua:</span>
+                                                                <span className="font-bold text-cyan-600">{report.formatVND(ktv.commission || 0)}</span>
+                                                            </div>
+                                                            {ktv.totalTip > 0 && (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Award size={12} className="text-pink-500" />
+                                                                    <span className="text-gray-500">Tip:</span>
+                                                                    <span className="font-bold text-pink-600">{report.formatVND(ktv.totalTip)}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {/* Show all / Show less */}
+                                        {report.data.topKTV.length > KTV_DISPLAY_LIMIT && (
+                                            <button
+                                                onClick={() => setShowAllKTV(!showAllKTV)}
+                                                className="w-full mt-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-xl active:bg-indigo-100 transition-all"
+                                            >
+                                                {showAllKTV ? 'Thu gọn' : `Xem tất cả ${report.data.topKTV.length} KTV`}
+                                            </button>
+                                        )}
+                                        {/* Tổng Tiền Tua */}
+                                        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <Coins size={16} className="text-cyan-600" />
+                                                <span className="text-sm font-bold text-gray-700">Tổng Tiền Tua</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-lg font-black text-cyan-600">
+                                                    {report.formatVND(summary.totalCommission)}
+                                                </span>
+                                                {summary.totalCommission > 0 && (
+                                                    <p className="text-[10px] text-gray-400">{report.formatFullVND(summary.totalCommission)}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                                )}
+                            </div>
+
+                            {/* Peak Hours */}
+                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <h3 className="text-base font-bold text-gray-900 mb-4">Khung Giờ Cao Điểm</h3>
+                                {report.data.peakHours.length > 0 ? (
+                                    <div className="h-52 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={report.data.peakHours}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                                <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
+                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                                                <Tooltip content={<ChartTooltip />} />
+                                                <Line
+                                                    type="monotone" dataKey="count" name="Số đơn"
+                                                    stroke="#10b981" strokeWidth={2.5}
+                                                    dot={{ r: 3, fill: '#10b981' }}
+                                                    activeDot={{ r: 5, stroke: '#10b981' }}
+                                                />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                ) : (
+                                    <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
+                                )}
+                            </div>
+                        </div>
 
                         {/* ─── KPI Cards (10 chỉ số) ──────────────────── */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -606,284 +907,8 @@ export default function RevenueReportsPage() {
                             );
                         })()}
 
-                        {/* ─── Revenue Chart + Group By ─────────────────── */}
-                        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                                <h3 className="text-base font-bold text-gray-900">{chartTitle}</h3>
-                                <div className="flex items-center gap-1">
-                                    {GROUP_BY_OPTIONS.map(o => (
-                                        <button
-                                            key={o.key}
-                                            onClick={() => report.applyGroupBy(o.key)}
-                                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                                                report.groupBy === o.key
-                                                    ? 'bg-indigo-600 text-white'
-                                                    : 'bg-gray-100 text-gray-500 active:bg-gray-200'
-                                            }`}
-                                        >
-                                            {o.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            {/* Hour range picker — only visible when groupBy = 'hour' */}
-                            {report.groupBy === 'hour' && (
-                                <div className="flex items-center gap-2 mb-4 flex-wrap">
-                                    <Clock size={14} className="text-gray-400" />
-                                    <span className="text-xs text-gray-500">Từ</span>
-                                    <select
-                                        value={report.hourFrom}
-                                        onChange={e => report.applyHourFilter(Number(e.target.value), report.hourTo)}
-                                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                                    >
-                                        {HOUR_OPTIONS.map(h => (
-                                            <option key={h.value} value={h.value}>{h.label}</option>
-                                        ))}
-                                    </select>
-                                    <span className="text-xs text-gray-500">đến</span>
-                                    <select
-                                        value={report.hourTo}
-                                        onChange={e => report.applyHourFilter(report.hourFrom, Number(e.target.value))}
-                                        className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                                    >
-                                        {HOUR_OPTIONS.map(h => (
-                                            <option key={h.value} value={h.value}>{h.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-                            {revenueChartData.length > 0 ? (
-                                <div className="h-64 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={revenueChartData}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `${v}K`} />
-                                            <Tooltip content={<ChartTooltip />} />
-                                            <Bar dataKey="revenueK" name="Doanh thu (K)" fill="#4f46e5" radius={[6, 6, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            ) : (
-                                <div className="h-64 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
-                            )}
-                        </div>
 
-                        {/* ─── Charts Row: Service + Language ──────────── */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {/* Service Breakdown Pie */}
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                <h3 className="text-base font-bold text-gray-900 mb-4">Cơ Cấu Dịch Vụ</h3>
-                                {report.data.serviceBreakdown.length > 0 ? (
-                                    <>
-                                        <div className="h-52 w-full">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie
-                                                        data={report.data.serviceBreakdown}
-                                                        cx="50%" cy="50%"
-                                                        innerRadius={55} outerRadius={90}
-                                                        paddingAngle={3}
-                                                        dataKey="revenue"
-                                                        nameKey="name"
-                                                    >
-                                                        {report.data.serviceBreakdown.map((_, idx) => (
-                                                            <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip content={<ChartTooltip />} />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                        <div className="flex flex-wrap justify-center gap-3 mt-2">
-                                            {report.data.serviceBreakdown.slice(0, 6).map((s, idx) => (
-                                                <div key={idx} className="flex items-center gap-1.5 text-xs text-gray-600">
-                                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                                                    <span className="truncate max-w-[100px]">{s.name}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
-                                )}
-                            </div>
 
-                            {/* Language Breakdown Donut */}
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                    <Globe size={16} className="text-indigo-500" />
-                                    Cơ Cấu Khách Theo Ngôn Ngữ
-                                </h3>
-                                {report.data.languageBreakdown.length > 0 ? (
-                                    <>
-                                        <div className="h-52 w-full">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie
-                                                        data={report.data.languageBreakdown}
-                                                        cx="50%" cy="50%"
-                                                        innerRadius={55} outerRadius={90}
-                                                        paddingAngle={3}
-                                                        dataKey="orders"
-                                                        nameKey="lang"
-                                                    >
-                                                        {report.data.languageBreakdown.map((_, idx) => (
-                                                            <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip content={<ChartTooltip />} />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                        <div className="space-y-2 mt-2">
-                                            {report.data.languageBreakdown.map((lb, idx) => {
-                                                const totalOrders = report.data.languageBreakdown.reduce((s, l) => s + l.orders, 0);
-                                                const pct = totalOrders > 0 ? Math.round((lb.orders / totalOrders) * 100) : 0;
-                                                return (
-                                                    <div key={idx} className="flex items-center justify-between text-sm">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                                                            <span className="text-gray-700 font-medium">{lb.lang}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-xs text-gray-400">{lb.orders} đơn</span>
-                                                            <span className="text-xs font-bold text-indigo-600">{pct}%</span>
-                                                            <span className="text-xs text-gray-500">{report.formatVND(lb.revenue)}</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* ─── KTV Section (#8 #9 #10) ──────────────────── */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {/* Top KTV */}
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                <h3 className="text-base font-bold text-gray-900 mb-4">Bảng Xếp Hạng KTV</h3>
-                                {report.data.topKTV.length > 0 ? (
-                                    <>
-                                        <div className="space-y-2.5">
-                                            {displayedKTV.map((ktv, idx) => {
-                                                const maxRevenue = report.data.topKTV[0]?.revenue || 1;
-                                                const pct = Math.round((ktv.revenue / maxRevenue) * 100);
-                                                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
-                                                const isTopTip = topTipKTV && ktv.code === topTipKTV.code && ktv.totalTip > 0;
-                                                return (
-                                                    <div key={ktv.code} className="bg-gray-50 rounded-xl p-3.5 border border-gray-100">
-                                                        {/* Row 1: Name + Orders + Rating */}
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-2">
-                                                                {medal ? (
-                                                                    <span className="text-base">{medal}</span>
-                                                                ) : (
-                                                                    <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500">{idx + 1}</span>
-                                                                )}
-                                                                <span className="text-sm font-bold text-gray-800">{ktv.name}</span>
-                                                                {isTopTip && (
-                                                                    <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black flex items-center gap-0.5">
-                                                                        <Crown size={9} /> Top Tip
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {ktv.avgRating > 0 && (
-                                                                    <span className="px-1.5 py-0.5 rounded-md bg-yellow-50 text-yellow-700 text-[10px] font-bold">
-                                                                        {ktv.avgRating} ★ <span className="text-gray-400 font-normal">({ktv.ratingCount})</span>
-                                                                    </span>
-                                                                )}
-                                                                <span className="text-[11px] text-gray-400 font-medium">{ktv.orders} đơn</span>
-                                                            </div>
-                                                        </div>
-                                                        {/* Progress bar */}
-                                                        <div className="h-1.5 bg-gray-200 rounded-full mb-2.5">
-                                                            <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                                                        </div>
-                                                        {/* Row 2: Revenue + Commission + Tip */}
-                                                        <div className="flex items-center justify-between text-xs flex-wrap gap-1">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <DollarSign size={12} className="text-emerald-500" />
-                                                                <span className="text-gray-500">DT:</span>
-                                                                <span className="font-bold text-indigo-600">{report.formatVND(ktv.revenue)}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Coins size={12} className="text-cyan-500" />
-                                                                <span className="text-gray-500">Tua:</span>
-                                                                <span className="font-bold text-cyan-600">{report.formatVND(ktv.commission || 0)}</span>
-                                                            </div>
-                                                            {ktv.totalTip > 0 && (
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Award size={12} className="text-pink-500" />
-                                                                    <span className="text-gray-500">Tip:</span>
-                                                                    <span className="font-bold text-pink-600">{report.formatVND(ktv.totalTip)}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        {/* Show all / Show less */}
-                                        {report.data.topKTV.length > KTV_DISPLAY_LIMIT && (
-                                            <button
-                                                onClick={() => setShowAllKTV(!showAllKTV)}
-                                                className="w-full mt-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-xl active:bg-indigo-100 transition-all"
-                                            >
-                                                {showAllKTV ? 'Thu gọn' : `Xem tất cả ${report.data.topKTV.length} KTV`}
-                                            </button>
-                                        )}
-                                        {/* Tổng Tiền Tua */}
-                                        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Coins size={16} className="text-cyan-600" />
-                                                <span className="text-sm font-bold text-gray-700">Tổng Tiền Tua</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-lg font-black text-cyan-600">
-                                                    {report.formatVND(summary.totalCommission)}
-                                                </span>
-                                                {summary.totalCommission > 0 && (
-                                                    <p className="text-[10px] text-gray-400">{report.formatFullVND(summary.totalCommission)}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
-                                )}
-                            </div>
-
-                            {/* Peak Hours */}
-                            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                <h3 className="text-base font-bold text-gray-900 mb-4">Khung Giờ Cao Điểm</h3>
-                                {report.data.peakHours.length > 0 ? (
-                                    <div className="h-52 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={report.data.peakHours}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                                <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
-                                                <Tooltip content={<ChartTooltip />} />
-                                                <Line
-                                                    type="monotone" dataKey="count" name="Số đơn"
-                                                    stroke="#10b981" strokeWidth={2.5}
-                                                    dot={{ r: 3, fill: '#10b981' }}
-                                                    activeDot={{ r: 5, stroke: '#10b981' }}
-                                                />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                ) : (
-                                    <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Chưa có dữ liệu</div>
-                                )}
-                            </div>
-                        </div>
                     </>
                 )}
             </div>
