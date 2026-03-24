@@ -4,6 +4,7 @@
 export const t = {
     pageTitle: 'Chấm Công',
     pageSubtitle: 'Bấm nút để ghi nhận vị trí và thông báo quản lý.',
+    loadingStatus: 'Đang kiểm tra trạng thái...',
     noAccess: 'Không có quyền truy cập',
 
     // IDLE

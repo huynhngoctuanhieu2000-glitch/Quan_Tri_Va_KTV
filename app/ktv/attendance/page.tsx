@@ -16,6 +16,7 @@ const KTVAttendancePage = () => {
         currentRecord,
         errorMsg,
         mounted,
+        initialLoading,
         mapsUrl,
         canAccessPage,
         handleAttendance,
@@ -44,8 +45,18 @@ const KTVAttendancePage = () => {
 
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-8 flex flex-col items-center gap-6">
 
+                    {/* INITIAL LOADING */}
+                    {initialLoading && (
+                        <>
+                            <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center">
+                                <Loader2 size={40} className="text-gray-400 animate-spin" />
+                            </div>
+                            <p className="text-sm text-gray-500 font-medium">{t.loadingStatus}</p>
+                        </>
+                    )}
+
                     {/* IDLE */}
-                    {checkStatus === 'IDLE' && (
+                    {!initialLoading && checkStatus === 'IDLE' && (
                         <>
                             <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center">
                                 <LogIn size={40} className="text-emerald-600" />
@@ -64,7 +75,7 @@ const KTVAttendancePage = () => {
                     )}
 
                     {/* LOADING GPS */}
-                    {checkStatus === 'LOADING_GPS' && (
+                    {!initialLoading && checkStatus === 'LOADING_GPS' && (
                         <>
                             <div className="w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center">
                                 <MapPin size={40} className="text-blue-400 animate-bounce" />
@@ -77,7 +88,7 @@ const KTVAttendancePage = () => {
                     )}
 
                     {/* PENDING */}
-                    {checkStatus === 'PENDING' && (
+                    {!initialLoading && checkStatus === 'PENDING' && (
                         <>
                             <div className="w-24 h-24 rounded-full bg-amber-50 flex items-center justify-center">
                                 <Clock size={40} className="text-amber-500 animate-pulse" />
@@ -101,7 +112,7 @@ const KTVAttendancePage = () => {
                     )}
 
                     {/* CONFIRMED */}
-                    {checkStatus === 'CONFIRMED' && (
+                    {!initialLoading && checkStatus === 'CONFIRMED' && (
                         <>
                             <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center">
                                 <CheckCircle2 size={40} className="text-emerald-600" />
@@ -131,7 +142,7 @@ const KTVAttendancePage = () => {
                     )}
 
                     {/* REJECTED */}
-                    {checkStatus === 'REJECTED' && (
+                    {!initialLoading && checkStatus === 'REJECTED' && (
                         <>
                             <div className="w-24 h-24 rounded-full bg-red-50 flex items-center justify-center">
                                 <XCircle size={40} className="text-red-500" />
@@ -150,7 +161,7 @@ const KTVAttendancePage = () => {
                     )}
 
                     {/* CHECKED OUT */}
-                    {checkStatus === 'CHECKED_OUT' && (
+                    {!initialLoading && checkStatus === 'CHECKED_OUT' && (
                         <>
                             <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center">
                                 <LogOut size={40} className="text-slate-500" />

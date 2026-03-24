@@ -31,8 +31,37 @@ export const useKTVAttendance = () => {
     const [currentRecord, setCurrentRecord] = useState<AttendanceRecord | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
 
     useEffect(() => { setMounted(true); }, []);
+
+    // --- Fetch current attendance status on mount ---
+    useEffect(() => {
+        if (!user?.id) {
+            setInitialLoading(false);
+            return;
+        }
+
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch(`/api/ktv/attendance/status?employeeId=${user.id}`);
+                const result = await res.json();
+
+                if (result.success && result.checkStatus) {
+                    setCheckStatus(result.checkStatus as CheckStatus);
+                    if (result.record) {
+                        setCurrentRecord(result.record);
+                    }
+                }
+            } catch (err) {
+                console.error('❌ [Attendance] Failed to fetch status:', err);
+            } finally {
+                setInitialLoading(false);
+            }
+        };
+
+        fetchStatus();
+    }, [user?.id]);
 
     // --- Realtime subscription ---
     useEffect(() => {
@@ -130,6 +159,7 @@ export const useKTVAttendance = () => {
         currentRecord,
         errorMsg,
         mounted,
+        initialLoading,
         mapsUrl,
         canAccessPage,
         handleAttendance,
