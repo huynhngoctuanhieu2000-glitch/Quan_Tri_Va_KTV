@@ -20,6 +20,7 @@ export type ModuleId =
   | 'service_handbook'
   | 'ai_features'
   | 'staff_notifications'
+  | 'device_management'
   | 'settings';
 
 export interface ModuleDefinition {

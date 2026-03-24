@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const rawRole = dbUser.role?.toUpperCase();
         
         if (rawRole === 'ADMIN') roleId = 'admin';
+        else if (rawRole === 'DEV') roleId = 'dev';
         else if (rawRole === 'MANAGER') roleId = 'branch_manager';
         else if (rawRole === 'RECEPTIONIST' || rawRole === 'LEAD_RECEPTIONIST') roleId = 'reception';
         else if (rawRole === 'TECHNICIAN' || rawRole === 'KTV') roleId = 'ktv';
@@ -71,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // If no permissions in DB, use smart defaults based on roleId
         if (permissions.length === 0) {
-          if (roleId === 'admin') {
+          if (roleId === 'admin' || roleId === 'dev') {
             permissions = MODULES.map(m => m.id);
           } else if (roleId === 'reception') {
             permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'staff_notifications', 'settings'];
