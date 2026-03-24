@@ -3,6 +3,7 @@
 // 🔧 UI CONFIGURATION
 const ANIMATION_DURATION = 0.25;
 const SLIDE_OVER_WIDTH = 'w-[420px]';
+const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
 
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -11,9 +12,10 @@ import {
     ShieldAlert, Clock, User, Phone,
     Calendar as CalendarIcon, ChevronRight,
     Plus, X, CreditCard, AlertCircle, CheckCircle2,
-    MessageSquare, ArrowRight, Banknote, Star
+    MessageSquare, ArrowRight, Banknote, Star, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { QRCodeSVG } from 'qrcode.react';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +106,7 @@ export default function OrderManagementPage() {
     const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
     const [showAddService, setShowAddService] = useState(false);
+    const [showQRModal, setShowQRModal] = useState(false);
     const [internalNote, setInternalNote] = useState('');
     const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
 
@@ -426,6 +429,27 @@ export default function OrderManagementPage() {
                                         </span>
                                     </div>
 
+                                    {/* QR Code Journey - Show for IN_PROGRESS, COMPLETED, DONE */}
+                                    {(['IN_PROGRESS', 'COMPLETED', 'DONE'] as OrderStatus[]).includes(selectedOrder.status) && (
+                                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <QrCode size={16} className="text-indigo-600" />
+                                                    <span className="text-xs font-bold text-indigo-700">QR Journey</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowQRModal(true)}
+                                                    className="px-3 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1"
+                                                >
+                                                    <QrCode size={12} /> Hiện QR
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-indigo-500 mt-1.5">
+                                                Cho khách quét để theo dõi dịch vụ trên điện thoại
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Note */}
                                     {selectedOrder.note && (
                                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
@@ -514,6 +538,60 @@ export default function OrderManagementPage() {
                                             </div>
                                         </button>
                                     ))}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* QR Code Modal */}
+            <AnimatePresence>
+                {showQRModal && selectedOrder && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+                            onClick={() => setShowQRModal(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.2 }}
+                            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+                        >
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+                                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                                            <QrCode size={18} className="text-indigo-600" /> QR Journey
+                                        </h3>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            {selectedOrder.customerName} — {selectedOrder.id}
+                                        </p>
+                                    </div>
+                                    <button onClick={() => setShowQRModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                                <div className="p-8 flex flex-col items-center space-y-4">
+                                    <div className="bg-white p-4 rounded-2xl border-2 border-gray-100 shadow-inner">
+                                        <QRCodeSVG
+                                            value={`${JOURNEY_BASE_URL}/vi/journey/${selectedOrder.id}`}
+                                            size={200}
+                                            level="H"
+                                            includeMargin={true}
+                                        />
+                                    </div>
+                                    <p className="text-xs text-gray-500 text-center">
+                                        Cho khách quét mã này để theo dõi dịch vụ trên điện thoại
+                                    </p>
+                                    <div className="bg-gray-50 rounded-xl p-3 w-full text-center">
+                                        <p className="text-[10px] text-gray-400 font-mono break-all">
+                                            {JOURNEY_BASE_URL}/vi/journey/{selectedOrder.id}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </motion.div>
