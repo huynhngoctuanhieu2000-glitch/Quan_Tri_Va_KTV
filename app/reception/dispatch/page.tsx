@@ -1235,10 +1235,6 @@ if (!hasPermission('dispatch_board')) {
                 />
               </div>
 
-              <p className="text-[10px] text-gray-400 font-mono mb-6 break-all">
-                {JOURNEY_BASE_URL}/vi/journey/{qrModal.orderId}
-              </p>
-
               <button
                 onClick={() => setQrModal(null)}
                 className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black rounded-2xl transition-colors text-sm uppercase tracking-wider"
