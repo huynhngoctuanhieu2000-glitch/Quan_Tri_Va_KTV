@@ -23,16 +23,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
 
   useEffect(() => {
-    // 🔄 Restore session from localStorage on mount (persists across tab kills)
-    const savedUser = localStorage.getItem('spa_auth_user');
-    const savedRole = localStorage.getItem('spa_auth_role');
+    // 🔄 Restore session: sessionStorage (per-tab, ưu tiên) → localStorage (backup khi app bị kill)
+    // sessionStorage giữ session riêng cho mỗi tab → không bị ghi đè khi mở 2 tab (admin + KTV)
+    const tabUser = sessionStorage.getItem('spa_auth_user');
+    const tabRole = sessionStorage.getItem('spa_auth_role');
+    const savedUser = tabUser || localStorage.getItem('spa_auth_user');
+    const savedRole = tabRole || localStorage.getItem('spa_auth_role');
 
     if (savedUser && savedRole) {
       try {
-        setUser(JSON.parse(savedUser));
-        setRole(JSON.parse(savedRole));
+        const parsedUser = JSON.parse(savedUser);
+        const parsedRole = JSON.parse(savedRole);
+        setUser(parsedUser);
+        setRole(parsedRole);
+        // Sync vào sessionStorage nếu chưa có (trường hợp restore từ localStorage)
+        if (!tabUser) sessionStorage.setItem('spa_auth_user', savedUser);
+        if (!tabRole) sessionStorage.setItem('spa_auth_role', savedRole);
       } catch (e) {
         console.error('Failed to parse saved auth session', e);
+        sessionStorage.removeItem('spa_auth_user');
+        sessionStorage.removeItem('spa_auth_role');
         localStorage.removeItem('spa_auth_user');
         localStorage.removeItem('spa_auth_role');
       }
@@ -89,7 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setRole(finalRole);
 
-        // 💾 Save to localStorage for persistence (survives tab kill / background)
+        // 💾 Save to sessionStorage (per-tab, isolated) + localStorage (backup khi app bị kill)
+        sessionStorage.setItem('spa_auth_user', JSON.stringify(finalUser));
+        sessionStorage.setItem('spa_auth_role', JSON.stringify(finalRole));
         localStorage.setItem('spa_auth_user', JSON.stringify(finalUser));
         localStorage.setItem('spa_auth_role', JSON.stringify(finalRole));
 
@@ -105,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setUser(null);
     setRole(null);
+    sessionStorage.removeItem('spa_auth_user');
+    sessionStorage.removeItem('spa_auth_role');
     localStorage.removeItem('spa_auth_user');
     localStorage.removeItem('spa_auth_role');
     try {
