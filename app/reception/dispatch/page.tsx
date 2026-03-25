@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
@@ -114,6 +114,11 @@ export default function DispatchBoardPage() {
   const lastSoundTimeRef = useRef<number>(0);
   const push = usePushNotifications(user?.id);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
+  const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string } | null>(null);
+
+  // 🔧 QR CONFIGURATION
+  const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
+  const QR_SIZE = 250;
 
   const soundEnabledRef = useRef(soundEnabled);
   useEffect(() => {
@@ -1171,6 +1176,21 @@ if (!hasPermission('dispatch_board')) {
               return null;
             })()}
 
+            {/* QR Journey button */}
+            <button
+              onClick={() => {
+                const order = orders.find(o => o.id === contextMenu.orderId);
+                if (order) {
+                  setQrModal({ orderId: order.id, billCode: order.billCode });
+                }
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
+            >
+              <QrCode size={18} />
+              Hiện QR Journey
+            </button>
+
             <button
               onClick={() => handleCancelBooking(contextMenu.orderId)}
               className="w-full flex items-center gap-3 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider"
@@ -1187,6 +1207,49 @@ if (!hasPermission('dispatch_board')) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* QR Journey Modal */}
+      <AnimatePresence>
+        {qrModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setQrModal(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full mx-4 text-center"
+            >
+              <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <QrCode size={28} className="text-indigo-600" />
+              </div>
+              <h3 className="text-lg font-black text-gray-900 mb-1">QR Journey</h3>
+              <p className="text-xs text-gray-500 font-medium mb-6">Đơn #{qrModal.billCode} — Khách quét để xem lộ trình</p>
+              
+              <div className="bg-gray-50 rounded-2xl p-6 mb-6 inline-block border border-gray-100">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&data=${encodeURIComponent(`${JOURNEY_BASE_URL}/vi/journey/${qrModal.orderId}`)}`}
+                  alt="QR Journey"
+                  width={QR_SIZE}
+                  height={QR_SIZE}
+                  className="mx-auto"
+                />
+              </div>
+
+              <p className="text-[10px] text-gray-400 font-mono mb-6 break-all">
+                {JOURNEY_BASE_URL}/vi/journey/{qrModal.orderId}
+              </p>
+
+              <button
+                onClick={() => setQrModal(null)}
+                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black rounded-2xl transition-colors text-sm uppercase tracking-wider"
+              >
+                Đóng
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AddOrderModal
         isOpen={showAddOrderModal}
         onClose={() => setShowAddOrderModal(false)}
