@@ -17,6 +17,11 @@
 - **Đang sửa**: `app/finance/revenue/RevenueReport.logic.ts`, `app/finance/revenue/page.tsx`
 - **Trạng thái**: 🔴 Xong
 
+### Nâng cấp Service Menu Edit Drawer
+- **Conversation**: `597dce05-8df1-43dd-a0fa-9e1cdc08f91f`
+- **Đang sửa**: `lib/types.ts`, `app/admin/service-menu/actions.ts`, `app/admin/service-menu/page.tsx`, `EditServiceDrawer.tsx`
+- **Trạng thái**: 🔴 Xong
+
 ---
 
 ## 📜 Quy tắc phối hợp

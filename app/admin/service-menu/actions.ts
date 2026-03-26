@@ -21,3 +21,29 @@ export async function getServices() {
         return { success: false, error: error.message || 'Unknown error' };
     }
 }
+
+export async function updateService(serviceId: string, payload: Partial<import('@/lib/types').Service>) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // Drop undefined properties
+        const cleanPayload = Object.fromEntries(
+            Object.entries(payload).filter(([_, v]) => v !== undefined)
+        );
+
+        const { data, error } = await supabase
+            .from('Services')
+            .update(cleanPayload)
+            .eq('id', serviceId)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return { success: true, data };
+    } catch (error: any) {
+        console.error('❌ [Server] updateService error:', error);
+        return { success: false, error: error.message || 'Unknown error' };
+    }
+}

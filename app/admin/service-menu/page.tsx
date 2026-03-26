@@ -8,12 +8,18 @@ import { getServices } from './actions';
 
 import { Service } from '@/lib/types';
 
+import { EditServiceDrawer } from './EditServiceDrawer';
+
 export default function ServiceMenuPage() {
   const { hasPermission } = useAuth();
   const [activeCategory, setActiveCategory] = useState('Tất cả');
   const [mounted, setMounted] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Drawer states
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -35,6 +41,16 @@ export default function ServiceMenuPage() {
     setMounted(true);
     fetchData();
   }, []);
+
+  const handleEditClick = (service: Service) => {
+    setSelectedService(service);
+    setIsDrawerOpen(true);
+  };
+
+  const handleDrawerClose = () => {
+    setIsDrawerOpen(false);
+    setTimeout(() => setSelectedService(null), 300); // clear after animation
+  };
 
   if (!mounted) return null;
 
@@ -152,7 +168,10 @@ export default function ServiceMenuPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-2">
-                          <button className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
+                          <button 
+                            onClick={() => handleEditClick(service)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+                          >
                             <Edit2 size={16} />
                           </button>
                           <button className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors">
@@ -168,6 +187,15 @@ export default function ServiceMenuPage() {
           </div>
         </div>
       </div>
+
+      <EditServiceDrawer 
+        isOpen={isDrawerOpen}
+        onClose={handleDrawerClose}
+        service={selectedService}
+        onSuccess={() => {
+          fetchData(); // reload on success
+        }}
+      />
     </AppLayout>
   );
 }

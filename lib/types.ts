@@ -122,18 +122,42 @@ export interface Bed {
   status: 'available' | 'occupied';
 }
 
+export interface FocusConfig {
+  [key: string]: boolean;
+}
+
 export interface Service {
   id: string;
-  name: string;
+  code?: string;
+  name: string; // legacy fallback
   nameVN?: string;
+  nameEN?: string;
+  nameCN?: string;
+  nameJP?: string;
+  nameKR?: string;
+  
   category: string;
   duration: number;
-  price: number;
+  price: number; // legacy fallback
   priceVND?: number;
-  description?: string;
+  priceUSD?: number;
+  
+  description?: any;
+  service_description?: string;
+  procedure?: string;
+  
   imageUrl?: string;
-  image_url?: string;
+  image_url?: string; // legacy fallback
+  
   isActive?: boolean;
   isBestSeller?: boolean;
   isBestChoice?: boolean;
+  
+  showCustomForYou?: boolean;
+  showNotes?: boolean;
+  showPreferences?: boolean;
+  
+  focusConfig?: FocusConfig | null;
+  tags?: string[] | null;
+  hint?: any;
 }
