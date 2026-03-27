@@ -10,8 +10,8 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  ShieldAlert, List, CalendarDays, ChevronLeft, ChevronRight,
-  RefreshCw, Bell, CheckCircle2, Clock, Globe2,
+  ShieldAlert, List, CalendarDays, ChevronLeft, ChevronRight, ChevronDown,
+  RefreshCw, CheckCircle2, Globe2, LayoutGrid,
 } from 'lucide-react';
 import { useNotifications } from '@/components/NotificationProvider';
 
@@ -23,7 +23,7 @@ import {
 } from './actions';
 import WebBookingCard from './WebBookingCard';
 import WebBookingDetailPanel from './WebBookingDetailPanel';
-import WebBookingCalendar from './WebBookingCalendar';
+import WebBookingCalendar, { type CalendarViewMode } from './WebBookingCalendar';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -37,8 +37,13 @@ const getMondayOfWeek = (d: Date): Date => {
   return monday;
 };
 
-/** Get YYYY-MM-DD */
-const toDateKey = (d: Date) => d.toISOString().split('T')[0];
+/** Get YYYY-MM-DD using LOCAL timezone (not UTC) to avoid midnight boundary bugs */
+const toDateKey = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 /** Format "Tuần dd/MM – dd/MM/yyyy" */
 const formatWeekRange = (monday: Date): string => {
@@ -56,11 +61,14 @@ export default function WebBookingPage() {
   const { unlockAudio, playSound } = useNotifications();
   const [mounted, setMounted] = useState(false);
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<'list' | 'calendar'>('list');
+  // Tab state: list | week | day
+  const [activeTab, setActiveTab] = useState<'list' | 'week' | 'day'>('list');
 
-  // Week navigation (for calendar)
+  // Week navigation (for week-view calendar)
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOfWeek(new Date()));
+
+  // Day navigation (for day-view calendar)
+  const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
 
   // Data state
   const [bookings, setBookings] = useState<WebBooking[]>([]);
@@ -216,6 +224,12 @@ export default function WebBookingPage() {
 
   const goToThisWeek = () => setWeekStart(getMondayOfWeek(new Date()));
 
+  // ─── Day navigation ───────────────────────────────────────────────────────
+
+  const prevDay = () => setSelectedDay(prev => { const d = new Date(prev); d.setDate(d.getDate() - 1); return d; });
+  const nextDay = () => setSelectedDay(prev => { const d = new Date(prev); d.setDate(d.getDate() + 1); return d; });
+  const goToToday = () => setSelectedDay(new Date());
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -247,39 +261,24 @@ export default function WebBookingPage() {
 
           {/* Controls */}
           <div className="flex items-center gap-2">
-            {/* Tab Switcher */}
-            <div className="flex bg-gray-100 rounded-xl p-1 gap-0.5">
-              <button
-                onClick={() => setActiveTab('list')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'list'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+            {/* View Mode Dropdown */}
+            <div className="relative">
+              <select
+                value={activeTab}
+                onChange={e => setActiveTab(e.target.value as 'list' | 'week' | 'day')}
+                className="appearance-none pl-3 pr-8 py-2 rounded-xl text-xs font-bold text-gray-700 bg-gray-100 border-0 cursor-pointer hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300"
               >
-                <List size={13} />
-                Danh sách
-                {newBookings.length > 0 && (
-                  <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {newBookings.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('calendar')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'calendar'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <CalendarDays size={13} />
-                Lịch tuần
-              </button>
+                <option value="list">☰ Danh sách{newBookings.length > 0 ? ` (${newBookings.length})` : ''}</option>
+                <option value="week">📅 Lịch tuần</option>
+                <option value="day">🗓 Lịch ngày</option>
+              </select>
+              <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500">
+                <ChevronDown size={12} />
+              </div>
             </div>
 
-            {/* Week navigation — only visible in calendar tab */}
-            {activeTab === 'calendar' && (
+            {/* Week navigation — only in week tab */}
+            {activeTab === 'week' && (
               <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-2 py-1 bg-white">
                 <button onClick={prevWeek} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
                   <ChevronLeft size={14} />
@@ -291,6 +290,24 @@ export default function WebBookingPage() {
                   {formatWeekRange(weekStart)}
                 </button>
                 <button onClick={nextWeek} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* Day navigation — only in day tab */}
+            {activeTab === 'day' && (
+              <div className="flex items-center gap-1 border border-gray-200 rounded-xl px-2 py-1 bg-white">
+                <button onClick={prevDay} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  onClick={goToToday}
+                  className="px-2 text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors whitespace-nowrap"
+                >
+                  {selectedDay.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </button>
+                <button onClick={nextDay} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
                   <ChevronRight size={14} />
                 </button>
               </div>
@@ -355,9 +372,9 @@ export default function WebBookingPage() {
                 )}
               </motion.div>
             ) : (
-              /* ── CALENDAR VIEW ── */
+              /* ── CALENDAR VIEW (Week or Day) ── */
               <motion.div
-                key="calendar"
+                key={activeTab}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
@@ -366,7 +383,9 @@ export default function WebBookingPage() {
               >
                 <WebBookingCalendar
                   bookings={allListBookings}
+                  viewMode={activeTab as CalendarViewMode}
                   weekStart={weekStart}
+                  selectedDay={selectedDay}
                   onCardClick={setSelectedBooking}
                 />
               </motion.div>
