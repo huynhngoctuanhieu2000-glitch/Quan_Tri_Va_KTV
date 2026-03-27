@@ -7,10 +7,23 @@
 
 ## 📡 Active Conversations
 
+### Trang Nhận Đơn Web Booking (/reception/web-booking)
+- **Conversation**: `d66424b4-0a58-404c-8df6-2992511cbcb8`
+- **Đang sửa**:
+  - `app/reception/dispatch/actions.ts` (fix filter NEW)
+  - `app/reception/web-booking/page.tsx` [MỚI]
+  - `app/reception/web-booking/WebBookingCalendar.tsx` [MỚI]
+  - `app/reception/web-booking/WebBookingCard.tsx` [MỚI]
+  - `app/reception/web-booking/WebBookingDetailPanel.tsx` [MỚI]
+  - `app/reception/web-booking/actions.ts` [MỚI]
+  - `app/admin/web-booking/page.tsx` (redirect)
+  - `components/layout/Sidebar.tsx` (thêm menu item)
+- **Trạng thái**: 🔴 Xong
+
 ### Báo cáo tiến độ trang báo cáo
 - **Conversation**: `9a73d883-85c4-4884-b88a-a14163ae7980`
 - **Đang sửa**: _Không sửa file, chỉ đọc để báo cáo tiến độ_
-- **Trạng thái**: 🟢 Đang làm
+- **Trạng thái**: 🔴 Xong
 
 ### Triển khai Xuất Excel Báo cáo
 - **Conversation**: `9a73d883-85c4-4884-b88a-a14163ae7980`
@@ -45,3 +58,4 @@
 | 2026-03-23 | `9a73d883` | Kiểm tra tiến độ | `RevenueReport.logic.ts`, `page.tsx`, `api/finance/reports/route.ts` |
 | 2026-03-27 | `98dc5a4b` | Thêm nút chọn tất cả | `page.tsx`, `KTVDashboard.logic.ts` |
 | 2026-03-27 | `98dc5a4b` | Hotfix hiển thị "Toàn thân" | `page.tsx` |
+| 2026-03-27 | `d66424b4` | Tạo trang nhận đơn Web Booking | `reception/web-booking/*`, `reception/dispatch/actions.ts`, `Sidebar.tsx` |

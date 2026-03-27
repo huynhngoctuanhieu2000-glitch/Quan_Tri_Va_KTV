@@ -71,7 +71,7 @@ const PATHS: Record<string, string> = {
   revenue_reports: '/finance/revenue',
   payroll_commissions: '/finance/payroll',
   cashbook_supplies: '/finance/cashbook',
-  web_booking: '/admin/web-booking',
+  web_booking: '/reception/web-booking',
   service_menu: '/admin/service-menu',
   role_management: '/admin/roles',
   employee_management: '/admin/employees',
