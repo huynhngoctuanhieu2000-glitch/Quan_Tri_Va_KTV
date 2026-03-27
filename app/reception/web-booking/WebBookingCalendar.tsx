@@ -1,8 +1,8 @@
 'use client';
 
 // 🔧 UI CONFIGURATION
-const START_HOUR = 9;  // Giờ bắt đầu hiển thị
-const END_HOUR = 22;   // Giờ kết thúc hiển thị
+const START_HOUR = 8;   // Giờ bắt đầu hiển thị
+const END_HOUR = 24;    // Giờ kết thúc hiển thị (24:00 = nửa đêm)
 const PIXELS_PER_MINUTE = 2;  // Mỗi phút = 2px chiều cao
 const CARD_MIN_HEIGHT = 40;   // Chiều cao tối thiểu cho booking card (px)
 
@@ -200,18 +200,30 @@ const WebBookingCalendar = ({ bookings, weekStart, onCardClick }: WebBookingCale
                       className={`absolute left-[4%] w-[92%] ${style.bg} border border-gray-100 border-l-4 ${style.border} rounded-lg cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all overflow-hidden p-2 z-10`}
                       style={{ top, height }}
                     >
+                      {/* Time */}
                       <p className="text-[10px] text-gray-500 font-medium leading-none mb-1">
                         {timeStr}
                       </p>
-                      <p className="text-[11px] font-black text-gray-800 leading-tight line-clamp-1">
+                      {/* Customer name */}
+                      <p className="text-[11px] font-black text-gray-800 leading-tight truncate">
                         {booking.customerName}
                       </p>
-                      {height > 60 && (
-                        <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">
-                          {booking.items[0]?.serviceName ?? '—'}
-                        </p>
+                      {/* Service list — show when card is tall enough */}
+                      {height > 55 && booking.items.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {booking.items.slice(0, 2).map((item) => (
+                            <p key={item.id} className="text-[10px] text-gray-500 leading-tight truncate">
+                              · {item.serviceName}
+                              {item.duration ? ` (${item.duration}p)` : ''}
+                            </p>
+                          ))}
+                          {booking.items.length > 2 && (
+                            <p className="text-[9px] text-gray-400 italic">+{booking.items.length - 2} dịch vụ</p>
+                          )}
+                        </div>
                       )}
-                      {height > 80 && (
+                      {/* Status badge — show when enough space */}
+                      {height > 90 && (
                         <div className={`mt-1.5 ${style.badge} text-[9px] font-bold px-1.5 py-0.5 rounded w-fit`}>
                           {style.badgeText}
                         </div>
