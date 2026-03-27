@@ -660,6 +660,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
         setHandoverChecklist(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
+    const checkAllChecklist = () => {
+        setChecklist({ ac: true, towel: true, oil: true, bed: true, toilet: true });
+    };
+
+    const checkAllHandoverChecklist = () => {
+        setHandoverChecklist({ laundry: true, clean: true, reset: true, scent: true });
+    };
+
     const handleConfirmSetup = async () => {
         if (!booking || !user?.id || !booking.assignedItemId) return;
         
@@ -1003,6 +1011,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         handleSubmitReview,
         handoverChecklist,
         toggleHandoverChecklist,
+        checkAllChecklist,
+        checkAllHandoverChecklist,
         isHandoverComplete,
         handleFinishHandover,
         commission,

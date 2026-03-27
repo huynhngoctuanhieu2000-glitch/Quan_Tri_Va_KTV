@@ -22,6 +22,11 @@
 - **Đang sửa**: `lib/types.ts`, `app/admin/service-menu/actions.ts`, `app/admin/service-menu/page.tsx`, `EditServiceDrawer.tsx`
 - **Trạng thái**: 🔴 Xong
 
+### Thêm nút chọn tất cả trên KTV Dashboard
+- **Conversation**: `98dc5a4b-0dad-4500-9138-c17fecbc6e4a`
+- **Đang sửa**: `app/ktv/dashboard/page.tsx`, `app/ktv/dashboard/KTVDashboard.logic.ts`
+- **Trạng thái**: 🔴 Xong
+
 ---
 
 ## 📜 Quy tắc phối hợp
@@ -38,3 +43,4 @@
 | Thời gian | Conversation | Hành động | File |
 |-----------|-------------|-----------|------|
 | 2026-03-23 | `9a73d883` | Kiểm tra tiến độ | `RevenueReport.logic.ts`, `page.tsx`, `api/finance/reports/route.ts` |
+| 2026-03-27 | `98dc5a4b` | Thêm nút chọn tất cả | `page.tsx`, `KTVDashboard.logic.ts` |

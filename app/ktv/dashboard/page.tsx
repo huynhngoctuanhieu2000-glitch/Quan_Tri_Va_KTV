@@ -387,10 +387,18 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
           {/* Setup Checklist */}
           <div>
-            <h3 className={`font-bold ${THEME.textBase} mb-3 flex items-center gap-2 uppercase text-[11px] tracking-widest`}>
-              <CheckCircle size={18} className={THEME.gold} />
-              Quy trình chuẩn bị
-            </h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className={`font-bold ${THEME.textBase} flex items-center gap-2 uppercase text-[11px] tracking-widest`}>
+                <CheckCircle size={18} className={THEME.gold} />
+                Quy trình chuẩn bị
+              </h3>
+              <button 
+                 onClick={logic.checkAllChecklist}
+                 className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg active:scale-95 transition-all uppercase tracking-widest border border-emerald-100 shadow-sm"
+              >
+                 Chọn tất cả
+              </button>
+            </div>
 
             <div className="space-y-2">
               <ChecklistItem label="Vệ sinh máy lạnh & quạt" checked={checklist.ac} onChange={() => toggleChecklist('ac')} />
@@ -836,6 +844,14 @@ function ScreenHandover({ logic }: { logic: any }) {
       </div>
 
       <div className="space-y-3">
+        <div className="flex justify-end mb-1">
+           <button 
+              onClick={logic.checkAllHandoverChecklist}
+              className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 transition-all uppercase tracking-widest border border-blue-100 shadow-sm"
+           >
+              Chọn tất cả
+           </button>
+        </div>
         <ChecklistItem label="Thu gom khăn bẩn & rác" checked={handoverChecklist.laundry} onChange={() => toggleHandoverChecklist('laundry')} />
         <ChecklistItem label="Vệ sinh bồn bệ & dụng cụ" checked={handoverChecklist.clean} onChange={() => toggleHandoverChecklist('clean')} />
         <ChecklistItem label="Sắp xếp lại gối, nệm" checked={handoverChecklist.reset} onChange={() => toggleHandoverChecklist('reset')} />
