@@ -44,3 +44,4 @@
 |-----------|-------------|-----------|------|
 | 2026-03-23 | `9a73d883` | Kiểm tra tiến độ | `RevenueReport.logic.ts`, `page.tsx`, `api/finance/reports/route.ts` |
 | 2026-03-27 | `98dc5a4b` | Thêm nút chọn tất cả | `page.tsx`, `KTVDashboard.logic.ts` |
+| 2026-03-27 | `98dc5a4b` | Hotfix hiển thị "Toàn thân" | `page.tsx` |

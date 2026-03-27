@@ -950,11 +950,15 @@ function CollapsibleRequirements({ booking }: { booking: any }) {
                       <Dumbbell size={12} /> {item.strength}
                     </div>
                   )}
-                  {item.focus && (
-                    <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black border border-emerald-100 flex items-center gap-1.5">
-                      <Target size={12} /> {item.focus}
-                    </div>
-                  )}
+                  {item.focus && (() => {
+                    const parts = item.focus.split(',').map((p: string) => p.trim());
+                    const isFull = item.focus === 'full_body' || parts.length >= 8;
+                    return (
+                      <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-black border border-emerald-100 flex items-center gap-1.5">
+                        <Target size={12} /> {isFull ? 'Toàn thân' : item.focus}
+                      </div>
+                    );
+                  })()}
                   {item.avoid && (
                     <div className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-xl text-[10px] font-black border border-rose-100 flex items-center gap-1.5">
                       <Ban size={12} /> Tránh: {item.avoid}
