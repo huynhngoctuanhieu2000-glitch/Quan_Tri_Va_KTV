@@ -32,7 +32,6 @@ export async function getDispatchData(date: string) {
             .gte('bookingDate', startOfDay)
             .lte('bookingDate', endOfDay)
             .neq('status', 'CANCELLED')
-            .neq('status', 'NEW') // Exclude unconfirmed web bookings — must be confirmed at /reception/web-booking first
             .order('createdAt', { ascending: true });
 
         if (bError) throw bError;

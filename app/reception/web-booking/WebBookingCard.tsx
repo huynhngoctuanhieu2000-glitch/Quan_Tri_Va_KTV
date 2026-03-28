@@ -13,7 +13,6 @@ import { WebBooking } from './actions';
 
 const STATUS_CONFIG = {
   NEW:        { label: 'Chờ xác nhận', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', dot: 'bg-orange-500', badgeBg: 'bg-orange-100' },
-  PENDING:    { label: 'Đã chấp nhận', color: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-200',   dot: 'bg-blue-500',   badgeBg: 'bg-blue-100' },
   PREPARING:  { label: 'Chuẩn bị',     color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200', dot: 'bg-violet-500', badgeBg: 'bg-violet-100' },
   IN_PROGRESS:{ label: 'Đang phục vụ', color: 'text-emerald-600',bg: 'bg-emerald-50',border: 'border-emerald-200',dot: 'bg-emerald-500',badgeBg: 'bg-emerald-100'},
   COMPLETED:  { label: 'Đang dọn',     color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', dot: 'bg-purple-500', badgeBg: 'bg-purple-100' },

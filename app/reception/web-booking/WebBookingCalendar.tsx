@@ -14,7 +14,6 @@ import { WebBooking } from './actions';
 
 const STATUS_STYLE = {
   NEW:         { border: 'border-l-orange-400', bg: 'bg-orange-50',  badge: 'bg-orange-100 text-orange-700', badgeText: '⏳ Chờ xác nhận' },
-  PENDING:     { border: 'border-l-blue-400',   bg: 'bg-blue-50',    badge: 'bg-blue-100 text-blue-700',    badgeText: '🕒 Đã chấp nhận' },
   PREPARING:   { border: 'border-l-violet-400', bg: 'bg-violet-50',  badge: 'bg-violet-100 text-violet-700',badgeText: '⚡ Chuẩn bị' },
   IN_PROGRESS: { border: 'border-l-emerald-400',bg: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700', badgeText: '▶ Đang phục vụ' },
   COMPLETED:   { border: 'border-l-purple-400', bg: 'bg-purple-50',  badge: 'bg-purple-100 text-purple-700',badgeText: '🧹 Dọn phòng' },

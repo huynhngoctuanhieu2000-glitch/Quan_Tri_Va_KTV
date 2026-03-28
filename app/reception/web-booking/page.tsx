@@ -74,6 +74,8 @@ export default function WebBookingPage() {
   const [bookings, setBookings] = useState<WebBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  // Track IDs confirmed this session to prevent realtime refetch from re-showing them
+  const confirmedIdsRef = useRef<Set<string>>(new Set());
 
   // Detail panel
   const [selectedBooking, setSelectedBooking] = useState<WebBooking | null>(null);
@@ -165,7 +167,11 @@ export default function WebBookingPage() {
 
   // ─── Derived state ─────────────────────────────────────────────────────────
 
-  const newBookings = bookings.filter((b) => b.status === 'NEW');
+  // Exclude confirmed bookings from the 'Chờ xác nhận' list (status stays NEW in DB
+  // so they appear in dispatch board as 'Chờ điều phối')
+  const newBookings = bookings.filter(
+    (b) => b.status === 'NEW' && !confirmedIdsRef.current.has(b.id)
+  );
   const allListBookings = bookings.filter((b) => b.status !== 'CANCELLED');
 
   // ─── Actions ──────────────────────────────────────────────────────────────
@@ -177,9 +183,10 @@ export default function WebBookingPage() {
       if (res.success) {
         showToast('✅ Đã xác nhận! Đơn đã chuyển sang bảng Điều phối.', 'success');
         setSelectedBooking(null);
-        setBookings((prev) =>
-          prev.map((b) => (b.id === id ? { ...b, status: 'PENDING' } : b))
-        );
+        // Mark as confirmed locally so it won't reappear after realtime refetch
+        confirmedIdsRef.current.add(id);
+        // Remove from local list immediately
+        setBookings((prev) => prev.filter((b) => b.id !== id));
       } else {
         showToast('❌ Lỗi: ' + res.error, 'error');
       }

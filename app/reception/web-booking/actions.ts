@@ -10,7 +10,7 @@ import { sendPushNotification } from '@/lib/push-helper';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-export type WebBookingStatus = 'NEW' | 'PENDING' | 'PREPARING' | 'IN_PROGRESS' | 'COMPLETED' | 'DONE' | 'FEEDBACK' | 'CANCELLED';
+export type WebBookingStatus = 'NEW' | 'PREPARING' | 'IN_PROGRESS' | 'COMPLETED' | 'DONE' | 'FEEDBACK' | 'CANCELLED';
 
 export interface WebBookingItem {
   id: string;
@@ -140,8 +140,9 @@ export async function getWebBookings(startDate: string, endDate: string) {
 }
 
 /**
- * Confirm a web booking: NEW → PENDING
- * The booking will now appear in the Dispatch Board.
+ * Confirm a web booking: keeps status = 'NEW' so it appears in
+ * Dispatch Board as 'Chờ điều phối' — same flow as walk-in bookings.
+ * Only touches updatedAt to trigger realtime update on dispatch board.
  */
 export async function confirmWebBooking(bookingId: string) {
   try {
@@ -151,7 +152,6 @@ export async function confirmWebBooking(bookingId: string) {
     const { error } = await supabase
       .from('Bookings')
       .update({
-        status: 'PENDING',
         updatedAt: new Date().toISOString(),
       })
       .eq('id', bookingId)
