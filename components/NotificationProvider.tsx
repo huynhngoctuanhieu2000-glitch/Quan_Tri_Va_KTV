@@ -33,6 +33,8 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 // --- CONFIG ---
 const SOUND_MAP: Record<string, string> = {
     'EMERGENCY': '/sounds/quay-bao-khan-cap.wav',
+    'SOS': '/sounds/quay-bao-khan-cap.wav',           // Alias của EMERGENCY
+    'ADD_SERVICE': '/sounds/reception-notification.wav', // Alias của BUY_MORE
     'COMPLAINT': '/sounds/quay-danh-gia-te.wav',
     'EARLY_EXIT': '/sounds/quay-khach-ve-som.wav',
     'WATER': '/sounds/reception-notification.wav',
@@ -111,6 +113,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
         console.log(`🔊 [NotificationProvider] Type: ${type} -> Key: ${soundKey} -> Path: ${soundPath}`);
         
         const audio = audioInstanceRef.current;
+        audio.volume = (normalizedType === 'EMERGENCY' || normalizedType === 'SOS') ? 1.0 : 0.7;
         try {
             audio.pause();
             audio.src = soundPath;
@@ -356,10 +359,10 @@ const Toast = ({
     const [confirmLoading, setConfirmLoading] = React.useState<'confirm' | 'reject' | null>(null);
 
     const type = notification.type?.toUpperCase();
-    const isCritical = type === 'EMERGENCY' || type === 'COMPLAINT';
+    const isCritical = type === 'EMERGENCY' || type === 'SOS' || type === 'COMPLAINT';
     const isEarlyExit = type === 'EARLY_EXIT';
     const isWater = type === 'WATER';
-    const isBuyMore = type === 'BUY_MORE';
+    const isBuyMore = type === 'BUY_MORE' || type === 'ADD_SERVICE' || type === 'NORMAL';
     const isReward = type === 'REWARD';
     const isNewOrder = type === 'NEW_ORDER';
     const isCheckIn = type === 'CHECK_IN';
