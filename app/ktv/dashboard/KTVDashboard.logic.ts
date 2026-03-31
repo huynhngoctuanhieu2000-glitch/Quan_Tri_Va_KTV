@@ -123,14 +123,36 @@ export function useKTVDashboard(config?: DashboardConfig) {
             if (manualSegmentOverrideRef.current) return;
 
             // 1. Tìm dịch vụ được gán cho KTV này
-            const assignedItem = booking.assignedItemId 
-                ? booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId)
-                : booking.BookingItems?.[0];
+            const allItemIds: string[] = booking.assignedItemIds?.length > 0
+                ? booking.assignedItemIds
+                : (booking.assignedItemId ? [booking.assignedItemId] : []);
+            
+            const allAssignedItems = allItemIds.length > 0
+                ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+                : [booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId) || booking.BookingItems?.[0]].filter(Boolean);
 
-            if (!assignedItem || !assignedItem.segments || assignedItem.segments.length === 0) return;
+            if (allAssignedItems.length === 0) return;
 
-            // 2. Tính toán lộ trình thực tế (Shifted Segments)
-            let tStart = assignedItem.timeStart || booking.timeStart;
+            // 2. Gom tất cả segments của KTV này
+            let allMySegs: any[] = [];
+            for (const ai of allAssignedItems) {
+                let segs: any[] = [];
+                try {
+                    segs = typeof ai?.segments === 'string' 
+                        ? JSON.parse(ai.segments) 
+                        : (Array.isArray(ai?.segments) ? ai.segments : []);
+                } catch { segs = []; }
+                
+                const mySegs = segs.filter((seg: any) => 
+                    seg.ktvId && user?.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
+                );
+                allMySegs.push(...mySegs);
+            }
+
+            if (allMySegs.length === 0) return;
+
+            // 3. Tính toán lộ trình thực tế (Shifted Segments)
+            let tStart = allAssignedItems[0]?.timeStart || booking.timeStart;
             if (!tStart) return;
 
             if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
@@ -142,14 +164,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
             let currentOffsetMs = 0;
             let foundIdx = 0;
 
-            assignedItem.segments.forEach((seg: any, idx: number) => {
+            allMySegs.forEach((seg: any, idx: number) => {
                 const segStartMs = actualStartMs + currentOffsetMs;
-                const segEndMs = segStartMs + (seg.duration * 60 * 1000);
-                
                 if (nowMs >= segStartMs) {
                     foundIdx = idx;
                 }
-                
                 currentOffsetMs += (seg.duration * 60 * 1000);
             });
 
