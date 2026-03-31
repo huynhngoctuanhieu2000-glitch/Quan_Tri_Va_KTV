@@ -152,6 +152,10 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
         setToastQueue(prev => prev.filter(n => n.id !== id));
     };
 
+    const clearAllToasts = () => {
+        setToastQueue([]);
+    };
+
     const markAsRead = async (id: string) => {
         // Update local state
         setToastQueue(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
@@ -289,6 +293,26 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             ) : (
                 // GIAO DIỆN TOAST CHO QUẦY (Dưới góc)
                 <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
+                    {/* Nút đóng tất cả — chỉ xuất hiện khi có >= 2 thông báo */}
+                    <AnimatePresence>
+                        {sortedToasts.length >= 2 && (
+                            <motion.div
+                                key="clear-all-btn"
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 8 }}
+                                className="pointer-events-auto flex justify-end"
+                            >
+                                <button
+                                    onClick={clearAllToasts}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 backdrop-blur-sm text-white text-[11px] font-bold shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
+                                >
+                                    <X size={12} strokeWidth={3} />
+                                    Đóng tất cả ({sortedToasts.length})
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     <AnimatePresence>
                         {sortedToasts.map((n) => (
                             <Toast 
