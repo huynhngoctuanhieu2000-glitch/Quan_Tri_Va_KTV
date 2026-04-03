@@ -84,6 +84,8 @@ interface PendingRecord {
     longitude: number | null;
     locationText: string | null;
     checkedAt: string;
+    photoUrl?: string | null;
+    reason?: string | null;
 }
 
 const AttendancePendingSection = () => {
@@ -127,7 +129,7 @@ const AttendancePendingSection = () => {
         >
             <div className="px-4 py-3 border-b border-amber-100 flex items-center gap-2">
                 <MapPin size={16} className="text-amber-600 animate-pulse" />
-                <h2 className="font-bold text-amber-800 text-sm">Điểm Danh Chờ Xác Nhận</h2>
+                <h2 className="font-bold text-amber-800 text-sm">Yêu Cầu Điểm Danh / OFF Chờ Duyệt</h2>
                 <span className="ml-auto bg-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
                     {records.length}
                 </span>
@@ -137,35 +139,57 @@ const AttendancePendingSection = () => {
                     const mapsUrl = rec.latitude && rec.longitude
                         ? `https://maps.google.com/?q=${rec.latitude},${rec.longitude}`
                         : null;
-                    const isCheckIn = rec.checkType === 'CHECK_IN';
+                        
+                    let typeLabel = 'VÀO CA';
+                    let typeColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                    if (rec.checkType === 'CHECK_OUT') {
+                         typeLabel = 'TAN CA'; typeColor = 'bg-amber-100 text-amber-700 border-amber-200';
+                    } else if (rec.checkType === 'LATE_CHECKIN') {
+                         typeLabel = 'BỔ SUNG'; typeColor = 'bg-orange-100 text-orange-700 border-orange-200';
+                    } else if (rec.checkType === 'OFF_REQUEST') {
+                         typeLabel = 'XIN OFF'; typeColor = 'bg-rose-100 text-rose-700 border-rose-200';
+                    }
+
                     const loadState = loading[rec.id];
 
                     return (
                         <motion.div
                             key={rec.id}
                             exit={{ opacity: 0, height: 0 }}
-                            className="px-4 py-3 flex items-center justify-between gap-3 border-b border-amber-100 last:border-0"
+                            className="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-100 last:border-0"
                         >
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                     <span className="font-bold text-gray-900 text-sm">{rec.employeeName || rec.employeeId}</span>
-                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${isCheckIn ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                        {isCheckIn ? 'VÀO CA' : 'TAN CA'}
+                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${typeColor}`}>
+                                        {typeLabel}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-3 mt-0.5">
-                                    <span className="text-xs text-gray-400">
+                                
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                                    <span className="text-xs text-gray-500 font-medium">
                                         {new Date(rec.checkedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                     {mapsUrl && (
                                         <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                                            className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-0.5 underline">
-                                            <MapPin size={10} /> GPS
+                                            className="text-[10px] text-blue-600 bg-blue-50/50 hover:bg-blue-100 border border-blue-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors">
+                                            <MapPin size={10} /> GPS Location
+                                        </a>
+                                    )}
+                                    {rec.photoUrl && (
+                                        <a href={rec.photoUrl} target="_blank" rel="noopener noreferrer" 
+                                           className="text-[10px] text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors">
+                                            <Camera size={10} /> Xem hình ảnh
                                         </a>
                                     )}
                                 </div>
+                                {rec.reason && (
+                                    <div className="mt-2 text-[11px] text-gray-600 italic bg-white/60 p-2 rounded-lg border border-amber-100/50">
+                                        "{rec.reason}"
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex gap-1.5 shrink-0">
+                            <div className="flex gap-1.5 shrink-0 sm:self-center mt-2 sm:mt-0">
                                 <button
                                     onClick={() => handleAction(rec.id, 'CONFIRM')}
                                     disabled={!!loadState}

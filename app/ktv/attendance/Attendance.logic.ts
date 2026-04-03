@@ -112,7 +112,11 @@ export const useKTVAttendance = () => {
     };
 
     // --- Handlers ---
-    const handleAttendance = useCallback(async (checkType: 'CHECK_IN' | 'CHECK_OUT') => {
+    const handleAttendance = useCallback(async (
+        checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'OFF_REQUEST',
+        photoBase64?: string | null,
+        reason?: string | null
+    ) => {
         setErrorMsg(null);
         setCheckStatus('LOADING_GPS');
 
@@ -126,18 +130,25 @@ export const useKTVAttendance = () => {
                     employeeId: user?.id,
                     employeeName: user?.id || 'KTV',
                     checkType,
+                    photoBase64: photoBase64 || null,
+                    reason: reason || null,
                     ...gps,
                 }),
             });
 
             const result = await res.json();
-            if (!result.success) throw new Error(result.error || 'Lỗi gửi điểm danh');
+            if (!result.success) throw new Error(result.error || 'Lỗi gửi yêu cầu');
 
             setCurrentRecord(result.data);
             setCheckStatus('PENDING');
         } catch (err: any) {
             setErrorMsg(err.message || 'Lỗi không xác định');
-            setCheckStatus(checkType === 'CHECK_IN' ? 'IDLE' : 'CONFIRMED');
+            // Revert back or stay IDLE if not checked out successfully
+            if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN' || checkType === 'OFF_REQUEST') {
+                setCheckStatus('IDLE');
+            } else {
+                setCheckStatus('CONFIRMED');
+            }
         }
     }, [user?.id]);
 

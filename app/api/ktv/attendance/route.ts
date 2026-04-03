@@ -7,7 +7,7 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, checkType = 'CHECK_IN', latitude, longitude, locationText } = body;
+        const { employeeId, employeeName, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason } = body;
 
         if (!employeeId) {
             return NextResponse.json({ success: false, error: 'Missing employeeId' }, { status: 400 });
@@ -18,7 +18,34 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        // ─── Step 1: Insert KTVAttendance (status = PENDING) ────────────
+        // ─── Step 1: Upload Photo if exists ────────────
+        let photoUrl = null;
+        if (photoBase64) {
+            try {
+                const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
+                const buffer = Buffer.from(base64Data, 'base64');
+                const fileExt = photoBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
+                const fileName = `${employeeId}_${Date.now()}.${fileExt}`;
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('attendance')
+                    .upload(fileName, buffer, {
+                        contentType: `image/${fileExt}`,
+                        upsert: false
+                    });
+                    
+                if (uploadError) {
+                    console.error('❌ [Attendance] Photo upload error:', uploadError);
+                } else if (uploadData?.path) {
+                    const { data: publicUrlData } = supabase.storage.from('attendance').getPublicUrl(uploadData.path);
+                    photoUrl = publicUrlData.publicUrl;
+                }
+            } catch (err) {
+                 console.error('❌ [Attendance] Base64 processing error:', err);
+            }
+        }
+
+        // ─── Step 2: Insert KTVAttendance (status = PENDING) ────────────
         const { data: record, error: insertError } = await supabase
             .from('KTVAttendance')
             .insert({
@@ -28,6 +55,8 @@ export async function POST(request: Request) {
                 latitude: latitude ?? null,
                 longitude: longitude ?? null,
                 locationText: locationText ?? null,
+                photoUrl: photoUrl,
+                reason: reason ?? null,
                 status: 'PENDING',
             })
             .select()
@@ -38,17 +67,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
 
-        // ─── Step 2: Push notification to admin with GPS link ───────────
+        // ─── Step 3: Push notification to admin with GPS link ───────────
         const mapsLink = latitude && longitude
             ? ` — https://maps.google.com/?q=${latitude},${longitude}`
             : '';
 
-        const isCheckIn = checkType === 'CHECK_IN';
-        // Encode attendanceId into message as [AID:uuid] tag so the toast can extract it
-        // NOTE: cannot use bookingId column — it's a FK to Bookings table
-        const notifMessage = isCheckIn
-            ? `📍 ${employeeName || employeeId} yêu cầu điểm danh${mapsLink} [AID:${record.id}]`
-            : `🏁 ${employeeName || employeeId} yêu cầu tan ca${mapsLink} [AID:${record.id}]`;
+        let actionText = 'yêu cầu điểm danh';
+        if (checkType === 'CHECK_OUT') actionText = 'yêu cầu tan ca';
+        else if (checkType === 'LATE_CHECKIN') actionText = 'điểm danh bổ sung';
+        else if (checkType === 'OFF_REQUEST') actionText = 'gửi yêu cầu OFF';
+
+        const notifMessage = `📍 ${employeeName || employeeId} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}`;
 
         const { data: notifData, error: notifError } = await supabase
             .from('StaffNotifications')

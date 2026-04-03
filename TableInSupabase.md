@@ -128,14 +128,19 @@
 
 | Cột | Kiểu | Mô tả chức năng |
 |-----|------|-----------------|
-| `id` | uuid PK | ID tự sinh |
-| `employeeId` | text FK → Staff | Mã KTV điểm danh |
-| `checkInTime` | timestamptz | Thời điểm bấm điểm danh |
-| `latitude` | double | Tọa độ GPS — vĩ độ |
-| `longitude` | double | Tọa độ GPS — kinh độ |
-| `status` | text | Trạng thái: `pending` → `approved` / `rejected` |
-| `approvedBy` | text | Admin nào duyệt |
-| `approvedAt` | timestamptz | Thời điểm duyệt |
+| `id` | uuid | Khóa chính (Primary Key). |
+| `employeeId` | uuid | Mã KTV yêu cầu điểm danh (FK -> Users.id). |
+| `employeeName` | varchar | Tên KTV (đẻ hiển thị nhanh trên Admin). |
+| `checkType` | enum | Loại yêu cầu: `CHECK_IN`, `CHECK_OUT`, `LATE_CHECKIN`, `OFF_REQUEST`. |
+| `status` | enum | `PENDING`, `CONFIRMED`, `REJECTED`. |
+| `latitude` | float8 | Tọa độ GPS vĩ độ (lúc gửi yêu cầu). |
+| `longitude` | float8 | Tọa độ GPS kinh độ (lúc gửi yêu cầu). |
+| `locationText` | text | Địa chỉ text (Geocoding) hoặc chuỗi tọa độ dự phòng. |
+| `photoUrl` | text | Link ảnh chụp minh chứng điểm danh. |
+| `reason` | text | Ghi chú/lý do điểm danh bổ sung hoặc xin OFF. |
+| `checkedAt` | timestamp | Thời gian KTV bấm gửi yêu cầu (Default: now()). |
+| `confirmedBy` | uuid | ID của admin/lễ tân duyệt yêu cầu. |
+| `confirmedAt` | timestamp | Thời gian duyệt yêu cầu. |
 | `checkOutTime` | timestamptz | Thời điểm tan ca |
 
 ---

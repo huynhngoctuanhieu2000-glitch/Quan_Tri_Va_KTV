@@ -11,7 +11,7 @@ export async function GET() {
 
     const { data, error } = await supabase
         .from('KTVAttendance')
-        .select('id, employeeId, employeeName, checkType, latitude, longitude, locationText, checkedAt, status')
+        .select('id, employeeId, employeeName, checkType, latitude, longitude, locationText, checkedAt, status, photoUrl, reason')
         .eq('status', 'PENDING')
         .order('checkedAt', { ascending: false });
 
