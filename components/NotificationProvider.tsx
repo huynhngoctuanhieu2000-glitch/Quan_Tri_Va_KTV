@@ -186,6 +186,11 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 if (isGlobal || isComplaint) addToast(newNotif);
             } else if (isKtv) {
                 if (newNotif.employeeId === user.id) {
+                    // ❌ Bỏ qua thông báo đơn hàng mới cho KTV (do KTV đã tự xem trên Dashboard)
+                    if (newNotif.type === 'NEW_ORDER') {
+                        console.log('⏭️ [NotificationProvider] Ignored NEW_ORDER for KTV');
+                        return;
+                    }
                     addToast(newNotif);
                 }
             } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
