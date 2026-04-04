@@ -5,11 +5,11 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import {
     ShieldAlert, CalendarOff, Loader2, Check, X, Trash2,
     ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle,
-    CalendarDays, AlertCircle
+    CalendarDays, Calendar, CalendarRange
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { useLeaveManagement } from './LeaveManagement.logic';
+import { useLeaveManagement, ViewMode } from './LeaveManagement.logic';
 import { t } from './LeaveManagement.i18n';
 
 // 🔧 UI CONFIGURATION
@@ -26,6 +26,12 @@ const STAT_CARDS = [
     { key: 'rejected' as const, label: t.statRejected, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
 ];
 
+const VIEW_MODE_OPTIONS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
+    { id: 'day', label: 'Ngày', icon: <Calendar size={14} /> },
+    { id: 'week', label: 'Tuần', icon: <CalendarRange size={14} /> },
+    { id: 'month', label: 'Tháng', icon: <CalendarDays size={14} /> },
+];
+
 const LeaveManagementPage = () => {
     const {
         mounted,
@@ -35,9 +41,11 @@ const LeaveManagementPage = () => {
         pendingList,
         processedList,
         stats,
-        monthOffset,
-        setMonthOffset,
-        getMonthLabel,
+        viewMode,
+        changeViewMode,
+        offset,
+        setOffset,
+        rangeLabel,
         handleAction,
         handleDelete,
     } = useLeaveManagement();
@@ -83,28 +91,50 @@ const LeaveManagementPage = () => {
 
     return (
         <AppLayout title={t.pageTitle}>
-            <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+            <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
 
-                {/* Header + Month Navigator */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-500">{t.pageSubtitle}</p>
+                {/* ── Header: View Mode Tabs + Date Navigator ── */}
+                <div className="space-y-3">
+                    {/* View mode switcher */}
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-gray-500 hidden sm:block">{t.pageSubtitle}</p>
+                        <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
+                            {VIEW_MODE_OPTIONS.map(opt => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => changeViewMode(opt.id)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all
+                                        ${viewMode === opt.id
+                                            ? 'bg-white text-indigo-700 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-700'
+                                        }`}
+                                >
+                                    {opt.icon}
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-1 py-1 shadow-sm">
+
+                    {/* Date range navigator */}
+                    <div className="flex items-center justify-center gap-2">
                         <button
-                            onClick={() => setMonthOffset(prev => prev - 1)}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => setOffset(prev => prev - 1)}
+                            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
                         >
-                            <ChevronLeft size={16} className="text-gray-500" />
+                            <ChevronLeft size={18} className="text-gray-500" />
                         </button>
-                        <span className="text-sm font-bold text-gray-800 px-3 min-w-[120px] text-center">
-                            {getMonthLabel()}
-                        </span>
                         <button
-                            onClick={() => setMonthOffset(prev => prev + 1)}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={() => setOffset(0)}
+                            className="text-sm font-bold text-gray-800 px-4 py-1.5 bg-white border border-gray-200 rounded-xl shadow-sm min-w-[160px] text-center hover:bg-gray-50 transition-colors"
                         >
-                            <ChevronRight size={16} className="text-gray-500" />
+                            {rangeLabel}
+                        </button>
+                        <button
+                            onClick={() => setOffset(prev => prev + 1)}
+                            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                        >
+                            <ChevronRight size={18} className="text-gray-500" />
                         </button>
                     </div>
                 </div>

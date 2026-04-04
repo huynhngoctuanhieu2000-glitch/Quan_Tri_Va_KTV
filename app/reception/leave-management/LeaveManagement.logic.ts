@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 // 🔧 CONFIGURATION
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 // --- TYPES ---
+export type ViewMode = 'day' | 'week' | 'month';
+
 export interface LeaveRequest {
     id: string;
     employeeId: string;
@@ -20,8 +22,13 @@ export interface LeaveRequest {
 }
 
 /**
+ * Get current VN time as a Date object.
+ */
+const getVnNow = () => new Date(Date.now() + VN_OFFSET_MS);
+
+/**
  * Custom hook for Admin Leave Management page.
- * Handles fetching, filtering, approving, rejecting, and deleting leave requests.
+ * Supports Day / Week / Month view modes with offset navigation.
  */
 export const useLeaveManagement = () => {
     const { hasPermission, user } = useAuth();
@@ -30,38 +37,70 @@ export const useLeaveManagement = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
 
-    // Filter: month offset (0 = current month, -1 = last month, 1 = next month)
-    const [monthOffset, setMonthOffset] = useState(0);
+    // View mode + offset (0 = current, -1 = previous, 1 = next)
+    const [viewMode, setViewMode] = useState<ViewMode>('month');
+    const [offset, setOffset] = useState(0);
 
     useEffect(() => { setMounted(true); }, []);
 
     const canAccessPage = hasPermission('leave_management');
 
-    // Calculate date range from monthOffset
-    const getDateRange = useCallback(() => {
-        const now = new Date();
-        const vnNow = new Date(now.getTime() + VN_OFFSET_MS);
-        const targetMonth = new Date(vnNow.getFullYear(), vnNow.getMonth() + monthOffset, 1);
-        const from = targetMonth.toISOString().split('T')[0];
-        const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0);
-        const to = lastDay.toISOString().split('T')[0];
-        return { from, to };
-    }, [monthOffset]);
+    // Calculate date range from viewMode + offset
+    const dateRange = useMemo(() => {
+        const vnNow = getVnNow();
+        let from: Date;
+        let to: Date;
 
-    // Get display month label
-    const getMonthLabel = useCallback(() => {
-        const now = new Date();
-        const vnNow = new Date(now.getTime() + VN_OFFSET_MS);
-        const targetMonth = new Date(vnNow.getFullYear(), vnNow.getMonth() + monthOffset, 1);
-        return `Tháng ${targetMonth.getMonth() + 1}/${targetMonth.getFullYear()}`;
-    }, [monthOffset]);
+        if (viewMode === 'day') {
+            const target = new Date(vnNow);
+            target.setDate(target.getDate() + offset);
+            from = target;
+            to = target;
+        } else if (viewMode === 'week') {
+            const target = new Date(vnNow);
+            target.setDate(target.getDate() + offset * 7);
+            // Start of week (Monday)
+            const dayOfWeek = target.getDay();
+            const mondayDiff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            from = new Date(target);
+            from.setDate(target.getDate() + mondayDiff);
+            to = new Date(from);
+            to.setDate(from.getDate() + 6);
+        } else {
+            // Month
+            from = new Date(vnNow.getFullYear(), vnNow.getMonth() + offset, 1);
+            to = new Date(vnNow.getFullYear(), vnNow.getMonth() + offset + 1, 0);
+        }
+
+        return {
+            from: from.toISOString().split('T')[0],
+            to: to.toISOString().split('T')[0],
+        };
+    }, [viewMode, offset]);
+
+    // Generate display label for current range
+    const rangeLabel = useMemo(() => {
+        const vnNow = getVnNow();
+
+        if (viewMode === 'day') {
+            const target = new Date(vnNow);
+            target.setDate(target.getDate() + offset);
+            const day = String(target.getDate()).padStart(2, '0');
+            const month = String(target.getMonth() + 1).padStart(2, '0');
+            return `${day}/${month}/${target.getFullYear()}`;
+        } else if (viewMode === 'week') {
+            return `${formatShortDate(dateRange.from)} — ${formatShortDate(dateRange.to)}`;
+        } else {
+            const target = new Date(vnNow.getFullYear(), vnNow.getMonth() + offset, 1);
+            return `Tháng ${target.getMonth() + 1}/${target.getFullYear()}`;
+        }
+    }, [viewMode, offset, dateRange]);
 
     // --- Fetch leave list ---
     const fetchLeaveList = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { from, to } = getDateRange();
-            const res = await fetch(`/api/ktv/leave?from=${from}&to=${to}`);
+            const res = await fetch(`/api/ktv/leave?from=${dateRange.from}&to=${dateRange.to}`);
             const result = await res.json();
 
             if (result.success) {
@@ -74,13 +113,19 @@ export const useLeaveManagement = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [getDateRange]);
+    }, [dateRange]);
 
     useEffect(() => {
         if (mounted && canAccessPage) {
             fetchLeaveList();
         }
     }, [mounted, canAccessPage, fetchLeaveList]);
+
+    // Reset offset when view mode changes
+    const changeViewMode = useCallback((mode: ViewMode) => {
+        setViewMode(mode);
+        setOffset(0);
+    }, []);
 
     // --- Approve / Reject ---
     const handleAction = async (leaveId: string, action: 'APPROVE' | 'REJECT') => {
@@ -144,10 +189,18 @@ export const useLeaveManagement = () => {
         pendingList,
         processedList,
         stats,
-        monthOffset,
-        setMonthOffset,
-        getMonthLabel,
+        viewMode,
+        changeViewMode,
+        offset,
+        setOffset,
+        rangeLabel,
         handleAction,
         handleDelete,
     };
 };
+
+// --- Helpers ---
+function formatShortDate(dateStr: string): string {
+    const [, m, d] = dateStr.split('-');
+    return `${d}/${m}`;
+}
