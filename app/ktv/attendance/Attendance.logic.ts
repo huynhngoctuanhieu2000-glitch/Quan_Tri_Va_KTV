@@ -45,6 +45,13 @@ export const useKTVAttendance = () => {
         const fetchStatus = async () => {
             try {
                 const res = await fetch(`/api/ktv/attendance/status?employeeId=${user.id}`);
+                
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error(`❌ [Attendance] Status API returned ${res.status}:`, text);
+                    return;
+                }
+
                 const result = await res.json();
 
                 if (result.success && result.checkStatus) {
@@ -135,6 +142,16 @@ export const useKTVAttendance = () => {
                     ...gps,
                 }),
             });
+
+            if (!res.ok) {
+                const text = await res.text();
+                console.error(`❌ [Attendance POST] Server returned ${res.status}:`, text);
+                throw new Error(
+                    res.status === 413
+                        ? 'Ảnh quá lớn. Vui lòng chụp lại với chất lượng thấp hơn.'
+                        : `Lỗi server (${res.status}). Vui lòng thử lại.`
+                );
+            }
 
             const result = await res.json();
             if (!result.success) throw new Error(result.error || 'Lỗi gửi yêu cầu');

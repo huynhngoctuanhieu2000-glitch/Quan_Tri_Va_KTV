@@ -48,14 +48,45 @@ const KTVAttendancePage = () => {
         setIsFormOpen(true);
     };
 
-    const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Compress image to reduce base64 size before upload
+    const compressImage = (file: File, maxWidth = 800, quality = 0.6): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                const canvas = document.createElement('canvas');
+                let { width, height } = img;
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { reject(new Error('Canvas not supported')); return; }
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = url;
+        });
+    };
+
+    const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            setPhotoSrc(ev.target?.result as string);
-        };
-        reader.readAsDataURL(file);
+        try {
+            const compressed = await compressImage(file);
+            setPhotoSrc(compressed);
+        } catch {
+            // Fallback to raw FileReader if compression fails
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                setPhotoSrc(ev.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
     const handleSubmitForm = () => {
