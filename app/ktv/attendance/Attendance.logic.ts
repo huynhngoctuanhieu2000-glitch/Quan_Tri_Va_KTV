@@ -113,7 +113,7 @@ export const useKTVAttendance = () => {
 
     // --- Handlers ---
     const handleAttendance = useCallback(async (
-        checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'OFF_REQUEST',
+        checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN',
         photoBase64?: string | null,
         reason?: string | null
     ) => {
@@ -144,7 +144,7 @@ export const useKTVAttendance = () => {
         } catch (err: any) {
             setErrorMsg(err.message || 'Lỗi không xác định');
             // Revert back or stay IDLE if not checked out successfully
-            if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN' || checkType === 'OFF_REQUEST') {
+            if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
                 setCheckStatus('IDLE');
             } else {
                 setCheckStatus('CONFIRMED');

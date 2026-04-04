@@ -24,7 +24,7 @@ const KTVAttendancePage = () => {
     } = useKTVAttendance();
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
-    const [formType, setFormType] = React.useState<'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'OFF_REQUEST'>('CHECK_IN');
+    const [formType, setFormType] = React.useState<'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN'>('CHECK_IN');
     const [photoSrc, setPhotoSrc] = React.useState<string | null>(null);
     const [reason, setReason] = React.useState<string>('');
 
@@ -41,7 +41,7 @@ const KTVAttendancePage = () => {
         );
     }
 
-    const openForm = (type: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'OFF_REQUEST') => {
+    const openForm = (type: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN') => {
         setFormType(type);
         setPhotoSrc(null);
         setReason('');
@@ -99,20 +99,12 @@ const KTVAttendancePage = () => {
                                 >
                                     Điểm Danh VÀO CA
                                 </button>
-                                <div className="grid grid-cols-2 gap-3 mt-4">
-                                    <button
-                                        onClick={() => openForm('LATE_CHECKIN')}
-                                        className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium text-sm rounded-xl transition-all border border-gray-200"
-                                    >
-                                        Bổ Sung
-                                    </button>
-                                    <button
-                                        onClick={() => openForm('OFF_REQUEST')}
-                                        className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-sm rounded-xl transition-all border border-rose-200"
-                                    >
-                                        Xin OFF
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => openForm('LATE_CHECKIN')}
+                                    className="w-full mt-3 py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium text-sm rounded-xl transition-all border border-gray-200"
+                                >
+                                    Điểm Danh Bổ Sung
+                                </button>
                             </div>
                         </>
                     )}
@@ -231,8 +223,7 @@ const KTVAttendancePage = () => {
                             <h3 className="text-lg font-black text-gray-900 text-center uppercase tracking-wide">
                                 {formType === 'CHECK_IN' ? 'Điểm danh vào ca' :
                                  formType === 'CHECK_OUT' ? 'Điểm danh tan ca' :
-                                 formType === 'LATE_CHECKIN' ? 'Điểm danh bổ sung' :
-                                 'Đăng ký OFF'}
+                                 'Điểm danh bổ sung'}
                             </h3>
                             
                             {/* Camera input */}
@@ -242,7 +233,7 @@ const KTVAttendancePage = () => {
                                     <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 focus:ring-2 focus:ring-emerald-500 transition-all rounded-2xl cursor-pointer">
                                         <Camera size={36} className="text-gray-400 mb-2" />
                                         <span className="text-sm font-medium text-gray-500">Mở Camera Điện Thoại</span>
-                                        <input type="file" accept="image/*" capture="user" className="hidden" onChange={handleCapture} />
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleCapture} />
                                     </label>
                                 ) : (
                                     <div className="relative w-full h-48 rounded-2xl overflow-hidden bg-black/5 flex items-center justify-center border border-gray-200">
@@ -257,7 +248,7 @@ const KTVAttendancePage = () => {
                             {/* Reason input */}
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-gray-700 block text-left">
-                                    Lý do/Ghi chú {(formType === 'OFF_REQUEST' || formType === 'LATE_CHECKIN') && <span className="text-rose-500">(*)</span>}
+                                    Lý do/Ghi chú {formType === 'LATE_CHECKIN' && <span className="text-rose-500">(*)</span>}
                                 </label>
                                 <textarea 
                                     value={reason} onChange={e => setReason(e.target.value)}
@@ -270,7 +261,7 @@ const KTVAttendancePage = () => {
                                 <button onClick={() => setIsFormOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
                                 <button 
                                    onClick={handleSubmitForm}
-                                   disabled={!photoSrc || ((formType === 'OFF_REQUEST' || formType === 'LATE_CHECKIN') && !reason.trim())}
+                                   disabled={!photoSrc || (formType === 'LATE_CHECKIN' && !reason.trim())}
                                    className="flex-1 py-3.5 bg-emerald-600 active:scale-95 transition-transform text-white rounded-xl font-bold disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2">
                                     <CheckCircle2 size={18} /> Gửi
                                 </button>
