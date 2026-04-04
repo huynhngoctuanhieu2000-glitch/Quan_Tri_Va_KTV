@@ -348,7 +348,29 @@ const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notifica
     const isLocked = ['REVIEW', 'HANDOVER'].includes(currentScreen);
     const type = notification.type?.toUpperCase();
     const isComplaint = type === 'COMPLAINT';
+    const isCheckIn = type === 'CHECK_IN';
     
+    // Determine title and icon based on notification type
+    let title = 'Phần thưởng mới';
+    let iconElement = <Star size={20} className="text-white fill-white" />;
+    let iconBg = 'bg-emerald-500';
+    let borderClass = 'border-emerald-100';
+    let titleColor = 'text-emerald-600';
+
+    if (isComplaint) {
+        title = 'Thông báo khẩn';
+        iconElement = <ShieldAlert size={20} />;
+        iconBg = 'bg-white/20';
+        borderClass = 'border-rose-500';
+        titleColor = 'text-rose-100';
+    } else if (isCheckIn) {
+        title = 'Điểm danh';
+        iconElement = <CheckCircle size={20} className="text-white" />;
+        iconBg = 'bg-blue-500';
+        borderClass = 'border-blue-100';
+        titleColor = 'text-blue-600';
+    }
+
     return (
         <motion.div
             initial={{ y: -50, opacity: 0, scale: 0.9 }}
@@ -356,15 +378,15 @@ const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notifica
             exit={{ y: -50, opacity: 0, scale: 0.9 }}
             onClick={() => !isLocked && onRedirect()}
             className={`pointer-events-auto p-4 rounded-[24px] shadow-2xl border-2 flex items-center gap-4 transition-all active:scale-95
-                ${isComplaint ? 'bg-rose-600 border-rose-500 text-white' : 'bg-white/95 backdrop-blur-md border-emerald-100 text-slate-800'}
+                ${isComplaint ? 'bg-rose-600 border-rose-500 text-white' : 'bg-white/95 backdrop-blur-md text-slate-800'} ${borderClass}
                 ${isLocked ? 'cursor-default opacity-90' : 'cursor-pointer'}`}
         >
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isComplaint ? 'bg-white/20' : 'bg-emerald-500'}`}>
-                {isComplaint ? <ShieldAlert size={20} /> : <Star size={20} className="text-white fill-white" />}
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
+                {iconElement}
             </div>
             <div className="flex-1 min-w-0">
-                <p className={`text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5 ${isComplaint ? 'text-rose-100' : 'text-emerald-600'}`}>
-                    {isComplaint ? 'Thông báo khẩn' : 'Phần thưởng mới'}
+                <p className={`text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5 ${isComplaint ? 'text-rose-100' : titleColor}`}>
+                    {title}
                 </p>
                 <p className="text-xs font-bold leading-tight truncate">{notification.message}</p>
             </div>
