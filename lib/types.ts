@@ -11,6 +11,7 @@ export type ModuleId =
   | 'role_management'
   | 'employee_management'
   | 'ktv_hub'
+  | 'leave_management'
   | 'ktv_dashboard'
   | 'ktv_attendance'
   | 'ktv_leave'

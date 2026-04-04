@@ -124,3 +124,111 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
+
+/**
+ * PATCH /api/ktv/leave
+ * Admin approves or rejects a leave request.
+ * Body: { leaveId, action: 'APPROVE' | 'REJECT', adminId? }
+ */
+export async function PATCH(request: Request) {
+    try {
+        const body = await request.json();
+        const { leaveId, action, adminId } = body;
+
+        if (!leaveId || !action) {
+            return NextResponse.json({ success: false, error: 'Missing leaveId or action' }, { status: 400 });
+        }
+        if (!['APPROVE', 'REJECT'].includes(action)) {
+            return NextResponse.json({ success: false, error: 'action must be APPROVE or REJECT' }, { status: 400 });
+        }
+
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+            return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
+        }
+
+        // Fetch the leave request
+        const { data: leave, error: fetchError } = await supabase
+            .from('KTVLeaveRequests')
+            .select('*')
+            .eq('id', leaveId)
+            .maybeSingle();
+
+        if (fetchError || !leave) {
+            return NextResponse.json({ success: false, error: 'Leave request not found' }, { status: 404 });
+        }
+
+        const newStatus = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+
+        // Update leave request status
+        const { error: updateError } = await supabase
+            .from('KTVLeaveRequests')
+            .update({
+                status: newStatus,
+                reviewedBy: adminId || null,
+                reviewedAt: new Date().toISOString(),
+            })
+            .eq('id', leaveId);
+
+        if (updateError) {
+            console.error('❌ [Leave PATCH] Update error:', updateError);
+            return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });
+        }
+
+        // Notify KTV about the decision
+        const statusText = action === 'APPROVE' ? '✅ được duyệt' : '❌ bị từ chối';
+        const ktvMessage = `📋 Yêu cầu OFF ngày ${leave.date} đã ${statusText}.`;
+
+        await supabase.from('StaffNotifications').insert({
+            type: 'CHECK_IN',
+            message: ktvMessage,
+            employeeId: leave.employeeId,
+            isRead: false,
+        });
+
+        console.log(`✅ [Leave PATCH] ${leave.employeeName}: ${action} for ${leave.date}`);
+
+        return NextResponse.json({ success: true, status: newStatus });
+
+    } catch (error: any) {
+        console.error('❌ [Leave PATCH] Unhandled error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
+
+/**
+ * DELETE /api/ktv/leave?id=xxx
+ * Admin deletes a leave request (e.g., wrong submission).
+ */
+export async function DELETE(request: NextRequest) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const leaveId = searchParams.get('id');
+
+        if (!leaveId) {
+            return NextResponse.json({ success: false, error: 'Missing id param' }, { status: 400 });
+        }
+
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+            return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
+        }
+
+        const { error } = await supabase
+            .from('KTVLeaveRequests')
+            .delete()
+            .eq('id', leaveId);
+
+        if (error) {
+            console.error('❌ [Leave DELETE] Error:', error);
+            return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+
+        console.log(`✅ [Leave DELETE] Removed leave request: ${leaveId}`);
+        return NextResponse.json({ success: true });
+
+    } catch (error: any) {
+        console.error('❌ [Leave DELETE] Unhandled error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
