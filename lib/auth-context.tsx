@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else if (roleId === 'reception') {
             permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'leave_management', 'turn_tracking', 'service_handbook', 'staff_notifications', 'settings'];
           } else if (roleId === 'ktv') {
-            permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'];
+            permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'];
           }
         }
 

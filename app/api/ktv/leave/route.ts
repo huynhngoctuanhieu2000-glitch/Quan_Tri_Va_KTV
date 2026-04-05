@@ -59,6 +59,26 @@ export async function POST(request: Request) {
             );
         }
 
+        // ── DEADLINE CHECK: Must register before 19:00 ICT the day before ──
+        // VD: OFF ngày 6/4 → phải đăng ký trước 19h ngày 5/4
+        const nowUtc = new Date();
+        const vnOffsetMs = 7 * 60 * 60 * 1000;
+        const vnNowMs = nowUtc.getTime() + vnOffsetMs;
+        
+        // Parse leave date as VN midnight
+        const [yyyy, mm, dd] = date.split('-').map(Number);
+        const leaveDateVnMidnight = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0)).getTime() - vnOffsetMs;
+        
+        // Deadline = 19:00 ICT the day before = leave date midnight VN - 5 hours in UTC
+        const deadlineMs = leaveDateVnMidnight - (5 * 60 * 60 * 1000); // 24h - 19h = 5h before midnight
+        
+        if (nowUtc.getTime() > deadlineMs) {
+            return NextResponse.json(
+                { success: false, error: 'Đã quá hạn đăng ký. Phải đăng ký OFF trước 19h ngày hôm trước.' },
+                { status: 400 }
+            );
+        }
+
         const supabase = getSupabaseAdmin();
         if (!supabase) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });

@@ -15,7 +15,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: 'employee_management', name: 'Nhân Viên', group: 'Hệ Thống' },
   { id: 'ktv_dashboard', name: 'KTV Dashboard', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_attendance', name: 'Chấm Công', group: 'Kỹ Thuật Viên' },
-  { id: 'ktv_leave', name: 'Nghỉ Phép', group: 'Kỹ Thuật Viên' },
+  { id: 'ktv_schedule', name: 'Lịch Làm Việc', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_performance', name: 'Hiệu Suất', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_history', name: 'Lịch Sử', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_hub', name: 'Quản Lý KTV', group: 'Vận Hành' },

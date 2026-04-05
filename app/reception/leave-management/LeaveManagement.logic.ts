@@ -8,6 +8,7 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 // --- TYPES ---
 export type ViewMode = 'day' | 'week' | 'month';
+export type AdminTab = 'off' | 'shift';
 
 export interface LeaveRequest {
     id: string;
@@ -18,6 +19,20 @@ export interface LeaveRequest {
     status: 'PENDING' | 'APPROVED' | 'REJECTED';
     reviewedBy?: string | null;
     reviewedAt?: string | null;
+    createdAt: string;
+}
+
+export interface ShiftRecord {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    shiftType: string;
+    effectiveFrom: string;
+    previousShift: string | null;
+    reason: string | null;
+    status: string;
+    reviewedBy: string | null;
+    reviewedAt: string | null;
     createdAt: string;
 }
 
@@ -36,6 +51,9 @@ export const useLeaveManagement = () => {
     const [leaveList, setLeaveList] = useState<LeaveRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
+
+    // Admin tab state
+    const [adminTab, setAdminTab] = useState<AdminTab>('off');
 
     // View mode + offset (0 = current, -1 = previous, 1 = next)
     const [viewMode, setViewMode] = useState<ViewMode>('month');
@@ -196,6 +214,130 @@ export const useLeaveManagement = () => {
         rangeLabel,
         handleAction,
         handleDelete,
+        adminTab,
+        setAdminTab,
+    };
+};
+
+/**
+ * Hook for Shift Management (admin side).
+ */
+export const useShiftManagement = () => {
+    const { user } = useAuth();
+    const [allShifts, setAllShifts] = useState<ShiftRecord[]>([]);
+    const [pendingShifts, setPendingShifts] = useState<ShiftRecord[]>([]);
+    const [isLoadingShifts, setIsLoadingShifts] = useState(true);
+    const [shiftActionLoading, setShiftActionLoading] = useState<Record<string, string>>({});
+
+    // Assign modal state
+    const [assignModalOpen, setAssignModalOpen] = useState(false);
+    const [assignEmployeeId, setAssignEmployeeId] = useState('');
+    const [assignEmployeeName, setAssignEmployeeName] = useState('');
+    const [assignShiftType, setAssignShiftType] = useState('');
+    const [isAssigning, setIsAssigning] = useState(false);
+
+    const fetchShifts = useCallback(async () => {
+        setIsLoadingShifts(true);
+        try {
+            const [allRes, pendingRes] = await Promise.all([
+                fetch('/api/ktv/shift?all=true'),
+                fetch('/api/ktv/shift?pending=true'),
+            ]);
+            const allResult = await allRes.json();
+            const pendingResult = await pendingRes.json();
+
+            if (allResult.success) setAllShifts(allResult.data || []);
+            if (pendingResult.success) setPendingShifts(pendingResult.data || []);
+        } catch (err) {
+            console.error('❌ [ShiftManagement] Fetch error:', err);
+        } finally {
+            setIsLoadingShifts(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchShifts(); }, [fetchShifts]);
+
+    // Approve / Reject shift change
+    const handleShiftAction = async (shiftId: string, action: 'APPROVE' | 'REJECT') => {
+        setShiftActionLoading(prev => ({ ...prev, [shiftId]: action.toLowerCase() }));
+        try {
+            const res = await fetch('/api/ktv/shift', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shiftId, action, adminId: user?.id }),
+            });
+            const result = await res.json();
+            if (result.success) {
+                fetchShifts();
+            } else {
+                alert(result.error || 'Lỗi xử lý');
+            }
+        } catch (err) {
+            console.error('❌ [ShiftManagement] Action error:', err);
+        } finally {
+            setShiftActionLoading(prev => { const next = { ...prev }; delete next[shiftId]; return next; });
+        }
+    };
+
+    // Admin assigns shift directly
+    const handleAssignShift = async () => {
+        if (!assignEmployeeId || !assignShiftType) return;
+        setIsAssigning(true);
+        try {
+            const res = await fetch('/api/ktv/shift', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    employeeId: assignEmployeeId,
+                    employeeName: assignEmployeeName || assignEmployeeId,
+                    shiftType: assignShiftType,
+                    assignedByAdmin: true,
+                    adminId: user?.id,
+                }),
+            });
+            const result = await res.json();
+            if (result.success) {
+                setAssignModalOpen(false);
+                setAssignEmployeeId('');
+                setAssignEmployeeName('');
+                setAssignShiftType('');
+                fetchShifts();
+            } else {
+                alert(result.error || 'Lỗi gán ca');
+            }
+        } catch (err) {
+            console.error('❌ [ShiftManagement] Assign error:', err);
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
+    const openAssignModal = (employeeId?: string, employeeName?: string) => {
+        setAssignEmployeeId(employeeId || '');
+        setAssignEmployeeName(employeeName || '');
+        setAssignShiftType('');
+        setAssignModalOpen(true);
+    };
+
+    return {
+        allShifts,
+        pendingShifts,
+        isLoadingShifts,
+        shiftActionLoading,
+        handleShiftAction,
+        fetchShifts,
+        // Assign modal
+        assignModalOpen,
+        setAssignModalOpen,
+        assignEmployeeId,
+        setAssignEmployeeId,
+        assignEmployeeName,
+        setAssignEmployeeName,
+        assignShiftType,
+        setAssignShiftType,
+        isAssigning,
+        handleAssignShift,
+        openAssignModal,
     };
 };
 

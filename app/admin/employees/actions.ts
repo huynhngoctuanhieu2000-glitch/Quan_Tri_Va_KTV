@@ -61,7 +61,7 @@ export async function createStaffMember(formData: any) {
             permissions: [
                 'ktv_dashboard',
                 'ktv_attendance',
-                'ktv_leave',
+                'ktv_schedule',
                 'ktv_performance',
                 'ktv_history',
                 'service_handbook',

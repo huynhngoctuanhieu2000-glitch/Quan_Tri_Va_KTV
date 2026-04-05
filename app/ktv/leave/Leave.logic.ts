@@ -36,7 +36,7 @@ export const useKTVLeave = () => {
 
     useEffect(() => { setMounted(true); }, []);
 
-    const canAccessPage = hasPermission('ktv_leave');
+    const canAccessPage = hasPermission('ktv_schedule');
 
     // --- Fetch leave schedule ---
     const fetchLeaveList = useCallback(async () => {

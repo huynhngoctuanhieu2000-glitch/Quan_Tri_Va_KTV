@@ -14,7 +14,7 @@ const MOCK_ROLES: Role[] = [
             'dashboard', 'dispatch_board', 'order_management', 'customer_management',
             'revenue_reports', 'payroll_commissions', 'cashbook_supplies', 'web_booking',
             'service_menu', 'role_management', 'employee_management', 'ktv_hub',
-            'ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance',
+            'ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance',
             'ktv_history', 'turn_tracking', 'service_handbook', 'ai_features', 'settings',
         ],
     },
@@ -26,7 +26,7 @@ const MOCK_ROLES: Role[] = [
     {
         id: 'ktv',
         name: 'Kỹ Thuật Viên',
-        permissions: ['ktv_dashboard', 'ktv_attendance', 'ktv_leave', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'],
+        permissions: ['ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'],
     },
 ];
 

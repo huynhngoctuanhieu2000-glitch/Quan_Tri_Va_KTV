@@ -14,7 +14,7 @@ export type ModuleId =
   | 'leave_management'
   | 'ktv_dashboard'
   | 'ktv_attendance'
-  | 'ktv_leave'
+  | 'ktv_schedule'
   | 'ktv_performance'
   | 'ktv_history'
   | 'turn_tracking'
