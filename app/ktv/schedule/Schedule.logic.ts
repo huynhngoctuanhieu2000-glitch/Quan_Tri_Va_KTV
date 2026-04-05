@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 // 🔧 UI CONFIGURATION
-const FETCH_RANGE_DAYS = 30;
+const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
 // --- TYPES ---
 export interface LeaveRequest {
@@ -60,6 +60,13 @@ export const useKTVSchedule = () => {
     const [offError, setOffError] = useState<string | null>(null);
     const [offSuccess, setOffSuccess] = useState(false);
 
+    // ── Calendar state ──
+    const [calendarMonth, setCalendarMonth] = useState(() => {
+        const now = new Date();
+        return { year: now.getFullYear(), month: now.getMonth() }; // 0-indexed
+    });
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
     // ── Shift state ──
     const [currentShift, setCurrentShift] = useState<ShiftRecord | null>(null);
     const [pendingRequest, setPendingRequest] = useState<ShiftRecord | null>(null);
@@ -74,14 +81,14 @@ export const useKTVSchedule = () => {
 
     useEffect(() => { setMounted(true); }, []);
 
-    // ── Fetch leave schedule ──
+    // ── Fetch leave schedule (by calendar month) ──
     const fetchLeaveList = useCallback(async () => {
         setIsLoadingLeaves(true);
         try {
-            const today = new Date();
-            const from = today.toISOString().split('T')[0];
-            const toDate = new Date(today.getTime() + FETCH_RANGE_DAYS * 24 * 60 * 60 * 1000);
-            const to = toDate.toISOString().split('T')[0];
+            const { year, month } = calendarMonth;
+            const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
             const res = await fetch(`/api/ktv/leave?from=${from}&to=${to}`);
             const result = await res.json();
@@ -96,6 +103,26 @@ export const useKTVSchedule = () => {
         } finally {
             setIsLoadingLeaves(false);
         }
+    }, [calendarMonth]);
+
+    // Calendar navigation
+    const goToPrevMonth = useCallback(() => {
+        setCalendarMonth(prev => {
+            if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+            return { ...prev, month: prev.month - 1 };
+        });
+    }, []);
+
+    const goToNextMonth = useCallback(() => {
+        setCalendarMonth(prev => {
+            if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+            return { ...prev, month: prev.month + 1 };
+        });
+    }, []);
+
+    const goToToday = useCallback(() => {
+        const now = new Date();
+        setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
     }, []);
 
     // ── Fetch shift data ──
@@ -227,6 +254,15 @@ export const useKTVSchedule = () => {
         setDate,
         setOffError,
         handleSubmitOff,
+
+        // Calendar
+        calendarMonth,
+        selectedDate,
+        setSelectedDate,
+        goToPrevMonth,
+        goToNextMonth,
+        goToToday,
+        WEEKDAY_LABELS,
 
         // Shift
         currentShift,

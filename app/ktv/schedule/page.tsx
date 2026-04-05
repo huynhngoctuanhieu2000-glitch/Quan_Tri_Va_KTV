@@ -5,11 +5,11 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import {
     ShieldAlert, CalendarDays, Send, Loader2,
     CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle,
-    ArrowRightLeft, Briefcase, ChevronRight
+    ArrowRightLeft, Briefcase, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { useKTVSchedule, ScheduleTab } from './Schedule.logic';
+import { useKTVSchedule, ScheduleTab, LeaveRequest } from './Schedule.logic';
 import { t } from './Schedule.i18n';
 
 // 🔧 UI CONFIGURATION
@@ -39,6 +39,17 @@ const SHIFT_COLORS: Record<string, string> = {
     SHIFT_1: 'bg-blue-600',
     SHIFT_2: 'bg-amber-600',
     SHIFT_3: 'bg-indigo-600',
+};
+
+const MONTH_NAMES = [
+    'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+    'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
+];
+
+const STATUS_DOT_COLORS: Record<string, string> = {
+    PENDING: 'bg-amber-400',
+    APPROVED: 'bg-emerald-500',
+    REJECTED: 'bg-red-400',
 };
 
 const TAB_CONFIG: { id: ScheduleTab; label: string; icon: React.ReactNode }[] = [
@@ -208,96 +219,229 @@ const OffTab = ({ logic }: { logic: ReturnType<typeof useKTVSchedule> }) => {
                 </form>
             </div>
 
-            {/* ── LEAVE SCHEDULE SECTION ── */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
-                <div className="px-6 pt-6 pb-3">
-                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                        <CalendarDays size={20} className="text-indigo-500" />
-                        {t.scheduleTitle}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-1">{t.scheduleSubtitle}</p>
-                </div>
+            {/* ── LEAVE CALENDAR SECTION ── */}
+            <LeaveCalendar logic={logic} />
+        </>
+    );
+};
 
-                <div className="px-6 pb-6">
-                    {/* Loading */}
-                    {isLoadingLeaves && (
-                        <div className="flex items-center justify-center py-8 gap-2 text-gray-400">
-                            <Loader2 size={20} className="animate-spin" />
-                            <span className="text-sm">{t.scheduleLoading}</span>
+// ════════════════════════════════════════════════════════════════
+// LEAVE CALENDAR COMPONENT
+// ════════════════════════════════════════════════════════════════
+
+const LeaveCalendar = ({ logic }: { logic: ReturnType<typeof useKTVSchedule> }) => {
+    const {
+        leaveList, isLoadingLeaves, calendarMonth,
+        selectedDate, setSelectedDate,
+        goToPrevMonth, goToNextMonth, goToToday, WEEKDAY_LABELS,
+    } = logic;
+
+    const { year, month } = calendarMonth;
+
+    // Build calendar grid
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const daysInMonth = lastDayOfMonth.getDate();
+
+    // Monday = 0, Sunday = 6 (for T2-CN layout)
+    let startDow = firstDayOfMonth.getDay(); // 0=Sun, 1=Mon, ...
+    startDow = startDow === 0 ? 6 : startDow - 1; // Convert to Mon=0
+
+    // Build leave lookup: date -> LeaveRequest[]
+    const leaveByDate: Record<string, LeaveRequest[]> = {};
+    leaveList.forEach(leave => {
+        if (!leaveByDate[leave.date]) leaveByDate[leave.date] = [];
+        leaveByDate[leave.date].push(leave);
+    });
+
+    // Today string
+    const todayStr = (() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    })();
+
+    // Selected date leaves
+    const selectedLeaves = selectedDate ? (leaveByDate[selectedDate] || []) : [];
+
+    return (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
+            {/* Calendar Header */}
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <button
+                    onClick={goToPrevMonth}
+                    className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                    <ChevronLeft size={18} className="text-gray-500" />
+                </button>
+                <button
+                    onClick={goToToday}
+                    className="text-sm font-bold text-gray-800 px-3 py-1.5 hover:bg-gray-50 rounded-xl transition-colors"
+                >
+                    {MONTH_NAMES[month]} {year}
+                </button>
+                <button
+                    onClick={goToNextMonth}
+                    className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                >
+                    <ChevronRight size={18} className="text-gray-500" />
+                </button>
+            </div>
+
+            <div className="px-4 py-4">
+                {isLoadingLeaves ? (
+                    <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                        <Loader2 size={20} className="animate-spin" />
+                        <span className="text-sm">{t.scheduleLoading}</span>
+                    </div>
+                ) : (
+                    <>
+                        {/* Weekday headers */}
+                        <div className="grid grid-cols-7 gap-1 mb-2">
+                            {WEEKDAY_LABELS.map((day, i) => (
+                                <div
+                                    key={day}
+                                    className={`text-center text-[10px] font-bold uppercase tracking-wider py-1 ${
+                                        i === 6 ? 'text-red-400' : i === 5 ? 'text-blue-400' : 'text-gray-400'
+                                    }`}
+                                >
+                                    {day}
+                                </div>
+                            ))}
                         </div>
-                    )}
 
-                    {/* Empty */}
-                    {!isLoadingLeaves && leaveList.length === 0 && (
-                        <div className="text-center py-8">
-                            <CalendarOff size={36} className="text-gray-300 mx-auto mb-2" />
-                            <p className="text-sm text-gray-400">{t.scheduleEmpty}</p>
-                        </div>
-                    )}
+                        {/* Calendar grid */}
+                        <div className="grid grid-cols-7 gap-1">
+                            {/* Empty cells for days before month starts */}
+                            {Array.from({ length: startDow }).map((_, i) => (
+                                <div key={`empty-${i}`} className="aspect-square" />
+                            ))}
 
-                    {/* Leave list */}
-                    {!isLoadingLeaves && leaveList.length > 0 && (
-                        <div className="space-y-3">
-                            {leaveList.map((leave) => {
-                                const statusConfig = STATUS_COLORS[leave.status as keyof typeof STATUS_COLORS] || STATUS_COLORS.PENDING;
-                                const StatusIcon = statusConfig.icon;
-                                const formattedDate = (() => {
-                                    try {
-                                        return format(new Date(leave.date + 'T00:00:00'), 'EEEE, dd/MM', { locale: vi });
-                                    } catch {
-                                        return leave.date;
-                                    }
-                                })();
+                            {/* Day cells */}
+                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                                const day = i + 1;
+                                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                const dayLeaves = leaveByDate[dateStr] || [];
+                                const isToday = dateStr === todayStr;
+                                const isSelected = dateStr === selectedDate;
+                                const hasLeaves = dayLeaves.length > 0;
+
+                                // Get day of week (for weekend styling)
+                                const dow = (startDow + i) % 7; // 0=Mon, 5=Sat, 6=Sun
+
+                                // Find "best" status to show (APPROVED > PENDING > REJECTED)
+                                const bestStatus = dayLeaves.find(l => l.status === 'APPROVED')?.status
+                                    || dayLeaves.find(l => l.status === 'PENDING')?.status
+                                    || dayLeaves[0]?.status;
 
                                 return (
-                                    <div
-                                        key={leave.id}
-                                        className={`flex items-center gap-3 p-3.5 rounded-2xl border ${statusConfig.border} ${statusConfig.bg} transition-all`}
+                                    <button
+                                        key={dateStr}
+                                        onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+                                        className={`
+                                            aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all text-sm
+                                            ${isSelected
+                                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 scale-105'
+                                                : isToday
+                                                    ? 'bg-indigo-50 text-indigo-700 border-2 border-indigo-300 font-black'
+                                                    : hasLeaves
+                                                        ? 'bg-gray-50 text-gray-800 hover:bg-gray-100 font-bold'
+                                                        : dow === 6
+                                                            ? 'text-red-300 hover:bg-red-50/50'
+                                                            : dow === 5
+                                                                ? 'text-blue-300 hover:bg-blue-50/50'
+                                                                : 'text-gray-500 hover:bg-gray-50'
+                                            }
+                                        `}
                                     >
-                                        {/* Left: Date badge */}
-                                        <div className="flex flex-col items-center justify-center min-w-[52px] bg-white rounded-xl p-2 shadow-sm border border-gray-100">
-                                            <span className="text-lg font-black text-gray-900 leading-none">
-                                                {(() => {
-                                                    try { return format(new Date(leave.date + 'T00:00:00'), 'dd'); }
-                                                    catch { return '--'; }
-                                                })()}
-                                            </span>
-                                            <span className="text-[10px] font-semibold text-gray-400 uppercase leading-tight">
-                                                {(() => {
-                                                    try { return format(new Date(leave.date + 'T00:00:00'), 'MMM', { locale: vi }); }
-                                                    catch { return ''; }
-                                                })()}
-                                            </span>
-                                        </div>
+                                        <span className={`leading-none ${isToday && !isSelected ? 'text-indigo-700' : ''}`}>
+                                            {day}
+                                        </span>
 
-                                        {/* Middle: Info */}
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-bold text-sm text-gray-900 truncate">
-                                                {leave.employeeName}
-                                            </p>
-                                            <p className="text-xs text-gray-500 capitalize truncate">
-                                                {formattedDate}
-                                            </p>
-                                            {leave.reason && (
-                                                <p className="text-xs text-gray-400 mt-0.5 truncate">
-                                                    {leave.reason}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Right: Status */}
-                                        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${statusConfig.text} ${statusConfig.bg}`}>
-                                            <StatusIcon size={12} />
-                                            <span>{STATUS_LABELS[leave.status] || leave.status}</span>
-                                        </div>
-                                    </div>
+                                        {/* Status dots */}
+                                        {hasLeaves && (
+                                            <div className="flex gap-0.5 mt-0.5">
+                                                {dayLeaves.length <= 3
+                                                    ? dayLeaves.map((leave, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={`w-1.5 h-1.5 rounded-full ${
+                                                                isSelected ? 'bg-white/80' : (STATUS_DOT_COLORS[leave.status] || 'bg-gray-300')
+                                                            }`}
+                                                        />
+                                                    ))
+                                                    : (
+                                                        <>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white/80' : (STATUS_DOT_COLORS[bestStatus || ''] || 'bg-gray-300')}`} />
+                                                            <span className={`text-[8px] font-bold ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                                                                +{dayLeaves.length - 1}
+                                                            </span>
+                                                        </>
+                                                    )
+                                                }
+                                            </div>
+                                        )}
+                                    </button>
                                 );
                             })}
                         </div>
-                    )}
-                </div>
+
+                        {/* Legend */}
+                        <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100">
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-amber-400" />
+                                <span className="text-[10px] text-gray-500 font-medium">{t.statusPending}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                <span className="text-[10px] text-gray-500 font-medium">{t.statusApproved}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-red-400" />
+                                <span className="text-[10px] text-gray-500 font-medium">{t.statusRejected}</span>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
-        </>
+
+            {/* Selected day details */}
+            {selectedDate && selectedLeaves.length > 0 && (
+                <div className="border-t border-gray-100 px-5 py-4 space-y-2.5 bg-gray-50/50">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                        {(() => {
+                            try {
+                                return format(new Date(selectedDate + 'T00:00:00'), 'EEEE, dd/MM/yyyy', { locale: vi });
+                            } catch { return selectedDate; }
+                        })()}
+                    </p>
+                    {selectedLeaves.map(leave => {
+                        const cfg = STATUS_COLORS[leave.status as keyof typeof STATUS_COLORS] || STATUS_COLORS.PENDING;
+                        const Icon = cfg.icon;
+                        return (
+                            <div key={leave.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${cfg.border} ${cfg.bg}`}>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-sm text-gray-900 truncate">{leave.employeeName}</p>
+                                    {leave.reason && (
+                                        <p className="text-xs text-gray-500 mt-0.5 truncate">{leave.reason}</p>
+                                    )}
+                                </div>
+                                <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${cfg.text}`}>
+                                    <Icon size={11} />
+                                    <span>{STATUS_LABELS[leave.status]}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Selected day empty */}
+            {selectedDate && selectedLeaves.length === 0 && (
+                <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
+                    <p className="text-xs text-gray-400 text-center">Không có ai OFF ngày này</p>
+                </div>
+            )}
+        </div>
     );
 };
 
