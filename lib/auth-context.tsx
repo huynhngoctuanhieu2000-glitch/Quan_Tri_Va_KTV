@@ -80,6 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Set role permissions (use DB permissions if available)
         let permissions: ModuleId[] = (dbUser.permissions && Array.isArray(dbUser.permissions)) ? dbUser.permissions : [];
         
+        // 🔄 Auto-migrate renamed permissions (backwards compatibility)
+        const PERMISSION_RENAMES: Record<string, ModuleId> = {
+          'ktv_leave': 'ktv_schedule',
+        };
+        permissions = permissions.map(p => PERMISSION_RENAMES[p] || p) as ModuleId[];
+
         // If no permissions in DB, use smart defaults based on roleId
         if (permissions.length === 0) {
           if (roleId === 'admin' || roleId === 'dev') {
