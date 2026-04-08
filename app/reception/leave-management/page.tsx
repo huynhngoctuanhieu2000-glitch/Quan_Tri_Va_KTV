@@ -6,7 +6,7 @@ import {
     ShieldAlert, CalendarOff, Loader2, Check, X, Trash2,
     ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle,
     CalendarDays, Calendar, CalendarRange, Briefcase,
-    ArrowRightLeft, UserPlus, Users, AlertTriangle
+    ArrowRightLeft, UserPlus, Users
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -565,24 +565,48 @@ const ShiftManagementTab = ({ logic }: { logic: ReturnType<typeof useShiftManage
                             {t.shiftAssignTitle}
                         </h3>
 
-                        {/* Employee Dropdown */}
+                        {/* Employee Dropdown — grouped by shift status */}
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 block">Chọn KTV</label>
+                            <label className="text-sm font-semibold text-gray-700 block">
+                                Chọn KTV
+                                {unassignedStaff.length > 0 && (
+                                    <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                        {unassignedStaff.length} chưa có ca
+                                    </span>
+                                )}
+                            </label>
                             <select
                                 value={assignEmployeeId}
-                                onChange={e => {
-                                    const selected = staffList.find(s => s.id === e.target.value);
-                                    setAssignEmployeeId(e.target.value);
-                                }}
+                                onChange={e => setAssignEmployeeId(e.target.value)}
                                 disabled={isLoadingStaff}
-                                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white appearance-none"
+                                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                             >
                                 <option value="">{isLoadingStaff ? 'Đang tải...' : '-- Chọn nhân viên --'}</option>
-                                {staffList.map(staff => (
-                                    <option key={staff.id} value={staff.id}>
-                                        {staff.full_name} ({staff.id})
-                                    </option>
-                                ))}
+
+                                {/* Group 1: Chưa có ca */}
+                                {unassignedStaff.length > 0 && (
+                                    <optgroup label="⚠️ Chưa có ca">
+                                        {unassignedStaff.map(staff => (
+                                            <option key={staff.id} value={staff.id}>
+                                                {staff.full_name} ({staff.id})
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                )}
+
+                                {/* Group 2: Đã có ca */}
+                                {staffList.filter(s => !unassignedStaff.find(u => u.id === s.id)).length > 0 && (
+                                    <optgroup label="✅ Đã có ca">
+                                        {staffList
+                                            .filter(s => !unassignedStaff.find(u => u.id === s.id))
+                                            .map(staff => (
+                                                <option key={staff.id} value={staff.id}>
+                                                    {staff.full_name} ({staff.id})
+                                                </option>
+                                            ))
+                                        }
+                                    </optgroup>
+                                )}
                             </select>
                         </div>
 
@@ -628,39 +652,6 @@ const ShiftManagementTab = ({ logic }: { logic: ReturnType<typeof useShiftManage
                                 {t.shiftAssign}
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── UNASSIGNED KTVs WARNING ── */}
-            {unassignedStaff.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-3xl overflow-hidden">
-                    <div className="px-5 py-4 border-b border-amber-200 flex items-center gap-2">
-                        <AlertTriangle size={18} className="text-amber-600" />
-                        <h3 className="text-base font-bold text-amber-800">KTV chưa được gán ca</h3>
-                        <span className="ml-auto bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                            {unassignedStaff.length}
-                        </span>
-                    </div>
-                    <div className="divide-y divide-amber-100">
-                        {unassignedStaff.map(staff => (
-                            <div key={staff.id} className="px-5 py-3.5 flex items-center gap-3">
-                                <div className="w-9 h-9 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 font-bold text-xs shrink-0">
-                                    {staff.full_name?.charAt(0) || '?'}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-bold text-sm text-gray-900 truncate">{staff.full_name}</p>
-                                    <p className="text-[10px] text-gray-400">{staff.id}</p>
-                                </div>
-                                <button
-                                    onClick={() => openAssignModal(staff.id, staff.full_name)}
-                                    className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-colors"
-                                >
-                                    <UserPlus size={13} />
-                                    Gán ca
-                                </button>
-                            </div>
-                        ))}
                     </div>
                 </div>
             )}
