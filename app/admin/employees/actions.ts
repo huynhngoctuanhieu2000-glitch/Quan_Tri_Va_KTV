@@ -120,6 +120,62 @@ export async function createStaffMember(formData: any) {
     }
 }
 
+export async function updateStaffMember(id: string, updates: any) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        // 1. Map camelCase (from Modal) to snake_case (for DB) if needed
+        // The modal might pass Employee type (camelCase)
+        const staffPayload: any = {};
+        if (updates.name !== undefined) staffPayload.full_name = updates.name;
+        if (updates.status !== undefined) staffPayload.status = updates.status === 'active' ? 'ĐANG LÀM' : 'ĐÃ NGHỈ';
+        if (updates.dob !== undefined) staffPayload.birthday = updates.dob;
+        if (updates.gender !== undefined) staffPayload.gender = updates.gender;
+        if (updates.idCard !== undefined) staffPayload.id_card = updates.idCard;
+        if (updates.phone !== undefined) staffPayload.phone = updates.phone;
+        if (updates.email !== undefined) staffPayload.email = updates.email;
+        if (updates.bankAccount !== undefined) staffPayload.bank_account = updates.bankAccount;
+        if (updates.bankName !== undefined) staffPayload.bank_name = updates.bankName;
+        if (updates.photoUrl !== undefined) staffPayload.avatar_url = updates.photoUrl;
+        if (updates.position !== undefined) staffPayload.position = updates.position;
+        if (updates.experience !== undefined) staffPayload.experience = updates.experience;
+        if (updates.joinDate !== undefined) staffPayload.join_date = updates.joinDate;
+        if (updates.height !== undefined) staffPayload.height = updates.height;
+        if (updates.weight !== undefined) staffPayload.weight = updates.weight;
+        if (updates.skills !== undefined) staffPayload.skills = updates.skills;
+
+        const { error: staffError } = await supabase
+            .from('Staff')
+            .update(staffPayload)
+            .eq('id', id);
+
+        if (staffError) throw new Error(`Lỗi cập nhật Staff: ${staffError.message}`);
+
+        // 2. If login info provided, update Users table
+        if (updates.password || updates.username) {
+            const userPayload: any = {};
+            if (updates.password) userPayload.password = updates.password;
+            if (updates.username) userPayload.username = updates.username;
+            if (updates.name) userPayload.fullName = updates.name;
+
+            const { error: userError } = await supabase
+                .from('Users')
+                .update(userPayload)
+                .eq('id', id);
+            
+            if (userError) console.warn("Could not update Users login info", userError);
+        }
+
+        revalidatePath('/admin/employees');
+        revalidatePath('/reception/ktv-hub');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error in updateStaffMember action:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function deleteStaffMember(id: string) {
     try {
         const supabase = getSupabaseAdmin();

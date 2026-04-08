@@ -10,7 +10,7 @@ import {
     ClipboardList, Users, CheckCircle2, Timer, Clock,
     MapPin, RotateCcw, ArrowDown, ArrowUp, ChevronRight, ChevronDown,
     UserCheck, Star, Moon, CalendarOff, Briefcase, ArrowRightLeft,
-    UserPlus, AlertTriangle,
+    UserPlus, AlertTriangle, Award, Camera,
     Check, X, Loader2, History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,6 +19,9 @@ import { vi } from 'date-fns/locale';
 
 import { supabase } from '@/lib/supabase';
 import { useLeaveManagement, useShiftManagement } from '@/app/reception/leave-management/LeaveManagement.logic';
+import { EmployeeDetailModal } from '@/components/EmployeeDetailModal';
+import { getStaffList, updateStaffMember } from '@/app/admin/employees/actions';
+import { Employee } from '@/lib/types';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -791,7 +794,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
 // TAB 3: DANH SÁCH KTV
 // ──────────────────────────────────────────────────────────────────────────────
 
-const KTVListTab = ({ staffs }: { staffs: StaffData[] }) => {
+const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) => void }) => {
     const typeofSkillValue = (val: any) => typeof val === 'string' ? val : 'basic';
     const skillEntries = (skills: any) =>
         Object.entries(skills || {}).filter(([, v]) => typeofSkillValue(v) === 'expert' || typeofSkillValue(v) === 'basic');
@@ -853,11 +856,18 @@ const KTVListTab = ({ staffs }: { staffs: StaffData[] }) => {
                             </div>
                         </div>
                         {/* Status dot mobile/desktop adapt */}
-                        <div className={`shrink-0 flex items-center justify-center p-3 sm:px-4 sm:border-l border-t sm:border-t-0 border-gray-100 ${emp.status === 'ĐANG LÀM' ? 'bg-emerald-50/30' : 'bg-gray-50'}`}>
+                        <div className={`shrink-0 flex flex-col gap-2 items-center justify-center p-3 sm:px-4 sm:border-l border-t sm:border-t-0 border-gray-100 ${emp.status === 'ĐANG LÀM' ? 'bg-emerald-50/30' : 'bg-gray-50'}`}>
                             <div className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm ${emp.status === 'ĐANG LÀM' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-500 border border-gray-300'
                                 }`}>
                                 {emp.status === 'ĐANG LÀM' ? '● Đang làm việc' : '○ Đã nghỉ'}
                             </div>
+                            <button
+                                onClick={() => onEdit(emp)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold text-[10px] transition-colors border border-indigo-100"
+                            >
+                                <Award size={14} />
+                                Sửa tay nghề
+                            </button>
                         </div>
                     </div>
                 );
@@ -1214,8 +1224,11 @@ export default function KTVHubPage() {
     const [mounted, setMounted] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>('turns');
 
-    const [staffs, setStaffs] = useState<StaffData[]>([]);
+    const [staffs, setStaffs] = useState<any[]>([]);
     const [loadingStaff, setLoadingStaff] = useState(true);
+
+    const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -1225,18 +1238,64 @@ export default function KTVHubPage() {
     const fetchStaff = async () => {
         setLoadingStaff(true);
         try {
-            const { data, error } = await supabase.from('Staff').select('*');
-            if (error) {
-                console.error("❌ [KTVHub] Error fetching staff:", error);
-            }
-            if (data) {
-                setStaffs(data);
-                console.log(`✅ [KTVHub] Fetched ${data.length} staff members`);
+            const res = await getStaffList();
+            if (res.success && res.data) {
+                setStaffs(res.data);
+                console.log(`✅ [KTVHub] Fetched ${res.data.length} staff members`);
+            } else if (res.error) {
+                console.error("❌ [KTVHub] Error fetching staff:", res.error);
             }
         } catch (e) {
             console.error("❌ [KTVHub] Unexpected error:", e);
         } finally {
             setLoadingStaff(false);
+        }
+    };
+
+    const handleEditSkills = (staff: any) => {
+        // Map Staff data from DB to Employee type for Modal
+        const emp: Employee = {
+            id: staff.id,
+            code: staff.id,
+            name: staff.full_name,
+            username: staff.username,
+            password: staff.password,
+            position: staff.position || 'Kỹ Thuật Viên',
+            experience: staff.experience || '1 năm',
+            status: staff.status === 'ĐANG LÀM' ? 'active' : 'inactive',
+            photoUrl: staff.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(staff.full_name)}&background=random`,
+            phone: staff.phone || '',
+            email: staff.email || '',
+            dob: staff.birthday || '',
+            gender: staff.gender || 'Nữ',
+            idCard: staff.id_card || '',
+            bankAccount: staff.bank_account || '',
+            bankName: staff.bank_name || '',
+            joinDate: staff.join_date || '',
+            height: staff.height || 0,
+            weight: staff.weight || 0,
+            baseSalary: 0,
+            commissionRate: 0,
+            rating: 5.0,
+            skills: staff.skills && Object.keys(staff.skills).length > 0 ? staff.skills : {
+                hairCut: 'none', hairExtensionShampoo: 'none', earCleaning: 'none',
+                machineShave: 'none', razorShave: 'none', facial: 'none', thaiBody: 'none',
+                shiatsuBody: 'none', oilBody: 'basic', hotStoneBody: 'none', scrubBody: 'none',
+                oilFoot: 'none', hotStoneFoot: 'none', acupressureFoot: 'none', heelScrub: 'none', maniPedi: 'none',
+                shampoo: 'basic'
+            }
+        };
+        setSelectedEmployee(emp);
+        setIsDetailOpen(true);
+    };
+
+    const handleUpdateSkills = async (updatedEmployee: Employee) => {
+        const res = await updateStaffMember(updatedEmployee.id, updatedEmployee);
+        if (res.success) {
+            fetchStaff();
+            setIsDetailOpen(false);
+        } else {
+            alert("Lỗi khi cập nhật tay nghề: " + res.error);
         }
     };
 
@@ -1301,11 +1360,20 @@ export default function KTVHubPage() {
                             <>
                                 {activeTab === 'turns' && <TurnTab staffs={staffs} />}
                                 {activeTab === 'leave-off' && <LeaveOffTab />}
-                                {activeTab === 'ktv-list' && <KTVListTab staffs={staffs} />}
+                                {activeTab === 'ktv-list' && <KTVListTab staffs={staffs} onEdit={handleEditSkills} />}
                             </>
                         )}
                     </motion.div>
                 </AnimatePresence>
+
+                {/* Modal Sửa Tay Nghề / Chi Tiết */}
+                <EmployeeDetailModal
+                    key={selectedEmployee?.id || 'none'}
+                    employee={selectedEmployee}
+                    isOpen={isDetailOpen}
+                    onClose={() => setIsDetailOpen(false)}
+                    onUpdate={handleUpdateSkills}
+                />
             </div>
         </AppLayout>
     );
