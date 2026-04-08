@@ -7,6 +7,15 @@ import { supabase } from '@/lib/supabase';
 // 🔧 CONFIGURATION
 const GPS_TIMEOUT_MS = 10000;
 const GPS_HIGH_ACCURACY = true;
+// VN timezone offset
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+// Shift end times (must match API SHIFT_TYPES config)
+const SHIFT_END_TIMES: Record<string, string> = {
+    SHIFT_1: '17:00',
+    SHIFT_2: '19:00',
+    SHIFT_3: '00:00', // treated as 24:00 of the same day
+};
 
 // --- TYPES ---
 export type CheckStatus = 'IDLE' | 'LOADING_GPS' | 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CHECKED_OUT';
@@ -32,6 +41,10 @@ export const useKTVAttendance = () => {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
+
+    // Shift timing state
+    const [activeShiftType, setActiveShiftType] = useState<string | null>(null);
+    const [isLoadingShift, setIsLoadingShift] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -69,6 +82,30 @@ export const useKTVAttendance = () => {
 
         fetchStatus();
     }, [user?.id]);
+
+    // Fetch active shift when CONFIRMED (to validate checkout time)
+    useEffect(() => {
+        if (checkStatus !== 'CONFIRMED' || !user?.id) return;
+
+        const fetchShift = async () => {
+            setIsLoadingShift(true);
+            try {
+                const res = await fetch(`/api/ktv/shift?employeeId=${user.id}`);
+                const result = await res.json();
+                if (result.success && result.data?.currentShift) {
+                    setActiveShiftType(result.data.currentShift.shiftType);
+                } else {
+                    setActiveShiftType(null); // no shift assigned → allow checkout
+                }
+            } catch {
+                setActiveShiftType(null);
+            } finally {
+                setIsLoadingShift(false);
+            }
+        };
+
+        fetchShift();
+    }, [checkStatus, user?.id]);
 
     // --- Realtime subscription ---
     useEffect(() => {
@@ -182,6 +219,43 @@ export const useKTVAttendance = () => {
 
     const canAccessPage = hasPermission('ktv_attendance');
 
+    /**
+     * Compute whether KTV is allowed to check out right now.
+     * - If no shift assigned (activeShiftType = null) → allow (fallback)
+     * - SHIFT_3 ends at "00:00" → treated as 24:00 (next midnight) of the shift day
+     * - No early checkout allowed: must be >= end time exactly
+     */
+    const { canCheckOut, checkoutBlockedUntil } = (() => {
+        if (!activeShiftType || isLoadingShift) return { canCheckOut: true, checkoutBlockedUntil: null };
+
+        const endTimeStr = SHIFT_END_TIMES[activeShiftType];
+        if (!endTimeStr) return { canCheckOut: true, checkoutBlockedUntil: null };
+
+        const vnNow = new Date(Date.now() + VN_OFFSET_MS);
+        const [endHour, endMin] = endTimeStr.split(':').map(Number);
+
+        let endMs: number;
+        if (activeShiftType === 'SHIFT_3' && endHour === 0 && endMin === 0) {
+            // 00:00 = midnight = start of next day → 24h from today 00:00 VN
+            const todayMidnight = new Date(vnNow);
+            todayMidnight.setUTCHours(todayMidnight.getUTCHours() - (VN_OFFSET_MS / 3600000)); // back to UTC
+            const vnMidnight = new Date(`${vnNow.toISOString().slice(0, 10)}T00:00:00+07:00`);
+            endMs = vnMidnight.getTime() + 24 * 60 * 60 * 1000; // next midnight VN
+        } else {
+            const vnEndStr = `${vnNow.toISOString().slice(0, 10)}T${endTimeStr}:00+07:00`;
+            endMs = new Date(vnEndStr).getTime();
+        }
+
+        const nowMs = Date.now();
+        const allowed = nowMs >= endMs;
+        const displayTime = endTimeStr === '00:00' ? '00:00' : endTimeStr;
+
+        return {
+            canCheckOut: allowed,
+            checkoutBlockedUntil: allowed ? null : displayTime,
+        };
+    })();
+
     return {
         checkStatus,
         currentRecord,
@@ -190,6 +264,11 @@ export const useKTVAttendance = () => {
         initialLoading,
         mapsUrl,
         canAccessPage,
+        // Shift checkout control
+        canCheckOut,
+        checkoutBlockedUntil,
+        isLoadingShift,
+        activeShiftType,
         handleAttendance,
         handleRetry,
     };

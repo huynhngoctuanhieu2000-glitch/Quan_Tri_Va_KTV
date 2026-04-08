@@ -27,6 +27,9 @@ export const t = {
     viewMapLocation: 'Xem vị trí',
     shiftStart: (time: string) => `Vào ca: ${time}`,
     checkOut: 'TAN CA',
+    checkOutPhotoOptional: 'Chụp ảnh (tùy chọn)',
+    cannotCheckOutYet: (time: string) => `Chưa tới giờ tan ca. Bạn có thể tan ca từ ${time}`,
+    noShiftAssigned: 'Bạn chưa được gán ca — vui lòng liên hệ quản lý.',
 
     // Rejected
     rejectedTitle: '❌ Admin đã từ chối',

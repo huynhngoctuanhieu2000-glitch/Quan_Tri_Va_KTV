@@ -40,6 +40,12 @@
 - **Đang sửa**: `app/ktv/dashboard/page.tsx`, `app/ktv/dashboard/KTVDashboard.logic.ts`
 - **Trạng thái**: 🔴 Xong
 
+### Nâng Cấp Set Ca & Chấm Công KTV
+- **Conversation**: `de9356f5-e495-4e93-8bb0-392015b29fc0`
+- **Đang sửa**: (xem danh sách bên dưới)
+- **Trạng thái**: 🔴 Xong
+
+
 ---
 
 ## 📜 Quy tắc phối hợp
@@ -58,4 +64,4 @@
 | 2026-03-23 | `9a73d883` | Kiểm tra tiến độ | `RevenueReport.logic.ts`, `page.tsx`, `api/finance/reports/route.ts` |
 | 2026-03-27 | `98dc5a4b` | Thêm nút chọn tất cả | `page.tsx`, `KTVDashboard.logic.ts` |
 | 2026-03-27 | `98dc5a4b` | Hotfix hiển thị "Toàn thân" | `page.tsx` |
-| 2026-03-27 | `d66424b4` | Tạo trang nhận đơn Web Booking | `reception/web-booking/*`, `reception/dispatch/actions.ts`, `Sidebar.tsx` |
+| 2026-04-08 | `de9356f5` | Dropdown set ca KTV, bỏ bắt buộc ảnh tan ca, giới hạn đúng giờ tan ca, danh sách KTV chưa có ca | `leave-management/*`, `attendance/*`, `api/staff/list` |

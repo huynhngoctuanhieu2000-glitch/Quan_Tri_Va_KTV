@@ -3,6 +3,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
+// --- TYPES ---
+export interface StaffOption {
+    id: string;
+    full_name: string;
+}
+
 // 🔧 CONFIGURATION
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
@@ -229,6 +235,10 @@ export const useShiftManagement = () => {
     const [isLoadingShifts, setIsLoadingShifts] = useState(true);
     const [shiftActionLoading, setShiftActionLoading] = useState<Record<string, string>>({});
 
+    // Staff list for dropdown
+    const [staffList, setStaffList] = useState<StaffOption[]>([]);
+    const [isLoadingStaff, setIsLoadingStaff] = useState(false);
+
     // Assign modal state
     const [assignModalOpen, setAssignModalOpen] = useState(false);
     const [assignEmployeeId, setAssignEmployeeId] = useState('');
@@ -255,7 +265,24 @@ export const useShiftManagement = () => {
         }
     }, []);
 
+    // Fetch all active staff for dropdown
+    const fetchStaffList = useCallback(async () => {
+        setIsLoadingStaff(true);
+        try {
+            const res = await fetch('/api/staff/list');
+            const result = await res.json();
+            if (result.success) {
+                setStaffList(result.data || []);
+            }
+        } catch (err) {
+            console.error('❌ [ShiftManagement] Fetch staff error:', err);
+        } finally {
+            setIsLoadingStaff(false);
+        }
+    }, []);
+
     useEffect(() => { fetchShifts(); }, [fetchShifts]);
+    useEffect(() => { fetchStaffList(); }, [fetchStaffList]);
 
     // Approve / Reject shift change
     const handleShiftAction = async (shiftId: string, action: 'APPROVE' | 'REJECT') => {
@@ -283,13 +310,16 @@ export const useShiftManagement = () => {
     const handleAssignShift = async () => {
         if (!assignEmployeeId || !assignShiftType) return;
         setIsAssigning(true);
+        // Resolve employee name from staffList
+        const selectedStaff = staffList.find(s => s.id === assignEmployeeId);
+        const resolvedName = selectedStaff?.full_name || assignEmployeeId;
         try {
             const res = await fetch('/api/ktv/shift', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     employeeId: assignEmployeeId,
-                    employeeName: assignEmployeeName || assignEmployeeId,
+                    employeeName: resolvedName,
                     shiftType: assignShiftType,
                     assignedByAdmin: true,
                     adminId: user?.id,
@@ -319,6 +349,18 @@ export const useShiftManagement = () => {
         setAssignModalOpen(true);
     };
 
+    // Computed: KTVs who have an ACTIVE shift (by employeeId)
+    const assignedEmployeeIds = useMemo(
+        () => new Set(allShifts.map(s => s.employeeId)),
+        [allShifts]
+    );
+
+    // KTVs without any active shift assignment
+    const unassignedStaff = useMemo(
+        () => staffList.filter(s => !assignedEmployeeIds.has(s.id)),
+        [staffList, assignedEmployeeIds]
+    );
+
     return {
         allShifts,
         pendingShifts,
@@ -326,6 +368,10 @@ export const useShiftManagement = () => {
         shiftActionLoading,
         handleShiftAction,
         fetchShifts,
+        // Staff dropdown
+        staffList,
+        isLoadingStaff,
+        unassignedStaff,
         // Assign modal
         assignModalOpen,
         setAssignModalOpen,

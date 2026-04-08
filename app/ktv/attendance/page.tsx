@@ -19,6 +19,9 @@ const KTVAttendancePage = () => {
         initialLoading,
         mapsUrl,
         canAccessPage,
+        canCheckOut,
+        checkoutBlockedUntil,
+        isLoadingShift,
         handleAttendance,
         handleRetry,
     } = useKTVAttendance();
@@ -198,9 +201,23 @@ const KTVAttendancePage = () => {
                                     </p>
                                 )}
                             </div>
+                            {/* Checkout time restriction warning */}
+                            {isLoadingShift ? (
+                                <div className="w-full flex items-center justify-center gap-2 py-3 text-gray-400 text-sm">
+                                    <Loader2 size={16} className="animate-spin" />
+                                    Đang kiểm tra giờ ca...
+                                </div>
+                            ) : !canCheckOut && checkoutBlockedUntil ? (
+                                <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center space-y-2">
+                                    <p className="text-amber-700 text-sm font-semibold">
+                                        {t.cannotCheckOutYet(checkoutBlockedUntil)}
+                                    </p>
+                                </div>
+                            ) : null}
                             <button
                                 onClick={() => openForm('CHECK_OUT')}
-                                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2"
+                                disabled={!canCheckOut || isLoadingShift}
+                                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                             >
                                 <LogOut size={22} /> {t.checkOut}
                             </button>
@@ -259,7 +276,11 @@ const KTVAttendancePage = () => {
                             
                             {/* Camera input */}
                             <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-700 block">Chụp ảnh minh chứng (*)</label>
+                                <label className="text-sm font-semibold text-gray-700 block">
+                                    {formType === 'CHECK_OUT'
+                                        ? t.checkOutPhotoOptional
+                                        : 'Chụp ảnh minh chứng (*)'}
+                                </label>
                                 {!photoSrc ? (
                                     <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 focus:ring-2 focus:ring-emerald-500 transition-all rounded-2xl cursor-pointer">
                                         <Camera size={36} className="text-gray-400 mb-2" />
@@ -292,7 +313,7 @@ const KTVAttendancePage = () => {
                                 <button onClick={() => setIsFormOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
                                 <button 
                                    onClick={handleSubmitForm}
-                                   disabled={!photoSrc || (formType === 'LATE_CHECKIN' && !reason.trim())}
+                                   disabled={(formType !== 'CHECK_OUT' && !photoSrc) || (formType === 'LATE_CHECKIN' && !reason.trim())}
                                    className="flex-1 py-3.5 bg-emerald-600 active:scale-95 transition-transform text-white rounded-xl font-bold disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2">
                                     <CheckCircle2 size={18} /> Gửi
                                 </button>
