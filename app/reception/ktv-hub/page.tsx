@@ -7,20 +7,22 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import {
-    ClipboardList, Camera, Users, CheckCircle2, Timer, Clock,
+    ClipboardList, Users, CheckCircle2, Timer, Clock,
     MapPin, RotateCcw, ArrowDown, ArrowUp, ChevronRight, ChevronDown,
-    UserCheck, Wifi, WifiOff, Star, Moon,
+    UserCheck, Star, Moon, CalendarOff, Briefcase, ArrowRightLeft,
+    UserPlus, AlertTriangle,
     Check, X, Loader2, History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import Image from 'next/image';
 import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 import { supabase } from '@/lib/supabase';
+import { useLeaveManagement, useShiftManagement } from '@/app/reception/leave-management/LeaveManagement.logic';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Tab = 'turns' | 'attendance' | 'ktv-list';
+type Tab = 'turns' | 'leave-off' | 'ktv-list';
 
 type StaffData = {
     id: string;
@@ -67,7 +69,7 @@ const ATT_OPTIONS: { id: AttendanceStatus; label: string; color: string }[] = [
 ];
 const TABS: { id: Tab; label: string; icon: React.ReactNode; short: string }[] = [
     { id: 'turns', label: 'Sổ Tua', short: 'Sổ tua', icon: <ClipboardList size={16} /> },
-    { id: 'attendance', label: 'Điểm Danh', short: 'Chấm công', icon: <Camera size={16} /> },
+    { id: 'leave-off', label: 'Lịch OFF & Ca', short: 'Lịch OFF', icon: <CalendarOff size={16} /> },
     { id: 'ktv-list', label: 'Danh Sách KTV', short: 'DS KTV', icon: <Users size={16} /> },
 ];
 
@@ -872,6 +874,333 @@ const KTVListTab = ({ staffs }: { staffs: StaffData[] }) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
+// TAB: LỊCH OFF & CA (from leave-management)
+// ──────────────────────────────────────────────────────────────────────────────
+
+const SHIFT_LABELS_HUB: Record<string, string> = {
+    SHIFT_1: 'Ca 1 (09:00 - 17:00)',
+    SHIFT_2: 'Ca 2 (11:00 - 19:00)',
+    SHIFT_3: 'Ca 3 (17:00 - 00:00)',
+};
+const SHIFT_COLORS_HUB: Record<string, { bg: string; text: string; border: string }> = {
+    SHIFT_1: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+    SHIFT_2: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+    SHIFT_3: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+};
+
+const LeaveOffTab = () => {
+    const leaveLogic = useLeaveManagement();
+    const shiftLogic = useShiftManagement();
+
+    const {
+        isLoading, pendingList, processedList, actionLoading,
+        viewMode, changeViewMode, offset, setOffset, rangeLabel,
+        handleAction, handleDelete,
+    } = leaveLogic;
+
+    const {
+        allShifts, pendingShifts, isLoadingShifts, shiftActionLoading,
+        handleShiftAction, staffList, isLoadingStaff, unassignedStaff,
+        assignModalOpen, setAssignModalOpen, assignEmployeeId, setAssignEmployeeId,
+        assignShiftType, setAssignShiftType, isAssigning, handleAssignShift, openAssignModal,
+    } = shiftLogic;
+
+    // Inner sub-tab: 'off' | 'shift'
+    const [subTab, setSubTab] = React.useState<'off' | 'shift'>('off');
+
+    const formatLeaveDate = (d: string) => {
+        try { return format(new Date(d + 'T00:00:00'), 'EEEE, dd/MM', { locale: vi }); }
+        catch { return d; }
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* Sub-tab switcher */}
+            <div className="flex bg-gray-100 rounded-2xl p-1 gap-1">
+                <button
+                    onClick={() => setSubTab('off')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'off' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    <CalendarOff size={15} /> Lịch OFF
+                </button>
+                <button
+                    onClick={() => setSubTab('shift')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'shift' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    <Briefcase size={15} /> Phân Ca
+                    {pendingShifts.length > 0 && (
+                        <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                            {pendingShifts.length}
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* ── OFF SUB-TAB ── */}
+            {subTab === 'off' && (
+                <div className="space-y-4">
+                    {/* Date navigator */}
+                    <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => setOffset(prev => prev - 1)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                            <ChevronRight size={18} className="text-gray-500 rotate-180" />
+                        </button>
+                        <button onClick={() => setOffset(0)} className="text-sm font-bold text-gray-800 px-4 py-1.5 bg-white border border-gray-200 rounded-xl shadow-sm min-w-[160px] text-center hover:bg-gray-50 transition-colors">
+                            {rangeLabel}
+                        </button>
+                        <button onClick={() => setOffset(prev => prev + 1)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                            <ChevronRight size={18} className="text-gray-500" />
+                        </button>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                            <Loader2 size={20} className="animate-spin" /> Đang tải...
+                        </div>
+                    ) : (
+                        <>
+                            {/* Pending */}
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                                    <Clock size={16} className="text-amber-500" />
+                                    <h3 className="text-sm font-bold text-gray-900">Chờ Duyệt</h3>
+                                    {pendingList.length > 0 && (
+                                        <span className="ml-auto bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                            {pendingList.length}
+                                        </span>
+                                    )}
+                                </div>
+                                {pendingList.length === 0 ? (
+                                    <div className="text-center py-8">
+                                        <CalendarOff size={28} className="text-gray-300 mx-auto mb-2" />
+                                        <p className="text-sm text-gray-400">Không có yêu cầu chờ duyệt</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-gray-50">
+                                        {pendingList.map(leave => {
+                                            const ls = actionLoading[leave.id];
+                                            return (
+                                                <div key={leave.id} className="px-4 py-3 flex items-center gap-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-bold text-sm text-gray-900">{leave.employeeName}</p>
+                                                        <p className="text-xs text-gray-500 capitalize">{formatLeaveDate(leave.date)}</p>
+                                                        {leave.reason && <p className="text-xs text-gray-400 italic truncate">"{leave.reason}"</p>}
+                                                    </div>
+                                                    <div className="flex gap-1.5 shrink-0">
+                                                        <button onClick={() => handleAction(leave.id, 'APPROVE')} disabled={!!ls}
+                                                            className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50">
+                                                            {ls === 'APPROVE' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} strokeWidth={3} />}
+                                                        </button>
+                                                        <button onClick={() => handleAction(leave.id, 'REJECT')} disabled={!!ls}
+                                                            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-xl transition-all disabled:opacity-50">
+                                                            {ls === 'REJECT' ? <Loader2 size={13} className="animate-spin" /> : <X size={13} strokeWidth={3} />}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Processed */}
+                            {processedList.length > 0 && (
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                    <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                                        <History size={16} className="text-indigo-500" />
+                                        <h3 className="text-sm font-bold text-gray-900">Đã Xử Lý</h3>
+                                        <span className="ml-auto text-xs text-gray-400">{processedList.length} yêu cầu</span>
+                                    </div>
+                                    <div className="divide-y divide-gray-50">
+                                        {processedList.map(leave => (
+                                            <div key={leave.id} className="px-4 py-3 flex items-center gap-3">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-sm text-gray-900">{leave.employeeName}</p>
+                                                    <p className="text-xs text-gray-500 capitalize">{formatLeaveDate(leave.date)}</p>
+                                                </div>
+                                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${leave.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                    {leave.status === 'APPROVED' ? '✓ Duyệt' : '✗ Từ chối'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* ── SHIFT SUB-TAB ── */}
+            {subTab === 'shift' && (
+                <div className="space-y-4">
+                    {isLoadingShifts ? (
+                        <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                            <Loader2 size={20} className="animate-spin" /> Đang tải...
+                        </div>
+                    ) : (
+                        <>
+                            {/* Pending shift changes */}
+                            {pendingShifts.length > 0 && (
+                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                    <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                                        <ArrowRightLeft size={16} className="text-amber-500" />
+                                        <h3 className="text-sm font-bold text-gray-900">Yêu Cầu Đổi Ca</h3>
+                                        <span className="ml-auto bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full">{pendingShifts.length}</span>
+                                    </div>
+                                    <div className="divide-y divide-gray-50">
+                                        {pendingShifts.map(shift => {
+                                            const ls = shiftActionLoading[shift.id];
+                                            return (
+                                                <div key={shift.id} className="px-4 py-3 flex items-center gap-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-bold text-sm text-gray-900">{shift.employeeName}</p>
+                                                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                                            <span>{SHIFT_LABELS_HUB[shift.previousShift || ''] || 'Chưa có'}</span>
+                                                            <ChevronRight size={11} />
+                                                            <span className="font-bold text-indigo-600">{SHIFT_LABELS_HUB[shift.shiftType]}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1.5 shrink-0">
+                                                        <button onClick={() => handleShiftAction(shift.id, 'APPROVE')} disabled={!!ls}
+                                                            className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-50">
+                                                            {ls === 'approve' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} strokeWidth={3} />}
+                                                        </button>
+                                                        <button onClick={() => handleShiftAction(shift.id, 'REJECT')} disabled={!!ls}
+                                                            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-xl disabled:opacity-50">
+                                                            {ls === 'reject' ? <Loader2 size={13} className="animate-spin" /> : <X size={13} strokeWidth={3} />}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* All active shifts */}
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+                                    <Users size={16} className="text-indigo-500" />
+                                    <h3 className="text-sm font-bold text-gray-900">Ca Hiện Tại</h3>
+                                    <button onClick={() => openAssignModal()}
+                                        className="ml-auto flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-xl transition-colors">
+                                        <UserPlus size={12} /> Gán Ca
+                                    </button>
+                                </div>
+                                {allShifts.length === 0 ? (
+                                    <div className="text-center py-8">
+                                        <Briefcase size={28} className="text-gray-300 mx-auto mb-2" />
+                                        <p className="text-sm text-gray-400">Chưa có ca được gán</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-gray-50">
+                                        {allShifts.map(shift => {
+                                            const c = SHIFT_COLORS_HUB[shift.shiftType] || { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' };
+                                            return (
+                                                <div key={shift.id} className="px-4 py-3 flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
+                                                        {shift.employeeName?.charAt(0)}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-bold text-sm text-gray-900 truncate">{shift.employeeName}</p>
+                                                    </div>
+                                                    <div className={`px-2 py-1 rounded-xl text-xs font-bold ${c.bg} ${c.text} border ${c.border}`}>
+                                                        {SHIFT_LABELS_HUB[shift.shiftType]?.split(' ')[0] || shift.shiftType}
+                                                    </div>
+                                                    <button onClick={() => openAssignModal(shift.employeeId, shift.employeeName)}
+                                                        className="p-1.5 text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all">
+                                                        <ArrowRightLeft size={13} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Unassigned warning */}
+                            {unassignedStaff.length > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center gap-2">
+                                    <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+                                    <p className="text-sm text-amber-700 font-semibold">
+                                        {unassignedStaff.length} KTV chưa được gán ca
+                                    </p>
+                                    <button onClick={() => openAssignModal()}
+                                        className="ml-auto text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-xl shrink-0 transition-colors">
+                                        Gán ngay
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* Assign Modal */}
+            {assignModalOpen && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 shadow-2xl">
+                        <h3 className="text-lg font-black text-gray-900 text-center">Gán Ca KTV</h3>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-semibold text-gray-700 block">
+                                Chọn KTV
+                                {unassignedStaff.length > 0 && (
+                                    <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                        {unassignedStaff.length} chưa có ca
+                                    </span>
+                                )}
+                            </label>
+                            <select value={assignEmployeeId} onChange={e => setAssignEmployeeId(e.target.value)}
+                                disabled={isLoadingStaff}
+                                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                                <option value="">{isLoadingStaff ? 'Đang tải...' : '-- Chọn nhân viên --'}</option>
+                                {unassignedStaff.length > 0 && (
+                                    <optgroup label="⚠️ Chưa có ca">
+                                        {unassignedStaff.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.id})</option>)}
+                                    </optgroup>
+                                )}
+                                {staffList.filter(s => !unassignedStaff.find(u => u.id === s.id)).length > 0 && (
+                                    <optgroup label="✅ Đã có ca">
+                                        {staffList.filter(s => !unassignedStaff.find(u => u.id === s.id)).map(s => (
+                                            <option key={s.id} value={s.id}>{s.full_name} ({s.id})</option>
+                                        ))}
+                                    </optgroup>
+                                )}
+                            </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-semibold text-gray-700 block">Chọn Ca</label>
+                            <div className="space-y-2">
+                                {['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].map(shift => (
+                                    <button key={shift} type="button" onClick={() => setAssignShiftType(shift)}
+                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${assignShiftType === shift ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-100 bg-gray-50 text-gray-700 hover:border-gray-200'}`}>
+                                        <div className={`w-2.5 h-2.5 rounded-full ${shift === 'SHIFT_1' ? 'bg-blue-600' : shift === 'SHIFT_2' ? 'bg-amber-600' : 'bg-indigo-600'}`} />
+                                        <span className="text-sm font-bold">{SHIFT_LABELS_HUB[shift]}</span>
+                                        {assignShiftType === shift && <CheckCircle2 size={14} className="ml-auto text-indigo-500" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button onClick={() => setAssignModalOpen(false)}
+                                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
+                            <button onClick={handleAssignShift} disabled={!assignEmployeeId || !assignShiftType || isAssigning}
+                                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                                {isAssigning ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                Gán Ca
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -924,7 +1253,7 @@ export default function KTVHubPage() {
             <div className="max-w-3xl mx-auto space-y-5">
                 {/* Header */}
                 <div>
-                    <p className="text-xs text-gray-500">Sổ tua · Điểm danh · Danh sách kỹ thuật viên</p>
+                    <p className="text-xs text-gray-500">Sổ tua · Lịch OFF & Ca · Danh sách kỹ thuật viên</p>
                 </div>
 
                 {/* Tab Bar */}
@@ -966,7 +1295,7 @@ export default function KTVHubPage() {
                         ) : (
                             <>
                                 {activeTab === 'turns' && <TurnTab staffs={staffs} />}
-                                {activeTab === 'attendance' && <AttendanceTab staffs={staffs} />}
+                                {activeTab === 'leave-off' && <LeaveOffTab />}
                                 {activeTab === 'ktv-list' && <KTVListTab staffs={staffs} />}
                             </>
                         )}
