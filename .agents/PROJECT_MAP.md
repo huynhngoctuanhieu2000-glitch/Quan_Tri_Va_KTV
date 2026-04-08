@@ -23,7 +23,7 @@
 |------------------|---------------------|------------|----------------|
 | **KTV App** | Hệ thống xin nghỉ, Đổi ca, Check-in bằng hình ảnh | 🟡 Đang phát triển | `create_shift_system.sql` |
 | **Admin** | Lịch sử thông báo (Notification History) | 🟡 Đang phát triển | `Admin/notifications` |
-| **Reception**| Dashboard điều phối KTV (`DispatchSegmentRow`) | 🟡 Đang phát triển | `Reception/dispatch` |
+| **Reception**| Dashboard Vận Hành (Điều Phối + Giám Sát Đơn) | 🟢 Đã hoàn thành | `app/reception/dispatch` |
 
 ## 4. Roadmap / Checklist Chung
 - [ ] Chốt toàn bộ luồng Booking VIP cho khách.

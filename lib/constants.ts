@@ -2,8 +2,7 @@ import { ModuleId, ModuleDefinition } from './types';
 
 export const MODULES: ModuleDefinition[] = [
   { id: 'dashboard', name: 'Dashboard', group: 'Vận Hành' },
-  { id: 'dispatch_board', name: 'Điều Phối', group: 'Vận Hành' },
-  { id: 'order_management', name: 'Đơn Hàng', group: 'Vận Hành' },
+  { id: 'dispatch_board', name: 'Điều Phối & Giám Sát', group: 'Vận Hành' },
   { id: 'staff_notifications', name: 'Thông Báo', group: 'Vận Hành' },
   { id: 'customer_management', name: 'Khách Hàng', group: 'Vận Hành' },
   { id: 'revenue_reports', name: 'Báo Cáo', group: 'Tài Chính & Kế Toán' },

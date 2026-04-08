@@ -9,11 +9,12 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { DispatchServiceBlock } from './_components/DispatchServiceBlock';
+import { KanbanBoard } from './_components/KanbanBoard';
 import { getDispatchData, processDispatch, cancelBooking, updateBookingStatus, createQuickBooking } from './actions';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AddOrderModal } from './_components/AddOrderModal';
@@ -103,6 +104,7 @@ export default function DispatchBoardPage() {
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
   const { notifications, soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
   const [leftPanelTab, setLeftPanelTab] = useState<DispatchStatus>('pending');
+  const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR'>('DISPATCH');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -838,28 +840,30 @@ if (!hasPermission('dispatch_board')) {
             <div>
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
                 <span className="hidden lg:inline">Bảng Điều Phối Trung Tâm</span>
-                <div className="hidden sm:flex items-center gap-1.5 ml-2">
-                  {LEFT_TABS.map(tab => (
-                    <button 
-                      key={tab.id} 
-                      title={tab.label}
-                      onClick={() => setLeftPanelTab(tab.id)}
-                      className={`
-                        ${tab.badgeBg} ${tab.badgeText} 
-                        w-6 h-6 lg:w-7 lg:h-7 
-                        flex items-center justify-center 
-                        rounded-full font-black text-[10px] lg:text-xs 
-                        border border-current border-opacity-20 shadow-sm 
-                        transition-all hover:scale-110 active:scale-95 
-                        cursor-pointer
-                      `}
-                    >
-                      {orders.filter(o => o.dispatchStatus === tab.id).length}
-                    </button>
-                  ))}
+                <div className="hidden sm:flex items-center gap-1 ml-4 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200">
+                  <button
+                    onClick={() => setActiveMode('DISPATCH')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      activeMode === 'DISPATCH'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <LayoutList size={14} /> Điều Phối
+                  </button>
+                  <button
+                    onClick={() => setActiveMode('MONITOR')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      activeMode === 'MONITOR'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <Columns3 size={14} /> Giám Sát Đơn
+                  </button>
                 </div>
               </h1>
-              <p className="text-[10px] lg:text-xs text-gray-500 mt-1 font-medium hidden sm:block">Điều phối KTV & Phòng chuyên nghiệp</p>
+              <p className="text-[10px] lg:text-xs text-gray-500 mt-1 font-medium hidden sm:block">{activeMode === 'DISPATCH' ? 'Điều phối KTV & Phòng chuyên nghiệp' : 'Theo dõi tiến trình phục vụ đơn hàng'}</p>
             </div>
           </div>
 
@@ -892,6 +896,8 @@ if (!hasPermission('dispatch_board')) {
         </div>
 
         <div className="flex-1 flex flex-col lg:flex-row gap-5 overflow-hidden pb-4 sm:pb-0">
+          {activeMode === 'DISPATCH' ? (
+            <>
           {/* LEFT: Order Panel */}
           <div className={`${selectedOrderId ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 flex-1 lg:flex-none shrink-0 flex-col border border-gray-200 bg-white rounded-3xl shadow-sm transition-all min-h-0 overflow-hidden`}>
             <div className="p-4 border-b border-gray-100 bg-white shrink-0">
@@ -1083,6 +1089,19 @@ if (!hasPermission('dispatch_board')) {
               </div>
             )}
           </div>
+            </>
+          ) : (
+            <KanbanBoard 
+              orders={orders} 
+              onUpdateStatus={handleUpdateStatus} 
+              onOpenDetail={(id) => {
+                setSelectedOrderId(id);
+                setActiveMode('DISPATCH');
+              }}
+              selectedOrderId={selectedOrderId}
+            />
+          )}
+
         </div>
       </div>
 
