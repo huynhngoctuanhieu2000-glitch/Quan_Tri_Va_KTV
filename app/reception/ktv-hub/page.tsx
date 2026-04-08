@@ -1104,8 +1104,13 @@ const LeaveOffTab = () => {
                                                     <div className="flex-1 min-w-0">
                                                         <p className="font-bold text-sm text-gray-900 truncate">{shift.employeeName}</p>
                                                     </div>
-                                                    <div className={`px-2 py-1 rounded-xl text-xs font-bold ${c.bg} ${c.text} border ${c.border}`}>
-                                                        {SHIFT_LABELS_HUB[shift.shiftType]?.split(' ')[0] || shift.shiftType}
+                                                    <div className={`px-3 py-1.5 rounded-xl border ${c.bg} ${c.text} ${c.border} flex flex-col items-center min-w-[70px]`}>
+                                                        <span className="text-[10px] font-black leading-tight">
+                                                            {SHIFT_LABELS_HUB[shift.shiftType]?.split(' (')[0] || shift.shiftType}
+                                                        </span>
+                                                        <span className="text-[8px] font-bold opacity-70 leading-none mt-0.5">
+                                                            {SHIFT_LABELS_HUB[shift.shiftType]?.match(/\((.*)\)/)?.[1] || ''}
+                                                        </span>
                                                     </div>
                                                     <button onClick={() => openAssignModal(shift.employeeId, shift.employeeName)}
                                                         className="p-1.5 text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all">
