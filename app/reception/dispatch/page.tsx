@@ -258,6 +258,8 @@ export default function DispatchBoardPage() {
             rawStatus: b.status,
             hasAssignedKtv,
             accessToken: b.accessToken || null,
+            timeStart: b.timeStart || null,
+            timeEnd: b.timeEnd || null,
             services: (b.BookingItems || []).map((bi: any) => {
               const itemTurns = assignedTurns.filter((t: any) => {
                   if (!t.booking_item_id) return false;

@@ -17,6 +17,24 @@ const STATUS_CONFIG = [
 
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 
+const formatToHourMinute = (isoString?: string | null) => {
+    if (!isoString) return '--:--';
+    
+    // Nếu truyền vào định dạng HH:mm (ví dụ "17:40") thì trả về luôn
+    if (/^\d{1,2}:\d{2}$/.test(isoString)) return isoString;
+
+    let parseString = isoString;
+    // Fix timezone: Supabase trả về timestamp không có múi giờ (UTC),
+    // thêm 'Z' vào cuối để trình duyệt hiểu đúng là múi giờ UTC và parse thành Local (+7)
+    if (!isoString.endsWith('Z') && !isoString.includes('+')) {
+        parseString = isoString.replace(' ', 'T') + 'Z';
+    }
+
+    const d = new Date(parseString);
+    if (isNaN(d.getTime())) return isoString;
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
 interface KanbanBoardProps {
     orders: PendingOrder[];
     onUpdateStatus: (orderId: string, newStatus: string) => void;
@@ -116,6 +134,22 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
                                                         <p className="text-[9px] text-gray-400 font-black italic">+ {order.services.length - 2} dịch vụ</p>
                                                     )}
                                                 </div>
+
+                                                {(order.timeStart || order.timeEnd) && (
+                                                    <div className="flex items-center justify-between bg-indigo-50/50 rounded-xl px-4 py-2 mb-4 border border-indigo-100/50">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
+                                                            <span className="text-xs font-black text-indigo-700">{formatToHourMinute(order.timeStart)}</span>
+                                                        </div>
+                                                        <div className="text-indigo-300">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                                        </div>
+                                                        <div className="flex flex-col text-right">
+                                                            <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Kết thúc</span>
+                                                            <span className="text-xs font-black text-indigo-700">{formatToHourMinute(order.timeEnd)}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 <div className="flex items-center gap-2">
                                                     {cfg.next && (

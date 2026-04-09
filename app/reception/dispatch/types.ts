@@ -46,6 +46,8 @@ export interface PendingOrder {
   paymentMethod?: string;
   rawStatus?: string;
   hasAssignedKtv?: boolean;
+  timeStart?: string | null;
+  timeEnd?: string | null;
 }
 
 export type StaffData = {
