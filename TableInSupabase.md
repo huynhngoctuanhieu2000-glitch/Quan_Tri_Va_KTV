@@ -85,13 +85,23 @@
 
 | Cột | Kiểu | Mô tả chức năng |
 |-----|------|-----------------|
-| `id` | text PK | Mã dịch vụ |
+| `id` | text PK | Mã dịch vụ (VD: NHS0001) |
+| `code` | text | Mã (code) rút gọn của dịch vụ |
 | `nameVN` | text | Tên tiếng Việt |
 | `nameEN` | text | Tên tiếng Anh |
+| `nameCN` | text | Tên tiếng Trung |
+| `nameJP` | text | Tên tiếng Nhật |
+| `nameKR` | text | Tên tiếng Hàn |
+| `description` | jsonb | Mô tả dịch vụ đa ngôn ngữ |
+| `priceVND` | numeric | Giá dịch vụ VNĐ |
+| `priceUSD` | numeric | Giá dịch vụ USD |
 | `duration` | integer | Thời lượng (phút) — dùng cho timer |
-| `price` | numeric | Giá dịch vụ |
-| `procedureDesc` | text | Mô tả quy trình thực hiện |
-| `segments` | jsonb | Các bước trong quy trình |
+| `category` | text | Danh mục dịch vụ (VD: Body, Facial) |
+| `imageUrl` | text | URL ảnh minh họa (viết hoa chữ U) |
+| `isActive` | boolean | Cờ trạng thái hoạt động |
+| `focusConfig` | jsonb | Tùy chọn tập trung các vùng cơ thể |
+| `tags` | jsonb | Danh sách các Tag đa ngôn ngữ (VD: Mang thai) |
+| `comboTags` | jsonb | Mảng các combo tags (VD: ["body"]) |
 
 ---
 

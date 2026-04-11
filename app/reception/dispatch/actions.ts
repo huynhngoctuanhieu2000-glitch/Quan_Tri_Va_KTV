@@ -41,7 +41,7 @@ export async function getDispatchData(date: string) {
         // 4. Fetch Services FIRST to build map (safer than complex filtering)
         const { data: allServices, error: svcError } = await supabase
             .from('Services')
-            .select('id, code, nameVN, nameEN, duration, description') // Added description
+            .select('id, code, nameVN, nameEN, duration, description, category, priceVND, imageUrl')
             .limit(1000);
 
         if (svcError) {
@@ -362,9 +362,11 @@ export async function createQuickBooking(data: {
         if (sError) throw new Error(`Không tìm thấy dịch vụ: ${sError.message}`);
 
         // 3. Tạo Booking
+        const bookingId = crypto.randomUUID();
         const { data: booking, error: bError } = await supabase
             .from('Bookings')
             .insert({
+                id: bookingId,
                 customerName: data.customerName,
                 customerPhone: data.customerPhone || '',
                 customerEmail: data.customerEmail || '',
@@ -385,11 +387,11 @@ export async function createQuickBooking(data: {
         const { error: iError } = await supabase
             .from('BookingItems')
             .insert({
+                id: crypto.randomUUID(),
                 bookingId: booking.id,
                 serviceId: data.serviceId,
                 quantity: 1,
                 price: svc.priceVND || 0,
-                createdAt: new Date().toISOString(),
             });
 
         if (iError) throw iError;

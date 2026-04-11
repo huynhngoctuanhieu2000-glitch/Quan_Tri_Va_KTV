@@ -8,12 +8,12 @@ import { PendingOrder } from '../types';
 type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'DONE' | 'COMPLETED' | 'FEEDBACK';
 
 const STATUS_CONFIG = [
-    { id: 'PREPARING' as OrderStatus, label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as OrderStatus, nextLabel: '▶️ Đang làm' },
-    { id: 'IN_PROGRESS' as OrderStatus, label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'COMPLETED' as OrderStatus, nextLabel: '🧹 Dọn phòng' },
-    { id: 'COMPLETED' as OrderStatus, label: 'Đang Dọn Phòng', shortLabel: 'Đang dọn', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Xong dọn phòng' },
-    { id: 'DONE' as OrderStatus, label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: 'FEEDBACK' as OrderStatus, nextLabel: '⭐ Nhận xét' },
-    { id: 'FEEDBACK' as OrderStatus, label: 'Nhận xét', shortLabel: 'Nhận xét', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: null, nextLabel: null },
-] as const;
+    { id: 'PREPARING' as OrderStatus, dispatchModeId: 'dispatched', label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as OrderStatus, nextLabel: '▶️ Bắt đầu làm' },
+    { id: 'IN_PROGRESS' as OrderStatus, dispatchModeId: 'in_progress', label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'COMPLETED' as OrderStatus, nextLabel: '🧹 Chuyển qua dọn' },
+    { id: 'COMPLETED' as OrderStatus, dispatchModeId: 'cleaning', label: 'Đang Dọn Phòng', shortLabel: 'Đang dọn', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'FEEDBACK' as OrderStatus, nextLabel: '⭐ Nhận xét' },
+    { id: 'FEEDBACK' as OrderStatus, dispatchModeId: 'waiting_rating', label: 'Chờ Đánh Giá', shortLabel: 'Nhận xét', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Xong' },
+    { id: 'DONE' as OrderStatus, dispatchModeId: 'done', label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
+];
 
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 
@@ -59,7 +59,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
     return (
         <div className="flex-1 flex gap-4 overflow-x-auto pb-6 no-scrollbar min-h-0">
             {STATUS_CONFIG.map(column => {
-                const columnOrders = orders.filter(o => (o.rawStatus || 'PREPARING') === column.id);
+                const columnOrders = orders.filter(o => o.dispatchStatus === column.dispatchModeId);
                 return (
                     <div
                         key={column.id}
@@ -83,6 +83,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
                             <AnimatePresence mode="popLayout">
                                 {columnOrders.map(order => {
                                     const cfg = getStatusConfig(order.rawStatus || 'PREPARING');
+                                    // Use cfg from dispatchStatus mapping to display the correct next button if rawStatus varies slightly
+                                    const currentCfg = STATUS_CONFIG.find(c => c.dispatchModeId === order.dispatchStatus) || cfg;
                                     const isSelected = selectedOrderId === order.id;
 
                                     return (
@@ -152,12 +154,12 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
                                                 )}
 
                                                 <div className="flex items-center gap-2">
-                                                    {cfg.next && (
+                                                    {currentCfg.next && (
                                                         <button
-                                                            onClick={e => { e.stopPropagation(); advanceStatus(order.id); }}
-                                                            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${cfg.activeBg} text-white hover:opacity-90 active:scale-95`}
+                                                            onClick={e => { e.stopPropagation(); onUpdateStatus(order.id, currentCfg.next); }}
+                                                            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${currentCfg.activeBg || 'bg-indigo-600'} text-white hover:opacity-90 active:scale-95`}
                                                         >
-                                                            {cfg.nextLabel}
+                                                            {currentCfg.nextLabel}
                                                         </button>
                                                     )}
                                                     <button

@@ -9,7 +9,8 @@ interface ServiceOption {
   nameVN: string;
   nameEN?: string;
   name?: string;
-  price: number;
+  price?: number;
+  priceVND?: number;
   duration: number;
   category?: string;
   image_url?: string;
@@ -106,7 +107,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: ANIMATION_DURATION, ease: 'easeOut' }}
-            className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden border border-gray-100 flex flex-col"
+            className="bg-white w-full max-w-4xl max-h-[95vh] rounded-[32px] shadow-2xl overflow-hidden border border-gray-100 flex flex-col"
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-rose-500 to-rose-600 px-8 py-6 flex items-center justify-between text-white shrink-0">
@@ -233,8 +234,8 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                   </div>
                   
                   {/* Search & Filter */}
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
+                  <div className="flex flex-col gap-3">
+                    <div className="relative w-full">
                       <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input 
                         type="text"
@@ -265,7 +266,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
 
                 {/* Service List */}
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {filteredServices.length > 0 ? (
                       filteredServices.map(svc => (
                         <button
@@ -294,11 +295,18 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                               {svc.nameVN || svc.nameEN || svc.name}
                             </h4>
                             <div className="flex items-center gap-3 mt-1 text-[11px] font-black uppercase tracking-tight">
-                              <span className="text-rose-500">{(svc.price || 0).toLocaleString()}đ</span>
+                              <span className="text-rose-500">{(svc.priceVND || svc.price || 0).toLocaleString()}đ</span>
                               <span className="text-gray-300 flex items-center gap-1">
                                 <Clock size={10} /> {svc.duration}p
                               </span>
                             </div>
+                            {svc.category && (
+                              <div className="mt-1.5">
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${serviceId === svc.id ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-400'}`}>
+                                  {svc.category}
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {serviceId === svc.id && (

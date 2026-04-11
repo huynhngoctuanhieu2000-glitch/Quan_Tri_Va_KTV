@@ -10,10 +10,12 @@
 1.  **Language**: 
     - **Conversation/Plans**: Vietnamese (Tiếng Việt) - for clear explanation to the user.
     - **Code/Comments/Commits**: English - for international standards.
-2.  **Tone**: Professional, concise, and solution-oriented.
+2.  **Tone**: Professional, AI Sparring Partner.
 
-# 🚀 WORKFLOW RULES (CRITICAL)
-1.  **PLAN FIRST**: Before writing any code, you MUST output a concise, bulleted plan (in Vietnamese) explaining your approach. Wait for user confirmation if the change is complex.
+# 🚀 WORKFLOW RULES (CRITICAL - NO GLOBAL SEARCH)
+1.  **NO AUTO SEARCHING**: Đã vô hiệu hóa việc tự động tìm kiếm (grep search) toàn codebase.
+2.  **PLAN FIRST & CHỜ DUYỆT BẮT BUỘC**: Before writing any code, you MUST output a plan in Vietnamese. **You MUST STOP and wait for user's explicit OK/Duyệt before editing files.** 
+3.  **HỎI NHƯ PARTNER**: Đặt câu hỏi khai thác yêu cầu thay vì đoán.
 2.  **GIT SAFETY**:
     - NEVER automatically push code.
     - After completing a task, explicitly remind the user: *"Please check the code and commit changes before moving on."*
@@ -77,10 +79,10 @@
   ├── 📄 Header.i18n.ts   (Text Dictionary: export const t = { ... })
   └── 📄 Header.logic.ts  (Business Logic hooks)
 
-# 🔒 MULTI-CONVERSATION COORDINATION (CRITICAL)
+# 🔒 MULTI-CONVERSATION COORDINATION (OPTIONAL)
 > Khi user chạy nhiều conversation Antigravity song song trên cùng 1 project.
 
-1.  **CHECK TRƯỚC KHI EDIT**: Before editing ANY file, ALWAYS read `.agents/coordination.md` first to check if that file is being edited by another conversation.
+1.  **CHECK TRƯỚC KHI EDIT**: Nếu dự án đang làm nhiều tính năng lớn song song, hãy đọc `.agents/coordination.md`. Với các bug fix nhỏ, có thể bỏ qua bước này để tiết kiệm thời gian.
 2.  **KHÓA FILE**: When starting work, UPDATE `.agents/coordination.md` with:
     - Your conversation description (e.g., "Sửa KTV Dashboard")
     - List of files you will modify
@@ -96,10 +98,10 @@
 2. **Kế hoạch triển khai (Implementation Plan):** Khi một bản kế hoạch (plan) được user ĐỒNG Ý / CHẤPরাপ NHẬN để tiến hành code, bạn BẮT BUỘC phải lưu lại bản kế hoạch đó vào một file lấy theo **Tên nhiệm vụ** (ví dụ: `plan_tao_api_dat_lich.md`).
 3. **Mục đích:** Đảm bảo không bị mất bối cảnh (context) khi chat dài, dễ dàng cho user đọc lại tiến trình làm việc và các quyết định kỹ thuật đã chốt.
 
-# 🔒 MULTI-CONVERSATION COORDINATION (CRITICAL)
+# 🔒 MULTI-CONVERSATION COORDINATION (OPTIONAL)
 
 ## Rule: File Locking & Coordination
-Before editing ANY file in this project, you MUST:
+Chỉ áp dụng khi triển khai các tính năng lớn. Nếu chỉ code hoặc fix lỗi thông thường, **hãy bỏ qua quy trình khóa file này** để xử lý tốc độ cao:
 
 1. **READ** the file `.agents/coordination.md` to check which files are currently being edited by other conversations.
 2. **If a file is listed as "in-use"** (🟢 Đang làm) by another conversation:
@@ -164,8 +166,8 @@ Khi code có thay đổi liên quan đến **database** (Supabase), bạn **BẮ
 
 
 
-# 🗺️ PROJECT MAP & CONTEXT SAVING (CRITICAL)
+# 🗺️ PROJECT MAP & CONTEXT SAVING (OPTIONAL)
 
 ## Rule: Cập nhật và tham chiếu Bản Đồ Dự Án
-1. **Tham khảo:** Khi bắt đầu phát triển một tính năng mới, bạn BẮT BUỘC phải đọc file `PROJECT_MAP.md` ở thư mục gốc để nắm cấu trúc, tiến độ hiện tại và tránh quét lại source code gây tốn token.
-2. **Cập nhật:** Sau khi hoàn thành một tính năng, xử lý xong một module hoặc thay đổi database, thuật toán lõi, bạn BẮT BUỘC phải cập nhật file `PROJECT_MAP.md`.
+1. **Tham khảo:** Không bắt buộc phải đọc `PROJECT_MAP.md` ở mọi cuộc trò chuyện. Chỉ tiến hành đọc khi làm tính năng hệ thống hoàn toàn mới để hiểu cấu trúc.
+2. **Cập nhật:** Chỉ bắt buộc cập nhật file `PROJECT_MAP.md` với tính năng tốn kém, cấu trúc lớn hoặc database thay đổi vĩ mô. Các chỉnh sửa UI/UX, logic đơn giản thì bỏ qua bước này.
