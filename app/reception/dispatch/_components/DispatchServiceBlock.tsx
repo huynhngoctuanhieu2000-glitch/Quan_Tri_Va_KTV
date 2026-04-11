@@ -30,11 +30,12 @@ interface DispatchServiceBlockProps {
     onAddStaff: (orderId: string, svcId: string) => void;
     onRemoveStaff: (orderId: string, svcId: string, rowId: string) => void;
     onRemoveSvc?: (orderId: string, svcId: string) => void;
+    selectedDate?: string;
 }
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], usedKtvIds = [], availableTurns,
-    onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc
+    onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc, selectedDate
 }: DispatchServiceBlockProps) => {
 
     return (
@@ -135,6 +136,13 @@ export const DispatchServiceBlock = ({
                                 onUpdate={onUpdateStaff}
                                 onRemove={onRemoveStaff}
                                 canRemove={svc.staffList.length > 1}
+                                serviceDescription={svc.serviceDescription}
+                                strength={svc.strength}
+                                adminNote={svc.adminNote}
+                                customerNote={svc.customerNote}
+                                selectedDate={selectedDate}
+                                focus={svc.focus}
+                                avoid={svc.avoid}
                             />
                         ))}
                     </div>

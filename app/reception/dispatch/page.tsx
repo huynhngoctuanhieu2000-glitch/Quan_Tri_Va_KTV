@@ -1057,6 +1057,7 @@ if (!hasPermission('dispatch_board')) {
                       onAddStaff={addStaffRow}
                       onRemoveStaff={removeStaffRow}
                       onRemoveSvc={removeServiceBlock}
+                      selectedDate={selectedDate}
                     />
                   );
                 })}

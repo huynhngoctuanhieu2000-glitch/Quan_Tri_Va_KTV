@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Trash2, Star, AlertCircle, CheckCircle2, ChevronDown, Plus } from 'lucide-react';
+import { Trash2, Star, AlertCircle, CheckCircle2, ChevronDown, Plus, Printer, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { StaffData, TurnQueueData, WorkSegment } from '../types';
 import { DispatchSegmentRow } from './DispatchSegmentRow';
 
@@ -38,6 +39,14 @@ interface DispatchStaffRowProps {
     onUpdate: (orderId: string, svcId: string, rowId: string, patch: Partial<StaffAssignment>) => void;
     onRemove: (orderId: string, svcId: string, rowId: string) => void;
     canRemove: boolean;
+    // Print ticket props
+    serviceDescription?: string;
+    strength?: string;
+    adminNote?: string;
+    customerNote?: string;
+    selectedDate?: string;
+    focus?: string;
+    avoid?: string;
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -63,7 +72,8 @@ const calcEndTime = (start: string, duration: number): string => {
 };
 
 export const DispatchStaffRow = ({
-    row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove
+    row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove,
+    serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -71,6 +81,7 @@ export const DispatchStaffRow = ({
         : null;
 
     const [now, setNow] = React.useState(new Date());
+    const [showTicketPreview, setShowTicketPreview] = React.useState(false);
 
     React.useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 30000); // Update every 30s
@@ -80,6 +91,17 @@ export const DispatchStaffRow = ({
     const handleChange = (patch: Partial<StaffAssignment>) => {
         onUpdate(orderId, svcId, row.id, { ...row, ...patch });
     };
+
+    // 🖨️ Show KTV Turn Ticket Preview
+    const handlePrintTicket = () => {
+        setShowTicketPreview(true);
+    };
+
+    const dateFormatted = selectedDate 
+        ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        : new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const ticketNoteText = row.noteForKtv || adminNote || '';
 
     const addSegment = () => {
         const lastSegment = row.segments[row.segments.length - 1];
@@ -125,6 +147,7 @@ export const DispatchStaffRow = ({
     };
 
     return (
+        <>
         <div className="p-4 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-5">
             <div className="flex flex-col gap-4">
                 {/* KTV Header Selection */}
@@ -160,6 +183,17 @@ export const DispatchStaffRow = ({
                         </select>
                         <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
                     </div>
+
+                    {/* 🖨️ Print Ticket Button — only show when KTV is selected */}
+                    {row.ktvId && (
+                        <button
+                            onClick={handlePrintTicket}
+                            className="p-2.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all active:scale-90"
+                            title="In phiếu tua KTV"
+                        >
+                            <Printer size={15} strokeWidth={2.5} />
+                        </button>
+                    )}
 
                     {canRemove && (
                         <button
@@ -227,5 +261,132 @@ export const DispatchStaffRow = ({
                 />
             </div>
         </div>
+
+            {/* 🖨️ Ticket Preview Modal */}
+            <AnimatePresence>
+                {showTicketPreview && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={() => setShowTicketPreview(false)}>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto"
+                        >
+                            {/* Close button */}
+                            <button
+                                onClick={() => setShowTicketPreview(false)}
+                                className="absolute top-4 right-4 z-10 p-2 bg-white/80 hover:bg-white rounded-full shadow-lg border border-gray-200 transition-all active:scale-90"
+                            >
+                                <X size={18} className="text-gray-500" />
+                            </button>
+
+                            {/* Ticket Header */}
+                            <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center rounded-t-3xl">
+                                <div className="text-4xl font-black italic tracking-tight">{row.ktvId}</div>
+                                <div className="text-right">
+                                    <div className="text-[11px] font-bold tracking-wider opacity-70">Phiếu Tua KTV</div>
+                                    <div className="text-base font-black mt-0.5">{dateFormatted}</div>
+                                </div>
+                            </div>
+
+                            {/* Ticket Content */}
+                            <div className="px-5 py-5 space-y-4">
+                                {/* Service Name */}
+                                <div>
+                                    <div className="text-2xl font-black text-red-600 uppercase leading-tight">
+                                        {serviceName} ({svcDuration}&apos;)
+                                    </div>
+                                    {serviceDescription && (
+                                        <p className="text-sm text-gray-500 font-semibold mt-1">{serviceDescription}</p>
+                                    )}
+                                </div>
+
+                                {/* Segments */}
+                                {row.segments.map((seg, idx) => {
+                                    const roomName = rooms.find(r => r.id === seg.roomId)?.name || seg.roomId || '—';
+                                    return (
+                                        <div key={seg.id} className="space-y-3">
+                                            {row.segments.length > 1 && (
+                                                <p className="text-[11px] font-black text-indigo-600 uppercase tracking-widest text-center">
+                                                    Chặng {idx + 1}
+                                                </p>
+                                            )}
+                                            {/* Time */}
+                                            <div className="border-[2.5px] border-dashed border-amber-400 rounded-2xl px-4 py-4 text-center">
+                                                <p className="text-[10px] font-black text-amber-800 uppercase tracking-[3px] mb-2">Thời gian thực hiện</p>
+                                                <p className="text-[32px] font-black text-red-600 leading-none tracking-tight">
+                                                    {seg.startTime || '--:--'} <span className="text-red-400">→</span> {seg.endTime || '--:--'}
+                                                </p>
+                                            </div>
+                                            {/* Room */}
+                                            <div className="bg-slate-100 rounded-xl px-4 py-3 border-l-4 border-slate-500">
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phòng</p>
+                                                <p className="text-xl font-black text-red-600 mt-0.5">{roomName}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {/* Customer Requirements */}
+                                {(strength || focus || avoid || customerNote) && (
+                                    <div className="space-y-2.5">
+                                        <div className="inline-block bg-slate-800 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider">
+                                            🔴 Yêu cầu khách hàng
+                                        </div>
+                                        <div className="space-y-2">
+                                            {strength && (
+                                                <div className="bg-amber-50 border-[1.5px] border-amber-400 rounded-xl px-4 py-2.5 text-sm font-black text-amber-800">
+                                                    💪 Lực: {strength}
+                                                </div>
+                                            )}
+                                            {focus && (
+                                                <div className="bg-emerald-50 border-[1.5px] border-emerald-400 rounded-xl px-4 py-2.5 text-sm font-black text-emerald-800">
+                                                    🎯 Tập trung: {focus}
+                                                </div>
+                                            )}
+                                            {avoid && (
+                                                <div className="bg-rose-50 border-[1.5px] border-rose-400 rounded-xl px-4 py-2.5 text-sm font-black text-rose-800">
+                                                    🚫 Tránh: {avoid}
+                                                </div>
+                                            )}
+                                            {customerNote && (
+                                                <div className="bg-yellow-50 border-[1.5px] border-yellow-400 rounded-xl px-4 py-2.5 text-xs font-bold text-yellow-800 italic">
+                                                    📌 {customerNote}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Admin Note */}
+                                {ticketNoteText && (
+                                    <div className="space-y-2.5">
+                                        <div className="inline-block bg-slate-800 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider">
+                                            📝 Admin dặn dò
+                                        </div>
+                                        <div className="bg-green-50 border-2 border-green-500 rounded-xl px-4 py-3.5 text-sm font-black text-green-900 uppercase">
+                                            &quot;{ticketNoteText}&quot;
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="text-center py-4 border-t border-gray-200 mt-2">
+                                <p className="text-xs text-gray-400 font-semibold italic">Hệ thống Spa Ngân Hà</p>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </>
     );
 };
