@@ -31,6 +31,18 @@ export const t = {
     cannotCheckOutYet: (time: string) => `Chưa tới giờ tan ca. Bạn có thể tan ca từ ${time}`,
     noShiftAssigned: 'Bạn chưa được gán ca — vui lòng liên hệ quản lý.',
 
+    // Late / Warning string
+    lateWarning: '⚠️ Bạn đang điểm danh trễ — vui lòng nhập lý do',
+    reasonRequired: 'Lý do điểm danh trễ (*)',
+    reasonPlaceholder: 'Ví dụ: Kẹt xe, do lý do cá nhân...',
+    reasonOptional: 'Lý do/Ghi chú (tùy chọn)',
+    reasonRequiredGeneral: 'Lý do/Ghi chú (*)',
+
+    // Photo
+    addPhoto: (count: number, max: number) => `Thêm ảnh (${count}/${max})`,
+    openCamera: 'Mở Camera Điện Thoại',
+    photoRequired: 'Chụp ảnh minh chứng (*)',
+
     // Rejected
     rejectedTitle: '❌ Admin đã từ chối',
     rejectedDesc: 'Vui lòng liên hệ quản lý để được hỗ trợ',

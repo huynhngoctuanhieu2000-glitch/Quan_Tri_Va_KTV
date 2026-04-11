@@ -22,23 +22,51 @@ export async function POST(request: Request) {
         let photoUrl = null;
         if (photoBase64) {
             try {
-                const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
-                const buffer = Buffer.from(base64Data, 'base64');
-                const fileExt = photoBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
-                const fileName = `${employeeId}_${Date.now()}.${fileExt}`;
-                
-                const { data: uploadData, error: uploadError } = await supabase.storage
-                    .from('attendance')
-                    .upload(fileName, buffer, {
-                        contentType: `image/${fileExt}`,
-                        upsert: false
-                    });
+                if (Array.isArray(photoBase64)) {
+                    const urls: string[] = [];
+                    for (let i = 0; i < photoBase64.length; i++) {
+                        const base64Str = photoBase64[i];
+                        const base64Data = base64Str.replace(/^data:image\/\w+;base64,/, "");
+                        const buffer = Buffer.from(base64Data, 'base64');
+                        const fileExt = base64Str.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
+                        const fileName = `${employeeId}_${Date.now()}_${i}.${fileExt}`;
+                        
+                        const { data: uploadData, error: uploadError } = await supabase.storage
+                            .from('attendance')
+                            .upload(fileName, buffer, {
+                                contentType: `image/${fileExt}`,
+                                upsert: false
+                            });
+                            
+                        if (uploadError) {
+                            console.error(`❌ [Attendance] Photo upload error (idx ${i}):`, uploadError);
+                        } else if (uploadData?.path) {
+                            const { data: publicUrlData } = supabase.storage.from('attendance').getPublicUrl(uploadData.path);
+                            urls.push(publicUrlData.publicUrl);
+                        }
+                    }
+                    if (urls.length > 0) {
+                        photoUrl = JSON.stringify(urls);
+                    }
+                } else {
+                    const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, "");
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    const fileExt = photoBase64.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
+                    const fileName = `${employeeId}_${Date.now()}.${fileExt}`;
                     
-                if (uploadError) {
-                    console.error('❌ [Attendance] Photo upload error:', uploadError);
-                } else if (uploadData?.path) {
-                    const { data: publicUrlData } = supabase.storage.from('attendance').getPublicUrl(uploadData.path);
-                    photoUrl = publicUrlData.publicUrl;
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('attendance')
+                        .upload(fileName, buffer, {
+                            contentType: `image/${fileExt}`,
+                            upsert: false
+                        });
+                        
+                    if (uploadError) {
+                        console.error('❌ [Attendance] Photo upload error:', uploadError);
+                    } else if (uploadData?.path) {
+                        const { data: publicUrlData } = supabase.storage.from('attendance').getPublicUrl(uploadData.path);
+                        photoUrl = publicUrlData.publicUrl;
+                    }
                 }
             } catch (err) {
                  console.error('❌ [Attendance] Base64 processing error:', err);

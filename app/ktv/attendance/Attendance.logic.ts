@@ -10,7 +10,12 @@ const GPS_HIGH_ACCURACY = true;
 // VN timezone offset
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
-// Shift end times (must match API SHIFT_TYPES config)
+// Shift start and end times (must match API SHIFT_TYPES config)
+const SHIFT_START_TIMES: Record<string, string> = {
+    SHIFT_1: '09:00',
+    SHIFT_2: '11:00',
+    SHIFT_3: '17:00',
+};
 const SHIFT_END_TIMES: Record<string, string> = {
     SHIFT_1: '17:00',
     SHIFT_2: '19:00',
@@ -45,6 +50,7 @@ export const useKTVAttendance = () => {
     // Shift timing state
     const [activeShiftType, setActiveShiftType] = useState<string | null>(null);
     const [isLoadingShift, setIsLoadingShift] = useState(false);
+    const [isLate, setIsLate] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -83,9 +89,9 @@ export const useKTVAttendance = () => {
         fetchStatus();
     }, [user?.id]);
 
-    // Fetch active shift when CONFIRMED (to validate checkout time)
+    // Fetch active shift when IDLE (for checkIsLate) or CONFIRMED (to validate checkout time)
     useEffect(() => {
-        if (checkStatus !== 'CONFIRMED' || !user?.id) return;
+        if (!['IDLE', 'CONFIRMED'].includes(checkStatus) || !user?.id) return;
 
         const fetchShift = async () => {
             setIsLoadingShift(true);
@@ -156,9 +162,35 @@ export const useKTVAttendance = () => {
     };
 
     // --- Handlers ---
+    const checkIsLate = useCallback(() => {
+        if (!activeShiftType) {
+            setIsLate(false);
+            return false;
+        }
+
+        const startTimeStr = SHIFT_START_TIMES[activeShiftType];
+        if (!startTimeStr) {
+            setIsLate(false);
+            return false;
+        }
+
+        const vnNow = new Date(Date.now() + VN_OFFSET_MS);
+        const [startHour, startMin] = startTimeStr.split(':').map(Number);
+        
+        // Tạo Date object đại diện cho giờ bắt đầu ca trong ngày hôm nay
+        const vnStartStr = `${vnNow.toISOString().slice(0, 10)}T${startTimeStr}:00+07:00`;
+        const startMs = new Date(vnStartStr).getTime();
+        
+        const nowMs = Date.now();
+        const late = nowMs > startMs; // nếu giờ hiện tại lớn hơn giờ start ca
+        
+        setIsLate(late);
+        return late;
+    }, [activeShiftType]);
+
     const handleAttendance = useCallback(async (
         checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN',
-        photoBase64?: string | null,
+        photosBase64?: string[] | null,
         reason?: string | null
     ) => {
         setErrorMsg(null);
@@ -174,7 +206,7 @@ export const useKTVAttendance = () => {
                     employeeId: user?.id,
                     employeeName: user?.id || 'KTV',
                     checkType,
-                    photoBase64: photoBase64 || null,
+                    photoBase64: photosBase64 || null,
                     reason: reason || null,
                     ...gps,
                 }),
@@ -269,6 +301,8 @@ export const useKTVAttendance = () => {
         checkoutBlockedUntil,
         isLoadingShift,
         activeShiftType,
+        isLate,
+        checkIsLate,
         handleAttendance,
         handleRetry,
     };
