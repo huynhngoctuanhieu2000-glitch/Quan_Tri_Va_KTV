@@ -56,7 +56,7 @@ export async function PATCH(request: Request) {
         }
 
         // ─── If CONFIRMED CHECK_IN: upsert TurnQueue ────────────────────
-        if (action === 'CONFIRM' && attendance.checkType === 'CHECK_IN') {
+        if (action === 'CONFIRM' && (attendance.checkType === 'CHECK_IN' || attendance.checkType === 'LATE_CHECKIN')) {
             const nowUtc = new Date();
             const nowVnMs = nowUtc.getTime() + VN_OFFSET_MS;
             const today = new Date(nowVnMs).toISOString().split('T')[0];
@@ -108,7 +108,7 @@ export async function PATCH(request: Request) {
         }
 
         // ─── Notify KTV via StaffNotifications ──────────────────────────
-        const isCheckIn = attendance.checkType === 'CHECK_IN';
+        const isCheckIn = attendance.checkType === 'CHECK_IN' || attendance.checkType === 'LATE_CHECKIN';
         const ktvMessage = action === 'CONFIRM'
             ? (isCheckIn ? '✅ Admin đã xác nhận điểm danh của bạn!' : '✅ Admin đã xác nhận tan ca!')
             : (isCheckIn ? '❌ Admin từ chối điểm danh. Vui lòng liên hệ quản lý.' : '❌ Admin từ chối tan ca.');

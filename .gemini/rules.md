@@ -95,7 +95,7 @@
 
 ## Rule: Lưu Phân Tích & Kế Hoạch Vào File
 1. **Phân tích hướng phát triển (Development Analysis):** Mỗi khi phân tích một hướng đi mới, ưu nhược điểm kỹ thuật hoặc kiến trúc, bạn BẮT BUỘC phải tạo/lưu một Markdown artifact để lưu trữ toàn bộ nội dung phân tích đó.
-2. **Kế hoạch triển khai (Implementation Plan):** Khi một bản kế hoạch (plan) được user ĐỒNG Ý / CHẤPরাপ NHẬN để tiến hành code, bạn BẮT BUỘC phải lưu lại bản kế hoạch đó vào một file lấy theo **Tên nhiệm vụ** (ví dụ: `plan_tao_api_dat_lich.md`).
+2. **Kế hoạch triển khai (Implementation Plan):** Khi một bản kế hoạch (plan) được user ĐỒNG Ý / CHẤP NHẬN để tiến hành code, bạn BẮT BUỘC phải lưu lại bản kế hoạch đó vào thư mục **`plans/`** với tên file lấy theo **Tên nhiệm vụ** (ví dụ: `plans/plan_tao_api_dat_lich.md`). Mọi plan đã duyệt phải nằm gọn trong thư mục này.
 3. **Mục đích:** Đảm bảo không bị mất bối cảnh (context) khi chat dài, dễ dàng cho user đọc lại tiến trình làm việc và các quyết định kỹ thuật đã chốt.
 
 # 🔒 MULTI-CONVERSATION COORDINATION (OPTIONAL)
@@ -161,7 +161,7 @@ Khi code có thay đổi liên quan đến **database** (Supabase), bạn **BẮ
 
 ## Rule: Lưu Phân Tích & Kế Hoạch Vào File
 1. **Phân tích hướng phát triển (Development Analysis):** Mỗi khi phân tích một hướng đi mới, ưu nhược điểm kỹ thuật hoặc kiến trúc, bạn BẮT BUỘC phải tạo/lưu một Markdown artifact để lưu trữ toàn bộ nội dung phân tích đó.
-2. **Kế hoạch triển khai (Implementation Plan):** Khi một bản kế hoạch (plan) được user ĐỒNG Ý / CHẤP NHẬN để tiến hành code, bạn BẮT BUỘC phải lưu lại bản kế hoạch đó vào một file lấy theo **Tên nhiệm vụ** (ví dụ: `plan_tao_api_dat_lich.md`).
+2. **Kế hoạch triển khai (Implementation Plan):** Khi một bản kế hoạch (plan) được user ĐỒNG Ý / CHẤP NHẬN để tiến hành code, bạn BẮT BUỘC phải lưu lại bản kế hoạch đó vào thư mục **`plans/`** với tên file lấy theo **Tên nhiệm vụ** (ví dụ: `plans/plan_tao_api_dat_lich.md`). Mọi plan đã duyệt phải nằm gọn trong thư mục này.
 3. **Mục đích:** Đảm bảo không bị mất bối cảnh (context) khi chat dài, dễ dàng cho user đọc lại tiến trình làm việc và các quyết định kỹ thuật đã chốt.
 
 

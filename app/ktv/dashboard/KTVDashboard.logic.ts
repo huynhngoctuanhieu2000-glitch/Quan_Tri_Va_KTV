@@ -5,6 +5,31 @@ import { supabase } from '@/lib/supabase';
 
 export type ScreenState = 'DASHBOARD' | 'TIMER' | 'REVIEW' | 'REWARD' | 'HANDOVER';
 
+// 🔧 DEFAULT PROCEDURES (Fallback when room has no config)
+const DEFAULT_PREP_PROCEDURE = [
+    'Vệ sinh máy lạnh & quạt',
+    'Chuẩn bị tinh dầu & dụng cụ',
+    'Setup giường (Khăn, gối)',
+    'Chuẩn bị khăn nóng',
+    'Kiểm tra vệ sinh phòng'
+];
+const DEFAULT_CLEAN_PROCEDURE = [
+    'Thu gom khăn bẩn & rác',
+    'Vệ sinh bồn bệ & dụng cụ',
+    'Sắp xếp lại gối, nệm',
+    'Xịt tinh dầu khử mùi'
+];
+
+// 🚩 ROOM ISSUE QUICK OPTIONS
+export const ROOM_ISSUE_OPTIONS = [
+    'Máy lạnh hư / rò nước',
+    'Đèn cháy / hỏng',
+    'Thiếu khăn / dụng cụ',
+    'Mùi hôi / ẩm mốc',
+    'Nghẹt nước / toilet',
+    'Hỏng giường / nệm'
+];
+
 export interface DashboardConfig {
     initialAction?: string | null;
     targetBookingId?: string | null;
@@ -16,27 +41,29 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const [booking, setBooking] = useState<any>(null);
     const [showProcedure, setShowProcedure] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [checklist, setChecklist] = useState({
-        ac: false,
-        towel: false,
-        oil: false,
-        bed: false,
-        toilet: false
-    });
+    // Dynamic checklist arrays (driven by room config from API)
+    const [prepChecklist, setPrepChecklist] = useState<boolean[]>([]);
+    const [cleanChecklist, setCleanChecklist] = useState<boolean[]>([]);
+    const [showRoomIssueModal, setShowRoomIssueModal] = useState(false);
 
-    const [handoverChecklist, setHandoverChecklist] = useState({
-        laundry: false,
-        clean: false,
-        reset: false,
-        scent: false
-    });
+    // Derive procedure labels from booking data (fallback to defaults)
+    const prepProcedure: string[] = booking?.roomPrepProcedure || DEFAULT_PREP_PROCEDURE;
+    const cleanProcedure: string[] = booking?.roomCleanProcedure || DEFAULT_CLEAN_PROCEDURE;
 
-    const isChecklistComplete = Object.values(checklist).every(Boolean);
-    const isHandoverComplete = 
-        handoverChecklist.laundry && 
-        handoverChecklist.clean && 
-        handoverChecklist.reset && 
-        handoverChecklist.scent;
+    // Initialize checklist arrays when booking/procedures change
+    useEffect(() => {
+        setPrepChecklist(new Array(prepProcedure.length).fill(false));
+    }, [booking?.id, prepProcedure.length]);
+    useEffect(() => {
+        setCleanChecklist(new Array(cleanProcedure.length).fill(false));
+    }, [booking?.id, cleanProcedure.length]);
+
+    const isChecklistComplete = prepChecklist.length > 0 && prepChecklist.every(Boolean);
+    const isHandoverComplete = cleanChecklist.length > 0 && cleanChecklist.every(Boolean);
+
+    // Legacy-compatible aliases for page.tsx
+    const checklist = prepChecklist;
+    const handoverChecklist = cleanChecklist;
 
     const [settings, setSettings] = useState<any>({
         ktv_setup_duration_minutes: 10,
@@ -671,20 +698,49 @@ export function useKTVDashboard(config?: DashboardConfig) {
         }
     }, [timeRemaining, isTimerRunning, isPrepping]);
 
-    const toggleChecklist = (key: keyof typeof checklist) => {
-        setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
+    const toggleChecklist = (index: number) => {
+        setPrepChecklist(prev => prev.map((v, i) => i === index ? !v : v));
     };
 
-    const toggleHandoverChecklist = (key: keyof typeof handoverChecklist) => {
-        setHandoverChecklist(prev => ({ ...prev, [key]: !prev[key] }));
+    const toggleHandoverChecklist = (index: number) => {
+        setCleanChecklist(prev => prev.map((v, i) => i === index ? !v : v));
     };
 
     const checkAllChecklist = () => {
-        setChecklist({ ac: true, towel: true, oil: true, bed: true, toilet: true });
+        setPrepChecklist(prev => prev.map(() => true));
     };
 
     const checkAllHandoverChecklist = () => {
-        setHandoverChecklist({ laundry: true, clean: true, reset: true, scent: true });
+        setCleanChecklist(prev => prev.map(() => true));
+    };
+
+    // 🚩 Room Issue Report
+    const handleReportRoomIssue = async (issues: string[], note: string) => {
+        if (!booking || !user?.id) return;
+        setIsLoading(true);
+        try {
+            const roomId = booking.assignedRoomId || booking.roomName || 'N/A';
+            const issueText = issues.length > 0 ? issues.join(', ') : '';
+            const fullMessage = `🚩 BÁO SỰ CỐ PHÒNG ${roomId} — KTV ${user.id}: ${issueText}${note ? ` | ${note}` : ''}`;
+
+            await fetch('/api/ktv/interaction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bookingId: booking.id,
+                    type: 'EMERGENCY',
+                    techCode: user.id,
+                    message: fullMessage
+                })
+            });
+            setShowRoomIssueModal(false);
+            alert('Đã gửi báo cáo sự cố về Lễ tân!');
+        } catch (err) {
+            console.error('Error reporting room issue:', err);
+            alert('Lỗi gửi báo cáo!');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleConfirmSetup = async () => {
@@ -955,8 +1011,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setCommission(calculatedCommission);
 
             // KHÔNG xoá booking ở đây để Reward còn lấy được rating/points
-            setChecklist({ ac: false, towel: false, oil: false, bed: false, toilet: false });
-            setHandoverChecklist({ laundry: false, clean: false, reset: false, scent: false });
+            setPrepChecklist(prev => prev.map(() => false));
+            setCleanChecklist(prev => prev.map(() => false));
             setIsPrepping(false);
             setPrepTimeRemaining(0);
             
@@ -1044,6 +1100,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
         handleEarlyExit,
         canStart,
         allowedStartTime,
-        activeSegmentIndex
+        activeSegmentIndex,
+        // Room procedures & issue reporting
+        prepProcedure,
+        cleanProcedure,
+        showRoomIssueModal,
+        setShowRoomIssueModal,
+        handleReportRoomIssue,
+        settings
     };
 }

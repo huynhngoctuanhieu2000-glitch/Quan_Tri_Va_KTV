@@ -267,6 +267,16 @@ export async function cancelBooking(bookingId: string, date: string) {
 
         if (bError) throw bError;
 
+        // Cập nhật trạng thái các BookingItems chưa hoàn thành về CANCELLED
+        const { error: itemError } = await supabase
+            .from('BookingItems')
+            .update({ status: 'CANCELLED' })
+            .eq('bookingId', bookingId)
+            .neq('status', 'DONE')
+            .neq('status', 'CANCELLED');
+            
+        if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+
         // 2. Giải phóng KTV trong TurnQueue nếu đang gán cho đơn này
         const { error: tError } = await supabase
             .from('TurnQueue')
@@ -309,6 +319,18 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             .eq('id', bookingId);
 
         if (bError) throw bError;
+
+        // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
+        if (['COMPLETED', 'DONE', 'CANCELLED'].includes(newStatus)) {
+            const { error: itemError } = await supabase
+                .from('BookingItems')
+                .update({ status: newStatus })
+                .eq('bookingId', bookingId)
+                .neq('status', 'DONE')
+                .neq('status', 'CANCELLED');
+                
+            if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+        }
 
         // 2. Nếu trạng thái mới là DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
         if (newStatus === 'DONE' || newStatus === 'CANCELLED') {

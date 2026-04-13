@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useKTVDashboard } from './KTVDashboard.logic';
+import { ROOM_ISSUE_OPTIONS } from './KTVDashboard.logic';
 import { useNotifications } from '@/components/NotificationProvider';
 
 // 🔧 UI CONFIGURATION
@@ -155,6 +156,14 @@ function KTVDashboardContent() {
         procedure={assignedItem?.service_description}
         serviceName={assignedItem?.service_name}
       />
+
+      {/* Room Issue Report Modal */}
+      <RoomIssueModal
+        isOpen={logic.showRoomIssueModal}
+        onClose={() => logic.setShowRoomIssueModal(false)}
+        onSubmit={logic.handleReportRoomIssue}
+        roomId={booking?.assignedRoomId || booking?.roomName || ''}
+      />
     </>
   );
 }
@@ -254,7 +263,7 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments:
 // ----------------------------------------------------
 
 function ScreenDashboard({ logic }: { logic: any }) {
-  const { booking, checklist, toggleChecklist, isChecklistComplete, handleConfirmSetup, setShowProcedure, activeSegmentIndex } = logic;
+  const { booking, checklist, isChecklistComplete, handleConfirmSetup, setShowProcedure, activeSegmentIndex, prepProcedure, toggleChecklist, checkAllChecklist, setShowRoomIssueModal } = logic;
 
   // Lấy tất cả dịch vụ mà KTV này được gán (hỗ trợ multi-item)
   const allItemIds: string[] = booking?.assignedItemIds?.length > 0
@@ -393,7 +402,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                 Quy trình chuẩn bị
               </h3>
               <button 
-                 onClick={logic.checkAllChecklist}
+                 onClick={checkAllChecklist}
                  className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg active:scale-95 transition-all uppercase tracking-widest border border-emerald-100 shadow-sm"
               >
                  Chọn tất cả
@@ -401,13 +410,20 @@ function ScreenDashboard({ logic }: { logic: any }) {
             </div>
 
             <div className="space-y-2">
-              <ChecklistItem label="Vệ sinh máy lạnh & quạt" checked={checklist.ac} onChange={() => toggleChecklist('ac')} />
-              <ChecklistItem label="Chuẩn bị tinh dầu & dụng cụ" checked={checklist.oil} onChange={() => toggleChecklist('oil')} />
-              <ChecklistItem label="Setup giường (Khăn, gối)" checked={checklist.bed} onChange={() => toggleChecklist('bed')} />
-              <ChecklistItem label="Chuẩn bị khăn nóng" checked={checklist.towel} onChange={() => toggleChecklist('towel')} />
-              <ChecklistItem label="Kiểm tra vệ sinh phòng" checked={checklist.toilet} onChange={() => toggleChecklist('toilet')} />
+              {prepProcedure.map((label: string, idx: number) => (
+                <ChecklistItem key={idx} label={label} checked={checklist[idx] || false} onChange={() => toggleChecklist(idx)} />
+              ))}
             </div>
           </div>
+
+          {/* Room Issue Report Button */}
+          <button
+            onClick={() => setShowRoomIssueModal(true)}
+            className="w-full py-3 rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50/50 text-rose-600 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-rose-100/50"
+          >
+            <AlertTriangle size={16} />
+            Báo sự cố phòng
+          </button>
 
           <button
             disabled={!isChecklistComplete || logic.isLoading}
@@ -831,7 +847,7 @@ function ScreenReview({ logic }: { logic: any }) {
 }
 
 function ScreenHandover({ logic }: { logic: any }) {
-  const { handoverChecklist, toggleHandoverChecklist, isHandoverComplete, handleFinishHandover } = logic;
+  const { handoverChecklist, toggleHandoverChecklist, isHandoverComplete, handleFinishHandover, cleanProcedure, checkAllHandoverChecklist } = logic;
 
   return (
     <div className="p-6 pt-12 space-y-8">
@@ -846,16 +862,15 @@ function ScreenHandover({ logic }: { logic: any }) {
       <div className="space-y-3">
         <div className="flex justify-end mb-1">
            <button 
-              onClick={logic.checkAllHandoverChecklist}
+              onClick={checkAllHandoverChecklist}
               className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg active:scale-95 transition-all uppercase tracking-widest border border-blue-100 shadow-sm"
            >
               Chọn tất cả
            </button>
         </div>
-        <ChecklistItem label="Thu gom khăn bẩn & rác" checked={handoverChecklist.laundry} onChange={() => toggleHandoverChecklist('laundry')} />
-        <ChecklistItem label="Vệ sinh bồn bệ & dụng cụ" checked={handoverChecklist.clean} onChange={() => toggleHandoverChecklist('clean')} />
-        <ChecklistItem label="Sắp xếp lại gối, nệm" checked={handoverChecklist.reset} onChange={() => toggleHandoverChecklist('reset')} />
-        <ChecklistItem label="Xịt tinh dầu khử mùi" checked={handoverChecklist.scent} onChange={() => toggleHandoverChecklist('scent')} />
+        {cleanProcedure.map((label: string, idx: number) => (
+          <ChecklistItem key={idx} label={label} checked={handoverChecklist[idx] || false} onChange={() => toggleHandoverChecklist(idx)} />
+        ))}
       </div>
 
       <button
@@ -1040,7 +1055,7 @@ function ProcedureModal({ isOpen, onClose, procedure, serviceName }: { isOpen: b
              {procedure ? (
                 <div className="space-y-4">
                    {Array.isArray(procedure) ? (
-                      procedure.map((step, idx) => (
+                      procedure.map((step: string, idx: number) => (
                          <div key={idx} className="flex gap-4">
                             <span className="text-emerald-500 font-black">{(idx + 1).toString().padStart(2, '0')}.</span>
                             <p>{step}</p>
@@ -1055,9 +1070,101 @@ function ProcedureModal({ isOpen, onClose, procedure, serviceName }: { isOpen: b
              )}
           </div>
           <div className="p-8 border-t border-slate-100">
-             <button onClick={onClose} className="w-full bg-slate-900 text-white py-5 rounded-[24px] font-black text-xs uppercase tracking-widest uppercase">Đã hiểu quy trình</button>
+             <button onClick={onClose} className="w-full bg-slate-900 text-white py-5 rounded-[24px] font-black text-xs uppercase tracking-widest">Đã hiểu quy trình</button>
           </div>
        </motion.div>
+    </div>
+  );
+}
+
+function RoomIssueModal({ isOpen, onClose, onSubmit, roomId }: { isOpen: boolean, onClose: () => void, onSubmit: (issues: string[], note: string) => void, roomId: string }) {
+  const [selectedIssues, setSelectedIssues] = React.useState<string[]>([]);
+  const [note, setNote] = React.useState('');
+
+  if (!isOpen) return null;
+
+  const toggleIssue = (issue: string) => {
+    setSelectedIssues(prev => prev.includes(issue) ? prev.filter(i => i !== issue) : [...prev, issue]);
+  };
+
+  const handleSubmit = () => {
+    if (selectedIssues.length === 0 && !note.trim()) {
+      alert('Vui lòng chọn hoặc nhập mô tả sự cố!');
+      return;
+    }
+    onSubmit(selectedIssues, note.trim());
+    setSelectedIssues([]);
+    setNote('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 100 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white w-full sm:max-w-md max-h-[90vh] rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col"
+      >
+        {/* Header */}
+        <div className="bg-rose-600 p-6 text-white flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+              <AlertTriangle size={20} />
+              Báo Sự Cố Phòng
+            </h3>
+            {roomId && <p className="text-[10px] font-bold text-rose-100 uppercase tracking-widest mt-1">Phòng {roomId}</p>}
+          </div>
+          <button onClick={onClose} className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Quick Options */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chọn loại sự cố</p>
+          <div className="grid grid-cols-2 gap-2">
+            {ROOM_ISSUE_OPTIONS.map((issue) => (
+              <button
+                key={issue}
+                onClick={() => toggleIssue(issue)}
+                className={`p-3 rounded-2xl border-2 text-xs font-black text-left transition-all active:scale-95 ${
+                  selectedIssues.includes(issue)
+                    ? 'border-rose-500 bg-rose-50 text-rose-700'
+                    : 'border-slate-100 bg-white text-slate-600 hover:border-rose-200'
+                }`}
+              >
+                {issue}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ghi chú thêm</p>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Mô tả chi tiết sự cố..."
+              className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-rose-300 focus:ring-0 outline-none text-sm font-bold text-slate-700 resize-none h-24 placeholder:text-slate-300"
+            />
+          </div>
+        </div>
+
+        {/* Submit */}
+        <div className="p-5 border-t border-slate-100 space-y-2">
+          <button
+            onClick={handleSubmit}
+            className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-rose-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <ShieldAlert size={16} />
+            Gửi báo cáo về Lễ tân
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-3 text-slate-400 font-bold text-xs uppercase tracking-widest"
+          >
+            Huỷ
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }

@@ -146,6 +146,23 @@ export async function GET(request: Request) {
             : [];
         const primaryItemId = assignedItemIds[0] || assignedItemId;
 
+        // 5. Fetch room-specific procedures (prep & clean checklists)
+        let roomProcedures: { prep_procedure: string[] | null, clean_procedure: string[] | null } = { prep_procedure: null, clean_procedure: null };
+        const roomId = turnInfo?.room_id || booking.roomName;
+        if (roomId) {
+            const { data: roomData } = await supabase
+                .from('Rooms')
+                .select('prep_procedure, clean_procedure')
+                .eq('id', roomId)
+                .maybeSingle();
+            if (roomData) {
+                roomProcedures = {
+                    prep_procedure: roomData.prep_procedure || null,
+                    clean_procedure: roomData.clean_procedure || null
+                };
+            }
+        }
+
         return NextResponse.json({
             success: true,
             data: {
@@ -158,7 +175,10 @@ export async function GET(request: Request) {
                 last_served_at: turnInfo?.last_served_at,
                 dispatchStartTime: turnInfo?.start_time,
                 assignedRoomId: turnInfo?.room_id,
-                assignedBedId: turnInfo?.bed_id
+                assignedBedId: turnInfo?.bed_id,
+                // Room-specific procedures
+                roomPrepProcedure: roomProcedures.prep_procedure,
+                roomCleanProcedure: roomProcedures.clean_procedure
             }
         });
     } catch (error: any) {

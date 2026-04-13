@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { bookingId, type, techCode } = body;
+        const { bookingId, type, techCode, message: customMessage } = body;
 
         if (!bookingId || !type) {
             return NextResponse.json({ success: false, error: 'bookingId and type are required' }, { status: 400 });
@@ -61,7 +61,8 @@ export async function POST(request: Request) {
             'EMERGENCY': `🚨 KHẨN CẤP: Sự cố lớn tại ${roomUpper}!`
         };
 
-        const finalMessage = messageMap[type] || `Yêu cầu (${type}) tại ${roomInfo}`;
+        // Ưu tiên custom message từ client (dùng cho Room Issue Report)
+        const finalMessage = customMessage || messageMap[type] || `Yêu cầu (${type}) tại ${roomInfo}`;
 
         // 3. Lưu vào bảng StaffNotifications để Lễ tân nhận Realtime
         console.log(`💾 [API KTV Interaction] Inserting notification:`, { bookingId, type, message: finalMessage });

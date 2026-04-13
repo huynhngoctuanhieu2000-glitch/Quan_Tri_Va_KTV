@@ -42,6 +42,31 @@ interface KanbanBoardProps {
     selectedOrderId: string | null;
 }
 
+const getEstimatedEndTime = (order: PendingOrder) => {
+    let maxTime = '';
+    
+    // Nếu có timeEnd sẵn từ DB thì format thẳng
+    if (order.timeEnd) {
+        return formatToHourMinute(order.timeEnd);
+    }
+
+    if (!order.services) return null;
+
+    for (const svc of order.services) {
+        if (!svc.staffList) continue;
+        for (const staff of svc.staffList) {
+            if (!staff.segments) continue;
+            for (const seg of staff.segments) {
+                // seg.endTime thường ở định dạng "HH:mm"
+                if (seg.endTime && seg.endTime > maxTime && seg.endTime !== '--:--') {
+                    maxTime = seg.endTime;
+                }
+            }
+        }
+    }
+    return maxTime || order.time; // Fallback về thời gian tạo đơn nếu chưa có dữ liệu điều phối
+};
+
 export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrderId }: KanbanBoardProps) {
     const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
 
@@ -104,7 +129,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
                                                 <div className="flex items-center justify-between mb-4">
                                                     <span className="text-[10px] font-black text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg tracking-wider">{order.billCode}</span>
                                                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
-                                                        <Clock size={11} className="text-indigo-400" /> {order.time}
+                                                        <Clock size={11} className="text-indigo-400" /> ra ca {getEstimatedEndTime(order)}
                                                     </div>
                                                 </div>
 
