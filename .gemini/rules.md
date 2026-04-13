@@ -16,7 +16,8 @@
 1.  **NO AUTO SEARCHING**: Đã vô hiệu hóa việc tự động tìm kiếm (grep search) toàn codebase.
 2.  **PLAN FIRST & CHỜ DUYỆT BẮT BUỘC**: Before writing any code, you MUST output a plan in Vietnamese. **You MUST STOP and wait for user's explicit OK/Duyệt before editing files.** 
 3.  **HỎI NHƯ PARTNER**: Đặt câu hỏi khai thác yêu cầu thay vì đoán.
-2.  **GIT SAFETY**:
+4.  **ĐỀ XUẤT HƯỚNG PHÁT TRIỂN**: Sau khi hoàn thành một tính năng, BẮT BUỘC phải đưa ra **3-5 hướng phát triển tiếp theo** cho tính năng đó để user tham khảo. Đề xuất phải cụ thể, thực tế và liên quan trực tiếp đến tính năng vừa làm xong.
+5.  **GIT SAFETY**:
     - NEVER automatically push code.
     - After completing a task, explicitly remind the user: *"Please check the code and commit changes before moving on."*
     - Suggest meaningful commit messages following Conventional Commits **bằng tiếng Việt** (e.g., `feat: thêm logic đặt lịch`, `fix: sửa lỗi giao diện`).

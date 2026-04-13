@@ -22,6 +22,7 @@ export type ModuleId =
   | 'ai_features'
   | 'staff_notifications'
   | 'device_management'
+  | 'room_management'
   | 'settings';
 
 export interface ModuleDefinition {

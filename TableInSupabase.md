@@ -226,6 +226,7 @@
 | `type` | text | Loại phòng |
 | `prep_procedure` | jsonb | Quy trình mở phòng (JSON array of strings). Default: 5 bước chuẩn |
 | `clean_procedure` | jsonb | Quy trình dọn dẹp phòng (JSON array of strings). Default: 4 bước chuẩn |
+| `allowed_services` | jsonb | Danh sách ID dịch vụ phòng này có thể nhận (JSON array of service IDs) |
 | `created_at` | timestamptz | Thời điểm tạo |
 | `updated_at` | timestamptz | Thời điểm cập nhật |
 

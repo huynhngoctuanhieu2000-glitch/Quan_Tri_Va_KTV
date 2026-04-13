@@ -18,6 +18,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: 'ktv_performance', name: 'Hiệu Suất', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_history', name: 'Lịch Sử', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_hub', name: 'Quản Lý KTV', group: 'Vận Hành' },
+  { id: 'room_management', name: 'Quản Lý Phòng', group: 'Vận Hành' },
   { id: 'service_handbook', name: 'Sổ Tay Dịch Vụ', group: 'Kỹ Thuật Viên' },
   { id: 'ai_features', name: 'AI Assistant', group: 'Hệ Thống' },
   { id: 'device_management', name: 'Thiết Bị', group: 'Hệ Thống' },

@@ -34,7 +34,8 @@ import {
   ChevronDown,
   Bell,
   Tablet,
-  LogOut
+  LogOut,
+  DoorOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -61,6 +62,7 @@ const ICONS: Record<string, React.ReactNode> = {
   service_handbook: <BookOpen size={20} />,
   ai_features: <Sparkles size={20} />,
   device_management: <Tablet size={20} />,
+  room_management: <DoorOpen size={20} />,
   staff_notifications: <Bell size={20} />,
   settings: <Settings size={20} />,
 };
@@ -88,6 +90,7 @@ const PATHS: Record<string, string> = {
   service_handbook: '/services/handbook',
   ai_features: '/admin/ai',
   device_management: '/admin/devices',
+  room_management: '/reception/rooms',
   staff_notifications: '/admin/notifications',
   settings: '/settings',
 };
