@@ -319,6 +319,7 @@ export default function DispatchBoardPage() {
 
               return {
                 id: bi.id,
+                serviceId: bi.serviceId,
                 serviceName: bi.serviceName || bi.service_name || 'Dịch vụ',
                 serviceDescription: bi.serviceDescription || bi.service_description || '',
                 duration: Number(bi.duration) || 0,

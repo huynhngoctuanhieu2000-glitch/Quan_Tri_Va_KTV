@@ -47,6 +47,7 @@ interface DispatchStaffRowProps {
     selectedDate?: string;
     focus?: string;
     avoid?: string;
+    realSvcId?: string;
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -73,7 +74,7 @@ const calcEndTime = (start: string, duration: number): string => {
 
 export const DispatchStaffRow = ({
     row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove,
-    serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid
+    serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -241,6 +242,7 @@ export const DispatchStaffRow = ({
                                 rooms={rooms}
                                 beds={beds}
                                 busyBedIds={busyBedIds}
+                                realSvcId={realSvcId}
                                 onUpdate={(patch) => updateSegment(idx, patch)}
                                 onRemove={() => removeSegment(idx)}
                                 canRemove={row.segments.length > 1}

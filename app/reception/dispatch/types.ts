@@ -17,6 +17,7 @@ export interface StaffAssignment {
 
 export interface ServiceBlock {
   id: string; // BookingItem ID
+  serviceId?: string;
   serviceName: string;
   serviceDescription?: string;
   duration: number;

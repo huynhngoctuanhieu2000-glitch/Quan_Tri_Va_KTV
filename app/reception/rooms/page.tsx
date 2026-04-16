@@ -6,7 +6,8 @@ import { useRoomConfig, MASTER_PREP_STEPS, MASTER_CLEAN_STEPS } from './RoomConf
 import { motion, AnimatePresence } from 'motion/react';
 import {
     DoorOpen, CheckCircle2, Sparkles, Wrench,
-    ChevronRight, Loader2, Check, X, ListChecks
+    ChevronRight, Loader2, Check, X, ListChecks,
+    ChevronUp, ChevronDown
 } from 'lucide-react';
 
 // 🔧 UI CONFIGURATION
@@ -28,6 +29,7 @@ export default function RoomManagementPage() {
         addCustomPrepStep, addCustomCleanStep,
         removeCustomPrepStep, removeCustomCleanStep,
         editPrepStep, editCleanStep,
+        reorderPrepStep, reorderCleanStep,
     } = logic;
 
     if (isLoading) {
@@ -171,6 +173,7 @@ export default function RoomManagementPage() {
                                                     onAddStep={addCustomPrepStep}
                                                     onRemoveStep={removeCustomPrepStep}
                                                     onEditStep={editPrepStep}
+                                                    onReorderStep={reorderPrepStep}
                                                 />
                                             </motion.div>
                                         )}
@@ -185,6 +188,7 @@ export default function RoomManagementPage() {
                                                     onAddStep={addCustomCleanStep}
                                                     onRemoveStep={removeCustomCleanStep}
                                                     onEditStep={editCleanStep}
+                                                    onReorderStep={reorderCleanStep}
                                                 />
                                             </motion.div>
                                         )}
@@ -283,7 +287,7 @@ const TabServices = ({ servicesByCategory, allowedServices, onToggle, onToggleCa
 // Hiển thị CHỈ các bước từ DB (selectedSteps).
 // Master list = danh sách mẫu collapsible để thêm nhanh.
 
-const TabProcedure = ({ title, masterSteps, selectedSteps, onSelectAll, onClearAll, onAddStep, onRemoveStep, onEditStep }: {
+const TabProcedure = ({ title, masterSteps, selectedSteps, onSelectAll, onClearAll, onAddStep, onRemoveStep, onEditStep, onReorderStep }: {
     title: string,
     masterSteps: string[],
     selectedSteps: string[],
@@ -292,11 +296,10 @@ const TabProcedure = ({ title, masterSteps, selectedSteps, onSelectAll, onClearA
     onAddStep: (step: string) => void,
     onRemoveStep: (step: string) => void,
     onEditStep: (oldStep: string, newStep: string) => void,
+    onReorderStep: (stepIndex: number, direction: 'up' | 'down') => void,
 }) => {
     const [newStep, setNewStep] = React.useState('');
-    const [contextMenu, setContextMenu] = React.useState<{ step: string; x: number; y: number } | null>(null);
     const [showTemplatePicker, setShowTemplatePicker] = React.useState(false);
-    const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Template steps not yet added to this room's procedure
     const availableTemplateSteps = masterSteps.filter(s => !selectedSteps.includes(s));
@@ -311,51 +314,6 @@ const TabProcedure = ({ title, masterSteps, selectedSteps, onSelectAll, onClearA
         onAddStep(trimmed);
         setNewStep('');
     };
-
-    // Context menu: right-click (PC)
-    const handleContextMenu = (e: React.MouseEvent, step: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setContextMenu({ step, x: e.clientX, y: e.clientY });
-    };
-
-    // Context menu: long-press (Mobile)
-    const handleTouchStart = (step: string) => {
-        longPressTimerRef.current = setTimeout(() => {
-            setContextMenu({ step, x: window.innerWidth / 2, y: window.innerHeight / 2 });
-        }, 600);
-    };
-
-    const handleTouchEnd = () => {
-        if (longPressTimerRef.current) {
-            clearTimeout(longPressTimerRef.current);
-            longPressTimerRef.current = null;
-        }
-    };
-
-    const handleEdit = () => {
-        if (!contextMenu) return;
-        const newName = prompt('Đổi tên bước:', contextMenu.step);
-        if (newName && newName.trim() && newName.trim() !== contextMenu.step) {
-            onEditStep(contextMenu.step, newName.trim());
-        }
-        setContextMenu(null);
-    };
-
-    const handleDelete = () => {
-        if (!contextMenu) return;
-        onRemoveStep(contextMenu.step);
-        setContextMenu(null);
-    };
-
-    // Close context menu on outside click
-    React.useEffect(() => {
-        const close = () => setContextMenu(null);
-        if (contextMenu) {
-            document.addEventListener('click', close);
-            return () => document.removeEventListener('click', close);
-        }
-    }, [contextMenu]);
 
     return (
         <div className="space-y-4">
@@ -384,20 +342,49 @@ const TabProcedure = ({ title, masterSteps, selectedSteps, onSelectAll, onClearA
             {selectedSteps.length > 0 ? (
                 <div className="space-y-2">
                     {selectedSteps.map((step, idx) => (
-                        <div
-                            key={idx}
-                            className="relative"
-                            onContextMenu={(e) => handleContextMenu(e, step)}
-                            onTouchStart={() => handleTouchStart(step)}
-                            onTouchEnd={handleTouchEnd}
-                            onTouchMove={handleTouchEnd}
-                        >
-                            <div className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 select-none cursor-default">
+                        <div key={idx} className="relative">
+                            <div className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 select-none">
                                 <div className="w-7 h-7 rounded-full bg-emerald-500 border-2 border-emerald-500 text-white flex items-center justify-center shrink-0 text-xs font-black">
                                     {idx + 1}
                                 </div>
                                 <span className="text-sm font-bold text-emerald-700 flex-1">{step}</span>
-                                <span className="text-[9px] text-gray-300 hidden sm:block">chuột phải để sửa/xoá</span>
+                                <div className="flex items-center gap-1 shrink-0 px-1 border-l border-emerald-200 pl-4">
+                                    <button
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            const newName = prompt('Đổi tên bước:', step); 
+                                            if (newName && newName.trim() && newName.trim() !== step) onEditStep(step, newName.trim()); 
+                                        }}
+                                        className="p-1.5 rounded-lg text-emerald-600 bg-white shadow-sm hover:bg-emerald-100 transition-colors sm:mr-1"
+                                        title="Chỉnh sửa"
+                                    >
+                                        <Wrench size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            if (confirm('Bạn có chắc xoá bước này?')) onRemoveStep(step); 
+                                        }}
+                                        className="p-1.5 rounded-lg text-rose-600 bg-white shadow-sm hover:bg-rose-100 transition-colors sm:mr-3 mr-1"
+                                        title="Xoá"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onReorderStep(idx, 'up'); }}
+                                        disabled={idx === 0}
+                                        className="p-1.5 rounded-lg text-emerald-600 bg-white shadow-sm hover:bg-emerald-100 disabled:opacity-30 transition-colors"
+                                    >
+                                        <ChevronUp size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onReorderStep(idx, 'down'); }}
+                                        disabled={idx === selectedSteps.length - 1}
+                                        className="p-1.5 rounded-lg text-emerald-600 bg-white shadow-sm hover:bg-emerald-100 disabled:opacity-30 transition-colors"
+                                    >
+                                        <ChevronDown size={16} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -460,31 +447,6 @@ const TabProcedure = ({ title, masterSteps, selectedSteps, onSelectAll, onClearA
                     Thêm
                 </button>
             </div>
-
-            {/* Context Menu (floating) */}
-            {contextMenu && (
-                <div
-                    className="fixed z-[200] bg-white rounded-2xl shadow-2xl border border-gray-200 py-2 w-48 overflow-hidden"
-                    style={{ top: Math.min(contextMenu.y, window.innerHeight - 120), left: Math.min(contextMenu.x, window.innerWidth - 200) }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="px-3 py-1.5 border-b border-gray-100">
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest truncate">{contextMenu.step}</p>
-                    </div>
-                    <button
-                        onClick={handleEdit}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                    >
-                        <Wrench size={14} /> Điều chỉnh
-                    </button>
-                    <button
-                        onClick={handleDelete}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 transition-colors"
-                    >
-                        <X size={14} /> Xoá bước
-                    </button>
-                </div>
-            )}
         </div>
     );
 };

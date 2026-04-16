@@ -210,6 +210,28 @@ export const useRoomConfig = () => {
         await updateRoom(selectedRoom.id, { clean_procedure: current.map(s => s === oldStep ? newStep : s) });
     };
 
+    const reorderPrepStep = async (stepIndex: number, direction: 'up' | 'down') => {
+        if (!selectedRoom) return;
+        const current = [...(selectedRoom.prep_procedure || [])];
+        if (direction === 'up' && stepIndex > 0) {
+            [current[stepIndex - 1], current[stepIndex]] = [current[stepIndex], current[stepIndex - 1]];
+        } else if (direction === 'down' && stepIndex < current.length - 1) {
+            [current[stepIndex], current[stepIndex + 1]] = [current[stepIndex + 1], current[stepIndex]];
+        } else return;
+        await updateRoom(selectedRoom.id, { prep_procedure: current });
+    };
+
+    const reorderCleanStep = async (stepIndex: number, direction: 'up' | 'down') => {
+        if (!selectedRoom) return;
+        const current = [...(selectedRoom.clean_procedure || [])];
+        if (direction === 'up' && stepIndex > 0) {
+            [current[stepIndex - 1], current[stepIndex]] = [current[stepIndex], current[stepIndex - 1]];
+        } else if (direction === 'down' && stepIndex < current.length - 1) {
+            [current[stepIndex], current[stepIndex + 1]] = [current[stepIndex + 1], current[stepIndex]];
+        } else return;
+        await updateRoom(selectedRoom.id, { clean_procedure: current });
+    };
+
     // Group services by category
     const servicesByCategory = services.reduce((acc, svc) => {
         const cat = svc.category || 'Khác';
@@ -243,5 +265,7 @@ export const useRoomConfig = () => {
         removeCustomCleanStep,
         editPrepStep,
         editCleanStep,
+        reorderPrepStep,
+        reorderCleanStep,
     };
 };

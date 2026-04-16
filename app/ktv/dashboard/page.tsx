@@ -873,6 +873,15 @@ function ScreenHandover({ logic }: { logic: any }) {
         ))}
       </div>
 
+      {/* Room Issue Report Button */}
+      <button
+        onClick={() => logic.setShowRoomIssueModal(true)}
+        className="w-full py-3 rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50/50 text-rose-600 font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-rose-100/50"
+      >
+        <AlertTriangle size={16} />
+        Báo sự cố phòng
+      </button>
+
       <button
         disabled={!isHandoverComplete || logic.isLoading}
         onClick={handleFinishHandover}

@@ -14,6 +14,7 @@ interface Room {
     id: string;
     name: string;
     type: string;
+    allowed_services?: string[];
 }
 
 interface DispatchSegmentRowProps {
@@ -25,6 +26,7 @@ interface DispatchSegmentRowProps {
     onUpdate: (patch: Partial<WorkSegment>) => void;
     onRemove: () => void;
     canRemove: boolean;
+    realSvcId?: string;
 }
 
 const calcEndTime = (start: string, duration: number): string => {
@@ -36,7 +38,7 @@ const calcEndTime = (start: string, duration: number): string => {
 };
 
 export const DispatchSegmentRow = ({
-    segment, segmentIndex, rooms, beds, busyBedIds = [], onUpdate, onRemove, canRemove
+    segment, segmentIndex, rooms, beds, busyBedIds = [], onUpdate, onRemove, canRemove, realSvcId
 }: DispatchSegmentRowProps) => {
 
     const handleChange = (patch: Partial<WorkSegment>) => {
@@ -68,6 +70,12 @@ export const DispatchSegmentRow = ({
                 <div className="space-y-2.5">
                     <div className="flex flex-wrap gap-1.5">
                         {rooms.map(room => {
+                            if (realSvcId && room.allowed_services && room.allowed_services.length > 0) {
+                                if (!room.allowed_services.includes(realSvcId)) {
+                                    return null;
+                                }
+                            }
+
                             const rId = room.id || (room as any).room_id;
                             const hasBeds = beds.some(b => b.roomId === rId || (b as any).room_id === rId);
                             const isSelected = segment.roomId === rId;

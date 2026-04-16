@@ -143,6 +143,7 @@ export const DispatchServiceBlock = ({
                                 selectedDate={selectedDate}
                                 focus={svc.focus}
                                 avoid={svc.avoid}
+                                realSvcId={svc.serviceId}
                             />
                         ))}
                     </div>
