@@ -6,27 +6,45 @@ import sharp from 'sharp';
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 /**
- * Tạo SVG Watermark cho ảnh
+ * Tạo SVG Watermark cho ảnh (Theo yêu cầu mẫu 2: To, rõ, góc trên phải)
  */
-async function createWatermarkSvg(width: number, height: number, textLines: string[]) {
-    // Kích thước font tỉ lệ với chiều rộng ảnh (khoảng 2-3%)
-    const fontSize = Math.max(16, Math.floor(width * 0.03));
-    const padding = Math.max(10, Math.floor(width * 0.02));
-    const lineHeight = fontSize * 1.4;
+async function createWatermarkSvg(width: number, height: number, dateStr: string, timeStr: string, locationText: string) {
+    // Tỉ lệ font size khoảng 3% chiều rộng ảnh, tối thiểu 24px
+    const fontSize = Math.max(24, Math.floor(width * 0.035));
+    const padding = Math.max(20, Math.floor(width * 0.02));
+    const lineHeight = fontSize * 1.3;
     
-    // Tính toán chiều rộng/cao của panel watermark
-    const panelWidth = Math.floor(width * 0.4); // Tối đa 40% chiều rộng
-    const panelHeight = textLines.length * lineHeight + padding * 2;
+    // Xử lý xuống dòng cho địa chỉ nếu quá dài (chia khoảng 25 ký tự/dòng)
+    const maxChars = 25;
+    const addrLines: string[] = [];
+    if (locationText) {
+        let current = '';
+        locationText.split(' ').forEach(word => {
+            if ((current + word).length > maxChars) {
+                addrLines.push(current.trim());
+                current = word + ' ';
+            } else {
+                current += word + ' ';
+            }
+        });
+        if (current) addrLines.push(current.trim());
+    }
 
-    const textElements = textLines.map((line, i) => {
-        return `<text x="${panelWidth - padding}" y="${padding + fontSize + (i * lineHeight)}" 
-                font-family="Arial, sans-serif" font-size="${fontSize}px" fill="white" 
-                text-anchor="end" font-weight="bold">${line}</text>`;
+    const lines = [`${dateStr} at ${timeStr}`, ...addrLines];
+    const panelWidth = Math.floor(width * 0.45); // Tối đa 45% chiều rộng
+    const panelHeight = lines.length * lineHeight + padding * 2;
+
+    const textElements = lines.map((line, i) => {
+        // Shadow effect bằng cách vẽ 2 lần (offset 1px) hoặc dùng filter
+        return `
+            <text x="${panelWidth - padding + 1}" y="${padding + fontSize + (i * lineHeight) + 1}" font-family="sans-serif" font-size="${fontSize}px" fill="rgba(0,0,0,0.5)" text-anchor="end" font-weight="900">${line}</text>
+            <text x="${panelWidth - padding}" y="${padding + fontSize + (i * lineHeight)}" font-family="sans-serif" font-size="${fontSize}px" fill="white" text-anchor="end" font-weight="900">${line}</text>
+        `;
     }).join('');
 
     return `
         <svg width="${panelWidth}" height="${panelHeight}">
-            <rect x="0" y="0" width="${panelWidth}" height="${panelHeight}" fill="rgba(0,0,0,0.5)" rx="5" />
+            <rect x="0" y="0" width="${panelWidth}" height="${panelHeight}" fill="rgba(0,0,0,0.3)" rx="10" />
             ${textElements}
         </svg>
     `;
@@ -35,7 +53,7 @@ async function createWatermarkSvg(width: number, height: number, textLines: stri
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason } = body;
+        const { employeeId, employeeName: empNameInput, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason } = body;
 
         if (!employeeId) {
             return NextResponse.json({ success: false, error: 'Missing employeeId' }, { status: 400 });
@@ -46,19 +64,28 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        // ─── Step 0: Prepare Watermark Info ─────────────
+        // ─── Step 0: Resolve Staff Code and Real Name ─────────────
+        const { data: userData, error: userError } = await supabase
+            .from('Users')
+            .select('code, fullName')
+            .eq('id', employeeId)
+            .single();
+
+        if (userError || !userData) {
+            console.error('❌ [Attendance] User lookup error:', userError);
+            return NextResponse.json({ success: false, error: 'Không tìm thấy thông tin nhân viên' }, { status: 404 });
+        }
+
+        const staffCode = userData.code; // Mã như NH016
+        const realName = userData.fullName || empNameInput || 'KTV';
+
+        // ─── Step 1: Prepare Watermark Info ─────────────
         const nowUtc = new Date();
         const nowVn = new Date(nowUtc.getTime() + VN_OFFSET_MS);
-        const dateStr = nowVn.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const dateStr = nowVn.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); // 15 Apr 2026
         const timeStr = nowVn.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-        const gpsStr = latitude && longitude ? `📍 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : '';
-        const locStr = locationText ? `🏛️ ${locationText.substring(0, 30)}${locationText.length > 30 ? '...' : ''}` : '';
         
-        const watermarkLines = [dateStr, timeStr];
-        if (gpsStr) watermarkLines.push(gpsStr);
-        if (locStr) watermarkLines.push(locStr);
-
-        // ─── Step 1: Upload Photo if exists ────────────
+        // ─── Step 2: Upload Photo if exists ────────────
         let photoUrl = null;
         if (photoBase64) {
             try {
@@ -66,21 +93,21 @@ export async function POST(request: Request) {
                     const base64Data = base64Str.replace(/^data:image\/\w+;base64,/, "");
                     let buffer = Buffer.from(base64Data, 'base64');
                     const fileExt = base64Str.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
-                    const fileName = `${employeeId}_${Date.now()}${index !== undefined ? `_${index}` : ''}.${fileExt}`;
+                    const fileName = `${staffCode}_${Date.now()}${index !== undefined ? `_${index}` : ''}.${fileExt}`;
 
                     // 🛠️ APPLY WATERMARK using sharp
                     try {
                         const image = sharp(buffer);
                         const metadata = await image.metadata();
                         if (metadata.width && metadata.height) {
-                            const svg = await createWatermarkSvg(metadata.width, metadata.height, watermarkLines);
-                            buffer = await image
+                            const svg = await createWatermarkSvg(metadata.width, metadata.height, dateStr, timeStr, locationText || '');
+                            buffer = (await image
                                 .composite([{
                                     input: Buffer.from(svg),
-                                    gravity: 'northeast', // Góc trên bên phải
+                                    gravity: 'northeast', 
                                     blend: 'over'
                                 }])
-                                .toBuffer();
+                                .toBuffer()) as any;
                         }
                     } catch (sharpError) {
                         console.error('❌ [Attendance] Sharp watermark error:', sharpError);
@@ -88,7 +115,7 @@ export async function POST(request: Request) {
                     
                     const { data: uploadData, error: uploadError } = await supabase.storage
                         .from('attendance')
-                        .upload(fileName, buffer, {
+                        .upload(fileName, buffer as any, {
                             contentType: `image/${fileExt}`,
                             upsert: false
                         });
@@ -118,7 +145,7 @@ export async function POST(request: Request) {
             }
         }
 
-        // ─── Step 2: Auto-Approve Logic ─────────────────
+        // ─── Step 3: Auto-Approve Logic ─────────────────
         const isAutoApprove = checkType === 'CHECK_IN' || checkType === 'CHECK_OUT';
         const finalStatus = isAutoApprove ? 'CONFIRMED' : 'PENDING';
 
@@ -126,7 +153,7 @@ export async function POST(request: Request) {
             .from('KTVAttendance')
             .insert({
                 employeeId,
-                employeeName,
+                employeeName: realName,
                 checkType,
                 latitude: latitude ?? null,
                 longitude: longitude ?? null,
@@ -141,20 +168,22 @@ export async function POST(request: Request) {
             .single();
 
         if (insertError) {
-            console.error('❌ [Attendance POST] Insert error:', insertError);
             return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
 
-        // ─── Step 3: TurnQueue Update (if auto-approved) ─────────────
+        // ─── Step 4: TurnQueue & User Shift Update (if auto-approved) ─────
         if (isAutoApprove) {
             const today = nowVn.toISOString().split('T')[0];
 
             if (checkType === 'CHECK_IN') {
-                // Logic copy from confirm/route.ts
+                // 🔹 Active shift for User
+                await supabase.from('Users').update({ isOnShift: true }).eq('id', employeeId);
+
+                // 🔹 Insert into TurnQueue (using staffCode)
                 const { data: existingTurn } = await supabase
                     .from('TurnQueue')
                     .select('id')
-                    .eq('employee_id', employeeId)
+                    .eq('employee_id', staffCode)
                     .eq('date', today)
                     .maybeSingle();
 
@@ -172,7 +201,7 @@ export async function POST(request: Request) {
                     await supabase
                         .from('TurnQueue')
                         .insert({
-                            employee_id: employeeId,
+                            employee_id: staffCode,
                             date: today,
                             queue_position: nextPosition,
                             status: 'waiting',
@@ -180,15 +209,19 @@ export async function POST(request: Request) {
                         });
                 }
             } else if (checkType === 'CHECK_OUT') {
+                // 🔸 Deactivate shift for User
+                await supabase.from('Users').update({ isOnShift: false }).eq('id', employeeId);
+
+                // 🔸 Set off for TurnQueue (using staffCode)
                 await supabase
                     .from('TurnQueue')
                     .update({ status: 'off' })
-                    .eq('employee_id', employeeId)
+                    .eq('employee_id', staffCode)
                     .eq('date', today);
             }
         }
 
-        // ─── Step 4: Notifications ──────────────────────
+        // ─── Step 5: Notifications ──────────────────────
         const mapsLink = latitude && longitude
             ? ` — https://maps.google.com/?q=${latitude},${longitude}`
             : '';
@@ -199,7 +232,7 @@ export async function POST(request: Request) {
         else if (checkType === 'OFF_REQUEST') actionText = 'gửi yêu cầu OFF';
 
         const autoSuffix = isAutoApprove ? ' [AUTO]' : '';
-        const notifMessage = `📍 ${employeeName || employeeId} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
+        const notifMessage = `📍 ${realName} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
 
         await supabase
             .from('StaffNotifications')
@@ -207,8 +240,6 @@ export async function POST(request: Request) {
                 type: 'CHECK_IN',
                 message: notifMessage,
             });
-
-        console.log(`✅ [Attendance] ${employeeName} ${checkType} - Status: ${finalStatus}`);
 
         return NextResponse.json({
             success: true,
