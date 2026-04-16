@@ -182,8 +182,17 @@ const AttendancePendingSection = () => {
                                         </a>
                                     )}
                                     {rec.photoUrl && (
-                                        <a href={rec.photoUrl} target="_blank" rel="noopener noreferrer" 
-                                           className="text-[10px] text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors">
+                                        <a 
+                                            href={(() => {
+                                                try {
+                                                    const p = JSON.parse(rec.photoUrl || '');
+                                                    return Array.isArray(p) ? p[0] : rec.photoUrl;
+                                                } catch { return rec.photoUrl || '#'; }
+                                            })()} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="text-[10px] text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors"
+                                        >
                                             <Camera size={10} /> Xem hình ảnh
                                         </a>
                                     )}

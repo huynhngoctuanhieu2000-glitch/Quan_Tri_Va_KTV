@@ -421,10 +421,12 @@ const Toast = ({
     // Parse attendanceId from message tag [AID:uuid] — bookingId FK cannot be used
     const aidMatch = notification.message?.match(/\[AID:([a-f0-9-]+)\]/i);
     const attendanceId = aidMatch?.[1] ?? null;
-    // Clean message: hide the [AID:...] tag from UI
-    const displayMessage = notification.message?.replace(/\s*\[AID:[a-f0-9-]+\]/i, '') ?? '';
+    const isAuto = notification.message?.includes('[AUTO]');
+    
+    // Clean message: hide tags from UI
+    const displayMessage = notification.message?.replace(/\s*\[(AID:[a-f0-9-]+|AUTO)\]/gi, '')?.trim() ?? '';
 
-    const isAdminCheckIn = isCheckIn && !!attendanceId && (role?.id === 'admin' || role?.id === 'reception');
+    const isAdminCheckIn = isCheckIn && !!attendanceId && !isAuto && (role?.id === 'admin' || role?.id === 'reception');
 
     const handleAttendanceAction = async (action: 'CONFIRM' | 'REJECT') => {
         setConfirmLoading(action === 'CONFIRM' ? 'confirm' : 'reject');

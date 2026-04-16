@@ -204,7 +204,7 @@ export const useKTVAttendance = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     employeeId: user?.id,
-                    employeeName: user?.id || 'KTV',
+                    employeeName: user?.name || 'KTV',
                     checkType,
                     photoBase64: photosBase64 || null,
                     reason: reason || null,

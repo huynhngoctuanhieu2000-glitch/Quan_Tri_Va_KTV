@@ -198,7 +198,7 @@ export async function POST(request: Request) {
         else if (checkType === 'LATE_CHECKIN') actionText = 'điểm danh bổ sung';
         else if (checkType === 'OFF_REQUEST') actionText = 'gửi yêu cầu OFF';
 
-        const autoSuffix = isAutoApprove ? ' [AUTO-APPROVED]' : '';
+        const autoSuffix = isAutoApprove ? ' [AUTO]' : '';
         const notifMessage = `📍 ${employeeName || employeeId} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
 
         await supabase
