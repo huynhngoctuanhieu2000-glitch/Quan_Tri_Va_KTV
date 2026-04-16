@@ -77,7 +77,8 @@ export async function POST(request: Request) {
         }
 
         const staffCode = userData.code; // Mã như NH016
-        const realName = userData.fullName || empNameInput || 'KTV';
+        // Fallback: nếu không có mã thì dùng tên tạm, nhưng ưu tiên Mã NV theo yêu cầu
+        const displayName = staffCode || userData.fullName || empNameInput || 'KTV';
 
         // ─── Step 1: Prepare Watermark Info ─────────────
         const nowUtc = new Date();
@@ -91,9 +92,9 @@ export async function POST(request: Request) {
             try {
                 const processImage = async (base64Str: string, index?: number) => {
                     const base64Data = base64Str.replace(/^data:image\/\w+;base64,/, "");
-                    let buffer = Buffer.from(base64Data, 'base64');
+                    let buffer: any = Buffer.from(base64Data, 'base64');
                     const fileExt = base64Str.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
-                    const fileName = `${staffCode}_${Date.now()}${index !== undefined ? `_${index}` : ''}.${fileExt}`;
+                    const fileName = `${staffCode || 'UNKNOWN'}_${Date.now()}${index !== undefined ? `_${index}` : ''}.${fileExt}`;
 
                     // 🛠️ APPLY WATERMARK using sharp
                     try {
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
             .from('KTVAttendance')
             .insert({
                 employeeId,
-                employeeName: realName,
+                employeeName: displayName, // Chống dùng Tên => Dùng Mã NV
                 checkType,
                 latitude: latitude ?? null,
                 longitude: longitude ?? null,
@@ -179,45 +180,56 @@ export async function POST(request: Request) {
                 // 🔹 Active shift for User
                 await supabase.from('Users').update({ isOnShift: true }).eq('id', employeeId);
 
-                // 🔹 Insert into TurnQueue (using staffCode)
-                const { data: existingTurn } = await supabase
-                    .from('TurnQueue')
-                    .select('id')
-                    .eq('employee_id', staffCode)
-                    .eq('date', today)
-                    .maybeSingle();
-
-                if (!existingTurn) {
-                    const { data: maxPosRow } = await supabase
+                if (staffCode) {
+                    // 🔹 Insert into TurnQueue (using staffCode)
+                    const { data: existingTurn } = await supabase
                         .from('TurnQueue')
-                        .select('queue_position')
+                        .select('id')
+                        .eq('employee_id', staffCode)
                         .eq('date', today)
-                        .order('queue_position', { ascending: false })
-                        .limit(1)
                         .maybeSingle();
 
-                    const nextPosition = (maxPosRow?.queue_position ?? 0) + 1;
+                    if (!existingTurn) {
+                        const { data: maxPosRow } = await supabase
+                            .from('TurnQueue')
+                            .select('queue_position, check_in_order')
+                            .eq('date', today)
+                            .order('queue_position', { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
 
-                    await supabase
-                        .from('TurnQueue')
-                        .insert({
-                            employee_id: staffCode,
-                            date: today,
-                            queue_position: nextPosition,
-                            status: 'waiting',
-                            turns_completed: 0,
-                        });
+                        const nextPosition = (maxPosRow?.queue_position ?? 0) + 1;
+                        const nextCheckIn = (maxPosRow?.check_in_order ?? 0) + 1;
+
+                        const { error: turnQueueError } = await supabase
+                            .from('TurnQueue')
+                            .insert({
+                                employee_id: staffCode,
+                                date: today,
+                                queue_position: nextPosition,
+                                check_in_order: nextCheckIn,
+                                status: 'waiting',
+                                turns_completed: 0,
+                            });
+                        if (turnQueueError) {
+                             console.error('❌ [TurnQueue Insert Error]:', turnQueueError);
+                        }
+                    }
+                } else {
+                    console.error('❌ [TurnQueue Error]: staffCode is null for user ID:', employeeId);
                 }
             } else if (checkType === 'CHECK_OUT') {
                 // 🔸 Deactivate shift for User
                 await supabase.from('Users').update({ isOnShift: false }).eq('id', employeeId);
 
-                // 🔸 Set off for TurnQueue (using staffCode)
-                await supabase
-                    .from('TurnQueue')
-                    .update({ status: 'off' })
-                    .eq('employee_id', staffCode)
-                    .eq('date', today);
+                if (staffCode) {
+                    // 🔸 Set off for TurnQueue (using staffCode)
+                    await supabase
+                        .from('TurnQueue')
+                        .update({ status: 'off' })
+                        .eq('employee_id', staffCode)
+                        .eq('date', today);
+                }
             }
         }
 
@@ -232,7 +244,7 @@ export async function POST(request: Request) {
         else if (checkType === 'OFF_REQUEST') actionText = 'gửi yêu cầu OFF';
 
         const autoSuffix = isAutoApprove ? ' [AUTO]' : '';
-        const notifMessage = `📍 ${realName} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
+        const notifMessage = `📍 ${displayName} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
 
         await supabase
             .from('StaffNotifications')

@@ -48,6 +48,8 @@ export interface PendingOrder {
   hasAssignedKtv?: boolean;
   timeStart?: string | null;
   timeEnd?: string | null;
+  customerLang?: string;
+  accessToken?: string | null;
 }
 
 export type StaffData = {

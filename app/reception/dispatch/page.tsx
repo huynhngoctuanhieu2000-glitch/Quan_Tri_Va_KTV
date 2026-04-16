@@ -116,7 +116,7 @@ export default function DispatchBoardPage() {
   const lastSoundTimeRef = useRef<number>(0);
   const push = usePushNotifications(user?.id);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
-  const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string } | null>(null);
+  const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string } | null>(null);
 
   // 🔧 QR CONFIGURATION
   const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
@@ -249,6 +249,7 @@ export default function DispatchBoardPage() {
             id: b.id,
             billCode: b.billCode || 'N/A',
             customerName: b.customerName || 'Khách vãng lai',
+            customerLang: b.customerLang || 'vi',
             phone: b.customerPhone || '',
             time: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
             dispatchStatus: dStatus,
@@ -1204,7 +1205,7 @@ if (!hasPermission('dispatch_board')) {
               onClick={() => {
                 const order = orders.find(o => o.id === contextMenu.orderId);
                 if (order) {
-                  setQrModal({ orderId: order.id, billCode: order.billCode, accessToken: (order as any).accessToken });
+                  setQrModal({ orderId: order.id, billCode: order.billCode, accessToken: order.accessToken, customerLang: order.customerLang });
                 }
                 setContextMenu(null);
               }}
@@ -1250,7 +1251,7 @@ if (!hasPermission('dispatch_board')) {
               
               <div className="bg-gray-50 rounded-2xl p-6 mb-6 inline-block border border-gray-100">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&data=${encodeURIComponent(`${JOURNEY_BASE_URL}/vi/journey/${qrModal.accessToken || qrModal.orderId}`)}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&data=${encodeURIComponent(`${JOURNEY_BASE_URL}/${qrModal.customerLang || 'vi'}/journey/${qrModal.accessToken || qrModal.orderId}`)}`}
                   alt="QR Journey"
                   width={QR_SIZE}
                   height={QR_SIZE}

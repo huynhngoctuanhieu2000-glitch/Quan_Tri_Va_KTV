@@ -23,7 +23,7 @@ export async function GET() {
 
         const { data, error } = await supabase
             .from('KTVAttendance')
-            .select('id, employeeId, employeeName, checkType, status, checkedAt, confirmedAt, confirmedBy, latitude, longitude')
+            .select('id, employeeId, employeeName, checkType, status, checkedAt, confirmedAt, confirmedBy, latitude, longitude, photoUrl')
             .in('status', ['CONFIRMED', 'REJECTED'])
             .gte('checkedAt', startOfDay)
             .lte('checkedAt', endOfDay)

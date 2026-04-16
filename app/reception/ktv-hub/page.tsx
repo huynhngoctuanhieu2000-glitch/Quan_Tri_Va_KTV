@@ -244,6 +244,7 @@ interface HistoryRecord {
     confirmedBy: string | null;
     latitude: number | null;
     longitude: number | null;
+    photoUrl?: string | null;
 }
 
 const AttendanceHistorySection = () => {
@@ -314,14 +315,14 @@ const AttendanceHistorySection = () => {
                                 const isConfirmed = rec.status === 'CONFIRMED';
                                 return (
                                     <div key={rec.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                                             <span className="font-bold text-gray-800 text-sm truncate">
                                                 {rec.employeeName || rec.employeeId}
                                             </span>
                                             <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0 ${
                                                 isCheckIn ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                                             }`}>
-                                                {isCheckIn ? 'VÀO' : 'RA'}
+                                                {rec.checkType === 'CHECK_IN' ? 'VÀO' : rec.checkType === 'CHECK_OUT' ? 'RA' : rec.checkType === 'OFF_REQUEST' ? 'OFF' : 'BỔ SUNG'}
                                             </span>
                                             {rec.latitude && rec.longitude && (
                                                 <a
@@ -329,9 +330,24 @@ const AttendanceHistorySection = () => {
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 underline shrink-0"
+                                                    className="text-[10px] text-blue-500 hover:text-blue-700 bg-blue-50/50 hover:bg-blue-100 px-1 border border-transparent rounded flex items-center gap-0.5 shrink-0 transition-colors"
                                                 >
                                                     <MapPin size={10} /> GPS
+                                                </a>
+                                            )}
+                                            {rec.photoUrl && (
+                                                <a 
+                                                    href={(() => {
+                                                        try {
+                                                            const p = JSON.parse(rec.photoUrl || '');
+                                                            return Array.isArray(p) ? p[0] : rec.photoUrl;
+                                                        } catch { return rec.photoUrl || '#'; }
+                                                    })()} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="text-[10px] text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 px-1.5 rounded flex items-center gap-1 shrink-0 transition-colors h-[21px]"
+                                                >
+                                                    <Camera size={10} /> Xem ảnh
                                                 </a>
                                             )}
                                         </div>
