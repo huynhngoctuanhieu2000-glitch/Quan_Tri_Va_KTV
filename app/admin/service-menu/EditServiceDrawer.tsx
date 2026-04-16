@@ -50,6 +50,9 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
         ...service,
         focusConfig: service.focusConfig || {},
         tags: service.tags || [],
+        description: typeof service.description === 'string' 
+          ? { vn: service.description, en: '', cn: '', jp: '', kr: '' } 
+          : (service.description || { vn: '', en: '', cn: '', jp: '', kr: '' }),
       });
     }
   }, [service]);
@@ -64,6 +67,16 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : type === 'number' ? Number(value) : value
+    }));
+  };
+
+  const handleDescriptionChange = (lang: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      description: {
+        ...(typeof prev.description === 'object' && prev.description !== null ? prev.description : {}),
+        [lang]: value
+      }
     }));
   };
 
@@ -129,14 +142,7 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
     setIsSubmitting(false);
   };
 
-  // Safe description extraction if DB holds JSON
-  const getDescText = (desc: any) => {
-    if (typeof desc === 'string') return desc;
-    if (desc && typeof desc === 'object') {
-        return desc.vn || desc.en || JSON.stringify(desc);
-    }
-    return '';
-  };
+
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
@@ -237,18 +243,35 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
                 </div>
                 
                 <div className="space-y-4">
-                  <div>
+                  <div className="space-y-3">
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center justify-between">
-                      Mô tả hiển thị cho Khách
+                      Mô tả hiển thị cho Khách đa ngôn ngữ
                       <span className="text-[10px] font-normal text-gray-400 normal-case">(Lưu dạng văn bản thuần)</span>
                     </label>
-                    <textarea 
-                      name="description" 
-                      rows={3}
-                      value={getDescText(formData.description)} 
-                      onChange={handleChange} 
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" 
-                    />
+                    <div className="space-y-3 p-4 bg-gray-50 border border-gray-100 rounded-xl">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Việt (VN)</label>
+                        <textarea rows={2} value={formData.description?.vn || ''} onChange={e => handleDescriptionChange('vn', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Anh (EN)</label>
+                          <textarea rows={2} value={formData.description?.en || ''} onChange={e => handleDescriptionChange('en', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Trung (CN)</label>
+                          <textarea rows={2} value={formData.description?.cn || ''} onChange={e => handleDescriptionChange('cn', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Nhật (JP)</label>
+                          <textarea rows={2} value={formData.description?.jp || ''} onChange={e => handleDescriptionChange('jp', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Hàn (KR)</label>
+                          <textarea rows={2} value={formData.description?.kr || ''} onChange={e => handleDescriptionChange('kr', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Quy định / Lưu ý phụ</label>
