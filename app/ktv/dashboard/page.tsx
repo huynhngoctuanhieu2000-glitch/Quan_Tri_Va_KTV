@@ -277,9 +277,15 @@ function ScreenDashboard({ logic }: { logic: any }) {
   // Tên tất cả DV
   const allServiceNames = allItems.map((i: any) => i.service_name).filter(Boolean);
   // Tổng thời gian các segments admin gán cho KTV
-  const allKtvSegments = allItems.flatMap((i: any) => 
-    (i?.segments || []).filter((s: any) => s.ktvId === logic.user?.id)
-  );
+  const allKtvSegments = allItems.flatMap((i: any) => {
+    let segs = [];
+    if (typeof i?.segments === 'string') {
+        try { segs = JSON.parse(i.segments); } catch (e) { segs = []; }
+    } else if (Array.isArray(i?.segments)) {
+        segs = i.segments;
+    }
+    return segs.filter((s: any) => s.ktvId === logic.user?.id);
+  });
   const totalAssignedMins = allKtvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
   const ktvSegments = allKtvSegments;
   
@@ -472,11 +478,21 @@ function ScreenTimer({ logic }: { logic: any }) {
   const allTimerServiceNames = allTimerItems.map((i: any) => i.service_name).filter(Boolean);
   
   // Gộp tất cả segments của KTV này
-  const ktvSegments = allTimerItems.flatMap((i: any) => 
-    (i?.segments || []).filter((s: any) => s.ktvId === logic.user?.id)
-  );
+  const ktvSegments = allTimerItems.flatMap((i: any) => {
+    let segs = [];
+    if (typeof i?.segments === 'string') {
+        try { segs = JSON.parse(i.segments); } catch (e) { segs = []; }
+    } else if (Array.isArray(i?.segments)) {
+        segs = i.segments;
+    }
+    return segs.filter((s: any) => s.ktvId === logic.user?.id);
+  });
   const totalAssignedMins = ktvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
-  const displayDuration = totalAssignedMins || item.duration || 60;
+  const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
+  const nextSeg = ktvSegments.length > (activeSegmentIndex + 1) ? ktvSegments[activeSegmentIndex + 1] : null;
+
+  // 🕒 CHỈ HIỂN THỊ THỜI GIAN CỦA CHẶNG HIỆN TẠI thay vì tổng
+  const displayDuration = currentSeg ? (Number(currentSeg.duration) || 60) : (item.duration || 60);
 
   const totalDuration = isPrepping 
     ? (logic.settings?.ktv_setup_duration_minutes || 10) * 60 
@@ -484,8 +500,6 @@ function ScreenTimer({ logic }: { logic: any }) {
   
   // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
   const progress = (currentSecs / totalDuration) * 100;
-  const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
-  const nextSeg = ktvSegments.length > (activeSegmentIndex + 1) ? ktvSegments[activeSegmentIndex + 1] : null;
 
   // 🔔 Stage Transition Alert Logic: Show if current segment ends in < 3 mins
   const [showTransitionAlert, setShowTransitionAlert] = useState(false);

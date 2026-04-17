@@ -178,28 +178,33 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
             if (allMySegs.length === 0) return;
 
-            // 3. Tính toán lộ trình thực tế (Shifted Segments)
-            let tStart = allAssignedItems[0]?.timeStart || booking.timeStart;
-            if (!tStart) return;
+            // 3. TÍNH TOÁN THEO THỜI GIAN THỰC (actualStartTime & actualEndTime)
+            let foundIdx = -1;
 
-            if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
-                tStart = tStart.replace(' ', 'T') + 'Z';
-            }
-            const actualStartMs = new Date(tStart).getTime();
-            const nowMs = new Date().getTime();
-
-            let currentOffsetMs = 0;
-            let foundIdx = 0;
-
-            allMySegs.forEach((seg: any, idx: number) => {
-                const segStartMs = actualStartMs + currentOffsetMs;
-                if (nowMs >= segStartMs) {
-                    foundIdx = idx;
+            // 3.1 Tìm chặng đang chạy (có start, chưa có end)
+            for (let i = allMySegs.length - 1; i >= 0; i--) {
+                if (allMySegs[i].actualStartTime && !allMySegs[i].actualEndTime) {
+                    foundIdx = i;
+                    break;
                 }
-                currentOffsetMs += (seg.duration * 60 * 1000);
-            });
+            }
 
-            setActiveSegmentIndex(foundIdx);
+            // 3.2 Nếu không có chặng đang chạy (ví dụ PREPARING), tìm chặng kế tiếp chưa start
+            if (foundIdx === -1) {
+                for (let i = 0; i < allMySegs.length; i++) {
+                    if (!allMySegs[i].actualStartTime) {
+                        foundIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            // 3.3 Nếu đã chạy xong hết, trỏ về chặng cuối cùng
+            if (foundIdx === -1) {
+                foundIdx = allMySegs.length - 1;
+            }
+
+            setActiveSegmentIndex(Math.max(0, foundIdx));
         };
 
         updateActiveSegment();
@@ -439,20 +444,32 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             allMySegs.push(...mySegs);
                         }
 
-                        // ------------- TÍNH TOÁN CHẶNG HIỆN TẠI NGAY TRONG FETCH -------------
                         let calculatedSegIdx = manualSegmentOverrideRef.current ? activeSegmentIndex : 0;
-                        if (!manualSegmentOverrideRef.current && currentStatus === 'IN_PROGRESS' && res.data.timeStart) {
-                            let tStart = res.data.timeStart;
-                            if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
-                                tStart = tStart.replace(' ', 'T') + 'Z';
-                            }
-                            const start = new Date(tStart).getTime();
-                            const elapsedMins = (new Date().getTime() - start) / 60000;
-                            let acc = 0;
-                            for (let i = 0; i < allMySegs.length; i++) {
-                                acc += allMySegs[i].duration;
-                                // Nếu chưa xong chặng này
-                                if (elapsedMins <= acc) { calculatedSegIdx = i; break; }
+                        if (!manualSegmentOverrideRef.current) {
+                            if (allMySegs.length > 0 && allMySegs.some(s => s.actualStartTime)) {
+                                // Tìm chặng đang active dựa trên actualStartTime
+                                let foundIdx = -1;
+                                for (let i = allMySegs.length - 1; i >= 0; i--) {
+                                    if (allMySegs[i].actualStartTime) {
+                                        foundIdx = i;
+                                        break;
+                                    }
+                                }
+                                if (foundIdx >= 0) calculatedSegIdx = foundIdx;
+                            } else if (currentStatus === 'IN_PROGRESS' && res.data.timeStart) {
+                                // Fallback đếm ngược ảo nếu chưa có segments time tracking
+                                let tStart = res.data.timeStart;
+                                if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
+                                    tStart = tStart.replace(' ', 'T') + 'Z';
+                                }
+                                const start = new Date(tStart).getTime();
+                                const elapsedMins = (new Date().getTime() - start) / 60000;
+                                let acc = 0;
+                                for (let i = 0; i < allMySegs.length; i++) {
+                                    acc += allMySegs[i].duration;
+                                    // Nếu chưa xong chặng này
+                                    if (elapsedMins <= acc) { calculatedSegIdx = i; break; }
+                                }
                             }
                         }
                         // Nếu đang PREPARING mà KTV check activeSegmentIndex > 0 (đã chạy trước đó)
@@ -475,8 +492,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             res.data.currentStatus = currentStatus;
                             
                             // Dùng duration của CHẶNG HIỆN TẠI (không phải tổng)
-                            const currentSegDuration = allMySegs.length > 0
-                                ? (Number(allMySegs[calculatedSegIdx]?.duration) || allMySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0) || 60)
+                            const currentSegDuration = allMySegs.length > 0 && allMySegs[calculatedSegIdx]
+                                ? (Number(allMySegs[calculatedSegIdx].duration) || 60)
                                 : (assignedItem?.duration || 60);
                             
                             console.log("⏱️ [Timer] calculatedSegIdx:", calculatedSegIdx, "segDuration:", currentSegDuration, "totalSegs:", allMySegs.length);
@@ -485,22 +502,31 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             const totalSecs = currentSegDuration * 60;
                             let tStart = assignedItem?.timeStart || res.data.timeStart;
                             
-                            if (currentStatus === 'IN_PROGRESS' && tStart) {
-                                if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
-                                    tStart = tStart.replace(' ', 'T') + 'Z';
-                                }
-                                const start = new Date(tStart).getTime();
-                                const now = new Date().getTime();
-                                const elapsed = Math.floor((now - start) / 1000);
+                            if (currentStatus === 'IN_PROGRESS') {
                                 // Nếu đã override chặng thủ công, KHÔNG ghi đè timer
                                 if (!manualSegmentOverrideRef.current) {
-                                    // 🔧 TÍNH LẠI ELAPSED THEO CHẶNG: trừ đi thời gian của các chặng trước
-                                    let previousSegsDuration = 0;
-                                    for(let i=0; i < calculatedSegIdx; i++) {
-                                        previousSegsDuration += (allMySegs[i]?.duration || 0);
+                                    let activeSegStartTime = allMySegs[calculatedSegIdx]?.actualStartTime || tStart;
+                                    if (activeSegStartTime) {
+                                        if (typeof activeSegStartTime === 'string' && !activeSegStartTime.includes('Z') && !activeSegStartTime.includes('+')) {
+                                            activeSegStartTime = activeSegStartTime.replace(' ', 'T') + 'Z';
+                                        }
+                                        const start = new Date(activeSegStartTime).getTime();
+                                        const now = new Date().getTime();
+                                        const elapsed = Math.floor((now - start) / 1000);
+                                        // TÍNH LẠI ELAPSED THEO CHẶNG (từ mốc bắt đầu của chặng)
+                                        let adjustedElapsed = elapsed;
+                                        
+                                        // Fallback nếu không có actualStartTime (trừ đi thời gian các chặng trước)
+                                        if (!allMySegs[calculatedSegIdx]?.actualStartTime) {
+                                            let previousSegsDuration = 0;
+                                            for(let i=0; i < calculatedSegIdx; i++) {
+                                                previousSegsDuration += (allMySegs[i]?.duration || 0);
+                                            }
+                                            adjustedElapsed = elapsed - (previousSegsDuration * 60);
+                                        }
+                                        
+                                        setTimeRemaining(Math.max(0, totalSecs - adjustedElapsed));
                                     }
-                                    const adjustedElapsed = elapsed - (previousSegsDuration * 60);
-                                    setTimeRemaining(Math.max(0, totalSecs - adjustedElapsed));
                                 }
                             } else if (!isTimerRunningRef.current) {
                                 // Chỉ reset timer khi CHƯA chạy (tránh nhảy số khi đang đếm ngược)
@@ -805,7 +831,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 bookingId: booking.id, 
                 status: 'IN_PROGRESS',
                 techCode: user.id,
-                action: activeSegmentIndex > 0 ? 'RESUME_TIMER' : 'START_TIMER'
+                action: activeSegmentIndex > 0 ? 'RESUME_TIMER' : 'START_TIMER',
+                activeSegmentIndex: activeSegmentIndex
             })
         });
         const res = await response.json();
@@ -859,6 +886,19 @@ export function useKTVDashboard(config?: DashboardConfig) {
             if (isSameRoom) {
                // Cùng phòng -> Tiếp tục chạy, giữ nguyên trạng thái IN_PROGRESS
                console.log(`🚪 [KTV] Cùng phòng ${currentSeg?.roomId}. Tự động nhảy timer...`);
+               setIsLoading(true);
+               await fetch('/api/ktv/booking', {
+                   method: 'PATCH',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ 
+                       bookingId: booking.id, 
+                       status: 'IN_PROGRESS',
+                       techCode: user.id,
+                       action: 'NEXT_SEGMENT',
+                       activeSegmentIndex: nextIdx
+                   })
+               });
+               setIsLoading(false);
             } else {
                // Khác phòng -> Cần nghỉ giải lao -> PREPARING
                console.log(`🚪 [KTV] Khác phòng (${currentSeg?.roomId} -> ${nextSeg?.roomId}). Chờ KTV bấm bắt đầu...`);
@@ -869,7 +909,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
                    body: JSON.stringify({ 
                        bookingId: booking.id, 
                        status: 'PREPARING',
-                       techCode: user.id 
+                       techCode: user.id,
+                       action: 'NEXT_SEGMENT_PREPARE',
+                       activeSegmentIndex: nextIdx
                    })
                });
                setIsTimerRunning(false);

@@ -285,23 +285,18 @@ export async function PATCH(request: Request) {
             targetBookingItemId = allItemIdsForThisKTV[0];
         }
         
-        if (status === 'IN_PROGRESS') {
-            // 🔒 Server-side validation: Kiểm tra ràng buộc thời gian
-            if (turnForSync) {
+        if (status === 'IN_PROGRESS' || action === 'NEXT_SEGMENT_PREPARE') {
+            // 🔒 Server-side validation: Kiểm tra ràng buộc thời gian (chỉ khi thực sự IN_PROGRESS)
+            if (turnForSync && action !== 'NEXT_SEGMENT_PREPARE') {
                 let allowed: Date | null = null;
 
                 if (turnForSync.start_time) {
-                    // ⚠️ FIX TIMEZONE: start_time là giờ VN (HH:MM).
-                    // Server Vercel chạy UTC+0, nên KHÔNG dùng setHours() (sẽ sai 7h).
-                    // Giải pháp: build timestamp UTC từ "HH:MM" VN bằng cách trừ 7h offset.
                     const [h, m] = String(turnForSync.start_time).split(':').map(Number);
-                    const nowUtc = new Date(); // UTC time on server
-                    // Lấy ngày VN hiện tại (UTC+7)
+                    const nowUtc = new Date();
                     const vnOffsetMs = 7 * 60 * 60 * 1000;
                     const nowVnMs = nowUtc.getTime() + vnOffsetMs;
                     const nowVn = new Date(nowVnMs);
                     const [ynVn, mnVn, dnVn] = [nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate()];
-                    // Build Date UTC tương ứng với HH:MM giờ VN hôm nay
                     const allowedUtc = new Date(Date.UTC(ynVn, mnVn, dnVn, h, m, 0) - vnOffsetMs);
                     allowed = allowedUtc;
                 } else if (turnForSync.last_served_at) {
@@ -316,7 +311,6 @@ export async function PATCH(request: Request) {
                 }
 
                 if (allowed && new Date().getTime() < (allowed.getTime() - 5000)) {
-                    // Hiển thị giờ VN cho user
                     const vnOffsetMs = 7 * 60 * 60 * 1000;
                     const allowedVn = new Date(allowed.getTime() + vnOffsetMs);
                     const hh = String(allowedVn.getUTCHours()).padStart(2, '0');
@@ -329,25 +323,63 @@ export async function PATCH(request: Request) {
             }
 
             // 🔧 FIX: Dùng 1 timestamp duy nhất cho cả Booking + BookingItem
-            // Tránh lệch giây giữa timer KTV và khách hàng
-            // KHÔNG GHI ĐÈ timeStart NẾU là Resume (Chặng 2+)
-            if (action !== 'RESUME_TIMER') {
-                const sharedTimeStart = new Date().toISOString();
+            const sharedTimeStart = new Date().toISOString();
+            
+            // KHÔNG GHI ĐÈ timeStart của Bookings NẾU là Resume/Next Segment
+            if (action !== 'RESUME_TIMER' && action !== 'NEXT_SEGMENT' && action !== 'NEXT_SEGMENT_PREPARE') {
                 updatePayload.timeStart = sharedTimeStart;
                 itemUpdatePayload.timeStart = sharedTimeStart;
             }
 
-            // 🚀 IN_PROGRESS: Update TẤT CẢ items của KTV này
+            // 🚀 CẬP NHẬT SEGMENTS (thời gian chặng)
+            if (allItemIdsForThisKTV.length > 0) {
+                const { data: currentItems } = await supabase
+                    .from('BookingItems')
+                    .select('id, segments')
+                    .in('id', allItemIdsForThisKTV);
+
+                for (const item of currentItems || []) {
+                    let segs: any[] = [];
+                    try {
+                        segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
+                    } catch { segs = []; }
+                    
+                    const activeSegmentIndex = body.activeSegmentIndex || 0;
+
+                    if (action === 'START_TIMER') {
+                        if (segs.length > 0) segs[0].actualStartTime = sharedTimeStart;
+                    } else if (action === 'NEXT_SEGMENT') {
+                        if (activeSegmentIndex > 0 && segs.length > activeSegmentIndex) {
+                            if (segs[activeSegmentIndex - 1]) segs[activeSegmentIndex - 1].actualEndTime = sharedTimeStart;
+                            segs[activeSegmentIndex].actualStartTime = sharedTimeStart;
+                        }
+                    } else if (action === 'NEXT_SEGMENT_PREPARE') {
+                        if (activeSegmentIndex > 0 && segs[activeSegmentIndex - 1]) {
+                            segs[activeSegmentIndex - 1].actualEndTime = sharedTimeStart;
+                        }
+                    } else if (action === 'RESUME_TIMER') {
+                        if (segs.length > activeSegmentIndex) {
+                            segs[activeSegmentIndex].actualStartTime = sharedTimeStart;
+                        }
+                    }
+                    
+                    await supabase
+                        .from('BookingItems')
+                        .update({ segments: JSON.stringify(segs) })
+                        .eq('id', item.id);
+                }
+            }
+
+            // 🚀 IN_PROGRESS (hoặc PREPARING nếu là NEXT_SEGMENT_PREPARE): Update TẤT CẢ items của KTV này
             if (allItemIdsForThisKTV.length > 0) {
                 await supabase
                     .from('BookingItems')
                     .update(itemUpdatePayload)
                     .in('id', allItemIdsForThisKTV);
-                // Đánh dấu đã update batch → skip single update ở dưới
                 targetBookingItemId = null;
             }
 
-            updatePayload.status = 'IN_PROGRESS';
+            updatePayload.status = action === 'NEXT_SEGMENT_PREPARE' ? 'PREPARING' : 'IN_PROGRESS';
         } else if (status === 'READY') {
             itemUpdatePayload.status = 'READY';
         } else if (status === 'CLEANING') {
