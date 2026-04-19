@@ -253,11 +253,14 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 if (isGlobal || isComplaint) addToast(newNotif);
             } else if (isKtv) {
                 if (newNotif.employeeId === user.id) {
-                    if (newNotif.type === 'KTV_NEW_ORDER') {
-                        // 🔊 Chỉ phát âm thanh, KHÔNG hiện popup (KTV tự thấy trên Dashboard)
-                        playSound(newNotif.type);
+                    // ✅ Hiện toast + phát âm thanh cho tất cả notification types
+                    // NEW_ORDER/KTV_NEW_ORDER: Đơn hàng mới → toast "Đơn hàng mới" + âm thanh
+                    // REWARD: Điểm thưởng → toast "Phần thưởng mới" + âm thanh
+                    // COMPLAINT: Khiếu nại → toast "Thông báo khẩn" + âm thanh
+                    if (newNotif.type === 'NEW_ORDER') {
+                        // Fallback: force correct sound even if trigger chưa apply migration
+                        addToast({ ...newNotif, type: 'KTV_NEW_ORDER' });
                     } else {
-                        // ✅ REWARD, COMPLAINT, etc: Hiện toast + phát âm thanh
                         addToast(newNotif);
                     }
                 }
