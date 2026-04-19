@@ -186,12 +186,13 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 if (isGlobal || isComplaint) addToast(newNotif);
             } else if (isKtv) {
                 if (newNotif.employeeId === user.id) {
-                    // ❌ Bỏ qua thông báo đơn hàng mới cho KTV (do KTV đã tự xem trên Dashboard)
-                    if (newNotif.type === 'NEW_ORDER') {
-                        console.log('⏭️ [NotificationProvider] Ignored NEW_ORDER for KTV');
-                        return;
+                    if (newNotif.type === 'KTV_NEW_ORDER') {
+                        // 🔊 Chỉ phát âm thanh, KHÔNG hiện popup (KTV tự thấy trên Dashboard)
+                        playSound(newNotif.type);
+                    } else {
+                        // ✅ REWARD, COMPLAINT, etc: Hiện toast + phát âm thanh
+                        addToast(newNotif);
                     }
-                    addToast(newNotif);
                 }
             } else if (isReception && (!newNotif.employeeId || newNotif.employeeId === '')) {
                 addToast(newNotif);
@@ -349,6 +350,7 @@ const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notifica
     const type = notification.type?.toUpperCase();
     const isComplaint = type === 'COMPLAINT';
     const isCheckIn = type === 'CHECK_IN';
+    const isKtvNewOrder = type === 'KTV_NEW_ORDER';
     
     // Determine title and icon based on notification type
     let title = 'Phần thưởng mới';
@@ -363,6 +365,12 @@ const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notifica
         iconBg = 'bg-white/20';
         borderClass = 'border-rose-500';
         titleColor = 'text-rose-100';
+    } else if (isKtvNewOrder) {
+        title = 'Đơn hàng mới';
+        iconElement = <Bell size={20} className="text-white" />;
+        iconBg = 'bg-amber-500';
+        borderClass = 'border-amber-200';
+        titleColor = 'text-amber-600';
     } else if (isCheckIn) {
         title = 'Điểm danh';
         iconElement = <CheckCircle size={20} className="text-white" />;

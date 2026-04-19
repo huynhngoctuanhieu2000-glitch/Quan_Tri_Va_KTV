@@ -95,6 +95,10 @@ self.addEventListener('push', (event) => {
     icon: '/icon.png',
     badge: '/icon.png',
     vibrate: [200, 100, 200],
+    // 🔧 iOS improvements: tag + renotify ensures each notification is shown separately
+    tag: 'ngan-ha-' + Date.now(),
+    renotify: true,
+    silent: false,
     data: {
       url: data.url || '/',
     },
