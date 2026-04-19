@@ -73,21 +73,41 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     // 📲 Auto-register Push Notifications (runs once per session on first user tap)
     const registerPushIfNeeded = async () => {
         if (pushRegisteredRef.current || !user?.id) return;
-        if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+            console.log('⏭️ [Push] Not supported in this browser');
+            return;
+        }
         
         pushRegisteredRef.current = true; // Prevent duplicate calls
         
         try {
+            console.log('📲 [Push] Registering Service Worker...');
             const reg = await navigator.serviceWorker.register('/sw.js');
+            await navigator.serviceWorker.ready; // Wait for SW to be active
+            console.log('✅ [Push] Service Worker ready');
+
             const existingSub = await reg.pushManager.getSubscription();
             
             if (existingSub) {
-                console.log('✅ [Push] Already subscribed');
+                console.log('✅ [Push] Already subscribed, syncing to DB...');
+                // Sync existing subscription to DB (in case it was lost)
+                await fetch('/api/notifications/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        staffId: user.id,
+                        subscription: existingSub.toJSON(),
+                        userAgent: navigator.userAgent
+                    })
+                });
                 return;
             }
 
             // Request permission (requires user gesture — we're inside unlockAudio click handler)
+            console.log('📲 [Push] Requesting notification permission...');
             const permission = await Notification.requestPermission();
+            console.log('📲 [Push] Permission result:', permission);
+            
             if (permission !== 'granted') {
                 console.log('⏭️ [Push] Permission denied or dismissed');
                 return;
@@ -97,23 +117,24 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
             });
+            console.log('✅ [Push] Subscribed successfully');
 
-            // Save subscription to database
-            const { error } = await supabase
-                .from('StaffPushSubscriptions')
-                .upsert({
-                    staff_id: user.id,
+            // Save subscription via API route (bypasses RLS)
+            const res = await fetch('/api/notifications/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    staffId: user.id,
                     subscription: sub.toJSON(),
-                    user_agent: navigator.userAgent,
-                    updated_at: new Date().toISOString()
-                }, {
-                    onConflict: 'staff_id,subscription'
-                });
+                    userAgent: navigator.userAgent
+                })
+            });
+            const result = await res.json();
 
-            if (error) {
-                console.error('❌ [Push] Error saving subscription:', error);
-            } else {
+            if (result.success) {
                 console.log('✅ [Push] Subscription saved for', user.id);
+            } else {
+                console.error('❌ [Push] Error saving subscription:', result.error);
             }
         } catch (err) {
             console.error('❌ [Push] Registration failed:', err);
