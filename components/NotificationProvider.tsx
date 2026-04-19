@@ -55,7 +55,71 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     const audioUnlockedRef = useRef<boolean>(false);
     const audioInstanceRef = useRef<HTMLAudioElement | null>(null);
     const lastSoundTimeRef = useRef<number>(0);
+    const pushRegisteredRef = useRef<boolean>(false);
     const router = useRouter();
+
+    // 🔧 VAPID KEY for Push Subscription (same as in usePushNotifications.ts and push API)
+    const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BEQkLUJGYdeaVqOoHGQ8JGks-EcGlWWi9R4LHSjyPMH3dLSR3-GGsFwu6YvWFv9jO7uHlK-UogSGkgfNuLr1kS7o';
+
+    const urlBase64ToUint8Array = (base64String: string) => {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+        return outputArray;
+    };
+
+    // 📲 Auto-register Push Notifications (runs once per session on first user tap)
+    const registerPushIfNeeded = async () => {
+        if (pushRegisteredRef.current || !user?.id) return;
+        if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        
+        pushRegisteredRef.current = true; // Prevent duplicate calls
+        
+        try {
+            const reg = await navigator.serviceWorker.register('/sw.js');
+            const existingSub = await reg.pushManager.getSubscription();
+            
+            if (existingSub) {
+                console.log('✅ [Push] Already subscribed');
+                return;
+            }
+
+            // Request permission (requires user gesture — we're inside unlockAudio click handler)
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.log('⏭️ [Push] Permission denied or dismissed');
+                return;
+            }
+
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+
+            // Save subscription to database
+            const { error } = await supabase
+                .from('StaffPushSubscriptions')
+                .upsert({
+                    staff_id: user.id,
+                    subscription: sub.toJSON(),
+                    user_agent: navigator.userAgent,
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'staff_id,subscription'
+                });
+
+            if (error) {
+                console.error('❌ [Push] Error saving subscription:', error);
+            } else {
+                console.log('✅ [Push] Subscription saved for', user.id);
+            }
+        } catch (err) {
+            console.error('❌ [Push] Registration failed:', err);
+            pushRegisteredRef.current = false; // Allow retry
+        }
+    };
 
     // Prime the audio instance on first load
     useEffect(() => {
@@ -66,6 +130,9 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     }, []);
 
     const unlockAudio = () => {
+        // 📲 Auto-register push on first tap (needs user gesture for Notification.requestPermission)
+        registerPushIfNeeded();
+
         if (audioUnlockedRef.current || !audioInstanceRef.current) return;
         
         const audio = audioInstanceRef.current;
