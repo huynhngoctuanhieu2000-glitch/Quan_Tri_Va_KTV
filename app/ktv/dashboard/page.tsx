@@ -641,23 +641,10 @@ function ScreenTimer({ logic }: { logic: any }) {
             )}
           </div>
         ) : (
-          ktvSegments.length > 1 && activeSegmentIndex < ktvSegments.length - 1 ? (
-            /* Multi-segment: nút chuyển chặng thủ công */
-            <button
-              onClick={handleFinishTimer}
-              disabled={logic.isLoading}
-              className={`w-full h-16 ${THEME.radius} bg-indigo-600 shadow-indigo-200 text-white font-black text-lg shadow-xl flex items-center justify-center gap-3 active:scale-[0.98] transition-all`}
-            >
-              <ArrowRight size={24} />
-              XONG CHẶNG {activeSegmentIndex + 1} → CHẶNG {activeSegmentIndex + 2}
-            </button>
-          ) : (
-            /* Chặng cuối / đơn chặng: tự động hoàn tất khi hết giờ */
-            <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
-              <Clock size={16} className="text-emerald-600 animate-pulse" />
-              <span className="text-sm font-bold text-emerald-700">Hệ thống tự động hoàn tất khi hết giờ</span>
-            </div>
-          )
+          <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+            <Clock size={16} className="text-emerald-600 animate-pulse" />
+            <span className="text-sm font-bold text-emerald-700">Hệ thống tự động chuyển chặng/hoàn tất khi hết giờ</span>
+          </div>
         )}
       </div>
 
