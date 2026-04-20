@@ -338,35 +338,52 @@ export async function PATCH(request: Request) {
                     .select('id, segments')
                     .in('id', allItemIdsForThisKTV);
 
+                // 1. Phân tách và gộp thành mảng Global Segments giống UI
+                let allGlobalSegs: { item: any, localIdx: number, seg: any }[] = [];
+                const itemSegmentsMap = new Map<string, any[]>();
+
                 for (const item of currentItems || []) {
                     let segs: any[] = [];
                     try {
                         segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
                     } catch { segs = []; }
-                    
-                    const activeSegmentIndex = body.activeSegmentIndex || 0;
+                    itemSegmentsMap.set(item.id, segs);
 
-                    if (action === 'START_TIMER') {
-                        if (segs.length > 0) segs[0].actualStartTime = sharedTimeStart;
-                    } else if (action === 'NEXT_SEGMENT') {
-                        if (activeSegmentIndex > 0 && segs.length > activeSegmentIndex) {
-                            if (segs[activeSegmentIndex - 1]) segs[activeSegmentIndex - 1].actualEndTime = sharedTimeStart;
-                            segs[activeSegmentIndex].actualStartTime = sharedTimeStart;
+                    segs.forEach((seg, idx) => {
+                        if (seg.ktvId && technicianCode && seg.ktvId.toLowerCase().includes(technicianCode.toLowerCase())) {
+                            allGlobalSegs.push({ item, localIdx: idx, seg });
                         }
-                    } else if (action === 'NEXT_SEGMENT_PREPARE') {
-                        if (activeSegmentIndex > 0 && segs[activeSegmentIndex - 1]) {
-                            segs[activeSegmentIndex - 1].actualEndTime = sharedTimeStart;
-                        }
-                    } else if (action === 'RESUME_TIMER') {
-                        if (segs.length > activeSegmentIndex) {
-                            segs[activeSegmentIndex].actualStartTime = sharedTimeStart;
-                        }
+                    });
+                }
+
+                // 2. Cập nhật thời gian vào Global Segments
+                const activeSegmentIndex = body.activeSegmentIndex || 0;
+
+                if (action === 'START_TIMER') {
+                    if (allGlobalSegs.length > 0) {
+                        allGlobalSegs[0].seg.actualStartTime = sharedTimeStart;
                     }
-                    
+                } else if (action === 'NEXT_SEGMENT') {
+                    if (activeSegmentIndex > 0 && allGlobalSegs.length > activeSegmentIndex) {
+                        if (allGlobalSegs[activeSegmentIndex - 1]) allGlobalSegs[activeSegmentIndex - 1].seg.actualEndTime = sharedTimeStart;
+                        allGlobalSegs[activeSegmentIndex].seg.actualStartTime = sharedTimeStart;
+                    }
+                } else if (action === 'NEXT_SEGMENT_PREPARE') {
+                    if (activeSegmentIndex > 0 && allGlobalSegs[activeSegmentIndex - 1]) {
+                        allGlobalSegs[activeSegmentIndex - 1].seg.actualEndTime = sharedTimeStart;
+                    }
+                } else if (action === 'RESUME_TIMER') {
+                    if (allGlobalSegs.length > activeSegmentIndex) {
+                        allGlobalSegs[activeSegmentIndex].seg.actualStartTime = sharedTimeStart;
+                    }
+                }
+
+                // 3. Đẩy lại các cập nhật vào DB
+                for (const [itemId, segs] of Array.from(itemSegmentsMap.entries())) {
                     await supabase
                         .from('BookingItems')
                         .update({ segments: JSON.stringify(segs) })
-                        .eq('id', item.id);
+                        .eq('id', itemId);
                 }
             }
 
