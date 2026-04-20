@@ -71,7 +71,7 @@ export type TurnQueueData = {
   date: string;
   queue_position: number;
   check_in_order: number;
-  status: 'waiting' | 'working' | 'done_turn';
+  status: 'waiting' | 'working' | 'done_turn' | 'off';
   turns_completed: number;
   current_order_id?: string | null;
   booking_item_id?: string | null;
