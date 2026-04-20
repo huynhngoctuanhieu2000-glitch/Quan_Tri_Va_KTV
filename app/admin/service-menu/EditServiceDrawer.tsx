@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Save, Image as ImageIcon, Tags, Target, Settings2, FileText, Globe } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Tags, Target, Settings2, FileText, Globe, CopyCheck } from 'lucide-react';
 import { Service, FocusConfig } from '@/lib/types';
-import { updateService } from './actions';
+import { updateService, updateServiceBulkSync } from './actions';
 
 interface EditServiceDrawerProps {
   isOpen: boolean;
@@ -41,6 +41,7 @@ const FOCUS_AREAS = [
 export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditServiceDrawerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isBulkSync, setIsBulkSync] = useState(true);
 
   const [formData, setFormData] = useState<Partial<Service>>({});
 
@@ -98,6 +99,31 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
     });
   };
 
+  const getMultiTags = () => {
+    const multi = (formData.tags || []).filter(t => typeof t === 'object' && t !== null) as Record<string, string>[];
+    // Always pad to 2 items for UI rendering
+    return [
+      multi[0] || { vn: '', en: '', cn: '', jp: '', kr: '' },
+      multi[1] || { vn: '', en: '', cn: '', jp: '', kr: '' }
+    ];
+  };
+
+  const handleMultiTagChange = (index: number, lang: string, value: string) => {
+    setFormData(prev => {
+      const currentTags = prev.tags || [];
+      const multi = currentTags.filter(t => typeof t === 'object' && t !== null) as Record<string, string>[];
+      const strings = currentTags.filter(t => typeof t === 'string');
+
+      while (multi.length < 2) {
+        multi.push({ vn: '', en: '', cn: '', jp: '', kr: '' });
+      }
+
+      multi[index] = { ...multi[index], [lang]: value };
+
+      return { ...prev, tags: [...multi, ...strings] };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -128,12 +154,21 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
         showPreferences: formData.showPreferences,
 
         focusConfig: formData.focusConfig,
-        tags: formData.tags,
+        tags: formData.tags?.filter(t => {
+            if (typeof t === 'string') return true;
+            if (typeof t === 'object' && t !== null) {
+                return Object.values(t).some(val => val && String(val).trim() !== '');
+            }
+            return false;
+        }),
     };
 
     const res = await updateService(service.id, payload);
 
     if (res.success) {
+      if (isBulkSync && service.nameVN) {
+        await updateServiceBulkSync(service.nameVN, payload);
+      }
       onSuccess();
       onClose();
     } else {
@@ -232,6 +267,46 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Tiếng Hàn (KR)</label>
                     <input type="text" name="nameKR" value={formData.nameKR || ''} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
                   </div>
+                </div>
+              </section>
+
+              {/* SECTION 2.5: TAG ĐẶC BIỆT ĐA NGÔN NGỮ */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b pb-2">
+                  <Tags size={18} className="text-gray-400" />
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Tag Đặc Biệt Đa Ngôn Ngữ (Tối Đa 2)</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {getMultiTags().map((tag, idx) => (
+                    <div key={`multi-tag-${idx}`} className="space-y-3 p-4 bg-gray-50 border border-gray-100 rounded-xl">
+                      <h4 className="text-xs font-bold text-indigo-700 uppercase">Tag {idx + 1}</h4>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Việt (VN)</label>
+                        <input type="text" value={tag.vn || ''} onChange={e => handleMultiTagChange(idx, 'vn', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="VD: Mang thai..." />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Anh (EN)</label>
+                          <input type="text" value={tag.en || ''} onChange={e => handleMultiTagChange(idx, 'en', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="Pregnant..." />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Trung (CN)</label>
+                          <input type="text" value={tag.cn || ''} onChange={e => handleMultiTagChange(idx, 'cn', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Nhật (JP)</label>
+                          <input type="text" value={tag.jp || ''} onChange={e => handleMultiTagChange(idx, 'jp', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tiếng Hàn (KR)</label>
+                          <input type="text" value={tag.kr || ''} onChange={e => handleMultiTagChange(idx, 'kr', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </section>
 
@@ -421,8 +496,27 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
           </div>
 
           <div className="p-6 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
-            <p className="text-xs text-gray-400">Thay đổi sẽ áp dụng ngay khi lưu.</p>
-            <div className="flex gap-3">
+            <div className="flex-1 mr-6">
+              <label className="flex items-center gap-2.5 p-2.5 bg-white border border-indigo-100 rounded-xl cursor-pointer hover:border-indigo-300 transition-colors group">
+                <input 
+                  type="checkbox" 
+                  checked={isBulkSync}
+                  onChange={(e) => setIsBulkSync(e.target.checked)}
+                  className="w-5 h-5 accent-indigo-600 rounded shrink-0" 
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-indigo-900 group-hover:text-indigo-700 flex items-center gap-1.5">
+                    <CopyCheck size={16} />
+                    Đồng bộ hàng loạt
+                  </span>
+                  <span className="text-xs text-gray-500 font-medium">
+                    Áp dụng ngôn ngữ, mô tả, tag cho tất cả dịch vụ cùng tên "{service.nameVN}" (60p, 90p...)
+                  </span>
+                </div>
+              </label>
+            </div>
+            
+            <div className="flex gap-3 shrink-0">
               <button 
                 type="button" 
                 onClick={onClose} 
