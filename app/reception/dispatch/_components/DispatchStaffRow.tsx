@@ -65,7 +65,7 @@ const SERVICE_TO_SKILL: Record<string, string> = {
 const genId = () => Math.random().toString(36).substring(2, 9);
 
 const calcEndTime = (start: string, duration: number): string => {
-    if (!start || !duration) return '';
+    if (!start || duration == null) return '';
     const [h, m] = start.split(':').map(Number);
     const end = new Date();
     end.setHours(h, m + Math.floor(duration), Math.floor((duration % 1) * 60), 0);
