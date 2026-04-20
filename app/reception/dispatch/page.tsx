@@ -111,6 +111,7 @@ export default function DispatchBoardPage() {
   const [beds, setBeds] = useState<any[]>([]);
   const [roomTransitionTime, setRoomTransitionTime] = useState(5);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<any>(null);
 
   const { user } = useAuth();
   const lastSoundTimeRef = useRef<number>(0);
@@ -957,6 +958,22 @@ if (!hasPermission('dispatch_board')) {
                       e.preventDefault();
                       setContextMenu({ x: e.clientX, y: e.clientY, orderId: order.id });
                     }}
+                    onTouchStart={(e) => {
+                      const touch = e.touches[0];
+                      longPressTimer.current = setTimeout(() => {
+                        if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+                            window.navigator.vibrate(50);
+                        }
+                        setContextMenu({ x: touch.clientX, y: touch.clientY, orderId: order.id });
+                      }, 500);
+                    }}
+                    onTouchMove={() => {
+                      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                    }}
+                    onTouchEnd={() => {
+                      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                    }}
+                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
                     className={`bg-white p-5 rounded-3xl border-2 cursor-pointer transition-all active:scale-[0.98] relative ${selectedOrderId === order.id ? 'border-indigo-600 shadow-2xl shadow-indigo-100 ring-4 ring-indigo-50/50' : 'border-transparent shadow-sm hover:border-indigo-100 hover:shadow-lg'}`}
                   >
                     <div className="flex justify-between items-center mb-2">
