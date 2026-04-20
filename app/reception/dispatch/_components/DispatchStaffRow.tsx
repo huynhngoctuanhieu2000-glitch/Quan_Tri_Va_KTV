@@ -163,7 +163,7 @@ export const DispatchStaffRow = ({
                             className="w-full pl-4 pr-10 py-3 border-2 border-gray-50 rounded-2xl text-sm font-black focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-gray-50/30 transition-all appearance-none active:scale-[0.99]"
                         >
                             <option value="">— Chọn Nhân viên —</option>
-                            {availableTurns.map((turn, idx) => {
+                            {availableTurns.filter(t => t.status !== 'off').map((turn) => {
                                 const hasSkill = targetSkill ? (turn.staff?.skills?.[targetSkill] === 'expert' || turn.staff?.skills?.[targetSkill] === 'basic') : true;
                                 const isExpert = targetSkill && turn.staff?.skills?.[targetSkill] === 'expert';
                                 const isUsedInOtherSvc = usedKtvIds.includes(turn.employee_id);
@@ -175,9 +175,9 @@ export const DispatchStaffRow = ({
                                         disabled={isUsedInOtherSvc}
                                         className={isUsedInOtherSvc ? 'text-gray-300' : (!hasSkill ? 'text-gray-300' : '')}
                                     >
-                                        #{idx + 1} [{turn.employee_id}] {turn.staff?.full_name}
+                                        #{turn.queue_position} [{turn.employee_id}] {turn.staff?.full_name}
                                         {isExpert ? ' (⭐)' : ''}
-                                        {isUsedInOtherSvc ? ' (🚫 Đã gán DV khác)' : (turn.status === 'working' ? ` (⌛ Bận đến ${turn.estimated_end_time})` : ' (✅ Rảnh)')}
+                                        {isUsedInOtherSvc ? ' (🚫 Đã gán DV khác)' : (turn.status === 'working' ? ` (⌛ Đang làm đến ${turn.estimated_end_time || '--:--'})` : ' (✅ Sẵn sàng)')}
                                     </option>
                                 );
                             })}

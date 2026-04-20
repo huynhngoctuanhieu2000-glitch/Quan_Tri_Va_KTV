@@ -171,8 +171,10 @@ export default function DispatchBoardPage() {
         // 🚀 STATE PATCHING: Update turns list locally
         if (payload.eventType === 'UPDATE') {
           setTurns(prev => prev.map(t => t.employee_id === payload.new.employee_id ? { ...t, ...payload.new } : t));
+        } else if (payload.eventType === 'DELETE') {
+          setTurns(prev => prev.filter(t => t.id !== payload.old.id));
         } else {
-          // INSERT or DELETE: full sync — but skip if editing
+          // INSERT: full sync — but skip if editing
           if (!selectedOrderIdRef.current) fetchData();
         }
       })
