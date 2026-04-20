@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-const VAPID_PUBLIC_KEY = 'BEQkLUJGYdeaVqOoHGQ8JGks-EcGlWWi9R4LHSjyPMH3dLSR3-GGsFwu6YvWFv9jO7uHlK-UogSGkgfNuLr1kS7o'; // Sẽ đưa vào env sau
+const VAPID_PUBLIC_KEY = 'BNEVJHwVmuU6e7vYPOm1S2hpAWprAhUNl6ew85ktt_HBH2osu4wkrbMXnC8uFj5IZtYXBawvSa1C33bVHTeo6lE'; // Sẽ đưa vào env sau
 
 export function usePushNotifications(staffId: string | undefined) {
     const [isSupported, setIsSupported] = useState(false);

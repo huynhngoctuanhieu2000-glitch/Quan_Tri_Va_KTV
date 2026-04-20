@@ -3,8 +3,8 @@ import webpush from 'web-push';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // 🔧 VAPID CONFIGURATION
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BEQkLUJGYdeaVqOoHGQ8JGks-EcGlWWi9R4LHSjyPMH3dLSR3-GGsFwu6YvWFv9jO7uHlK-UogSGkgfNuLr1kS7o';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'sMNjj18PAzSRo_36rNKDIQY28jihusAiovtTANk_NHw';
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BNEVJHwVmuU6e7vYPOm1S2hpAWprAhUNl6ew85ktt_HBH2osu4wkrbMXnC8uFj5IZtYXBawvSa1C33bVHTeo6lE';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '8YrwgZmKBy0dv5yOetQklOS36z_pYCRzf52jD8rmvOg';
 const GMAIL_ACCOUNT = 'huynhngoctuanhieu2000@gmail.com'; // Contact email for VAPID
 
 // 🏗️ LAZY INITIALIZATION

@@ -59,7 +59,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     const router = useRouter();
 
     // 🔧 VAPID KEY for Push Subscription (same as in usePushNotifications.ts and push API)
-    const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BEQkLUJGYdeaVqOoHGQ8JGks-EcGlWWi9R4LHSjyPMH3dLSR3-GGsFwu6YvWFv9jO7uHlK-UogSGkgfNuLr1kS7o';
+    const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BNEVJHwVmuU6e7vYPOm1S2hpAWprAhUNl6ew85ktt_HBH2osu4wkrbMXnC8uFj5IZtYXBawvSa1C33bVHTeo6lE';
 
     const urlBase64ToUint8Array = (base64String: string) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);

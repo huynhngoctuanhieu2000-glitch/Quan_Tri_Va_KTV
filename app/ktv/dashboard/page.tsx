@@ -285,6 +285,10 @@ function ScreenDashboard({ logic }: { logic: any }) {
         segs = i.segments;
     }
     return segs.filter((s: any) => s.ktvId === logic.user?.id);
+  }).sort((a: any, b: any) => {
+      const timeA = a.startTime || '23:59';
+      const timeB = b.startTime || '23:59';
+      return timeA.localeCompare(timeB);
   });
   const totalAssignedMins = allKtvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
   const ktvSegments = allKtvSegments;
@@ -486,6 +490,10 @@ function ScreenTimer({ logic }: { logic: any }) {
         segs = i.segments;
     }
     return segs.filter((s: any) => s.ktvId === logic.user?.id);
+  }).sort((a: any, b: any) => {
+      const timeA = a.startTime || '23:59';
+      const timeB = b.startTime || '23:59';
+      return timeA.localeCompare(timeB);
   });
   const totalAssignedMins = ktvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;

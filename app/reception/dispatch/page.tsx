@@ -11,7 +11,7 @@ import {
   Plus, Calendar as CalendarIcon, Send, Phone,
   ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { DispatchServiceBlock } from './_components/DispatchServiceBlock';
 import { KanbanBoard } from './_components/KanbanBoard';
@@ -118,7 +118,7 @@ export default function DispatchBoardPage() {
   const push = usePushNotifications(user?.id);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string } | null>(null);
-
+  const [expandedSvcId, setExpandedSvcId] = useState<string | null>(null);
   // 🔧 QR CONFIGURATION
   const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
   const QR_SIZE = 250;
@@ -423,46 +423,39 @@ if (!hasPermission('dispatch_board')) {
     }));
   };
 
-  const autoAlignStaffRow = (order: PendingOrder, svcId: string, rowId: string, ktvId: string, roomTransitionTime: number): PendingOrder => {
-    let lastEndTime = '';
-    let lastRoomId = '';
-    
-    // Tìm segment cuối cùng của KTV này CÓ TRƯỚC hàng hiện tại
-    for (const svc of order.services) {
-      for (const r of svc.staffList) {
-        if (r.id === rowId) break; 
-        if (r.ktvId === ktvId && r.segments.length > 0) {
-          const lastSeg = r.segments[r.segments.length - 1];
-          lastEndTime = lastSeg.endTime;
-          lastRoomId = lastSeg.roomId || '';
-        }
-      }
-      if (svc.id === svcId) break;
-    }
-
-    if (!lastEndTime) return order;
-
+  const recalculateAllTimes = (order: PendingOrder, roomTransitionTime: number): PendingOrder => {
     const cloned = JSON.parse(JSON.stringify(order)) as PendingOrder;
-    const targetSvc = cloned.services.find(s => s.id === svcId);
-    const targetRow = targetSvc?.staffList.find(r => r.id === rowId);
+    let ktvEndTimes: Record<string, { time: string, roomId: string }> = {};
     
-    if (targetRow && targetRow.segments.length > 0) {
-      const firstSeg = targetRow.segments[0];
-      const isSameRoom = lastRoomId === firstSeg.roomId;
-      const gap = isSameRoom ? 0 : roomTransitionTime;
-      
-      const start = calcEndTime(lastEndTime, gap);
-      firstSeg.startTime = start;
-      firstSeg.endTime = calcEndTime(start, firstSeg.duration);
-      
-      for(let i = 1; i < targetRow.segments.length; i++) {
-         const p = targetRow.segments[i-1];
-         const c = targetRow.segments[i];
-         const g = p.roomId === c.roomId ? 0 : roomTransitionTime;
-         c.startTime = calcEndTime(p.endTime, g);
-         c.endTime = calcEndTime(c.startTime, c.duration);
-      }
-    }
+    cloned.services.forEach(svc => {
+      svc.staffList.forEach(r => {
+        if (!r.ktvId || r.segments.length === 0) return;
+        
+        if (ktvEndTimes[r.ktvId]) {
+          const last = ktvEndTimes[r.ktvId];
+          const firstSeg = r.segments[0];
+          const isSameRoom = last.roomId === firstSeg.roomId;
+          const gap = isSameRoom ? 0 : roomTransitionTime;
+          
+          const start = calcEndTime(last.time, gap);
+          firstSeg.startTime = start;
+          firstSeg.endTime = calcEndTime(start, firstSeg.duration);
+          
+          for(let i = 1; i < r.segments.length; i++) {
+             const p = r.segments[i-1];
+             const c = r.segments[i];
+             const g = p.roomId === c.roomId ? 0 : roomTransitionTime;
+             c.startTime = calcEndTime(p.endTime, g);
+             c.endTime = calcEndTime(c.startTime, c.duration);
+          }
+        }
+        
+        const lastSeg = r.segments[r.segments.length - 1];
+        if (lastSeg && lastSeg.endTime) {
+          ktvEndTimes[r.ktvId] = { time: lastSeg.endTime, roomId: lastSeg.roomId || '' };
+        }
+      });
+    });
     
     return cloned;
   };
@@ -479,7 +472,7 @@ if (!hasPermission('dispatch_board')) {
 
       // Tự động nối giờ nếu KTV được chọn và đã có phục vụ chặng trước đó
       if (patch.ktvId) {
-        updatedOrder = autoAlignStaffRow(updatedOrder, svcId, rowId, patch.ktvId, roomTransitionTime);
+        updatedOrder = recalculateAllTimes(updatedOrder, roomTransitionTime);
       }
 
       return updatedOrder;
@@ -1039,47 +1032,60 @@ if (!hasPermission('dispatch_board')) {
 
             {selectedOrder ? (
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 bg-slate-50/30">
-                {selectedOrder.services.map((svc, idx) => {
-                  // 🚩 LOGIC: Xác định các giường đang bận
-                  // 1. Giường bận do đơn hàng khác (đang làm hoặc đang dọn)
-                  const busyInOtherOrders = orders
-                    .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
-                    .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
-                    .filter(Boolean) as string[];
+                <Reorder.Group
+                  axis="y"
+                  values={selectedOrder.services}
+                  onReorder={(newServices) => {
+                    const recalculated = recalculateAllTimes({ ...selectedOrder, services: newServices }, roomTransitionTime);
+                    updateOrder(selectedOrder.id, o => ({ ...o, services: recalculated.services }));
+                  }}
+                  className="space-y-6"
+                >
+                  {selectedOrder.services.map((svc, idx) => {
+                    // 🚩 LOGIC: Xác định các giường đang bận
+                    // 1. Giường bận do đơn hàng khác (đang làm hoặc đang dọn)
+                    const busyInOtherOrders = orders
+                      .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
+                      .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
+                      .filter(Boolean) as string[];
 
-                  // 2. Giường bận do DV KHÁC trong cùng đơn — nhưng CHO PHÉP nếu cùng KTV
-                  const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
-                  const busyInCurrentOrder = selectedOrder.services
-                    .filter(s => s.id !== svc.id)
-                    .flatMap(s => s.staffList
-                      .filter(r => !currentSvcKtvIds.includes(r.ktvId)) // Cùng KTV → cho chung giường
-                      .flatMap(r => r.segments.map(seg => seg.bedId)))
-                    .filter(Boolean) as string[];
+                    // 2. Giường bận do DV KHÁC trong cùng đơn — nhưng CHO PHÉP nếu cùng KTV
+                    const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
+                    const busyInCurrentOrder = selectedOrder.services
+                      .filter(s => s.id !== svc.id)
+                      .flatMap(s => s.staffList
+                        .filter(r => !currentSvcKtvIds.includes(r.ktvId)) // Cùng KTV → cho chung giường
+                        .flatMap(r => r.segments.map(seg => seg.bedId)))
+                      .filter(Boolean) as string[];
 
-                  const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
+                    const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
 
-                  // ✅ Cho phép 1 KTV gán cho nhiều DV trong cùng đơn (1KH + 2DV + 1KTV)
+                    // ✅ Cho phép 1 KTV gán cho nhiều DV trong cùng đơn (1KH + 2DV + 1KTV)
 
-                  return (
-                    <DispatchServiceBlock
-                      key={svc.id}
-                      svc={svc}
-                      svcIndex={idx}
-                      orderId={selectedOrder.id}
-                      rooms={rooms}
-                      beds={beds}
-                      busyBedIds={allBusyBedIds}
-                      usedKtvIds={[]}
-                      availableTurns={turns}
-                      onUpdateSvc={updateSvcField}
-                      onUpdateStaff={updateStaffRow}
-                      onAddStaff={addStaffRow}
-                      onRemoveStaff={removeStaffRow}
-                      onRemoveSvc={removeServiceBlock}
-                      selectedDate={selectedDate}
-                    />
-                  );
-                })}
+                    return (
+                      <Reorder.Item key={svc.id} value={svc} dragListener={expandedSvcId !== svc.id}>
+                        <DispatchServiceBlock
+                          svc={svc}
+                          svcIndex={idx}
+                          orderId={selectedOrder.id}
+                          rooms={rooms}
+                          beds={beds}
+                          busyBedIds={allBusyBedIds}
+                          usedKtvIds={[]}
+                          availableTurns={turns}
+                          onUpdateSvc={updateSvcField}
+                          onUpdateStaff={updateStaffRow}
+                          onAddStaff={addStaffRow}
+                          onRemoveStaff={removeStaffRow}
+                          onRemoveSvc={removeServiceBlock}
+                          selectedDate={selectedDate}
+                          isExpanded={expandedSvcId === svc.id}
+                          onToggleExpand={() => setExpandedSvcId(expandedSvcId === svc.id ? null : svc.id)}
+                        />
+                      </Reorder.Item>
+                    );
+                  })}
+                </Reorder.Group>
 
                 <button
                   onClick={() => setShowAddSvcModal(true)}

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
                 user_agent: userAgent || 'unknown',
                 updated_at: new Date().toISOString()
             }, {
-                onConflict: 'staff_id'
+                onConflict: 'staff_id,subscription'
             });
 
         if (error) {

@@ -356,6 +356,13 @@ export async function PATCH(request: Request) {
                     });
                 }
 
+                // Sắp xếp Global Segments theo startTime (chronological order)
+                allGlobalSegs.sort((a, b) => {
+                    const timeA = a.seg.startTime || '23:59';
+                    const timeB = b.seg.startTime || '23:59';
+                    return timeA.localeCompare(timeB);
+                });
+
                 // 2. Cập nhật thời gian vào Global Segments
                 const activeSegmentIndex = body.activeSegmentIndex || 0;
 

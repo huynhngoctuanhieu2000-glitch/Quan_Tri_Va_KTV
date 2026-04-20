@@ -176,6 +176,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 allMySegs.push(...mySegs);
             }
 
+            // 🚀 Đảm bảo các chặng được hiển thị đúng trình tự thời gian (startTime) do Lễ tân xếp
+            allMySegs.sort((a, b) => {
+                const timeA = a.startTime || '23:59';
+                const timeB = b.startTime || '23:59';
+                return timeA.localeCompare(timeB);
+            });
+
             if (allMySegs.length === 0) return;
 
             // 3. TÍNH TOÁN THEO THỜI GIAN THỰC (actualStartTime & actualEndTime)
@@ -444,6 +451,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             allMySegs.push(...mySegs);
                         }
 
+                        allMySegs.sort((a, b) => {
+                            const timeA = a.startTime || '23:59';
+                            const timeB = b.startTime || '23:59';
+                            return timeA.localeCompare(timeB);
+                        });
+
                         let calculatedSegIdx = manualSegmentOverrideRef.current ? activeSegmentIndex : 0;
                         if (!manualSegmentOverrideRef.current) {
                             if (allMySegs.length > 0 && allMySegs.some(s => s.actualStartTime)) {
@@ -679,6 +692,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 allMySegs.push(...mySegs);
             }
 
+            allMySegs.sort((a, b) => {
+                const timeA = a.startTime || '23:59';
+                const timeB = b.startTime || '23:59';
+                return timeA.localeCompare(timeB);
+            });
+
             const segIdx = activeSegmentIndex;
             const currentSegDuration = allMySegs.length > 0
                 ? (Number(allMySegs[segIdx]?.duration) || allMySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0) || 60)
@@ -806,6 +825,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 allMySegs.push(...mySegs);
             }
 
+            allMySegs.sort((a, b) => {
+                const timeA = a.startTime || '23:59';
+                const timeB = b.startTime || '23:59';
+                return timeA.localeCompare(timeB);
+            });
+
             // Dùng duration của chặng đầu tiên (không phải tổng duration)
             const firstSegDuration = allMySegs.length > 0
                 ? (Number(allMySegs[0].duration) || 60)
@@ -865,6 +890,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
             const mySegs = segs.filter((seg: any) => seg.ktvId && user.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase()));
             allMySegs.push(...mySegs);
         }
+
+        allMySegs.sort((a, b) => {
+            const timeA = a.startTime || '23:59';
+            const timeB = b.startTime || '23:59';
+            return timeA.localeCompare(timeB);
+        });
 
         const totalSegs = allMySegs.length;
         const currentIdx = activeSegmentIndex;
