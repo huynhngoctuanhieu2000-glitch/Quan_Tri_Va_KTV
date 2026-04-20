@@ -160,6 +160,6 @@ export interface Service {
   showPreferences?: boolean;
   
   focusConfig?: FocusConfig | null;
-  tags?: string[] | null;
+  tags?: (string | Record<string, string>)[] | null;
   hint?: any;
 }
