@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, User, Phone, Mail, CreditCard, Calendar, Ruler, Weight, Award, CheckCircle2, Briefcase, Edit2, Save, GraduationCap, Zap, BookOpen, Key } from 'lucide-react';
+import { X, User, Phone, Mail, CreditCard, Calendar, Ruler, Weight, Award, CheckCircle2, Briefcase, Edit2, Save, GraduationCap, Zap, BookOpen, Key, Shield } from 'lucide-react';
 import { Employee, SkillLevel } from '@/lib/types';
+import { updateEmployeeRole } from '@/app/admin/employees/actions';
 
 interface EmployeeDetailModalProps {
   employee: Employee | null;
@@ -15,9 +16,18 @@ interface EmployeeDetailModalProps {
 export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: EmployeeDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState<Employee | null>(employee);
+  const [selectedRole, setSelectedRole] = useState(employee?.userRole || 'TECHNICIAN');
+  const [isSavingRole, setIsSavingRole] = useState(false);
+
+  const ROLE_OPTIONS = [
+    { value: 'ADMIN', label: 'Admin', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+    { value: 'RECEPTIONIST', label: 'Lễ Tân', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    { value: 'TECHNICIAN', label: 'Kỹ Thuật Viên', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  ];
 
   React.useEffect(() => {
     setEditedEmployee(employee);
+    setSelectedRole((employee as any)?.userRole || 'TECHNICIAN');
   }, [employee]);
 
   if (!employee || !editedEmployee) return null;
@@ -193,6 +203,52 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Role Selection */}
+              <div className="mt-4 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Shield size={14} className="text-indigo-600" />
+                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-widest">Vai trò hệ thống</span>
+                  </div>
+                  {isSavingRole && (
+                    <div className="w-4 h-4 rounded-full border-2 border-indigo-300 border-t-indigo-600 animate-spin" />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {ROLE_OPTIONS.map(opt => {
+                    const isSelected = selectedRole === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={async () => {
+                          if (isSelected || !editedEmployee) return;
+                          setSelectedRole(opt.value);
+                          setIsSavingRole(true);
+                          const res = await updateEmployeeRole(editedEmployee.id, opt.value);
+                          if (res.success) {
+                            // Update local state
+                            setEditedEmployee(prev => prev ? { ...prev, userRole: opt.value } as any : null);
+                          } else {
+                            alert('Lỗi khi đổi role: ' + res.error);
+                            setSelectedRole((editedEmployee as any)?.userRole || 'TECHNICIAN');
+                          }
+                          setIsSavingRole(false);
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold border-2 transition-all ${
+                          isSelected
+                            ? `${opt.color} border-current shadow-sm scale-105`
+                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2">Vai trò quyết định giao diện khi đăng nhập. Quyền chi tiết được tùy chỉnh ở trang Phân Quyền.</p>
               </div>
             </div>
 

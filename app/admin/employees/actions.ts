@@ -14,10 +14,10 @@ export async function getStaffList() {
 
         if (error) throw error;
 
-        // Fetch user login data to display username and password
+        // Fetch user login data to display username, password and role
         const { data: users, error: usersError } = await supabase
             .from('Users')
-            .select('id, username, password');
+            .select('id, username, password, role');
 
         if (usersError) {
             console.warn("Could not fetch Users data", usersError);
@@ -28,7 +28,8 @@ export async function getStaffList() {
             return {
                 ...s,
                 username: authInfo?.username || s.id,
-                password: authInfo?.password || '---'
+                password: authInfo?.password || '---',
+                userRole: authInfo?.role || 'TECHNICIAN'
             };
         });
 
@@ -210,3 +211,24 @@ export async function deleteStaffMember(id: string) {
         return { success: false, error: error.message };
     }
 }
+
+export async function updateEmployeeRole(employeeId: string, newRole: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        const { error } = await supabase
+            .from('Users')
+            .update({ role: newRole })
+            .eq('id', employeeId);
+
+        if (error) throw error;
+
+        revalidatePath('/admin/employees');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error updating employee role:', error);
+        return { success: false, error: error.message };
+    }
+}
+

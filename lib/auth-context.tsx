@@ -155,10 +155,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = useCallback((moduleId: ModuleId) => {
     if (!role) return false;
-    // 🛡️ Always allow staff_notifications for Admin, Dev & Reception even if not in DB permissions yet
-    if (moduleId === 'staff_notifications') {
-      return role.id === 'admin' || role.id === 'dev' || role.id === 'reception';
-    }
     return role.permissions.includes(moduleId);
   }, [role]);
 

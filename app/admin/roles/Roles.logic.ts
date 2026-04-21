@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Role, ModuleId } from '@/lib/types';
-import { getAllUsers, verifyAdminPassword } from './actions';
+import { getAllUsers, verifyAdminPassword, saveRolePermissions } from './actions';
 
 // --- MOCK DATA ---
 const MOCK_ROLES: Role[] = [
@@ -134,12 +134,21 @@ export const useRoleManagement = () => {
         setPendingModuleId(null);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         setIsSaving(true);
-        setTimeout(() => {
-            setIsSaving(false);
-            alert('Đã lưu phân quyền thành công!');
-        }, 800);
+        try {
+            const res = await saveRolePermissions(
+                roles.map(r => ({ id: r.id, permissions: r.permissions as string[] }))
+            );
+            if (res.success) {
+                alert('Đã lưu phân quyền thành công! Nhân viên cần đăng nhập lại để áp dụng.');
+            } else {
+                alert('Lỗi khi lưu: ' + (res.error || 'Unknown'));
+            }
+        } catch (err: any) {
+            alert('Lỗi: ' + err.message);
+        }
+        setIsSaving(false);
     };
 
     const handleAddRole = () => {

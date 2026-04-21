@@ -38,7 +38,6 @@ export async function verifyAdminPassword(inputPassword: string) {
             return { success: false, error: 'Chưa cấu hình mật khẩu hệ thống. Vui lòng thêm key "admin_unlock_password" vào bảng SystemConfigs.' };
         }
 
-        // value is stored as jsonb, could be a string or { password: "..." }
         const storedPassword = typeof data.value === 'string' ? data.value : data.value?.password;
 
         if (inputPassword === storedPassword) {
@@ -51,3 +50,58 @@ export async function verifyAdminPassword(inputPassword: string) {
         return { success: false, error: error.message };
     }
 }
+
+// Map local role IDs to DB role enum values
+const ROLE_ID_TO_DB: Record<string, string[]> = {
+    'admin': ['ADMIN'],
+    'reception': ['RECEPTIONIST', 'LEAD_RECEPTIONIST'],
+    'ktv': ['TECHNICIAN', 'KTV'],
+};
+
+export async function saveRolePermissions(roles: { id: string, permissions: string[] }[]) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        for (const role of roles) {
+            const dbRoles = ROLE_ID_TO_DB[role.id];
+            if (!dbRoles) continue;
+
+            for (const dbRole of dbRoles) {
+                const { error } = await supabase
+                    .from('Users')
+                    .update({ permissions: role.permissions })
+                    .eq('role', dbRole);
+
+                if (error) {
+                    console.error(`Error updating permissions for role ${dbRole}:`, error);
+                }
+            }
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error saving role permissions:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateUserRole(userId: string, newRole: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        const { error } = await supabase
+            .from('Users')
+            .update({ role: newRole })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error updating user role:', error);
+        return { success: false, error: error.message };
+    }
+}
+
