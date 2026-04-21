@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Role, ModuleId } from '@/lib/types';
-import { getAllUsers } from './actions';
+import { getAllUsers, verifyAdminPassword } from './actions';
 
 // --- MOCK DATA ---
 const MOCK_ROLES: Role[] = [
@@ -42,6 +42,15 @@ export const useRoleManagement = () => {
     const [activeTab, setActiveTab] = useState('roles');
     const [mounted, setMounted] = useState(false);
 
+    // Admin unlock state
+    const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [passwordInput, setPasswordInput] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    // Store the pending toggle action while waiting for password
+    const [pendingModuleId, setPendingModuleId] = useState<ModuleId | null>(null);
+
     useEffect(() => {
         setMounted(true);
         async function fetchUsers() {
@@ -56,6 +65,15 @@ export const useRoleManagement = () => {
 
     // --- HANDLERS ---
     const togglePermission = (roleId: string, moduleId: ModuleId) => {
+        // If admin role and not unlocked, show password modal
+        if (roleId === 'admin' && !isAdminUnlocked) {
+            setPendingModuleId(moduleId);
+            setShowPasswordModal(true);
+            setPasswordInput('');
+            setPasswordError('');
+            return;
+        }
+
         setRoles(prev => prev.map(role => {
             if (role.id === roleId) {
                 const hasPerm = role.permissions.includes(moduleId);
@@ -68,6 +86,52 @@ export const useRoleManagement = () => {
             }
             return role;
         }));
+    };
+
+    const confirmAdminUnlock = async () => {
+        if (!passwordInput.trim()) {
+            setPasswordError('Vui lòng nhập mật khẩu!');
+            return;
+        }
+
+        setIsVerifying(true);
+        setPasswordError('');
+
+        const res = await verifyAdminPassword(passwordInput.trim());
+
+        if (res.success) {
+            setIsAdminUnlocked(true);
+            setShowPasswordModal(false);
+            setPasswordInput('');
+
+            // Execute the pending toggle
+            if (pendingModuleId) {
+                setRoles(prev => prev.map(role => {
+                    if (role.id === 'admin') {
+                        const hasPerm = role.permissions.includes(pendingModuleId!);
+                        return {
+                            ...role,
+                            permissions: hasPerm
+                                ? role.permissions.filter(p => p !== pendingModuleId)
+                                : [...role.permissions, pendingModuleId!]
+                        };
+                    }
+                    return role;
+                }));
+                setPendingModuleId(null);
+            }
+        } else {
+            setPasswordError(res.error || 'Mật khẩu không chính xác!');
+        }
+
+        setIsVerifying(false);
+    };
+
+    const cancelPasswordModal = () => {
+        setShowPasswordModal(false);
+        setPasswordInput('');
+        setPasswordError('');
+        setPendingModuleId(null);
     };
 
     const handleSave = () => {
@@ -104,15 +168,25 @@ export const useRoleManagement = () => {
         activeTab,
         mounted,
 
+        // Admin unlock
+        isAdminUnlocked,
+        showPasswordModal,
+        passwordInput,
+        passwordError,
+        isVerifying,
+
         // Computed
         canAccessPage,
 
         // Setters
         setActiveTab,
+        setPasswordInput,
 
         // Handlers
         togglePermission,
         handleSave,
         handleAddRole,
+        confirmAdminUnlock,
+        cancelPasswordModal,
     };
 };

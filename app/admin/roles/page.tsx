@@ -4,10 +4,10 @@ import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MODULES } from '@/lib/constants';
 import { ModuleId } from '@/lib/types';
-import { ShieldAlert, Check, Plus, Save, User, Key } from 'lucide-react';
+import { ShieldAlert, Check, Plus, Save, User, Key, Lock, Unlock, ShieldCheck } from 'lucide-react';
 import * as Checkbox from '@radix-ui/react-checkbox';
 import * as Tabs from '@radix-ui/react-tabs';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useRoleManagement } from './Roles.logic';
 import { t } from './Roles.i18n';
 
@@ -20,10 +20,18 @@ export default function RoleManagementPage() {
         activeTab,
         mounted,
         canAccessPage,
+        isAdminUnlocked,
+        showPasswordModal,
+        passwordInput,
+        passwordError,
+        isVerifying,
         setActiveTab,
+        setPasswordInput,
         togglePermission,
         handleSave,
         handleAddRole,
+        confirmAdminUnlock,
+        cancelPasswordModal,
     } = useRoleManagement();
 
     if (!mounted) return null;
@@ -100,7 +108,18 @@ export default function RoleManagementPage() {
                                             </th>
                                             {roles.map(role => (
                                                 <th key={role.id} className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-center min-w-[140px]">
-                                                    {role.name}
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <span>{role.name}</span>
+                                                        {role.id === 'admin' && (
+                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                                                isAdminUnlocked 
+                                                                    ? 'bg-green-100 text-green-700' 
+                                                                    : 'bg-amber-100 text-amber-700'
+                                                            }`}>
+                                                                {isAdminUnlocked ? <><Unlock size={10} /> Đã mở khoá</> : <><Lock size={10} /> Đang khoá</>}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </th>
                                             ))}
                                         </tr>
@@ -115,15 +134,15 @@ export default function RoleManagementPage() {
                                                 {roles.map(role => {
                                                     const isChecked = role.permissions.includes(module.id as ModuleId);
                                                     const isAdmin = role.id === 'admin';
+                                                    const isLocked = isAdmin && !isAdminUnlocked;
                                                     return (
                                                         <td key={`${role.id}-${module.id}`} className="p-4 text-center">
                                                             <Checkbox.Root
                                                                 checked={isChecked}
-                                                                onCheckedChange={() => !isAdmin && togglePermission(role.id, module.id as ModuleId)}
-                                                                disabled={isAdmin}
+                                                                onCheckedChange={() => togglePermission(role.id, module.id as ModuleId)}
                                                                 className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${isChecked
-                                                                    ? isAdmin ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                                    : 'bg-gray-100 border border-gray-300 hover:border-indigo-400'
+                                                                    ? isLocked ? 'bg-indigo-300 text-white cursor-pointer' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                                    : isLocked ? 'bg-gray-100 border border-gray-300 cursor-pointer' : 'bg-gray-100 border border-gray-300 hover:border-indigo-400'
                                                                 }`}
                                                             >
                                                                 <Checkbox.Indicator>
@@ -183,6 +202,72 @@ export default function RoleManagementPage() {
                     </Tabs.Content>
                 </Tabs.Root>
             </div>
+
+            {/* Password Modal */}
+            <AnimatePresence>
+                {showPasswordModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+                        onClick={cancelPasswordModal}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={e => e.stopPropagation()}
+                            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5"
+                        >
+                            <div className="text-center">
+                                <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <ShieldCheck size={28} className="text-amber-600" />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900">Xác thực quyền Admin</h3>
+                                <p className="text-sm text-gray-500 mt-1">Nhập mật khẩu hệ thống để mở khoá chỉnh sửa quyền Admin</p>
+                            </div>
+
+                            <div>
+                                <input
+                                    type="password"
+                                    value={passwordInput}
+                                    onChange={e => setPasswordInput(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && confirmAdminUnlock()}
+                                    placeholder="Nhập mật khẩu hệ thống..."
+                                    autoFocus
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                                />
+                                {passwordError && (
+                                    <p className="text-sm text-red-600 font-medium mt-2 flex items-center gap-1">
+                                        <ShieldAlert size={14} /> {passwordError}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={cancelPasswordModal}
+                                    className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                                >
+                                    Huỷ
+                                </button>
+                                <button
+                                    onClick={confirmAdminUnlock}
+                                    disabled={isVerifying}
+                                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-70 flex items-center justify-center gap-2"
+                                >
+                                    {isVerifying ? (
+                                        <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                    ) : (
+                                        <><Unlock size={16} /> Mở khoá</>
+                                    )}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </AppLayout>
     );
 }
