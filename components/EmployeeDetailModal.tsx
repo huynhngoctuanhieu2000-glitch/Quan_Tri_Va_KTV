@@ -16,7 +16,7 @@ interface EmployeeDetailModalProps {
 export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: EmployeeDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState<Employee | null>(employee);
-  const [selectedRole, setSelectedRole] = useState(employee?.userRole || 'TECHNICIAN');
+  const [selectedRole, setSelectedRole] = useState((employee as any)?.userRole || 'TECHNICIAN');
   const [isSavingRole, setIsSavingRole] = useState(false);
 
   const ROLE_OPTIONS = [
