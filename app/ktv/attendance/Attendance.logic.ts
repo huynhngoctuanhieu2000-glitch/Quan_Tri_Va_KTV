@@ -139,27 +139,8 @@ export const useKTVAttendance = () => {
         return () => { supabase.removeChannel(channel); };
     }, [user?.id, currentRecord?.id]);
 
-    // --- GPS helper (OPTIONAL FALLBACK) ---
-    const getGPS = (): Promise<{ latitude: number | null; longitude: number | null; locationText: string }> => {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) {
-                resolve({ latitude: null, longitude: null, locationText: '' });
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({
-                    latitude: pos.coords.latitude,
-                    longitude: pos.coords.longitude,
-                    locationText: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
-                }),
-                (err) => {
-                    console.warn('GPS failed or denied:', err);
-                    resolve({ latitude: null, longitude: null, locationText: '' });
-                },
-                { enableHighAccuracy: GPS_HIGH_ACCURACY, timeout: 3000 } // Short timeout (3s)
-            );
-        });
-    };
+    // --- GPS Removed ---
+    // GPS is completely disabled in favor of IP Whitelisting
 
     // --- Handlers ---
     const checkIsLate = useCallback(() => {
@@ -194,11 +175,9 @@ export const useKTVAttendance = () => {
         reason?: string | null
     ) => {
         setErrorMsg(null);
-        setCheckStatus('LOADING_GPS');
+        setCheckStatus('LOADING_GPS'); // Will rename this state eventually, keeping string for now to avoid breaking UI
 
         try {
-            const gps = await getGPS();
-
             const res = await fetch('/api/ktv/attendance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -208,7 +187,9 @@ export const useKTVAttendance = () => {
                     checkType,
                     photoBase64: photosBase64 || null,
                     reason: reason || null,
-                    ...gps,
+                    latitude: null,
+                    longitude: null,
+                    locationText: null,
                 }),
             });
 
@@ -228,7 +209,9 @@ export const useKTVAttendance = () => {
             setCurrentRecord(result.data);
             setCheckStatus('PENDING');
         } catch (err: any) {
-            setErrorMsg(err.message || 'Lỗi không xác định');
+            const errorMessage = err.message || 'Lỗi không xác định';
+            setErrorMsg(errorMessage);
+            alert(`CẢNH BÁO: ${errorMessage}`);
             // Revert back or stay IDLE if not checked out successfully
             if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
                 setCheckStatus('IDLE');
