@@ -17,7 +17,6 @@ const KTVAttendancePage = () => {
         errorMsg,
         mounted,
         initialLoading,
-        mapsUrl,
         canAccessPage,
         canCheckOut,
         checkoutBlockedUntil,
@@ -167,12 +166,6 @@ const KTVAttendancePage = () => {
                             <div className="text-center space-y-1">
                                 <p className="font-bold text-amber-700 text-lg">{t.pendingTitle}</p>
                                 <p className="text-sm text-gray-500">{t.pendingDesc}</p>
-                                {mapsUrl && (
-                                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700 mt-2">
-                                        <MapPin size={13} /> {t.viewLocation} <ExternalLink size={11} />
-                                    </a>
-                                )}
                                 {currentRecord?.checkedAt && (
                                     <p className="text-xs text-gray-400 mt-1">
                                         {t.sentAt(format(new Date(currentRecord.checkedAt), 'HH:mm:ss dd/MM/yyyy'))}
@@ -191,12 +184,6 @@ const KTVAttendancePage = () => {
                             <div className="text-center space-y-1">
                                 <p className="font-bold text-emerald-700 text-lg">{t.confirmedTitle}</p>
                                 <p className="text-sm text-gray-500">{t.confirmedDesc}</p>
-                                {mapsUrl && (
-                                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700">
-                                        <MapPin size={13} /> {t.viewMapLocation} <ExternalLink size={11} />
-                                    </a>
-                                )}
                                 {currentRecord?.checkedAt && (
                                     <p className="text-xs text-gray-400">
                                         {t.shiftStart(format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy'))}

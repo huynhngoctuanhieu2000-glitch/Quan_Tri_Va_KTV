@@ -228,10 +228,6 @@ export const useKTVAttendance = () => {
     };
 
     // --- Computed ---
-    const mapsUrl = currentRecord?.latitude && currentRecord?.longitude
-        ? `https://maps.google.com/?q=${currentRecord.latitude},${currentRecord.longitude}`
-        : null;
-
     const canAccessPage = hasPermission('ktv_attendance');
 
     /**
@@ -277,7 +273,6 @@ export const useKTVAttendance = () => {
         errorMsg,
         mounted,
         initialLoading,
-        mapsUrl,
         canAccessPage,
         // Shift checkout control
         canCheckOut,

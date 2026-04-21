@@ -9,22 +9,20 @@ export const t = {
 
     // IDLE
     startShift: 'Bắt đầu ca làm việc',
-    gpsNote: 'Hệ thống sẽ ghi nhận vị trí GPS của bạn',
+    wifiNote: 'Hệ thống sẽ ghi nhận IP mạng Wi-Fi của bạn',
     checkIn: 'ĐIỂM DANH',
 
     // Loading
-    loadingGPS: 'Đang lấy vị trí GPS...',
+    loadingNetwork: 'Đang xác thực mạng...',
 
     // Pending
     pendingTitle: 'Đang chờ xác nhận',
-    pendingDesc: 'Admin đang kiểm tra vị trí GPS của bạn',
-    viewLocation: 'Vị trí của bạn',
+    pendingDesc: 'Admin đang kiểm duyệt yêu cầu của bạn',
     sentAt: (time: string) => `Gửi lúc: ${time}`,
 
     // Confirmed
     confirmedTitle: '✅ Đã điểm danh',
-    confirmedDesc: 'Admin đã xác nhận vị trí của bạn',
-    viewMapLocation: 'Xem vị trí',
+    confirmedDesc: 'Điểm danh của bạn đã được ghi nhận',
     shiftStart: (time: string) => `Vào ca: ${time}`,
     checkOut: 'TAN CA',
     checkOutPhotoOptional: 'Chụp ảnh (tùy chọn)',
