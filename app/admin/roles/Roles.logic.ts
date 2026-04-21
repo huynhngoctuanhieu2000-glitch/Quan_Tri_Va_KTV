@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Role, ModuleId } from '@/lib/types';
-import { getAllUsers, verifyAdminPassword, saveRolePermissions, getRolePermissions } from './actions';
+import { getAllUsers, verifyAdminPassword, saveRolePermissions, getRolePermissions, updateUserPermissions } from './actions';
 
 // --- MOCK DATA ---
 const MOCK_ROLES: Role[] = [
@@ -50,6 +50,12 @@ export const useRoleManagement = () => {
     const [isVerifying, setIsVerifying] = useState(false);
     // Store the pending toggle action while waiting for password
     const [pendingModuleId, setPendingModuleId] = useState<ModuleId | null>(null);
+
+    // Individual User Permissions State
+    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<any | null>(null);
+    const [currentUserPermissions, setCurrentUserPermissions] = useState<ModuleId[]>([]);
+    const [isSavingUser, setIsSavingUser] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -181,6 +187,63 @@ export const useRoleManagement = () => {
         alert(`Đã thêm Role "${roleName}" thành công!`);
     };
 
+    // --- USER PERMISSIONS HANDLERS ---
+    const handleOpenUserPermissions = (user: any) => {
+        setSelectedUser(user);
+        setCurrentUserPermissions(user.permissions || []);
+        setIsUserModalOpen(true);
+    };
+
+    const handleCloseUserPermissions = () => {
+        setIsUserModalOpen(false);
+        setTimeout(() => {
+            setSelectedUser(null);
+            setCurrentUserPermissions([]);
+        }, 200);
+    };
+
+    const handleToggleUserPermission = (moduleId: ModuleId) => {
+        setCurrentUserPermissions(prev => {
+            if (prev.includes(moduleId)) {
+                return prev.filter(id => id !== moduleId);
+            }
+            return [...prev, moduleId];
+        });
+    };
+
+    const handleApplyTemplate = (roleId: string | 'clear') => {
+        if (roleId === 'clear') {
+            setCurrentUserPermissions([]);
+            return;
+        }
+        
+        const templateRole = MOCK_ROLES.find(r => r.id === roleId);
+        if (templateRole) {
+            setCurrentUserPermissions([...templateRole.permissions]);
+        }
+    };
+
+    const handleSaveUserPermissions = async () => {
+        if (!selectedUser) return;
+        
+        setIsSavingUser(true);
+        try {
+            const res = await updateUserPermissions(selectedUser.id, currentUserPermissions);
+            if (res.success) {
+                setUsers(prev => prev.map(u => 
+                    u.id === selectedUser.id ? { ...u, permissions: currentUserPermissions } : u
+                ));
+                alert('Đã cập nhật quyền cho nhân viên thành công!');
+                handleCloseUserPermissions();
+            } else {
+                alert('Lỗi khi cập nhật quyền: ' + (res.error || 'Unknown'));
+            }
+        } catch (err: any) {
+            alert('Lỗi hệ thống: ' + err.message);
+        }
+        setIsSavingUser(false);
+    };
+
     const canAccessPage = hasPermission('role_management');
 
     return {
@@ -212,5 +275,15 @@ export const useRoleManagement = () => {
         handleAddRole,
         confirmAdminUnlock,
         cancelPasswordModal,
+        // User permissions
+        isUserModalOpen,
+        selectedUser,
+        currentUserPermissions,
+        isSavingUser,
+        handleOpenUserPermissions,
+        handleCloseUserPermissions,
+        handleToggleUserPermission,
+        handleApplyTemplate,
+        handleSaveUserPermissions,
     };
 };

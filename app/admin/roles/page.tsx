@@ -4,9 +4,10 @@ import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { MODULES } from '@/lib/constants';
 import { ModuleId } from '@/lib/types';
-import { ShieldAlert, Check, Plus, Save, User, Key, Lock, Unlock, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, Check, Plus, Save, User, Key, Lock, Unlock, ShieldCheck, X } from 'lucide-react';
 import * as Checkbox from '@radix-ui/react-checkbox';
 import * as Tabs from '@radix-ui/react-tabs';
+import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'motion/react';
 import { useRoleManagement } from './Roles.logic';
 import { t } from './Roles.i18n';
@@ -32,6 +33,16 @@ export default function RoleManagementPage() {
         handleAddRole,
         confirmAdminUnlock,
         cancelPasswordModal,
+        // User permissions
+        isUserModalOpen,
+        selectedUser,
+        currentUserPermissions,
+        isSavingUser,
+        handleOpenUserPermissions,
+        handleCloseUserPermissions,
+        handleToggleUserPermission,
+        handleApplyTemplate,
+        handleSaveUserPermissions,
     } = useRoleManagement();
 
     if (!mounted) return null;
@@ -190,7 +201,7 @@ export default function RoleManagementPage() {
                                                 <div className="text-sm font-mono text-gray-600 mr-2 px-2 py-1 bg-gray-50 rounded border border-gray-200">
                                                     {u.password || '***'}
                                                 </div>
-                                                <button className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={t.changePermission}>
+                                                <button onClick={() => handleOpenUserPermissions(u)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={t.changePermission}>
                                                     <Key size={18} />
                                                 </button>
                                             </div>
@@ -268,6 +279,101 @@ export default function RoleManagementPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Individual User Permissions Modal */}
+            <Dialog.Root open={isUserModalOpen} onOpenChange={handleCloseUserPermissions}>
+                <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] animate-in fade-in duration-200" />
+                    <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl z-[110] flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                            <div>
+                                <Dialog.Title className="text-xl font-bold text-gray-900">
+                                    Phân quyền chi tiết: {selectedUser?.fullName || selectedUser?.username}
+                                </Dialog.Title>
+                                <Dialog.Description className="text-sm text-gray-500 mt-1">
+                                    Tuỳ chỉnh quyền truy cập riêng rẽ, không phụ thuộc vào nhóm vai trò.
+                                </Dialog.Description>
+                            </div>
+                            <button onClick={handleCloseUserPermissions} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 flex-1 overflow-y-auto bg-gray-50/50">
+                            {/* Templates Bar */}
+                            <div className="mb-6 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                                <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Chọn nhanh từ mẫu</div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button onClick={() => handleApplyTemplate('ktv')} className="px-3 py-1.5 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors">
+                                        Mẫu Kỹ Thuật Viên
+                                    </button>
+                                    <button onClick={() => handleApplyTemplate('reception')} className="px-3 py-1.5 text-sm font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                                        Mẫu Lễ Tân
+                                    </button>
+                                    <button onClick={() => handleApplyTemplate('admin')} className="px-3 py-1.5 text-sm font-medium bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors">
+                                        Mẫu Admin
+                                    </button>
+                                    <div className="w-px h-8 bg-gray-200 mx-2" />
+                                    <button onClick={() => handleApplyTemplate('clear')} className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                                        Bỏ chọn tất cả
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modules Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {MODULES.map(module => {
+                                    const isChecked = currentUserPermissions.includes(module.id as ModuleId);
+                                    return (
+                                        <div 
+                                            key={module.id} 
+                                            onClick={() => handleToggleUserPermission(module.id as ModuleId)}
+                                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                                                isChecked 
+                                                    ? 'bg-indigo-50 border-indigo-500 shadow-sm' 
+                                                    : 'bg-white border-gray-200 hover:border-indigo-300'
+                                            }`}
+                                        >
+                                            <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center transition-colors flex-shrink-0 ${
+                                                isChecked ? 'bg-indigo-600 text-white' : 'border-2 border-gray-300'
+                                            }`}>
+                                                {isChecked && <Check size={14} strokeWidth={3} />}
+                                            </div>
+                                            <div>
+                                                <div className={`font-bold ${isChecked ? 'text-indigo-900' : 'text-gray-700'}`}>
+                                                    {module.name}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1">{module.group}</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 border-t border-gray-100 bg-white flex justify-end gap-3 rounded-b-2xl">
+                            <button onClick={handleCloseUserPermissions} className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors">
+                                Huỷ
+                            </button>
+                            <button 
+                                onClick={handleSaveUserPermissions} 
+                                disabled={isSavingUser}
+                                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-70 flex items-center gap-2 shadow-sm"
+                            >
+                                {isSavingUser ? (
+                                    <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                ) : (
+                                    <><Save size={18} /> Lưu thay đổi</>
+                                )}
+                            </button>
+                        </div>
+                    </Dialog.Content>
+                </Dialog.Portal>
+            </Dialog.Root>
+
         </AppLayout>
     );
 }

@@ -136,8 +136,27 @@ export async function updateUserRole(userId: string, newRole: string) {
         if (error) throw error;
 
         return { success: true };
-    } catch (error: any) {
+} catch (error: any) {
         console.error('Error updating user role:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateUserPermissions(userId: string, permissions: string[]) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        const { error } = await supabase
+            .from('Users')
+            .update({ permissions })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error updating user permissions:', error);
         return { success: false, error: error.message };
     }
 }
