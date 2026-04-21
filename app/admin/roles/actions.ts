@@ -21,6 +21,43 @@ export async function getAllUsers() {
     }
 }
 
+export async function getRolePermissions() {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        const { data: users, error } = await supabase
+            .from('Users')
+            .select('role, permissions');
+
+        if (error) throw error;
+
+        // Group by role and take the first valid permissions array found
+        const roleMap: Record<string, string[]> = {};
+        const DB_ROLE_TO_LOCAL: Record<string, string> = {
+            'ADMIN': 'admin',
+            'RECEPTIONIST': 'reception',
+            'LEAD_RECEPTIONIST': 'reception',
+            'TECHNICIAN': 'ktv',
+            'KTV': 'ktv',
+        };
+
+        for (const user of (users || [])) {
+            const localRoleId = DB_ROLE_TO_LOCAL[user.role] || user.role?.toLowerCase();
+            if (!localRoleId) continue;
+            // Only take if permissions is a valid array and we haven't set this role yet
+            if (!roleMap[localRoleId] && Array.isArray(user.permissions) && user.permissions.length > 0) {
+                roleMap[localRoleId] = user.permissions;
+            }
+        }
+
+        return { success: true, data: roleMap };
+    } catch (error: any) {
+        console.error('Error fetching role permissions:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function verifyAdminPassword(inputPassword: string) {
     try {
         const supabase = getSupabaseAdmin();

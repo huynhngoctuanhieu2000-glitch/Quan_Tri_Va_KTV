@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Role, ModuleId } from '@/lib/types';
-import { getAllUsers, verifyAdminPassword, saveRolePermissions } from './actions';
+import { getAllUsers, verifyAdminPassword, saveRolePermissions, getRolePermissions } from './actions';
 
 // --- MOCK DATA ---
 const MOCK_ROLES: Role[] = [
@@ -53,14 +53,29 @@ export const useRoleManagement = () => {
 
     useEffect(() => {
         setMounted(true);
-        async function fetchUsers() {
-            const res = await getAllUsers();
-            if (res.success && res.data) {
-                setUsers(res.data);
+        async function loadData() {
+            const [usersRes, permsRes] = await Promise.all([
+                getAllUsers(),
+                getRolePermissions()
+            ]);
+
+            if (usersRes.success && usersRes.data) {
+                setUsers(usersRes.data);
             }
+            
+            if (permsRes.success && permsRes.data) {
+                const dbRoleMap = permsRes.data as Record<string, string[]>;
+                setRoles(prev => prev.map(role => {
+                    if (dbRoleMap[role.id]) {
+                        return { ...role, permissions: dbRoleMap[role.id] as ModuleId[] };
+                    }
+                    return role;
+                }));
+            }
+            
             setIsLoadingUsers(false);
         }
-        fetchUsers();
+        loadData();
     }, []);
 
     // --- HANDLERS ---
