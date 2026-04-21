@@ -59,6 +59,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Missing employeeId' }, { status: 400 });
         }
 
+        // Lấy IP của người dùng từ headers
+        const forwardedFor = request.headers.get('x-forwarded-for');
+        const realIp = request.headers.get('x-real-ip');
+        const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : (realIp || 'unknown');
+
         const supabase = getSupabaseAdmin();
         if (!supabase) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
@@ -79,6 +84,28 @@ export async function POST(request: Request) {
         const staffCode = userData.code; // Mã như NH016
         // Fallback: nếu không có mã thì dùng tên tạm, nhưng ưu tiên Mã NV theo yêu cầu
         const displayName = staffCode || userData.fullName || empNameInput || 'KTV';
+
+        // ─── Step 0.5: Verify Wi-Fi IP (IP Whitelisting) ─────────────
+        const { data: configData, error: configError } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_wifi_ips')
+            .single();
+
+        // Nếu có cấu hình dải IP (dạng array) thì mới kiểm tra
+        if (!configError && configData?.value && Array.isArray(configData.value) && configData.value.length > 0) {
+            const allowedIps: string[] = configData.value;
+            // Cho phép localhost (cho môi trường dev) hoặc IP phải nằm trong mảng cấu hình
+            if (clientIp !== '::1' && clientIp !== '127.0.0.1' && clientIp !== 'unknown') {
+                if (!allowedIps.includes(clientIp)) {
+                    console.error(`❌ [Attendance] IP mismatch: clientIp=${clientIp}, allowedIps=${allowedIps}`);
+                    return NextResponse.json({ 
+                        success: false, 
+                        error: `Vui lòng kết nối vào mạng Wi-Fi của Spa để điểm danh! (IP của bạn: ${clientIp})` 
+                    }, { status: 403 });
+                }
+            }
+        }
 
         // ─── Step 1: Prepare Watermark Info ─────────────
         const nowUtc = new Date();

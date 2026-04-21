@@ -153,7 +153,7 @@ const KTVAttendancePage = () => {
                             </div>
                             <div className="flex items-center gap-2 text-blue-600 font-medium">
                                 <Loader2 size={18} className="animate-spin" />
-                                Đang tải GPS và Ảnh...
+                                Đang kiểm tra vị trí & tải ảnh...
                             </div>
                         </>
                     )}

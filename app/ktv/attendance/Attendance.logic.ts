@@ -139,11 +139,11 @@ export const useKTVAttendance = () => {
         return () => { supabase.removeChannel(channel); };
     }, [user?.id, currentRecord?.id]);
 
-    // --- GPS helper ---
-    const getGPS = (): Promise<{ latitude: number; longitude: number; locationText: string }> => {
-        return new Promise((resolve, reject) => {
+    // --- GPS helper (OPTIONAL FALLBACK) ---
+    const getGPS = (): Promise<{ latitude: number | null; longitude: number | null; locationText: string }> => {
+        return new Promise((resolve) => {
             if (!navigator.geolocation) {
-                reject(new Error('Trình duyệt không hỗ trợ GPS'));
+                resolve({ latitude: null, longitude: null, locationText: '' });
                 return;
             }
             navigator.geolocation.getCurrentPosition(
@@ -152,11 +152,11 @@ export const useKTVAttendance = () => {
                     longitude: pos.coords.longitude,
                     locationText: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
                 }),
-                (err) => reject(new Error(err.code === 1
-                    ? 'Bạn chưa cấp quyền GPS. Vào cài đặt trình duyệt để cho phép.'
-                    : 'Không lấy được vị trí GPS. Thử lại sau.'
-                )),
-                { enableHighAccuracy: GPS_HIGH_ACCURACY, timeout: GPS_TIMEOUT_MS }
+                (err) => {
+                    console.warn('GPS failed or denied:', err);
+                    resolve({ latitude: null, longitude: null, locationText: '' });
+                },
+                { enableHighAccuracy: GPS_HIGH_ACCURACY, timeout: 3000 } // Short timeout (3s)
             );
         });
     };
