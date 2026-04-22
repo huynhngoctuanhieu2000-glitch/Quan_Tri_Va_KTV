@@ -194,13 +194,24 @@ export const useKTVAttendance = () => {
             });
 
             if (!res.ok) {
-                const text = await res.text();
-                console.error(`❌ [Attendance POST] Server returned ${res.status}:`, text);
-                throw new Error(
-                    res.status === 413
-                        ? 'Ảnh quá lớn. Vui lòng chụp lại với chất lượng thấp hơn.'
-                        : `Lỗi server (${res.status}). Vui lòng thử lại.`
-                );
+                let errorMsgFromServer = `Lỗi server (${res.status}). Vui lòng thử lại.`;
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    try {
+                        const errorData = await res.json();
+                        if (errorData.error) errorMsgFromServer = errorData.error;
+                    } catch {
+                        // ignore parse error
+                    }
+                } else {
+                    const text = await res.text();
+                    console.error(`❌ [Attendance POST] Server returned ${res.status}:`, text);
+                }
+
+                if (res.status === 413) {
+                    errorMsgFromServer = 'Ảnh quá lớn. Vui lòng chụp lại với chất lượng thấp hơn.';
+                }
+                throw new Error(errorMsgFromServer);
             }
 
             const result = await res.json();
@@ -211,7 +222,6 @@ export const useKTVAttendance = () => {
         } catch (err: any) {
             const errorMessage = err.message || 'Lỗi không xác định';
             setErrorMsg(errorMessage);
-            alert(`CẢNH BÁO: ${errorMessage}`);
             // Revert back or stay IDLE if not checked out successfully
             if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
                 setCheckStatus('IDLE');
@@ -224,6 +234,10 @@ export const useKTVAttendance = () => {
     const handleRetry = () => {
         setCheckStatus('IDLE');
         setCurrentRecord(null);
+        setErrorMsg(null);
+    };
+
+    const clearError = () => {
         setErrorMsg(null);
     };
 
@@ -283,5 +297,6 @@ export const useKTVAttendance = () => {
         checkIsLate,
         handleAttendance,
         handleRetry,
+        clearError,
     };
 };

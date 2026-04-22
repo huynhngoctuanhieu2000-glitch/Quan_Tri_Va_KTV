@@ -25,6 +25,7 @@ const KTVAttendancePage = () => {
         checkIsLate,
         handleAttendance,
         handleRetry,
+        clearError,
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
@@ -245,12 +246,7 @@ const KTVAttendancePage = () => {
                         </>
                     )}
 
-                    {/* Error */}
-                    {errorMsg && (
-                        <div className="w-full bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 text-center">
-                            {errorMsg}
-                        </div>
-                    )}
+                    {/* Inline error has been moved to Modal */}
                 </div>
 
                 {/* FORM MODAL */}
@@ -330,6 +326,25 @@ const KTVAttendancePage = () => {
                                     <CheckCircle2 size={18} /> Gửi
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ERROR MODAL */}
+                {errorMsg && (
+                    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 text-center relative">
+                            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-2">
+                                <ShieldAlert size={32} className="text-red-600" />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900">Lỗi Điểm Danh</h3>
+                            <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{errorMsg}</p>
+                            <button 
+                                onClick={clearError}
+                                className="w-full mt-4 py-3.5 bg-gray-100 text-gray-800 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+                            >
+                                Đóng
+                            </button>
                         </div>
                     </div>
                 )}
