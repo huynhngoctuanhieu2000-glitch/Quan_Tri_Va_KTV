@@ -15,7 +15,7 @@ import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { DispatchServiceBlock } from './_components/DispatchServiceBlock';
 import { KanbanBoard } from './_components/KanbanBoard';
-import { getDispatchData, processDispatch, cancelBooking, updateBookingStatus, createQuickBooking } from './actions';
+import { getDispatchData, processDispatch, cancelBooking, updateBookingStatus, createQuickBooking, addAddonServices } from './actions';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AddOrderModal } from './_components/AddOrderModal';
 import { useNotifications } from '@/components/NotificationProvider';
@@ -77,18 +77,7 @@ const calcEndTime = (start: string, duration: number): string => {
 
 const genId = () => Math.random().toString(36).slice(2, 8);
 
-const QUICK_SERVICES_LIST = [
-  { name: 'Massage Body 60p', duration: 60 },
-  { name: 'Massage Body 90p', duration: 90 },
-  { name: 'Massage Chân 30p', duration: 30 },
-  { name: 'Massage Chân 45p', duration: 45 },
-  { name: 'Gội Đầu Dưỡng Sinh 60p', duration: 60 },
-  { name: 'Chăm Sóc Da Mặt 75p', duration: 75 },
-  { name: 'Scrub Tay 20p', duration: 20 },
-  { name: 'Đắp Mặt Nạ 30p', duration: 30 },
-  { name: 'Tẩy Tế Bào Chết 30p', duration: 30 },
-  { name: 'Massage Đá Nóng 90p', duration: 90 },
-];
+// QUICK_SERVICES_LIST removed — now using allServices from Supabase
 
 export default function DispatchBoardPage() {
   const { hasPermission } = useAuth();
@@ -107,6 +96,7 @@ export default function DispatchBoardPage() {
   const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR'>('DISPATCH');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
+  const [svcSearchQuery, setSvcSearchQuery] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
   const [roomTransitionTime, setRoomTransitionTime] = useState(5);
@@ -339,6 +329,7 @@ export default function DispatchBoardPage() {
                   Array.isArray(bi.options?.tags) && bi.options.tags.length > 0 ? `Yêu cầu đặc biệt: ${bi.options.tags.join(', ')}` : '',
                   b.focusAreaNote
                 ].filter(Boolean).join(' | '),
+                options: bi.options
               };
             })
           };
@@ -547,6 +538,13 @@ if (!hasPermission('dispatch_board')) {
 
   const addServiceBlock = (svcName: string, duration: number) => {
     if (!selectedOrderId) return;
+
+    if (selectedOrder?.dispatchStatus !== 'pending') {
+      // 🚀 MUA THÊM DỊCH VỤ (ADD-ON) TRỰC TIẾP
+      handleDirectAddon(svcName, duration);
+      return;
+    }
+
     const now = new Date();
     const startTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const newBlock: ServiceBlock = {
@@ -575,11 +573,45 @@ if (!hasPermission('dispatch_board')) {
       focus: '',
       avoid: '',
       customerNote: '',
+      options: { isAddon: true, isPaid: false }
     };
     setOrders(prev => prev.map(o =>
       o.id === selectedOrderId ? { ...o, services: [...o.services, newBlock] } : o
     ));
     setShowAddSvcModal(false);
+  };
+
+  const handleDirectAddon = async (svcName: string, duration: number) => {
+      if (!selectedOrderId) return;
+      // Tìm service bằng cách so tên đã parse (vì nameVN có thể là object multi-lang)
+      const svcDef = allServices.find((s: any) => {
+          const parsedName = (typeof s.nameVN === 'object' && s.nameVN !== null) 
+            ? (s.nameVN.vn || s.nameVN.en || s.nameVN) 
+            : (s.nameVN || s.nameEN || '');
+          return parsedName === svcName || s.nameEN === svcName || s.id === svcName;
+      });
+      if (!svcDef) {
+          alert('Không tìm thấy ID dịch vụ!');
+          return;
+      }
+      
+      const isConfirm = confirm(`Xác nhận thêm dịch vụ "${svcName}" (${(svcDef.priceVND || 0).toLocaleString()}đ) vào đơn hàng đang chạy?`);
+      if (!isConfirm) return;
+
+      try {
+          const res = await addAddonServices(selectedOrderId, [{ serviceId: svcDef.id, qty: 1 }], 'ADMIN');
+          if (res.success) {
+              alert(`✅ Thêm "${svcName}" thành công! Tổng tiền mới: ${(res.newTotalAmount || 0).toLocaleString()}đ`);
+              setShowAddSvcModal(false);
+              setSvcSearchQuery('');
+              fetchData();
+          } else {
+              alert('Lỗi: ' + res.error);
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Lỗi hệ thống!');
+      }
   };
 
   const removeServiceBlock = (orderId: string, svcId: string) => {
@@ -1021,6 +1053,16 @@ if (!hasPermission('dispatch_board')) {
                     <h2 className="font-black text-gray-900 text-base truncate">Đơn {selectedOrder.id} — {selectedOrder.customerName}</h2>
                   </div>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5 ml-4">Đang trong quá trình điều phối</p>
+                  
+                  {/* Cảnh báo Phát sinh chưa thu */}
+                  {selectedOrder.services.some(s => s.options?.isAddon && !s.options?.isPaid) && (
+                    <div className="mt-2 ml-4 px-3 py-1.5 bg-rose-50 border border-rose-100 rounded-lg inline-flex items-center gap-2">
+                        <ShieldAlert size={14} className="text-rose-500" />
+                        <span className="text-rose-600 font-black text-xs uppercase tracking-wider">
+                            Phát sinh chưa thu: Có dịch vụ mua thêm
+                        </span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-3 text-gray-400">
@@ -1082,7 +1124,37 @@ if (!hasPermission('dispatch_board')) {
                           onRemoveSvc={removeServiceBlock}
                           selectedDate={selectedDate}
                           isExpanded={expandedSvcId === svc.id}
-                          onToggleExpand={() => setExpandedSvcId(expandedSvcId === svc.id ? null : svc.id)}
+                          onToggleExpand={() => {
+                            const isOpening = expandedSvcId !== svc.id;
+                            setExpandedSvcId(isOpening ? svc.id : null);
+                            
+                            // 🕐 Khi MỞ panel → cập nhật startTime cho tất cả segments thành thời gian hiện tại
+                            if (isOpening && selectedOrder?.dispatchStatus === 'pending') {
+                              const now = new Date();
+                              const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                              setOrders(prev => prev.map(o => 
+                                o.id === selectedOrderId ? {
+                                  ...o,
+                                  services: o.services.map(s => s.id === svc.id ? {
+                                    ...s,
+                                    staffList: s.staffList.map(r => ({
+                                      ...r,
+                                      segments: r.segments.map((seg, segIdx) => {
+                                        if (segIdx === 0) {
+                                          return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
+                                        }
+                                        // Nối giờ cho các chặng sau
+                                        const prevEnd = r.segments[segIdx - 1] 
+                                          ? calcEndTime(segIdx === 1 ? nowStr : r.segments[segIdx - 1].startTime, r.segments[segIdx - 1].duration)
+                                          : nowStr;
+                                        return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
+                                      })
+                                    }))
+                                  } : s)
+                                } : o
+                              ));
+                            }
+                          }}
                         />
                       </Reorder.Item>
                     );
@@ -1165,22 +1237,49 @@ if (!hasPermission('dispatch_board')) {
                   <Plus className="rotate-45" size={24} />
                 </button>
               </div>
-              <div className="p-6 grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto no-scrollbar pb-10 sm:pb-6">
-                {QUICK_SERVICES_LIST.map(svc => (
-                  <button 
-                    key={svc.name} 
-                    onClick={() => addServiceBlock(svc.name, svc.duration)} 
-                    className="group p-5 text-left border-2 border-gray-100 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/30 transition-all flex items-center justify-between active:scale-[0.98]"
-                  >
-                    <div>
-                      <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{svc.name}</p>
-                      <p className="text-xs text-gray-400 font-bold mt-1 uppercase tracking-widest">{svc.duration} PHÚT</p>
-                    </div>
-                    <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                      <Plus size={20} strokeWidth={3} />
-                    </div>
-                  </button>
-                ))}
+              {/* Search bar */}
+              <div className="px-6 pt-4 pb-2">
+                <input
+                  type="text"
+                  placeholder="Tìm dịch vụ..."
+                  value={svcSearchQuery}
+                  onChange={(e) => setSvcSearchQuery(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-100 rounded-2xl text-sm font-medium focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-gray-300"
+                />
+              </div>
+              <div className="p-6 pt-2 grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto no-scrollbar pb-10 sm:pb-6">
+                {allServices
+                  .filter((svc: any) => {
+                    if (!svcSearchQuery.trim()) return true;
+                    const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || '') : (svc.nameVN || svc.nameEN || '');
+                    return name.toLowerCase().includes(svcSearchQuery.toLowerCase());
+                  })
+                  .map((svc: any) => {
+                    const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || svc.nameVN) : (svc.nameVN || svc.nameEN || `Dịch vụ ${svc.code || svc.id}`);
+                    const dur = svc.duration || 60;
+                    const price = svc.priceVND || 0;
+                    return (
+                      <button 
+                        key={svc.id} 
+                        onClick={() => addServiceBlock(name, dur)} 
+                        className="group p-5 text-left border-2 border-gray-100 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/30 transition-all flex items-center justify-between active:scale-[0.98]"
+                      >
+                        <div>
+                          <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{name}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">{dur} PHÚT</span>
+                            {price > 0 && <span className="text-xs text-emerald-600 font-black">{price.toLocaleString()}đ</span>}
+                          </div>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
+                          <Plus size={20} strokeWidth={3} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                {allServices.length === 0 && (
+                  <p className="text-center text-gray-400 text-sm py-8 font-medium">Đang tải danh sách dịch vụ...</p>
+                )}
               </div>
             </motion.div>
           </div>

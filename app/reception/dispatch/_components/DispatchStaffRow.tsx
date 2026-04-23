@@ -158,7 +158,26 @@ export const DispatchStaffRow = ({
                             value={row.ktvId}
                             onChange={e => {
                                 const selected = availableTurns.find(t => t.employee_id === e.target.value);
-                                handleChange({ ktvId: e.target.value, ktvName: selected?.staff?.full_name || '' });
+                                
+                                // 🕐 Cập nhật startTime thành giờ hiện tại khi chọn KTV
+                                const now = new Date();
+                                const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                                const updatedSegments = row.segments.map((seg, idx) => {
+                                    if (idx === 0) {
+                                        return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
+                                    }
+                                    const prevSeg = row.segments[idx - 1];
+                                    const prevEnd = idx === 1 
+                                        ? calcEndTime(nowStr, row.segments[0].duration) 
+                                        : calcEndTime(prevSeg.startTime, prevSeg.duration);
+                                    return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
+                                });
+                                
+                                handleChange({ 
+                                    ktvId: e.target.value, 
+                                    ktvName: selected?.staff?.full_name || '',
+                                    segments: updatedSegments
+                                });
                             }}
                             className="w-full pl-4 pr-10 py-3 border-2 border-gray-50 rounded-2xl text-sm font-black focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-gray-50/30 transition-all appearance-none active:scale-[0.99]"
                         >

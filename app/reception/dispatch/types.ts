@@ -30,6 +30,7 @@ export interface ServiceBlock {
   focus: string;
   avoid: string;
   customerNote: string;
+  options?: any;
 }
 
 export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'cleaning' | 'waiting_rating' | 'done';

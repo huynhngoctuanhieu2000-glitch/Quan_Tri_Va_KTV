@@ -432,3 +432,149 @@ export async function createQuickBooking(data: {
         return { success: false, error: error.message };
     }
 }
+
+export async function addAddonServices(bookingId: string, items: { serviceId: string; qty: number }[], adminId: string = 'ADMIN') {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        const vnTimeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+        // 1. Lấy đơn hàng hiện tại
+        const { data: booking, error: bookingError } = await supabase
+            .from('Bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .single();
+
+        if (bookingError || !booking) throw new Error('Không tìm thấy đơn hàng');
+
+        // 2. Lấy thông tin giá dịch vụ và tính tiền, thời lượng
+        const serviceIds = items.map(i => i.serviceId);
+        const { data: allServices, error: sError } = await supabase
+            .from('Services')
+            .select('*')
+            .in('id', serviceIds);
+
+        if (sError) throw sError;
+
+        let totalVND = 0;
+        let addedDuration = 0;
+        const detailedItems = items.map(item => {
+            const serviceDef = allServices?.find(s => s.id === item.serviceId);
+            const price = serviceDef?.priceVND || 0;
+            const duration = serviceDef?.duration || 60;
+            const name = (typeof serviceDef?.nameVN === 'object' && serviceDef?.nameVN !== null) ? (serviceDef?.nameVN.vn || serviceDef?.nameVN.en || serviceDef?.nameVN) : (serviceDef?.nameVN || serviceDef?.nameEN || `Dịch vụ ${item.serviceId}`);
+            
+            totalVND += price * item.qty;
+            addedDuration += duration * item.qty;
+
+            return {
+                ...item,
+                priceOriginal: price,
+                duration,
+                name
+            };
+        });
+
+        // 3. Chuẩn bị data cho BookingItems
+        const { count: currentItemCount } = await supabase
+            .from('BookingItems')
+            .select('*', { count: 'exact', head: true })
+            .eq('bookingId', bookingId);
+
+        const nextIndex = (currentItemCount || 0) + 1;
+
+        const itemsToInsert = detailedItems.map((item, index) => {
+            return {
+                id: `${bookingId}-item${nextIndex + index}`,
+                bookingId: bookingId,
+                serviceId: item.serviceId,
+                quantity: item.qty,
+                price: item.priceOriginal,
+                status: 'WAITING',
+                technicianCodes: [booking.technicianCode].filter(Boolean),
+                options: { isAddon: true, isPaid: false }
+            };
+        });
+
+        // 4. Insert vào BookingItems
+        const { error: itemsError } = await supabase
+            .from('BookingItems')
+            .insert(itemsToInsert);
+
+        if (itemsError) throw itemsError;
+
+        // 5. Update tổng tiền Bookings
+        const newTotalAmount = (Number(booking.totalAmount) || 0) + totalVND;
+        const { error: updateBookingError } = await supabase
+            .from('Bookings')
+            .update({ totalAmount: newTotalAmount, updatedAt: vnTimeStr })
+            .eq('id', bookingId);
+            
+        if (updateBookingError) throw updateBookingError;
+
+        // 6. Update TurnQueue (tăng estimated_end_time + nối addon item ID vào booking_item_id)
+        // ⚠️ KHÔNG tăng turns_completed — vì add-on chung 1 bill = chung 1 tua
+        const newItemIds = itemsToInsert.map(i => i.id);
+        
+        if (booking.technicianCode) {
+            // Lấy tất cả ktv được gán cho đơn hàng này
+            const ktvIds = booking.technicianCode.split(',').map((id: string) => id.trim());
+            
+            for (const ktvId of ktvIds) {
+                const { data: turn, error: turnError } = await supabase
+                    .from('TurnQueue')
+                    .select('*')
+                    .eq('current_order_id', bookingId)
+                    .eq('employee_id', ktvId)
+                    .maybeSingle();
+
+                if (turn) {
+                    const updateData: any = {};
+
+                    // 6a. Tăng estimated_end_time
+                    if (turn.estimated_end_time) {
+                        const [h, m, s] = turn.estimated_end_time.split(':').map(Number);
+                        const d = new Date();
+                        d.setHours(h, m, s || 0);
+                        d.setMinutes(d.getMinutes() + addedDuration);
+                        
+                        updateData.estimated_end_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+                    }
+
+                    // 6b. Nối addon item IDs vào booking_item_id (format: "id1,id2,id3")
+                    // Để KTV Dashboard tính tiền tua theo TỔNG duration tất cả items (chung 1 tua)
+                    const existingItemIds = turn.booking_item_id 
+                        ? String(turn.booking_item_id).split(',').map((s: string) => s.trim()).filter(Boolean)
+                        : [];
+                    const mergedItemIds = [...new Set([...existingItemIds, ...newItemIds])];
+                    updateData.booking_item_id = mergedItemIds.join(',');
+
+                    await supabase
+                        .from('TurnQueue')
+                        .update(updateData)
+                        .eq('id', turn.id);
+                }
+            }
+        }
+
+        // 7. Tạo StaffNotification (Ghi nhận log hệ thống)
+        const addedServiceNames = detailedItems.map(i => i.name).join(', ');
+        await supabase
+            .from('StaffNotifications')
+            .insert({
+                bookingId: bookingId,
+                employeeId: null,
+                type: 'ADDON_SERVICE',
+                message: `Phát sinh chưa thu: Đơn ${booking.billCode || bookingId} vừa được thêm ${addedServiceNames} (${totalVND.toLocaleString()}đ).`,
+                isRead: false,
+                createdAt: vnTimeStr
+            });
+
+        return { success: true, newTotalAmount };
+    } catch (error: any) {
+        console.error("❌ [Server] Lỗi thêm dịch vụ phụ (Add-on):", error.message);
+        return { success: false, error: error.message };
+    }
+}
