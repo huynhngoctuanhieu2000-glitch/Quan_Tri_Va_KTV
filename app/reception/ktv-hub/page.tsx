@@ -77,6 +77,42 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; short: string }[] =
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
+// PHOTO VIEWER MODAL
+// ──────────────────────────────────────────────────────────────────────────────
+const PhotoViewerModal = ({ photos, onClose }: { photos: string[] | null, onClose: () => void }) => {
+    return (
+        <AnimatePresence>
+            {photos && photos.length > 0 && (
+                <motion.div 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4 backdrop-blur-sm" 
+                    onClick={onClose}
+                >
+                    <button 
+                        className="absolute top-6 right-6 bg-white/10 text-white p-2 rounded-full hover:bg-white hover:text-black transition-colors z-10"
+                        onClick={onClose}
+                    >
+                        <X size={24} />
+                    </button>
+                    <div className="text-white mb-4 text-sm font-bold bg-white/10 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 shadow-lg">
+                        {photos.length} ảnh (Cuộn xuống để xem thêm)
+                    </div>
+                    <div 
+                        className="w-full max-w-lg max-h-[85vh] overflow-y-auto space-y-4 rounded-xl pb-10"
+                        onClick={e => e.stopPropagation()}
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                    >
+                        {photos.map((url, idx) => (
+                            <img key={idx} src={url} alt={`Photo ${idx + 1}`} className="w-full h-auto bg-gray-900 rounded-xl shadow-2xl border border-white/20" />
+                        ))}
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
 // ATTENDANCE PENDING SECTION (Duyệt điểm danh)
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -96,6 +132,7 @@ interface PendingRecord {
 const AttendancePendingSection = () => {
     const [records, setRecords] = React.useState<PendingRecord[]>([]);
     const [loading, setLoading] = React.useState<Record<string, 'confirm' | 'reject'>>({});
+    const [viewerPhotos, setViewerPhotos] = React.useState<string[] | null>(null);
 
     const fetchPending = React.useCallback(async () => {
         try {
@@ -182,19 +219,22 @@ const AttendancePendingSection = () => {
                                         </a>
                                     )}
                                     {rec.photoUrl && (
-                                        <a 
-                                            href={(() => {
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
                                                 try {
                                                     const p = JSON.parse(rec.photoUrl || '');
-                                                    return Array.isArray(p) ? p[0] : rec.photoUrl;
-                                                } catch { return rec.photoUrl || '#'; }
-                                            })()} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
+                                                    setViewerPhotos(Array.isArray(p) ? p : [rec.photoUrl!]);
+                                                } catch { 
+                                                    setViewerPhotos([rec.photoUrl!]); 
+                                                }
+                                            }}
                                             className="text-[10px] text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors"
                                         >
-                                            <Camera size={10} /> Xem hình ảnh
-                                        </a>
+                                            <Camera size={10} /> Xem {(() => {
+                                                try { const p = JSON.parse(rec.photoUrl || ''); return Array.isArray(p) ? p.length : 1; } catch { return 1; }
+                                            })()} ảnh
+                                        </button>
                                     )}
                                 </div>
                                 {rec.reason && (
@@ -225,6 +265,7 @@ const AttendancePendingSection = () => {
                     );
                 })}
             </AnimatePresence>
+            <PhotoViewerModal photos={viewerPhotos} onClose={() => setViewerPhotos(null)} />
         </motion.div>
     );
 };
@@ -250,6 +291,7 @@ interface HistoryRecord {
 const AttendanceHistorySection = () => {
     const [records, setRecords] = React.useState<HistoryRecord[]>([]);
     const [isExpanded, setIsExpanded] = useState(false);
+    const [viewerPhotos, setViewerPhotos] = React.useState<string[] | null>(null);
 
     const fetchHistory = React.useCallback(async () => {
         try {
@@ -336,19 +378,22 @@ const AttendanceHistorySection = () => {
                                                 </a>
                                             )}
                                             {rec.photoUrl && (
-                                                <a 
-                                                    href={(() => {
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         try {
                                                             const p = JSON.parse(rec.photoUrl || '');
-                                                            return Array.isArray(p) ? p[0] : rec.photoUrl;
-                                                        } catch { return rec.photoUrl || '#'; }
-                                                    })()} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer" 
+                                                            setViewerPhotos(Array.isArray(p) ? p : [rec.photoUrl!]);
+                                                        } catch { 
+                                                            setViewerPhotos([rec.photoUrl!]); 
+                                                        }
+                                                    }}
                                                     className="text-[10px] text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 border border-indigo-100 px-1.5 rounded flex items-center gap-1 shrink-0 transition-colors h-[21px]"
                                                 >
-                                                    <Camera size={10} /> Xem ảnh
-                                                </a>
+                                                    <Camera size={10} /> Xem {(() => {
+                                                        try { const p = JSON.parse(rec.photoUrl || ''); return Array.isArray(p) ? p.length : 1; } catch { return 1; }
+                                                    })()} ảnh
+                                                </button>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
@@ -370,6 +415,7 @@ const AttendanceHistorySection = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+            <PhotoViewerModal photos={viewerPhotos} onClose={() => setViewerPhotos(null)} />
         </div>
     );
 };

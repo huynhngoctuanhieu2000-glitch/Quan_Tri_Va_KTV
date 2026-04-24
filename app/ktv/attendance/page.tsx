@@ -29,7 +29,7 @@ const KTVAttendancePage = () => {
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
-    const MAX_PHOTOS = 3;
+    const MAX_PHOTOS = 5;
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [formType, setFormType] = React.useState<'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN'>('CHECK_IN');
@@ -85,21 +85,38 @@ const KTVAttendancePage = () => {
     };
 
     const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-            const compressed = await compressImage(file);
-            setPhotos(prev => [...prev, compressed].slice(0, MAX_PHOTOS));
-        } catch {
-            // Fallback to raw FileReader if compression fails
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const result = ev.target?.result as string;
-                if (result) {
-                    setPhotos(prev => [...prev, result].slice(0, MAX_PHOTOS));
-                }
-            };
-            reader.readAsDataURL(file);
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        const remainingSlots = MAX_PHOTOS - photos.length;
+        const filesToProcess = files.slice(0, remainingSlots);
+
+        for (const file of filesToProcess) {
+            try {
+                const compressed = await compressImage(file);
+                setPhotos(prev => {
+                    if (prev.length < MAX_PHOTOS) return [...prev, compressed];
+                    return prev;
+                });
+            } catch {
+                // Fallback to raw FileReader if compression fails
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const result = ev.target?.result as string;
+                    if (result) {
+                        setPhotos(prev => {
+                            if (prev.length < MAX_PHOTOS) return [...prev, result];
+                            return prev;
+                        });
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        // Reset input để có thể chọn lại cùng 1 file nếu lỡ xoá
+        if (e.target) {
+            e.target.value = '';
         }
     };
 
@@ -292,7 +309,7 @@ const KTVAttendancePage = () => {
                                         <span className="text-sm font-medium text-gray-500">
                                             {photos.length === 0 ? t.openCamera : t.addPhoto(photos.length + 1, MAX_PHOTOS)}
                                         </span>
-                                        <input type="file" accept="image/*" className="hidden" onChange={handleCapture} />
+                                        <input type="file" accept="image/*" multiple className="hidden" onChange={handleCapture} />
                                     </label>
                                 )}
                             </div>
