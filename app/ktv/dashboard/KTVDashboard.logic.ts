@@ -385,10 +385,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
                 
                 if (config?.targetBookingId) {
-                    url = `/api/ktv/booking?bookingId=${config.targetBookingId}`;
+                    url = `/api/ktv/booking?bookingId=${config.targetBookingId}&techCode=${user.id}`;
                 } else if (isPostService && prevBookingIdRef.current) {
                     // Ưu tiên fetch theo ID đơn vừa làm để tránh bị mất dữ liệu khi đã RELEASE_KTV
-                    url = `/api/ktv/booking?bookingId=${prevBookingIdRef.current}`;
+                    url = `/api/ktv/booking?bookingId=${prevBookingIdRef.current}&techCode=${user.id}`;
                     console.log("🔍 [KTV] Persisting booking fetch for post-service screen:", prevBookingIdRef.current);
                 }
                 // (Đã gộp vào logic ở trên)
@@ -959,7 +959,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
             body: JSON.stringify({ 
                 bookingId: booking.id, 
                 status: 'COMPLETED',
-                techCode: user.id 
+                techCode: user.id,
+                action: 'RELEASE_KTV' // Trả lại trạng thái rảnh ngay khi hết giờ dịch vụ
             })
         });
         const res = await response.json();

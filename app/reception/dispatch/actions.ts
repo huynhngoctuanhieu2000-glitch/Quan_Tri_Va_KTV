@@ -572,9 +572,69 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                 createdAt: vnTimeStr
             });
 
+        // 8. Gửi Push Notification cho Lễ tân
+        try {
+            const { sendPushNotification } = await import('@/lib/push-helper');
+            await sendPushNotification({
+                title: 'Dịch vụ phát sinh (Chưa thu)',
+                message: `Đơn ${booking.billCode || bookingId} vừa thêm: ${addedServiceNames}`,
+                targetRoles: ['RECEPTIONIST', 'ADMIN'],
+                url: `/reception/dispatch?bookingId=${bookingId}`
+            });
+        } catch (pushErr) {
+            console.error('⚠️ [Add-on] Failed to send push notification:', pushErr);
+        }
+
         return { success: true, newTotalAmount };
     } catch (error: any) {
         console.error("❌ [Server] Lỗi thêm dịch vụ phụ (Add-on):", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function confirmAddonPayment(bookingId: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // Lấy tất cả items của booking này
+        const { data: items, error: fetchError } = await supabase
+            .from('BookingItems')
+            .select('*')
+            .eq('bookingId', bookingId);
+        
+        if (fetchError) throw fetchError;
+        if (!items || items.length === 0) return { success: true };
+
+        // Lọc các item là addon và chưa thanh toán
+        const addonItems = items.filter(item => {
+            let options = item.options;
+            if (typeof options === 'string') {
+                try { options = JSON.parse(options); } catch (e) {}
+            }
+            return options?.isAddon === true && options?.isPaid === false;
+        });
+
+        if (addonItems.length === 0) return { success: true };
+
+        // Cập nhật từng item
+        for (const item of addonItems) {
+            let options = item.options;
+            if (typeof options === 'string') {
+                try { options = JSON.parse(options); } catch (e) { options = {}; }
+            }
+            
+            const newOptions = { ...options, isPaid: true };
+            
+            await supabase
+                .from('BookingItems')
+                .update({ options: newOptions })
+                .eq('id', item.id);
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("❌ [Server] Lỗi xác nhận thu tiền add-on:", error.message);
         return { success: false, error: error.message };
     }
 }

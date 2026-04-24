@@ -39,6 +39,7 @@ interface KanbanBoardProps {
     orders: PendingOrder[];
     onUpdateStatus: (orderId: string, newStatus: string) => void;
     onOpenDetail: (orderId: string) => void;
+    onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
 }
 
@@ -66,8 +67,7 @@ const getEstimatedEndTime = (order: PendingOrder) => {
     }
     return maxTime || order.time; // Fallback về thời gian tạo đơn nếu chưa có dữ liệu điều phối
 };
-
-export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrderId }: KanbanBoardProps) {
+export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId }: KanbanBoardProps) {
     const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
 
     const getStatusConfig = (id: string) => STATUS_CONFIG.find(s => s.id === id) || STATUS_CONFIG[0];
@@ -192,14 +192,30 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
                                                 )}
 
                                                 <div className="flex items-center gap-2">
-                                                    {currentCfg.next && (
-                                                        <button
-                                                            onClick={e => { e.stopPropagation(); onUpdateStatus(order.id, currentCfg.next); }}
-                                                            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${currentCfg.activeBg || 'bg-indigo-600'} text-white hover:opacity-90 active:scale-95`}
-                                                        >
-                                                            {currentCfg.nextLabel}
-                                                        </button>
-                                                    )}
+                                                    {(() => {
+                                                        const unpaidAmount = order.services.reduce((acc, svc) => acc + (svc.options?.isPaid === false ? ((svc.price || 0) * (svc.quantity || 1)) : 0), 0);
+                                                        if (unpaidAmount > 0 && onConfirmAddonPayment) {
+                                                            return (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); onConfirmAddonPayment(order.id); }}
+                                                                    className="flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm bg-orange-500 text-white hover:bg-orange-600 active:scale-95"
+                                                                >
+                                                                    Đã thu {formatVND(unpaidAmount)}
+                                                                </button>
+                                                            );
+                                                        }
+                                                        if (currentCfg.next) {
+                                                            return (
+                                                                <button
+                                                                    onClick={e => { e.stopPropagation(); onUpdateStatus(order.id, currentCfg.next); }}
+                                                                    className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${currentCfg.activeBg || 'bg-indigo-600'} text-white hover:opacity-90 active:scale-95`}
+                                                                >
+                                                                    {currentCfg.nextLabel}
+                                                                </button>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                     <button
                                                         onClick={e => { e.stopPropagation(); onOpenDetail(order.id); }}
                                                         className="px-3 py-2.5 rounded-xl text-[11px] font-black text-gray-400 bg-gray-50 hover:bg-gray-100 transition-all border border-gray-100"

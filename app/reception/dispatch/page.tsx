@@ -315,6 +315,8 @@ export default function DispatchBoardPage() {
                     noteForKtv: ''
                   }];
 
+              const parsedOptions = typeof bi.options === 'string' ? JSON.parse(bi.options) : (bi.options || {});
+
               return {
                 id: bi.id,
                 serviceId: bi.serviceId,
@@ -325,18 +327,18 @@ export default function DispatchBoardPage() {
                 bedId: bi.bedId || b.bedId || null,
                 staffList: staffList,
                 adminNote: b.notes || '',
-                genderReq: bi.options?.therapist || 'Ngẫu nhiên',
-                strength: bi.options?.strength || '',
-                focus: Array.isArray(bi.options?.focus) ? bi.options.focus.join(', ') : (bi.options?.focus || b.focusAreaNote || ''),
-                avoid: Array.isArray(bi.options?.avoid) ? bi.options.avoid.join(', ') : (bi.options?.avoid || ''),
+                genderReq: parsedOptions?.therapist || 'Ngẫu nhiên',
+                strength: parsedOptions?.strength || '',
+                focus: Array.isArray(parsedOptions?.focus) ? parsedOptions.focus.join(', ') : (parsedOptions?.focus || b.focusAreaNote || ''),
+                avoid: Array.isArray(parsedOptions?.avoid) ? parsedOptions.avoid.join(', ') : (parsedOptions?.avoid || ''),
                 customerNote: [
-                  bi.options?.note,
-                  Array.isArray(bi.options?.tags) && bi.options.tags.length > 0 ? `Yêu cầu đặc biệt: ${bi.options.tags.join(', ')}` : '',
+                  parsedOptions?.note,
+                  Array.isArray(parsedOptions?.tags) && parsedOptions.tags.length > 0 ? `Yêu cầu đặc biệt: ${parsedOptions.tags.join(', ')}` : '',
                   b.focusAreaNote
                 ].filter(Boolean).join(' | '),
                 price: Number(bi.price) || 0,
                 quantity: Number(bi.quantity) || 1,
-                options: bi.options
+                options: parsedOptions
               };
             })
           };
@@ -621,6 +623,26 @@ if (!hasPermission('dispatch_board')) {
       }
   };
 
+  const handleConfirmAddonPayment = async (orderId: string) => {
+      if (!confirm('Xác nhận đã thu tiền phát sinh cho đơn hàng này?')) return;
+      
+      try {
+          // Import dynamic to avoid top-level dependency issues if needed, or we can just use an API route
+          // But since we use server actions:
+          const { confirmAddonPayment } = await import('./actions');
+          const res = await confirmAddonPayment(orderId);
+          if (res.success) {
+              alert('✅ Đã xác nhận thu tiền thành công!');
+              fetchData();
+          } else {
+              alert('Lỗi: ' + res.error);
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Lỗi hệ thống!');
+      }
+  };
+
   const removeServiceBlock = (orderId: string, svcId: string) => {
     if (!confirm('Xác nhận xóa dịch vụ này khỏi đơn?')) return;
     setOrders(prev => prev.map(o =>
@@ -655,7 +677,6 @@ if (!hasPermission('dispatch_board')) {
           let queuePos = currentTurn.queue_position;
 
           if (currentTurn.current_order_id !== selectedOrder.id) {
-            turnsCompleted += 1;
             const currentMax = Math.max(...turns.map(t => t.queue_position), 0);
             const addedCount = allStaffAssignments.length; 
             queuePos = currentMax + addedCount + 1;
@@ -714,6 +735,7 @@ if (!hasPermission('dispatch_board')) {
               status: 'PREPARING', 
               segments: allSegments,
               options: {
+                  ...(svc.options || {}),
                   note: svc.customerNote?.split(' | ')[0] || '', 
                   therapist: svc.genderReq,
                   strength: svc.strength,
@@ -1207,6 +1229,7 @@ if (!hasPermission('dispatch_board')) {
                 setSelectedOrderId(id);
                 setActiveMode('DISPATCH');
               }}
+              onConfirmAddonPayment={handleConfirmAddonPayment}
               selectedOrderId={selectedOrderId}
             />
           )}

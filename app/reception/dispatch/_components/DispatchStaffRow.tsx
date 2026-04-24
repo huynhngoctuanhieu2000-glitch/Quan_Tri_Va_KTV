@@ -194,7 +194,7 @@ export const DispatchStaffRow = ({
                                         disabled={isUsedInOtherSvc}
                                         className={isUsedInOtherSvc ? 'text-gray-300' : (!hasSkill ? 'text-gray-300' : '')}
                                     >
-                                        #{turn.queue_position} [{turn.employee_id}] {turn.staff?.full_name}
+                                        #{turn.check_in_order} [{turn.employee_id}] {turn.staff?.full_name}
                                         {isExpert ? ' (⭐)' : ''}
                                         {isUsedInOtherSvc ? ' (🚫 Đã gán DV khác)' : (turn.status === 'working' ? ` (⌛ Đang làm đến ${turn.estimated_end_time || '--:--'})` : ' (✅ Sẵn sàng)')}
                                     </option>

@@ -564,7 +564,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                                 turn.status === 'working' ? 'bg-rose-100 text-rose-600 border border-rose-200' :
                                     'bg-gray-100 text-gray-500 border border-gray-200'
                                 }`}>
-                                {turn.queue_position}
+                                {turn.check_in_order}
                             </div>
 
                             {/* Name */}
