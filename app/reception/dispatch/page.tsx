@@ -173,6 +173,11 @@ export default function DispatchBoardPage() {
         // 🛡️ Skip refetch if editing form
         if (!selectedOrderIdRef.current) fetchData();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'BookingItems' }, (payload) => {
+        console.log("🔄 [Dispatch] BookingItem changed");
+        // 🛡️ Skip refetch if editing form
+        if (!selectedOrderIdRef.current) fetchData();
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -329,6 +334,8 @@ export default function DispatchBoardPage() {
                   Array.isArray(bi.options?.tags) && bi.options.tags.length > 0 ? `Yêu cầu đặc biệt: ${bi.options.tags.join(', ')}` : '',
                   b.focusAreaNote
                 ].filter(Boolean).join(' | '),
+                price: Number(bi.price) || 0,
+                quantity: Number(bi.quantity) || 1,
                 options: bi.options
               };
             })
@@ -723,7 +730,7 @@ if (!hasPermission('dispatch_board')) {
       });
 
       const res = await processDispatch(clonedOrder.id, {
-        status: 'PREPARING',
+        status: clonedOrder.rawStatus === 'NEW' ? 'PREPARING' : (clonedOrder.rawStatus || 'PREPARING'),
         technicianCode: combinedTechCodes,
         bedId: primarySeg?.bedId || null,
         roomName: primarySeg?.roomId || null,

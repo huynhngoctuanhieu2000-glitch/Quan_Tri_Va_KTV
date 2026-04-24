@@ -21,6 +21,8 @@ export interface ServiceBlock {
   serviceName: string;
   serviceDescription?: string;
   duration: number;
+  price?: number;
+  quantity?: number;
   selectedRoomId: string | null;
   bedId: string | null;
   staffList: StaffAssignment[];

@@ -140,11 +140,24 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, selectedOrde
                                                         </div>
                                                         <div className="min-w-0">
                                                             <p className="font-black text-sm text-gray-900 leading-none mb-1 truncate">{order.customerName}</p>
-                                                            {(!order.paymentMethod || order.paymentMethod === 'Unpaid') && (
-                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-100 flex items-center gap-1 w-fit">
-                                                                    <AlertCircle size={9} /> Chưa TT
-                                                                </span>
-                                                            )}
+                                                            <div className="flex flex-col gap-1 items-start">
+                                                                {(!order.paymentMethod || order.paymentMethod === 'Unpaid') && (
+                                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-100 flex items-center gap-1 w-fit">
+                                                                        <AlertCircle size={9} /> Chưa TT
+                                                                    </span>
+                                                                )}
+                                                                {(() => {
+                                                                    const unpaidAmount = order.services.reduce((acc, svc) => acc + (svc.options?.isPaid === false ? ((svc.price || 0) * (svc.quantity || 1)) : 0), 0);
+                                                                    if (unpaidAmount > 0) {
+                                                                        return (
+                                                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100 flex items-center gap-1 w-fit">
+                                                                                Phát sinh chưa thu: {formatVND(unpaidAmount)}
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                })()}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <p className="text-sm font-black text-gray-900 shrink-0">{formatVND(order.totalAmount || 0)}</p>
