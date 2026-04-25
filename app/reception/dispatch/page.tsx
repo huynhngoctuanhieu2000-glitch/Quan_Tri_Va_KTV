@@ -911,9 +911,11 @@ if (!hasPermission('dispatch_board')) {
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
     if (newStatus === 'COMPLETED') {
-      confirmMsg = `Xác nhận HOÀN THÀNH dịch vụ? Khách hàng sẽ được chuyển sang kiểm tra đồ → đánh giá.`;
+      confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở kiểm tra đồ và đánh giá, nhân viên bắt đầu dọn phòng.`;
     } else if (newStatus === 'DONE') {
-      confirmMsg = `Xác nhận HOÀN TẤT TOÀN BỘ đơn hàng và giải phóng KTV?`;
+      confirmMsg = `Xác nhận ĐÃ DỌN XONG PHÒNG VÀ HOÀN TẤT? Giường sẽ được nhả ra để đón khách mới.`;
+    } else if (newStatus === 'IN_PROGRESS') {
+      confirmMsg = `Xác nhận BẮT ĐẦU LÀM thay cho KTV? Hệ thống sẽ bắt đầu tính giờ làm dịch vụ ngay lập tức.`;
     }
     
     if (!confirm(confirmMsg)) return;
@@ -1350,6 +1352,18 @@ if (!hasPermission('dispatch_board')) {
               }}
               onConfirmAddonPayment={handleConfirmAddonPayment}
               selectedOrderId={selectedOrderId}
+              onContextMenu={(e: any, orderId: string) => {
+                let x = 0, y = 0;
+                if (e.type && e.type.startsWith('touch')) {
+                  const touch = e.touches[0];
+                  x = touch.clientX;
+                  y = touch.clientY;
+                } else {
+                  x = e.clientX;
+                  y = e.clientY;
+                }
+                setContextMenu({ x, y, orderId });
+              }}
             />
           )}
 
@@ -1543,25 +1557,36 @@ if (!hasPermission('dispatch_board')) {
               const order = orders.find(o => o.id === contextMenu.orderId);
               if (!order) return null;
 
+              if (order.dispatchStatus === 'dispatched') {
+                return (
+                  <button
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'IN_PROGRESS')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
+                  >
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    Bắt đầu làm (Thay KTV)
+                  </button>
+                );
+              }
               if (order.dispatchStatus === 'in_progress') {
                 return (
                   <button
                     onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
+                    className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
                   >
-                    <CheckCircle2 size={18} />
-                    Hoàn thành & Dọn phòng
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    Hết giờ → Nhắc Khách Kiểm Tra Đồ & Đánh Giá
                   </button>
                 );
               }
               if (order.dispatchStatus === 'cleaning' || order.dispatchStatus === 'waiting_rating') {
                 return (
                   <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
                   >
-                    <CheckCircle2 size={18} />
-                    Hoàn tất → Kiểm tra đồ & Đánh giá
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    Đã dọn phòng xong (Khách ra sảnh)
                   </button>
                 );
               }

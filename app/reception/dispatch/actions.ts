@@ -386,6 +386,27 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 .neq('status', 'CANCELLED');
                 
             if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+        } else if (newStatus === 'IN_PROGRESS') {
+            const now = new Date().toISOString();
+            // Cập nhật timeStart cho Bookings nếu chưa có
+            await supabase.from('Bookings').update({ timeStart: now }).eq('id', bookingId).is('timeStart', null);
+
+            // Cập nhật tất cả các items đang WAITING thành IN_PROGRESS
+            const { error: itemError } = await supabase
+                .from('BookingItems')
+                .update({ status: 'IN_PROGRESS', timeStart: now })
+                .eq('bookingId', bookingId)
+                .eq('status', 'WAITING');
+            if (itemError) console.error('❌ [Server] BookingItems start error:', itemError);
+
+            // Cập nhật TurnQueue thành working cho các KTV liên quan
+            const { error: tError } = await supabase
+                .from('TurnQueue')
+                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
+                .eq('current_order_id', bookingId)
+                .eq('date', date)
+                .eq('status', 'waiting');
+            if (tError) console.error('❌ [Server] TurnQueue start error:', tError);
         }
 
         // 2. Nếu trạng thái mới là DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue

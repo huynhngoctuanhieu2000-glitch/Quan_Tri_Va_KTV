@@ -5,14 +5,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode } from 'lucide-react';
 import { PendingOrder } from '../types';
 
-type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'DONE' | 'COMPLETED' | 'FEEDBACK';
+type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'COMPLETED' | 'DONE';
 
 const STATUS_CONFIG = [
-    { id: 'PREPARING' as OrderStatus, dispatchModeId: 'dispatched', label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as OrderStatus, nextLabel: '▶️ Bắt đầu làm' },
-    { id: 'IN_PROGRESS' as OrderStatus, dispatchModeId: 'in_progress', label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'COMPLETED' as OrderStatus, nextLabel: '🧹 Chuyển qua dọn' },
-    { id: 'COMPLETED' as OrderStatus, dispatchModeId: 'cleaning', label: 'Đang Dọn Phòng', shortLabel: 'Đang dọn', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'FEEDBACK' as OrderStatus, nextLabel: '⭐ Nhận xét' },
-    { id: 'FEEDBACK' as OrderStatus, dispatchModeId: 'waiting_rating', label: 'Chờ Đánh Giá', shortLabel: 'Nhận xét', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Xong' },
-    { id: 'DONE' as OrderStatus, dispatchModeId: 'done', label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
+    { id: 'PREPARING' as OrderStatus, dispatchModeId: ['dispatched'], label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as OrderStatus, nextLabel: '▶️ Bắt đầu làm' },
+    { id: 'IN_PROGRESS' as OrderStatus, dispatchModeId: ['in_progress'], label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'COMPLETED' as OrderStatus, nextLabel: '🧹 Dọn & Nhận xét' },
+    { id: 'COMPLETED' as OrderStatus, dispatchModeId: ['cleaning', 'waiting_rating'], label: 'Đang Dọn & Nhận Xét', shortLabel: 'Dọn & Nhận xét', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Đã dọn xong' },
+    { id: 'DONE' as OrderStatus, dispatchModeId: ['done'], label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
 ];
 
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
@@ -41,6 +40,7 @@ interface KanbanBoardProps {
     onOpenDetail: (orderId: string) => void;
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
+    onContextMenu?: (e: React.MouseEvent | React.TouchEvent, orderId: string) => void;
 }
 
 const getEstimatedEndTime = (order: PendingOrder) => {
@@ -67,8 +67,9 @@ const getEstimatedEndTime = (order: PendingOrder) => {
     }
     return maxTime || order.time; // Fallback về thời gian tạo đơn nếu chưa có dữ liệu điều phối
 };
-export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId }: KanbanBoardProps) {
+export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu }: KanbanBoardProps) {
     const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
+    const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     const getStatusConfig = (id: string) => STATUS_CONFIG.find(s => s.id === id) || STATUS_CONFIG[0];
 
@@ -84,7 +85,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
     return (
         <div className="flex-1 flex gap-4 overflow-x-auto pb-6 no-scrollbar min-h-0">
             {STATUS_CONFIG.map(column => {
-                const columnOrders = orders.filter(o => o.dispatchStatus === column.dispatchModeId);
+                const columnOrders = orders.filter(o => column.dispatchModeId.includes(o.dispatchStatus));
                 return (
                     <div
                         key={column.id}
@@ -109,7 +110,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                 {columnOrders.map(order => {
                                     const cfg = getStatusConfig(order.rawStatus || 'PREPARING');
                                     // Use cfg from dispatchStatus mapping to display the correct next button if rawStatus varies slightly
-                                    const currentCfg = STATUS_CONFIG.find(c => c.dispatchModeId === order.dispatchStatus) || cfg;
+                                    const currentCfg = STATUS_CONFIG.find(c => c.dispatchModeId.includes(order.dispatchStatus)) || cfg;
                                     const isSelected = selectedOrderId === order.id;
 
                                     return (
@@ -123,6 +124,30 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                             onDragStart={() => setDraggedOrderId(order.id)}
                                             onDragEnd={() => setDraggedOrderId(null)}
                                             onClick={() => onOpenDetail(order.id)}
+                                            onContextMenu={(e: React.MouseEvent) => {
+                                                if (onContextMenu) {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    onContextMenu(e, order.id);
+                                                }
+                                            }}
+                                            onTouchStart={(e) => {
+                                                if (!onContextMenu) return;
+                                                const touch = e.touches[0];
+                                                longPressTimer.current = setTimeout(() => {
+                                                    if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+                                                        window.navigator.vibrate(50);
+                                                    }
+                                                    onContextMenu(e, order.id);
+                                                }, 500);
+                                            }}
+                                            onTouchMove={() => {
+                                                if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                                            }}
+                                            onTouchEnd={() => {
+                                                if (longPressTimer.current) clearTimeout(longPressTimer.current);
+                                            }}
+                                            style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
                                             className={`bg-white rounded-[1.5rem] border-2 cursor-grab active:cursor-grabbing transition-all shadow-sm hover:shadow-2xl hover:translate-y-[-4px] ${isSelected ? 'border-indigo-500 ring-4 ring-indigo-500/10' : 'border-white hover:border-indigo-100'}`}
                                         >
                                             <div className="p-4">
