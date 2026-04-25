@@ -90,15 +90,14 @@ export async function getDispatchData(date: string) {
                         const sId = String(i.serviceId || '').trim().toLowerCase();
                         const svcInfo = servicesMap[sId];
                         
-                        // Ưu tiên duration từ database nếu có và > 0
-                        let finalDuration = 60; // Mặc định chung
-                        if (svcInfo && svcInfo.duration > 0) {
-                            finalDuration = svcInfo.duration;
-                        } else if (sId.toLowerCase().includes('nhs0000')) {
+                        // Ưu tiên duration từ database nếu có
+                        let finalDuration = svcInfo?.duration !== undefined ? svcInfo.duration : 0;
+                        if (sId.toLowerCase().includes('nhs0000')) {
                             finalDuration = 1;
-                        } else {
-                            // LOG ĐỂ DEBUG: Tại sao không tìm thấy hoặc duration <= 0?
-                            console.warn(`⚠️ [Dispatch] Service lookup failed or duration invalid for sId: "${sId}". svcInfo found: ${!!svcInfo}`);
+                        } else if (!svcInfo) {
+                            // Mặc định cho những dịch vụ không tìm thấy trong DB (có thể là lỗi data cũ)
+                            finalDuration = 60; 
+                            console.warn(`⚠️ [Dispatch] Service lookup failed for sId: "${sId}". Defaulting to 60p.`);
                         }
 
                         return {

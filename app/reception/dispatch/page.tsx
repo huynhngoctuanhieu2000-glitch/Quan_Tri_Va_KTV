@@ -551,18 +551,20 @@ if (!hasPermission('dispatch_board')) {
   };
 
   const isDispatchReady = (order: PendingOrder): boolean =>
-    order.services.every(s =>
-      s.staffList.length > 0 &&
+    order.services.every(s => {
+      if (s.duration === 0) return true;
+      return s.staffList.length > 0 &&
       s.staffList.every(r => 
         r.ktvId !== '' && 
         r.segments.length > 0 &&
         r.segments.every(seg => seg.roomId !== null && seg.bedId !== null && seg.startTime !== '')
       )
-    );
+    });
 
   const getMissingInfo = (order: PendingOrder): string[] => {
     const missing: string[] = [];
     order.services.forEach((s, i) => {
+      if (s.duration === 0) return;
       s.staffList.forEach((r, j) => {
         const prefix = `Dịch vụ ${i + 1} · KTV ${j + 1}`;
         if (!r.ktvId) missing.push(`${prefix}: Chưa chọn KTV`);

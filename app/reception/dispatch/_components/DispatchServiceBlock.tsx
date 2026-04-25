@@ -121,48 +121,50 @@ export const DispatchServiceBlock = ({
                     )}
 
                     {/* Staff Selection Area */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between px-1">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                Nhân viên & Phòng <span className="text-rose-500">*</span>
-                            </label>
-                            <button
-                                onClick={() => onAddStaff(orderId, svc.id)}
-                                className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors flex items-center gap-1.5"
-                            >
-                                <Plus size={14} strokeWidth={3} /> Thêm KTV/Phòng
-                            </button>
-                        </div>
+                    {svc.duration > 0 && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between px-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    Nhân viên & Phòng <span className="text-rose-500">*</span>
+                                </label>
+                                <button
+                                    onClick={() => onAddStaff(orderId, svc.id)}
+                                    className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors flex items-center gap-1.5"
+                                >
+                                    <Plus size={14} strokeWidth={3} /> Thêm KTV/Phòng
+                                </button>
+                            </div>
 
-                        <div className="grid grid-cols-1 gap-4">
-                            {svc.staffList.map((row) => (
-                                <DispatchStaffRow
-                                    key={row.id}
-                                    row={row}
-                                    svcId={svc.id}
-                                    orderId={orderId}
-                                    serviceName={svc.serviceName}
-                                    svcDuration={svc.duration}
-                                    availableTurns={availableTurns}
-                                    rooms={rooms}
-                                    beds={beds}
-                                    busyBedIds={busyBedIds}
-                                    usedKtvIds={usedKtvIds}
-                                    onUpdate={onUpdateStaff}
-                                    onRemove={onRemoveStaff}
-                                    canRemove={svc.staffList.length > 1}
-                                    serviceDescription={svc.serviceDescription}
-                                    strength={svc.strength}
-                                    adminNote={svc.adminNote}
-                                    customerNote={svc.customerNote}
-                                    selectedDate={selectedDate}
-                                    focus={svc.focus}
-                                    avoid={svc.avoid}
-                                    realSvcId={svc.serviceId}
-                                />
-                            ))}
+                            <div className="grid grid-cols-1 gap-4">
+                                {svc.staffList.map((row) => (
+                                    <DispatchStaffRow
+                                        key={row.id}
+                                        row={row}
+                                        svcId={svc.id}
+                                        orderId={orderId}
+                                        serviceName={svc.serviceName}
+                                        svcDuration={svc.duration}
+                                        availableTurns={availableTurns}
+                                        rooms={rooms}
+                                        beds={beds}
+                                        busyBedIds={busyBedIds}
+                                        usedKtvIds={usedKtvIds}
+                                        onUpdate={onUpdateStaff}
+                                        onRemove={onRemoveStaff}
+                                        canRemove={svc.staffList.length > 1}
+                                        serviceDescription={svc.serviceDescription}
+                                        strength={svc.strength}
+                                        adminNote={svc.adminNote}
+                                        customerNote={svc.customerNote}
+                                        selectedDate={selectedDate}
+                                        focus={svc.focus}
+                                        avoid={svc.avoid}
+                                        realSvcId={svc.serviceId}
+                                    />
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <div className="space-y-3 pt-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Ghi chú điều phối</label>
