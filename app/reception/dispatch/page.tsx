@@ -267,53 +267,84 @@ export default function DispatchBoardPage() {
               });
               const finalItemTurns = (itemTurns.length === 0 && (b.BookingItems || []).length === 1) ? assignedTurns : itemTurns;
 
-              const staffList = (finalItemTurns.length > 0) 
-                ? finalItemTurns.map((t: any) => {
-                    const staff = (sData as StaffData[])?.find((s: any) => s.id === t.employee_id);
-                    
-                    // Reconstruct segments
-                    let parsedSegments: any[] = [];
-                    try {
-                        parsedSegments = typeof bi.segments === 'string' ? JSON.parse(bi.segments) : (Array.isArray(bi.segments) ? bi.segments : []);
-                    } catch(e) { parsedSegments = []; }
+              let parsedSegments: any[] = [];
+              try {
+                  parsedSegments = typeof bi.segments === 'string' ? JSON.parse(bi.segments) : (Array.isArray(bi.segments) ? bi.segments : []);
+              } catch(e) { parsedSegments = []; }
 
-                    let segments: WorkSegment[] = parsedSegments.filter((s: any) => s.ktvId === t.employee_id);
-                    
-                    if (segments.length === 0) {
-                        const st = formatTime(t.start_time) || b.timeBooking || getCurrentTime();
-                        const dur = bi.duration ?? 0;
-                        segments = [{
-                            id: `seg-${genId()}`,
-                            roomId: t.room_id || bi.roomName || b.roomName,
-                            bedId: t.bed_id || bi.bedId || b.bedId,
-                            startTime: st,
-                            duration: dur,
-                            endTime: formatTime(t.estimated_end_time) || calcEndTime(st, dur)
-                        }];
-                    }
+              const techCodes: string[] = Array.isArray(bi.technicianCodes) ? bi.technicianCodes : (bi.technicianCodes ? [bi.technicianCodes] : []);
+              let staffList: any[] = [];
 
-                    return {
-                      id: `st-${bi.id}-${t.employee_id}`,
-                      ktvId: t.employee_id,
-                      ktvName: staff?.full_name || 'KTV',
-                      segments: segments,
-                      noteForKtv: bi.options?.noteForKtv || ''
-                    };
-                  })
-                : [{
-                    id: `st-${bi.id}`,
-                    ktvId: '',
-                    ktvName: '',
-                    segments: [{
-                        id: `seg-${genId()}`,
-                        roomId: null,
-                        bedId: null,
-                        startTime: getCurrentTime(),
-                        duration: bi.duration ?? 0,
-                        endTime: calcEndTime(getCurrentTime(), bi.duration ?? 0)
-                    }],
-                    noteForKtv: ''
+              if (techCodes.length > 0) {
+                  staffList = techCodes.map((tCode: string) => {
+                      const staff = (sData as StaffData[])?.find((s: any) => s.id === tCode);
+                      const turn = finalItemTurns.find((t: any) => t.employee_id === tCode);
+                      
+                      let segments: WorkSegment[] = parsedSegments.filter((s: any) => s.ktvId === tCode);
+                      
+                      if (segments.length === 0) {
+                          const st = formatTime(turn?.start_time) || b.timeBooking || getCurrentTime();
+                          const dur = bi.duration ?? 0;
+                          segments = [{
+                              id: `seg-${genId()}`,
+                              roomId: turn?.room_id || bi.roomName || b.roomName,
+                              bedId: turn?.bed_id || bi.bedId || b.bedId,
+                              startTime: st,
+                              duration: dur,
+                              endTime: formatTime(turn?.estimated_end_time) || calcEndTime(st, dur)
+                          }];
+                      }
+
+                      return {
+                        id: `st-${bi.id}-${tCode}`,
+                        ktvId: tCode,
+                        ktvName: staff?.full_name || tCode,
+                        segments: segments,
+                        noteForKtv: bi.options?.noteForKtv || ''
+                      };
+                  });
+              } else if (finalItemTurns.length > 0) {
+                  staffList = finalItemTurns.map((t: any) => {
+                      const staff = (sData as StaffData[])?.find((s: any) => s.id === t.employee_id);
+                      let segments: WorkSegment[] = parsedSegments.filter((s: any) => s.ktvId === t.employee_id);
+                      
+                      if (segments.length === 0) {
+                          const st = formatTime(t.start_time) || b.timeBooking || getCurrentTime();
+                          const dur = bi.duration ?? 0;
+                          segments = [{
+                              id: `seg-${genId()}`,
+                              roomId: t.room_id || bi.roomName || b.roomName,
+                              bedId: t.bed_id || bi.bedId || b.bedId,
+                              startTime: st,
+                              duration: dur,
+                              endTime: formatTime(t.estimated_end_time) || calcEndTime(st, dur)
+                          }];
+                      }
+
+                      return {
+                        id: `st-${bi.id}-${t.employee_id}`,
+                        ktvId: t.employee_id,
+                        ktvName: staff?.full_name || 'KTV',
+                        segments: segments,
+                        noteForKtv: bi.options?.noteForKtv || ''
+                      };
+                  });
+              } else {
+                  staffList = [{
+                      id: `st-${bi.id}`,
+                      ktvId: '',
+                      ktvName: '',
+                      segments: [{
+                          id: `seg-${genId()}`,
+                          roomId: null,
+                          bedId: null,
+                          startTime: getCurrentTime(),
+                          duration: bi.duration ?? 0,
+                          endTime: calcEndTime(getCurrentTime(), bi.duration ?? 0)
+                      }],
+                      noteForKtv: ''
                   }];
+              }
 
               const parsedOptions = typeof bi.options === 'string' ? JSON.parse(bi.options) : (bi.options || {});
 

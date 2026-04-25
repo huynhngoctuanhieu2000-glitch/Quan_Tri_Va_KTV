@@ -162,23 +162,9 @@ export const DispatchStaffRow = ({
     };
 
     const handleSelectKtv = (ktvId: string, ktvName: string) => {
-        const now = new Date();
-        const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const updatedSegments = row.segments.map((seg, idx) => {
-            if (idx === 0) {
-                return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
-            }
-            const prevSeg = row.segments[idx - 1];
-            const prevEnd = idx === 1 
-                ? calcEndTime(nowStr, row.segments[0].duration) 
-                : calcEndTime(prevSeg.startTime, prevSeg.duration);
-            return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
-        });
-        
         handleChange({ 
             ktvId, 
-            ktvName,
-            segments: updatedSegments
+            ktvName
         });
     };
 
