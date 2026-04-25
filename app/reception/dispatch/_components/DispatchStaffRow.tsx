@@ -454,43 +454,47 @@ export const DispatchStaffRow = ({
 
                                 {/* Customer Requirements */}
                                 {(strength || focus || avoid || customerNote) && (
-                                    <div className="space-y-2.5">
-                                        <div className="inline-block bg-slate-800 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider">
-                                            🔴 Yêu cầu khách hàng
-                                        </div>
-                                        <div className="space-y-2">
+                                    <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 space-y-3 shadow-inner">
+                                        <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+                                            <AlertCircle size={14} className="text-amber-500" /> Yêu Cầu Khách Hàng
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
                                             {strength && (
-                                                <div className="bg-amber-50 border-[1.5px] border-amber-400 rounded-xl px-4 py-2.5 text-sm font-black text-amber-800">
+                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
                                                     💪 Lực: {strength}
-                                                </div>
+                                                </span>
                                             )}
                                             {focus && (
-                                                <div className="bg-emerald-50 border-[1.5px] border-emerald-400 rounded-xl px-4 py-2.5 text-sm font-black text-emerald-800">
+                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
                                                     🎯 Tập trung: {focus}
-                                                </div>
+                                                </span>
                                             )}
                                             {avoid && (
-                                                <div className="bg-rose-50 border-[1.5px] border-rose-400 rounded-xl px-4 py-2.5 text-sm font-black text-rose-800">
+                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
                                                     🚫 Tránh: {avoid}
-                                                </div>
-                                            )}
-                                            {customerNote && (
-                                                <div className="bg-yellow-50 border-[1.5px] border-yellow-400 rounded-xl px-4 py-2.5 text-xs font-bold text-yellow-800 italic">
-                                                    📌 {customerNote}
-                                                </div>
+                                                </span>
                                             )}
                                         </div>
+                                        {customerNote && (
+                                            <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-amber-200/50">
+                                                <p className="text-xs font-bold text-amber-900 italic flex items-start gap-2">
+                                                    <span className="text-amber-400 mt-0.5">📌</span> {customerNote}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {/* Admin Note */}
                                 {ticketNoteText && (
-                                    <div className="space-y-2.5">
-                                        <div className="inline-block bg-slate-800 text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider">
-                                            📝 Admin dặn dò
-                                        </div>
-                                        <div className="bg-green-50 border-2 border-green-500 rounded-xl px-4 py-3.5 text-sm font-black text-green-900 uppercase">
-                                            &quot;{ticketNoteText}&quot;
+                                    <div className="bg-green-50/50 border border-green-200 rounded-2xl p-4 space-y-3 shadow-inner">
+                                        <p className="text-[10px] font-black text-green-700 uppercase tracking-widest flex items-center gap-2">
+                                            📝 Admin Dặn Dò
+                                        </p>
+                                        <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-green-200/50">
+                                            <p className="text-xs font-bold text-green-900 flex items-start gap-2 uppercase">
+                                                <span className="text-green-500 mt-0.5">💬</span> &quot;{ticketNoteText}&quot;
+                                            </p>
                                         </div>
                                     </div>
                                 )}
