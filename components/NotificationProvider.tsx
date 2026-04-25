@@ -382,7 +382,14 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                                 key={n.id} 
                                 notification={n} 
                                 currentScreen={ktvScreen}
-                                onRedirect={() => router.push('/ktv/history')}
+                                onRedirect={() => {
+                                    const t = (n.type || '').toUpperCase();
+                                    if (t === 'KTV_NEW_ORDER') {
+                                        router.push('/ktv/dashboard');
+                                    } else {
+                                        router.push('/ktv/history');
+                                    }
+                                }}
                             />
                         ))}
                     </AnimatePresence>
