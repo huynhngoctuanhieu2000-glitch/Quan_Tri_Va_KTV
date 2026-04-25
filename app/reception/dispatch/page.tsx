@@ -933,17 +933,19 @@ if (!hasPermission('dispatch_board')) {
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
-    let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
-    if (newStatus === 'COMPLETED') {
-      confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở kiểm tra đồ và đánh giá, nhân viên bắt đầu dọn phòng.`;
-    } else if (newStatus === 'DONE') {
-      confirmMsg = `Xác nhận ĐÃ DỌN XONG PHÒNG VÀ HOÀN TẤT? Giường sẽ được nhả ra để đón khách mới.`;
-    } else if (newStatus === 'IN_PROGRESS') {
-      confirmMsg = `Xác nhận BẮT ĐẦU LÀM thay cho KTV? Hệ thống sẽ bắt đầu tính giờ làm dịch vụ ngay lập tức.`;
+  const handleUpdateStatus = async (orderId: string, newStatus: string, bypassConfirm: boolean = false) => {
+    if (!bypassConfirm) {
+      let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
+      if (newStatus === 'COMPLETED') {
+        confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở kiểm tra đồ và đánh giá, nhân viên bắt đầu dọn phòng.`;
+      } else if (newStatus === 'DONE') {
+        confirmMsg = `Xác nhận ĐÃ DỌN XONG PHÒNG VÀ HOÀN TẤT? Giường sẽ được nhả ra để đón khách mới.`;
+      } else if (newStatus === 'IN_PROGRESS') {
+        confirmMsg = `Xác nhận BẮT ĐẦU LÀM thay cho KTV? Hệ thống sẽ bắt đầu tính giờ làm dịch vụ ngay lập tức.`;
+      }
+      
+      if (!confirm(confirmMsg)) return;
     }
-    
-    if (!confirm(confirmMsg)) return;
     try {
       const res = await updateBookingStatus(orderId, newStatus, selectedDate);
       if (res.success) {

@@ -409,21 +409,39 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             if (tError) console.error('❌ [Server] TurnQueue start error:', tError);
         }
 
-        // 2. Nếu trạng thái mới là DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
-        if (newStatus === 'DONE' || newStatus === 'CANCELLED') {
-            const { error: tError } = await supabase
+        // 2. Nếu trạng thái mới là COMPLETED, DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
+        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
+            // Lấy tất cả KTV đang làm đơn hàng này
+            const { data: turnsToRelease } = await supabase
                 .from('TurnQueue')
-                .update({
-                    status: 'waiting',
-                    current_order_id: null,
-                    booking_item_id: null,
-                    start_time: null,
-                    estimated_end_time: null                })
+                .select('id, turns_completed, status')
                 .eq('current_order_id', bookingId)
                 .eq('date', date);
 
-            if (tError) {
-                console.error('❌ [Server] TurnQueue cleanup error:', tError);
+            if (turnsToRelease && turnsToRelease.length > 0) {
+                for (const turn of turnsToRelease) {
+                    // Tăng tua khi chuyển sang COMPLETED hoặc DONE và KTV đang working
+                    let newTurnsCompleted = turn.turns_completed || 0;
+                    if ((newStatus === 'COMPLETED' || newStatus === 'DONE') && turn.status === 'working') {
+                        newTurnsCompleted += 1;
+                    }
+
+                    const { error: tError } = await supabase
+                        .from('TurnQueue')
+                        .update({
+                            status: 'waiting',
+                            current_order_id: null,
+                            booking_item_id: null,
+                            start_time: null,
+                            estimated_end_time: null,
+                            turns_completed: newTurnsCompleted
+                        })
+                        .eq('id', turn.id);
+
+                    if (tError) {
+                        console.error('❌ [Server] TurnQueue cleanup error:', tError);
+                    }
+                }
             }
         }
 

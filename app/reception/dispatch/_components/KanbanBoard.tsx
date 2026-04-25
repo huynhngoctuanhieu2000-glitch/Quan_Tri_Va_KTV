@@ -36,7 +36,7 @@ const formatToHourMinute = (isoString?: string | null) => {
 
 interface KanbanBoardProps {
     orders: PendingOrder[];
-    onUpdateStatus: (orderId: string, newStatus: string) => void;
+    onUpdateStatus: (orderId: string, status: string, bypassConfirm?: boolean) => void;
     onOpenDetail: (orderId: string) => void;
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
@@ -93,7 +93,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                         // Allow 5 seconds grace period
                         if (now.getTime() >= estEnd.getTime() + 5000) {
                              console.log(`🤖 [Kanban AutoFinish] Time is up for order ${order.id} (${estEndStr}). Moving to COMPLETED...`);
-                             onUpdateStatus(order.id, 'COMPLETED');
+                             onUpdateStatus(order.id, 'COMPLETED', true);
                         }
                     }
                 }
