@@ -643,11 +643,22 @@ if (!hasPermission('dispatch_board')) {
       }
   };
 
-  const removeServiceBlock = (orderId: string, svcId: string) => {
-    if (!confirm('Xác nhận xóa dịch vụ này khỏi đơn?')) return;
-    setOrders(prev => prev.map(o =>
-      o.id === orderId ? { ...o, services: o.services.filter(s => s.id !== svcId) } : o
-    ));
+  const removeServiceBlock = async (orderId: string, svcId: string) => {
+    if (!confirm('Xác nhận xóa dịch vụ này khỏi đơn? Tổng tiền sẽ được tính lại.')) return;
+    try {
+      const { removeBookingItem } = await import('./actions');
+      const res = await removeBookingItem(orderId, svcId);
+      if (res.success) {
+        setOrders(prev => prev.map(o =>
+          o.id === orderId ? { ...o, services: o.services.filter(s => s.id !== svcId), totalAmount: res.newTotalAmount } : o
+        ));
+      } else {
+        alert('Lỗi: ' + res.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi hệ thống khi xóa dịch vụ!');
+    }
   };
   const handleDispatch = async () => {
     if (!selectedOrder) return;

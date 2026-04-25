@@ -638,3 +638,76 @@ export async function confirmAddonPayment(bookingId: string) {
         return { success: false, error: error.message };
     }
 }
+
+export async function removeBookingItem(bookingId: string, itemId: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // 1. Fetch item to get price & quantity
+        const { data: item, error: iError } = await supabase
+            .from('BookingItems')
+            .select('*')
+            .eq('id', itemId)
+            .single();
+        
+        if (iError || !item) {
+            console.error("❌ [Server] Lỗi tìm dịch vụ để xoá:", iError?.message);
+            return { success: false, error: 'Không tìm thấy dịch vụ' };
+        }
+        
+        // 2. Fetch booking to get total amount
+        const { data: booking, error: bError } = await supabase
+            .from('Bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .single();
+            
+        if (bError) throw bError;
+        
+        // 3. Delete item (hoặc update status = 'CANCELLED' nếu muốn giữ lịch sử, ở đây xoá hẳn cho sạch UI Dispatch)
+        const { error: delError } = await supabase
+            .from('BookingItems')
+            .delete()
+            .eq('id', itemId);
+            
+        if (delError) throw delError;
+        
+        // 4. Update total amount
+        const itemTotal = (item.price || 0) * (item.quantity || 1);
+        const newTotalAmount = Math.max(0, (Number(booking.totalAmount) || 0) - itemTotal);
+        
+        const vnTimeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+        
+        const { error: updError } = await supabase
+            .from('Bookings')
+            .update({ 
+                totalAmount: newTotalAmount,
+                updatedAt: vnTimeStr 
+            })
+            .eq('id', bookingId);
+            
+        if (updError) throw updError;
+
+        // Xóa KTV khỏi TurnQueue nếu có (Tránh lỗi kẹt tua)
+        await supabase
+            .from('TurnQueue')
+            .update({
+                status: 'waiting',
+                current_order_id: null,
+                booking_item_id: null,
+                room_id: null,
+                bed_id: null,
+                start_time: null,
+                estimated_end_time: null
+            })
+            .eq('current_order_id', bookingId)
+            .like('booking_item_id', `%${itemId}%`);
+            
+        return { success: true, newTotalAmount };
+    } catch (error: any) {
+        console.error("❌ [Server] Lỗi xoá dịch vụ:", error.message);
+        return { success: false, error: error.message };
+    }
+}
+
