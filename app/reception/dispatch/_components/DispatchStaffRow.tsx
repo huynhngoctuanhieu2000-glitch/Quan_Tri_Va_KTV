@@ -83,6 +83,20 @@ export const DispatchStaffRow = ({
 
     const [now, setNow] = React.useState(new Date());
     const [showTicketPreview, setShowTicketPreview] = React.useState(false);
+    const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+    const [searchQuery, setSearchQuery] = React.useState('');
+    const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setIsDropdownOpen(false);
+                setSearchQuery(''); // Reset search when closing without selection
+            }
+        };
+        if (isDropdownOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isDropdownOpen]);
 
     React.useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 30000); // Update every 30s
@@ -147,61 +161,157 @@ export const DispatchStaffRow = ({
         handleChange({ segments: newSegments });
     };
 
+    const handleSelectKtv = (ktvId: string, ktvName: string) => {
+        const now = new Date();
+        const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const updatedSegments = row.segments.map((seg, idx) => {
+            if (idx === 0) {
+                return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
+            }
+            const prevSeg = row.segments[idx - 1];
+            const prevEnd = idx === 1 
+                ? calcEndTime(nowStr, row.segments[0].duration) 
+                : calcEndTime(prevSeg.startTime, prevSeg.duration);
+            return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
+        });
+        
+        handleChange({ 
+            ktvId, 
+            ktvName,
+            segments: updatedSegments
+        });
+    };
+
     return (
         <>
         <div className="p-4 bg-white rounded-3xl border border-gray-100 shadow-sm space-y-5">
             <div className="flex flex-col gap-4">
                 {/* KTV Header Selection */}
                 <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 relative">
-                        <select
-                            value={row.ktvId}
-                            onChange={e => {
-                                const selected = availableTurns.find(t => t.employee_id === e.target.value);
-                                
-                                // 🕐 Cập nhật startTime thành giờ hiện tại khi chọn KTV
-                                const now = new Date();
-                                const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                                const updatedSegments = row.segments.map((seg, idx) => {
-                                    if (idx === 0) {
-                                        return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
-                                    }
-                                    const prevSeg = row.segments[idx - 1];
-                                    const prevEnd = idx === 1 
-                                        ? calcEndTime(nowStr, row.segments[0].duration) 
-                                        : calcEndTime(prevSeg.startTime, prevSeg.duration);
-                                    return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
-                                });
-                                
-                                handleChange({ 
-                                    ktvId: e.target.value, 
-                                    ktvName: selected?.staff?.full_name || '',
-                                    segments: updatedSegments
-                                });
-                            }}
-                            className="w-full pl-4 pr-10 py-3 border-2 border-gray-50 rounded-2xl text-sm font-black focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-gray-50/30 transition-all appearance-none active:scale-[0.99]"
+                    <div className="flex-1 relative" ref={dropdownRef}>
+                        <div 
+                            className="w-full pl-4 pr-10 py-3 border-2 border-gray-50 rounded-2xl text-sm font-black focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 bg-gray-50/30 transition-all cursor-text relative flex items-center h-12"
+                            onClick={() => setIsDropdownOpen(true)}
                         >
-                            <option value="">— Chọn Nhân viên —</option>
-                            {availableTurns.filter(t => t.status !== 'off').map((turn) => {
-                                const hasSkill = targetSkill ? (turn.staff?.skills?.[targetSkill] === 'expert' || turn.staff?.skills?.[targetSkill] === 'basic') : true;
-                                const isExpert = targetSkill && turn.staff?.skills?.[targetSkill] === 'expert';
-                                const isUsedInOtherSvc = usedKtvIds.includes(turn.employee_id);
-                                
-                                return (
-                                    <option 
-                                        key={turn.employee_id} 
-                                        value={turn.employee_id} 
-                                        disabled={isUsedInOtherSvc}
-                                        className={isUsedInOtherSvc ? 'text-gray-300' : (!hasSkill ? 'text-gray-300' : '')}
-                                    >
-                                        #{turn.check_in_order} [{turn.employee_id}] {turn.staff?.full_name}
-                                        {isExpert ? ' (⭐)' : ''}
-                                        {isUsedInOtherSvc ? ' (🚫 Đã gán DV khác)' : (turn.status === 'working' ? ` (⌛ Đang làm đến ${turn.estimated_end_time || '--:--'})` : ' (✅ Sẵn sàng)')}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="— Nhập tên hoặc mã KTV —"
+                                value={isDropdownOpen ? searchQuery : (row.ktvId ? (row.ktvId === row.ktvName ? row.ktvName : `[${row.ktvId}] ${row.ktvName}`) : '')}
+                                onChange={(e) => {
+                                    setSearchQuery(e.target.value);
+                                    if (!isDropdownOpen) setIsDropdownOpen(true);
+                                }}
+                                onFocus={() => setIsDropdownOpen(true)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && searchQuery.trim()) {
+                                        const term = searchQuery.toLowerCase().trim();
+                                        const match = availableTurns.find(t => t.employee_id.toLowerCase() === term || t.staff?.full_name?.toLowerCase() === term);
+                                        if (match) {
+                                            handleSelectKtv(match.employee_id, match.staff?.full_name || '');
+                                        } else {
+                                            handleSelectKtv(searchQuery.trim(), searchQuery.trim());
+                                        }
+                                        setSearchQuery('');
+                                        setIsDropdownOpen(false);
+                                    }
+                                }}
+                                className={`w-full bg-transparent border-none outline-none placeholder:font-black placeholder:text-gray-400 font-black truncate ${!isDropdownOpen && row.ktvId ? 'text-indigo-700' : 'text-gray-900'}`}
+                            />
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setIsDropdownOpen(!isDropdownOpen); }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <ChevronDown size={16} className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                        </div>
+
+                        <AnimatePresence>
+                            {isDropdownOpen && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 5 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: 5 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute z-50 w-full mt-2 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 overflow-hidden"
+                                >
+                                    <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5">
+                                        {availableTurns
+                                            .filter(t => t.status !== 'off')
+                                            .filter(t => {
+                                                if (!searchQuery) return true;
+                                                const term = searchQuery.toLowerCase();
+                                                return t.employee_id.toLowerCase().includes(term) || (t.staff?.full_name || '').toLowerCase().includes(term);
+                                            })
+                                            .map((turn) => {
+                                                const hasSkill = targetSkill ? (turn.staff?.skills?.[targetSkill] === 'expert' || turn.staff?.skills?.[targetSkill] === 'basic') : true;
+                                                const isExpert = targetSkill && turn.staff?.skills?.[targetSkill] === 'expert';
+                                                const isUsedInOtherSvc = usedKtvIds.includes(turn.employee_id);
+                                                
+                                                return (
+                                                    <div 
+                                                        key={turn.employee_id} 
+                                                        onClick={() => {
+                                                            if (isUsedInOtherSvc) return;
+                                                            handleSelectKtv(turn.employee_id, turn.staff?.full_name || '');
+                                                            setSearchQuery('');
+                                                            setIsDropdownOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex flex-col gap-0.5
+                                                            ${isUsedInOtherSvc ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'cursor-pointer hover:bg-indigo-50 active:scale-[0.98]'}
+                                                            ${row.ktvId === turn.employee_id ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'text-gray-700'}
+                                                            ${!hasSkill && !isUsedInOtherSvc ? 'text-gray-400' : ''}
+                                                        `}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span>
+                                                                <span>[{turn.employee_id}] {turn.staff?.full_name}</span>
+                                                                {isExpert && <Star size={12} className="fill-amber-500 text-amber-500" />}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-[10px] font-semibold flex gap-2">
+                                                            {isUsedInOtherSvc 
+                                                                ? <span className="text-rose-500">🚫 Đã gán dịch vụ khác</span> 
+                                                                : (turn.status === 'working' 
+                                                                    ? <span className="text-amber-500">⌛ Đang làm đến {turn.estimated_end_time || '--:--'}</span> 
+                                                                    : <span className="text-emerald-500">✅ Sẵn sàng</span>
+                                                                )
+                                                            }
+                                                            {!hasSkill && <span className="text-gray-400 font-medium">(Chưa có kỹ năng)</span>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        
+                                        {/* Nhập ngoài custom text */}
+                                        {searchQuery.trim() && !availableTurns.some(t => t.employee_id.toLowerCase() === searchQuery.trim().toLowerCase() || t.staff?.full_name?.toLowerCase() === searchQuery.trim().toLowerCase()) && (
+                                            <div
+                                                onClick={() => {
+                                                    const customText = searchQuery.trim();
+                                                    handleSelectKtv(customText, customText);
+                                                    setSearchQuery('');
+                                                    setIsDropdownOpen(false);
+                                                }}
+                                                className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer hover:bg-emerald-50 text-emerald-700 active:scale-[0.98] border border-dashed border-emerald-200 mt-2"
+                                            >
+                                                <Plus size={16} className="text-emerald-500" />
+                                                <span>Nhập tên ngoài: <strong className="text-emerald-800">{searchQuery.trim()}</strong></span>
+                                            </div>
+                                        )}
+
+                                        {availableTurns.filter(t => t.status !== 'off').filter(t => {
+                                                if (!searchQuery) return true;
+                                                const term = searchQuery.toLowerCase();
+                                                return t.employee_id.toLowerCase().includes(term) || (t.staff?.full_name || '').toLowerCase().includes(term);
+                                            }).length === 0 && !searchQuery.trim() && (
+                                            <div className="px-3 py-4 text-center text-sm font-bold text-gray-400">
+                                                Không tìm thấy KTV phù hợp
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     {/* 🖨️ Print Ticket Button — only show when KTV is selected */}
