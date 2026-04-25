@@ -449,9 +449,19 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                 console.log('🔄 [Realtime] Bookings changed → syncing turns...');
                 fetchTurns();
             })
-            // Bảng TurnQueue: Thay đổi tua trực tiếp (swap vị trí, reset...)
+            // Bảng TurnQueue: Thay đổi tua trực tiếp (swap vị trí, reset, tan ca...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
                 console.log('🔄 [Realtime] TurnQueue changed → refreshing...');
+                fetchTurnsFromDB();
+            })
+            // Bảng DailyAttendance: Điểm danh, đổi trạng thái (on_duty, off_duty, absent...)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'DailyAttendance' }, () => {
+                console.log('🔄 [Realtime] DailyAttendance changed → syncing turns...');
+                fetchTurnsFromDB();
+            })
+            // Bảng KTVAttendance: KTV bấm điểm danh / tan ca trên app
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVAttendance' }, () => {
+                console.log('🔄 [Realtime] KTVAttendance changed → syncing turns...');
                 fetchTurnsFromDB();
             })
             .subscribe();
@@ -555,8 +565,17 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         fetchTurns();
     };
 
+    // Sắp xếp: waiting/working lên trước, off xuống cuối
+    const sortedTurns = [...turns].sort((a, b) => {
+        if (a.status === 'off' && b.status !== 'off') return 1;
+        if (a.status !== 'off' && b.status === 'off') return -1;
+        return 0;
+    });
+
     const readyCount = turns.filter(t => t.status === 'waiting').length;
     const workingCount = turns.filter(t => t.status === 'working').length;
+    const offCount = turns.filter(t => t.status === 'off').length;
+    const activeCount = turns.length - offCount;
 
     if (loading) return <div className="p-10 text-center text-gray-500">Đang tải hàng đợi...</div>;
 
@@ -569,7 +588,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                 {[
                     { label: 'Sẵn Sàng', value: readyCount, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
                     { label: 'Đang Làm', value: workingCount, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
-                    { label: 'Tổng Ca', value: turns.length, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
+                    { label: 'Tổng Ca', value: activeCount, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
                 ].map(s => (
                     <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl p-3 text-center`}>
                         <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
@@ -595,12 +614,12 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                         <div className="p-8 text-center text-gray-400 text-sm">
                             Chưa có KTV nào điểm danh hôm nay
                         </div>
-                    ) : turns.map((turn, idx) => (
+                    ) : sortedTurns.map((turn, idx) => (
                         <motion.div
                             layout
                             transition={{ duration: ANIMATION_DURATION }}
                             key={turn.employee_id}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/50 transition-colors"
+                            className={`flex items-center gap-3 px-4 py-3 transition-colors ${turn.status === 'off' ? 'opacity-40 bg-gray-50/80' : 'hover:bg-gray-50/50'}`}
                         >
                             {/* Position badge */}
                             <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
@@ -632,11 +651,12 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                                     turn.status === 'working' ? <Timer size={10} className="animate-spin" /> :
                                         <Moon size={10} />}
                                 <span className="hidden sm:inline">
-                                    {turn.status === 'waiting' ? 'Sẵn sàng' : 'Đang làm'}
+                                    {turn.status === 'waiting' ? 'Sẵn sàng' : turn.status === 'working' ? 'Đang làm' : 'Tan ca'}
                                 </span>
                             </div>
 
-                            {/* Move buttons */}
+                            {/* Move buttons - ẩn khi tan ca */}
+                            {turn.status !== 'off' && (
                             <div className="flex flex-col gap-0.5 shrink-0 ml-2">
                                 <button
                                     onClick={() => moveUp(turn.employee_id)}
@@ -647,12 +667,13 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                                 </button>
                                 <button
                                     onClick={() => moveDown(turn.employee_id)}
-                                    disabled={idx === turns.length - 1}
+                                    disabled={idx === sortedTurns.length - 1}
                                     className="p-1 hover:bg-indigo-50 rounded-md text-gray-400 hover:text-indigo-600 disabled:opacity-25 transition-colors border border-transparent hover:border-indigo-100"
                                 >
                                     <ArrowDown size={12} strokeWidth={3} />
                                 </button>
                             </div>
+                            )}
                         </motion.div>
                     ))}
                 </div>

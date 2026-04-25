@@ -250,7 +250,7 @@ export async function POST(request: Request) {
                 await supabase.from('Users').update({ isOnShift: false }).eq('id', employeeId);
 
                 if (staffCode) {
-                    // 🔸 Set off for TurnQueue (using staffCode)
+                    // 🔸 Set status = off trong TurnQueue (hiển thị mờ ở cuối danh sách)
                     await supabase
                         .from('TurnQueue')
                         .update({ status: 'off' })

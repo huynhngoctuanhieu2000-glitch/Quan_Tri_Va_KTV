@@ -95,7 +95,7 @@ export async function PATCH(request: Request) {
             }
         }
 
-        // ─── If CONFIRMED CHECK_OUT: update TurnQueue status = off ──────
+        // ─── If CONFIRMED CHECK_OUT: set status = off (hiển thị mờ cuối danh sách) ──────
         if (action === 'CONFIRM' && attendance.checkType === 'CHECK_OUT') {
             const nowUtc = new Date();
             const today = new Date(nowUtc.getTime() + VN_OFFSET_MS).toISOString().split('T')[0];
