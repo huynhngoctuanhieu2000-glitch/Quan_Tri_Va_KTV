@@ -56,11 +56,17 @@ export async function GET(request: Request) {
                     if (!itemDone && !bookingDone) continue;
                     
                     if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
-                        for (const ktvId of item.technicianCodes) {
-                            if (!ktvBills.has(ktvId)) {
-                                ktvBills.set(ktvId, new Set<string>());
+                        for (const rawCode of item.technicianCodes) {
+                            if (!rawCode) continue;
+                            const ktvIds = typeof rawCode === 'string' 
+                                ? rawCode.split(',').map(s => s.trim()).filter(Boolean) 
+                                : [rawCode];
+                            for (const ktvId of ktvIds) {
+                                if (!ktvBills.has(ktvId)) {
+                                    ktvBills.set(ktvId, new Set<string>());
+                                }
+                                ktvBills.get(ktvId)!.add(item.bookingId);
                             }
-                            ktvBills.get(ktvId)!.add(item.bookingId);
                         }
                     }
                 }

@@ -1,4 +1,4 @@
-// 🔧 FIX: Tính lại và ghi đúng turns_completed vào TurnQueue
+// 🔍 DEBUG: Kiểm tra chi tiết tua của NH014 hôm nay
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 
@@ -15,74 +15,92 @@ for (const line of envContent.split('\n')) {
 
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-async function fixTurns() {
+async function debugNH014() {
     const today = '2026-04-25';
     const fromFilter = `${today}T00:00:00`;
     const toFilter = `${today}T23:59:59`;
 
-    console.log(`\n🔧 Bắt đầu fix turns_completed cho ngày ${today}...`);
+    console.log(`\n🔍 KIỂM TRA ĐƠN CỦA NH014 NGÀY ${today}`);
+    console.log('='.repeat(80));
 
-    // 1. Lấy TurnQueue hôm nay
-    const { data: turns } = await supabase
-        .from('TurnQueue')
-        .select('id, employee_id, turns_completed')
-        .eq('date', today);
-
-    console.log(`📋 Tìm thấy ${turns.length} KTV trong TurnQueue`);
-
-    // 2. Lấy tất cả Bookings hôm nay
+    // 1. Lấy tất cả Bookings hôm nay
     const { data: bookings } = await supabase
         .from('Bookings')
-        .select('id, status')
+        .select('id, billCode, customerName, status, createdAt')
         .gte('createdAt', fromFilter)
-        .lte('createdAt', toFilter);
+        .lte('createdAt', toFilter)
+        .order('createdAt', { ascending: true });
 
-    const bookingIds = bookings.map(b => b.id);
-    const bookingStatusMap = new Map();
-    for (const b of bookings) bookingStatusMap.set(b.id, b.status);
+    let nh014Items = [];
+    let nh014Bills = new Set();
+    let pendingBills = new Set();
+    let nameMismatch = [];
 
-    // 3. Lấy tất cả BookingItems
-    const { data: items } = await supabase
-        .from('BookingItems')
-        .select('bookingId, technicianCodes, status')
-        .in('bookingId', bookingIds);
+    for (const b of bookings) {
+        const { data: items } = await supabase
+            .from('BookingItems')
+            .select('id, bookingId, technicianCodes, status, serviceId')
+            .eq('bookingId', b.id);
 
-    // 4. Tính tua thực tế
-    const ktvBills = new Map();
-    for (const item of items) {
-        const itemDone = ['COMPLETED', 'DONE'].includes(item.status);
-        const bookingDone = ['COMPLETED', 'DONE'].includes(bookingStatusMap.get(item.bookingId) || '');
-        if (!itemDone && !bookingDone) continue;
+        for (const item of (items || [])) {
+            // Check if NH014 is involved (either by exact match or substring)
+            let involved = false;
+            let matchedName = null;
+            
+            if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
+                for (const code of item.technicianCodes) {
+                    if (code === 'NH014') {
+                        involved = true;
+                        matchedName = code;
+                    } else if (code.includes('NH014') || code.toLowerCase().includes('tiểu tiên')) { // Adding Tiểu Tiên just in case it's NH014's alias
+                        // Just flag substring matches
+                        if (!involved && code.includes('NH014')) {
+                            nameMismatch.push({ bill: b.billCode, itemStatus: item.status, code: code });
+                        }
+                    }
+                }
+            }
 
-        if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
-            for (const ktvId of item.technicianCodes) {
-                if (!ktvBills.has(ktvId)) ktvBills.set(ktvId, new Set());
-                ktvBills.get(ktvId).add(item.bookingId);
+            if (involved) {
+                const isItemDone = ['COMPLETED', 'DONE'].includes(item.status);
+                const isBookingDone = ['COMPLETED', 'DONE'].includes(b.status);
+                const isCounted = isItemDone || isBookingDone;
+
+                nh014Items.push({
+                    billCode: b.billCode,
+                    bookingStatus: b.status,
+                    itemStatus: item.status,
+                    serviceId: item.serviceId,
+                    isCounted: isCounted
+                });
+
+                if (isCounted) {
+                    nh014Bills.add(b.id);
+                } else {
+                    pendingBills.add(b.billCode);
+                }
             }
         }
     }
 
-    // 5. Ghi vào DB
-    console.log('\n📊 Kết quả tính toán:');
-    for (const turn of turns) {
-        const correctTurns = ktvBills.get(turn.employee_id)?.size || 0;
-        const changed = correctTurns !== turn.turns_completed;
+    console.log('\n📋 CHI TIẾT CÁC ĐƠN CÓ MÃ "NH014":');
+    nh014Items.forEach(i => {
+        console.log(`   🔖 Bill: ${i.billCode.padEnd(15)} | Trạng thái Đơn: ${i.bookingStatus.padEnd(12)} | Trạng thái Dịch Vụ: ${i.itemStatus.padEnd(12)} -> Tính tua: ${i.isCounted ? '✅' : '❌'}`);
+    });
 
-        console.log(`   ${turn.employee_id}: ${turn.turns_completed} → ${correctTurns} ${changed ? '⚡ CẬP NHẬT!' : '✅ OK'}`);
-
-        if (changed) {
-            const { error } = await supabase
-                .from('TurnQueue')
-                .update({ turns_completed: correctTurns })
-                .eq('id', turn.id);
-
-            if (error) {
-                console.error(`   ❌ Lỗi update ${turn.employee_id}:`, error.message);
-            }
-        }
+    console.log('\n⚠️ CÁC TRƯỜNG HỢP SAI TÊN HOẶC CHỨA CHUỖI GỘP:');
+    if (nameMismatch.length === 0) {
+        console.log('   (Không có)');
+    } else {
+        nameMismatch.forEach(n => {
+            console.log(`   🔖 Bill: ${n.bill} | Lưu sai định dạng: "${n.code}" (Cần lưu chính xác là ["NH014"])`);
+        });
     }
 
-    console.log('\n✅ Fix xong! Kiểm tra lại trên Supabase.');
+    console.log('\n📊 TỔNG KẾT NH014:');
+    console.log(`   - Tổng số tua (hoàn thành) đã tính: ${nh014Bills.size}`);
+    console.log(`   - Các đơn chưa hoàn thành (chưa tính tua): ${pendingBills.size > 0 ? Array.from(pendingBills).join(', ') : '(Không có)'}`);
+
 }
 
-fixTurns().catch(console.error);
+debugNH014().catch(console.error);
