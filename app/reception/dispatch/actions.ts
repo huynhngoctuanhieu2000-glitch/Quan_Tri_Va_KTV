@@ -243,6 +243,9 @@ export async function processDispatch(bookingId: string, dispatchData: {
             }
         }
 
+        const { syncTurnsForDate } = await import('@/lib/turn-sync');
+        await syncTurnsForDate(dispatchData.date);
+
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -298,6 +301,14 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
                     })
                     .eq('id', item.id);
             }
+        }
+
+        // Fetch bookingDate to sync turns correctly
+        const { data: bData } = await supabase.from('Bookings').select('bookingDate').eq('id', bookingId).single();
+        if (bData && bData.bookingDate) {
+            const dateStr = bData.bookingDate.split('T')[0];
+            const { syncTurnsForDate } = await import('@/lib/turn-sync');
+            await syncTurnsForDate(dateStr);
         }
 
         return { success: true };
@@ -441,6 +452,9 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 }
             }
         }
+
+        const { syncTurnsForDate } = await import('@/lib/turn-sync');
+        await syncTurnsForDate(date);
 
         return { success: true };
     } catch (error: any) {

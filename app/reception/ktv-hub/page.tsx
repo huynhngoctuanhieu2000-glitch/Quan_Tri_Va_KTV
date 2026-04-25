@@ -434,8 +434,54 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         }
     }, [staffs]);
 
+    // 🔄 REALTIME: Lắng nghe 3 bảng quan trọng liên quan đến điều phối
+    useEffect(() => {
+        if (staffs.length === 0) return;
+
+        const channel = supabase.channel('turn-realtime-sync')
+            // Bảng BookingItems: Gán KTV, đổi KTV, thêm dịch vụ add-on
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'BookingItems' }, () => {
+                console.log('🔄 [Realtime] BookingItems changed → syncing turns...');
+                fetchTurns();
+            })
+            // Bảng Bookings: Cập nhật trạng thái đơn (DONE, CANCELLED, NEW...)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, () => {
+                console.log('🔄 [Realtime] Bookings changed → syncing turns...');
+                fetchTurns();
+            })
+            // Bảng TurnQueue: Thay đổi tua trực tiếp (swap vị trí, reset...)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
+                console.log('🔄 [Realtime] TurnQueue changed → refreshing...');
+                fetchTurnsFromDB();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [staffs]);
+
+    // Fetch qua API (trigger sync logic đếm tua chính xác)
     const fetchTurns = async () => {
         setLoading(true);
+        try {
+            const res = await fetch('/api/turns');
+            const json = await res.json();
+            if (json.success && json.data) {
+                const merged = json.data.map((t: TurnQueueData) => ({
+                    ...t,
+                    staff: staffs.find(s => s.id === t.employee_id)
+                }));
+                setTurns(merged);
+            }
+        } catch (err) {
+            console.error('Fetch turns error:', err);
+        }
+        setLoading(false);
+    };
+
+    // Fetch trực tiếp từ DB (dùng khi TurnQueue thay đổi, không cần re-sync)
+    const fetchTurnsFromDB = async () => {
         const today = new Date().toISOString().split('T')[0];
         const { data } = await supabase
             .from('TurnQueue')
@@ -450,10 +496,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                 staff: staffs.find(s => s.id === t.employee_id)
             }));
             setTurns(merged);
-        } else {
-            setTurns([]);
         }
-        setLoading(false);
     };
 
     const updatePosition = async (turnId: string, newPos: number) => {

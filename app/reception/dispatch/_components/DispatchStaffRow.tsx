@@ -302,13 +302,22 @@ export const DispatchStaffRow = ({
 
                     {/* 🖨️ Print Ticket Button — only show when KTV is selected */}
                     {row.ktvId && (
-                        <button
-                            onClick={handlePrintTicket}
-                            className="p-2.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all active:scale-90"
-                            title="In phiếu tua KTV"
-                        >
-                            <Printer size={15} strokeWidth={2.5} />
-                        </button>
+                        <>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleChange({ ktvId: '', ktvName: '' }); }}
+                                className="p-2.5 bg-rose-50 text-rose-400 hover:bg-rose-100 hover:text-rose-600 border border-rose-100 rounded-xl transition-all active:scale-90"
+                                title="Xoá KTV (để trống)"
+                            >
+                                <X size={15} strokeWidth={2.5} />
+                            </button>
+                            <button
+                                onClick={handlePrintTicket}
+                                className="p-2.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all active:scale-90"
+                                title="In phiếu tua KTV"
+                            >
+                                <Printer size={15} strokeWidth={2.5} />
+                            </button>
+                        </>
                     )}
 
                     {canRemove && (
