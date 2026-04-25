@@ -77,6 +77,20 @@ export async function GET(request: Request) {
             turns_completed: realTurnsMap[turn.employee_id] || 0
         }));
 
+        // 🔄 Sync: Ghi ngược giá trị đã tính vào DB để Supabase dashboard luôn chính xác
+        if (data && data.length > 0) {
+            const updates = data
+                .filter(turn => (realTurnsMap[turn.employee_id] || 0) !== turn.turns_completed)
+                .map(turn => 
+                    supabase.from('TurnQueue')
+                        .update({ turns_completed: realTurnsMap[turn.employee_id] || 0 })
+                        .eq('id', turn.id)
+                );
+            if (updates.length > 0) {
+                await Promise.all(updates);
+            }
+        }
+
         return NextResponse.json({ success: true, data: mappedData });
     } catch (error: any) {
         console.error('API Error (Turns):', error);
