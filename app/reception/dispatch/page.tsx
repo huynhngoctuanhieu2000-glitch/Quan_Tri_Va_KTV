@@ -787,12 +787,14 @@ if (!hasPermission('dispatch_board')) {
       console.error(err);
     }
   };
-  const handleDispatch = async () => {
+  const handleDispatch = async (skipValidation: boolean = false) => {
     if (!selectedOrder) return;
-    const missing = getMissingInfo(selectedOrder);
-    if (missing.length > 0) {
-      alert(`⚠️ Vui lòng điền đầy đủ thông tin:\n\n${missing.map(m => `• ${m}`).join('\n')}`);
-      return;
+    if (!skipValidation) {
+      const missing = getMissingInfo(selectedOrder);
+      if (missing.length > 0) {
+        alert(`⚠️ Vui lòng điền đầy đủ thông tin:\n\n${missing.map(m => `• ${m}`).join('\n')}`);
+        return;
+      }
     }
 
     try {
@@ -1633,6 +1635,21 @@ if (!hasPermission('dispatch_board')) {
             >
               <QrCode size={18} />
               Hiện QR Journey
+            </button>
+
+            {/* Force Dispatch - Skip validation */}
+            <button
+              onClick={() => {
+                if (!confirm('⚡ Xác nhận GỬI ĐƠN ngay? (Bỏ qua kiểm tra thiếu thông tin)')) return;
+                setSelectedOrderId(contextMenu.orderId);
+                setContextMenu(null);
+                // Dùng setTimeout để chờ selectedOrder cập nhật
+                setTimeout(() => handleDispatch(true), 100);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
+            >
+              <Send size={18} />
+              Gửi đơn ngay (bỏ qua kiểm tra)
             </button>
 
             <button
