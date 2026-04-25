@@ -464,11 +464,16 @@ export const DispatchStaffRow = ({
                                                     💪 Lực: {strength}
                                                 </span>
                                             )}
-                                            {focus && (
-                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
-                                                    🎯 Tập trung: {focus}
-                                                </span>
-                                            )}
+                                            {focus && (() => {
+                                                const FULL_BODY_THRESHOLD = 6;
+                                                const areas = focus.split(',').map(s => s.trim()).filter(Boolean);
+                                                const displayText = areas.length >= FULL_BODY_THRESHOLD ? 'Full Body' : focus;
+                                                return (
+                                                    <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
+                                                        🎯 Tập trung: {displayText}
+                                                    </span>
+                                                );
+                                            })()}
                                             {avoid && (
                                                 <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
                                                     🚫 Tránh: {avoid}
