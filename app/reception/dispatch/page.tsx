@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { supabase } from '@/lib/supabase';
@@ -96,6 +96,7 @@ export default function DispatchBoardPage() {
   const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR'>('DISPATCH');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
+  const [showDispatchConfirmModal, setShowDispatchConfirmModal] = useState(false);
   const [svcSearchQuery, setSvcSearchQuery] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
@@ -691,6 +692,74 @@ if (!hasPermission('dispatch_board')) {
       alert('Lỗi hệ thống khi xóa dịch vụ!');
     }
   };
+
+  const handleSaveDraft = async () => {
+    if (!selectedOrder) return;
+    
+    try {
+      const clonedOrder = JSON.parse(JSON.stringify(selectedOrder)) as PendingOrder;
+      const techCodesSet = new Set<string>();
+
+      for (const svc of clonedOrder.services) {
+        for (const row of svc.staffList) {
+          if (row.ktvId) techCodesSet.add(row.ktvId);
+        }
+      }
+
+      const combinedTechCodes = Array.from(techCodesSet).join(', ');
+      
+      const primaryService = clonedOrder.services[0];
+      const primaryStaff = primaryService?.staffList[0];
+      const primarySeg = primaryStaff?.segments[0];
+      
+      const itemUpdates = clonedOrder.services.map(svc => {
+          const allSegments = svc.staffList.flatMap(r => 
+            r.segments.map(seg => ({ ...seg, ktvId: r.ktvId }))
+          );
+
+          return {
+              id: svc.id,
+              roomName: allSegments[0]?.roomId || primarySeg?.roomId, 
+              bedId: allSegments[0]?.bedId || primarySeg?.bedId,
+              technicianCodes: svc.staffList.map(r => r.ktvId).filter(Boolean),
+              segments: allSegments,
+              options: {
+                  ...(svc.options || {}),
+                  note: svc.customerNote?.split(' | ')[0] || '', 
+                  therapist: svc.genderReq,
+                  strength: svc.strength,
+                  focus: svc.focus.split(',').map(f => f.trim()).filter(Boolean),
+                  avoid: svc.avoid.split(',').map(a => a.trim()).filter(Boolean),
+                  noteForKtv: svc.staffList?.[0]?.noteForKtv || '',
+                  notesForKtvs: Object.fromEntries(
+                      svc.staffList
+                          .filter(r => r.ktvId && r.noteForKtv)
+                          .map(r => [r.ktvId, r.noteForKtv])
+                  )
+              }
+          };
+      });
+
+      const { saveDraftDispatch } = await import('./actions');
+      const res = await saveDraftDispatch(clonedOrder.id, {
+        technicianCode: combinedTechCodes,
+        bedId: primarySeg?.bedId || null,
+        roomName: primarySeg?.roomId || null,
+        notes: primaryService?.adminNote || '',
+        itemUpdates: itemUpdates
+      });
+
+      if (res.success) {
+        alert('✅ Đã lưu tạm thông tin thành công!');
+        fetchData();
+      } else {
+        alert('Lỗi khi lưu tạm: ' + res.error);
+      }
+    } catch (err) {
+      alert('Đã có lỗi bất ngờ xảy ra khi lưu tạm.');
+      console.error(err);
+    }
+  };
   const handleDispatch = async () => {
     if (!selectedOrder) return;
     const missing = getMissingInfo(selectedOrder);
@@ -1239,11 +1308,17 @@ if (!hasPermission('dispatch_board')) {
                   <Plus size={18} strokeWidth={3} /> THÊM DỊCH VỤ KHÁC
                 </button>
 
-                <div className="pt-4 sticky bottom-0 bg-gradient-to-t from-white via-white/90 to-transparent pb-2 mt-auto">
+                <div className="pt-4 sticky bottom-0 bg-gradient-to-t from-white via-white/90 to-transparent pb-2 mt-auto flex gap-3">
                   <button
-                    onClick={handleDispatch}
+                    onClick={handleSaveDraft}
+                    className="flex-1 py-5 rounded-3xl font-black text-sm tracking-widest uppercase transition-all flex items-center justify-center gap-2 shadow-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-2 border-emerald-200 active:scale-95"
+                  >
+                    <Save size={20} strokeWidth={3} /> LƯU
+                  </button>
+                  <button
+                    onClick={() => setShowDispatchConfirmModal(true)}
                     disabled={!isDispatchReady(selectedOrder)}
-                    className={`w-full py-5 rounded-3xl font-black text-sm lg:text-base tracking-widest uppercase transition-all flex items-center justify-center gap-3 shadow-2xl ${isDispatchReady(selectedOrder)
+                    className={`flex-[2] py-5 rounded-3xl font-black text-sm lg:text-base tracking-widest uppercase transition-all flex items-center justify-center gap-3 shadow-2xl ${isDispatchReady(selectedOrder)
                       ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 active:scale-95'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
                       }`}
@@ -1352,6 +1427,100 @@ if (!hasPermission('dispatch_board')) {
                 {allServices.length === 0 && (
                   <p className="text-center text-gray-400 text-sm py-8 font-medium">Đang tải danh sách dịch vụ...</p>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dispatch Confirmation Modal */}
+      <AnimatePresence>
+        {showDispatchConfirmModal && selectedOrder && (
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md" 
+              onClick={() => setShowDispatchConfirmModal(false)} 
+            />
+            <motion.div 
+              initial={{ y: '100%', opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="relative bg-white rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-50">
+                <div>
+                  <h3 className="font-black text-indigo-900 text-lg uppercase tracking-tight">Xác nhận thông tin</h3>
+                  <p className="text-sm text-indigo-600 font-bold mt-1">Đơn {selectedOrder.billCode} - {selectedOrder.customerName}</p>
+                </div>
+                <button 
+                  onClick={() => setShowDispatchConfirmModal(false)}
+                  className="p-3 bg-white hover:bg-gray-100 rounded-2xl text-gray-400 transition-colors shadow-sm"
+                >
+                  <Plus className="rotate-45" size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto no-scrollbar flex-1 space-y-4">
+                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
+                  <span className="text-gray-500 font-bold">Tổng tiền thu:</span>
+                  <span className="text-xl font-black text-emerald-600">{(selectedOrder.totalAmount || 0).toLocaleString()}đ</span>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-black text-gray-900 uppercase tracking-widest text-xs">Chi tiết dịch vụ ({selectedOrder.services.length})</h4>
+                  {selectedOrder.services.map((svc, sIdx) => (
+                    <div key={svc.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+                      <p className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b border-gray-100">{sIdx + 1}. {svc.serviceName}</p>
+                      <div className="space-y-3">
+                        {svc.staffList.map((st) => (
+                          <div key={st.id} className="pl-2 border-l-2 border-indigo-200 flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-bold">KTV</span>
+                              <span className="text-sm font-black text-gray-800">{st.ktvName || 'Chưa gán'} {st.ktvId ? `[${st.ktvId}]` : ''}</span>
+                            </div>
+                            <div className="text-xs text-gray-600 flex flex-col gap-1">
+                              {st.segments.map((seg) => {
+                                const roomName = rooms.find(r => r.id === seg.roomId)?.name || seg.roomId || 'Chưa xếp phòng';
+                                const bedName = beds.find(b => b.id === seg.bedId)?.name || seg.bedId || 'Chưa xếp giường';
+                                return (
+                                  <div key={seg.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-1.5">
+                                    <span className="font-semibold text-gray-500">{seg.startTime} - {seg.endTime}</span>
+                                    <span className="text-gray-300">|</span>
+                                    <span className="font-semibold text-indigo-600">{roomName}</span>
+                                    <span className="text-gray-300">|</span>
+                                    <span className="font-semibold text-amber-600">{bedName}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-100 bg-white grid grid-cols-2 gap-3 shrink-0">
+                <button
+                  onClick={() => setShowDispatchConfirmModal(false)}
+                  className="w-full py-4 rounded-2xl font-black text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors uppercase text-sm"
+                >
+                  Quay lại sửa
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDispatchConfirmModal(false);
+                    handleDispatch();
+                  }}
+                  className="w-full py-4 rounded-2xl font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-colors uppercase text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
+                >
+                  <Send size={18} strokeWidth={3} /> Gửi & Dọn Phòng
+                </button>
               </div>
             </motion.div>
           </div>

@@ -246,7 +246,64 @@ export async function processDispatch(bookingId: string, dispatchData: {
 
         return { success: true };
     } catch (error: any) {
-        console.error('❌ [Server] processDispatch error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function saveDraftDispatch(bookingId: string, dispatchData: {
+    technicianCode: string | null;
+    bedId: string | null;
+    roomName: string | null;
+    notes?: string;
+    itemUpdates?: { 
+        id: string, 
+        roomName?: string | null, 
+        bedId?: string | null, 
+        technicianCodes?: string[], 
+        segments?: any[],
+        options: any 
+    }[];
+}) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // 1. Update Booking (Dữ liệu tổng quát cho Bill, không đổi status)
+        const { error: bError } = await supabase
+            .from('Bookings')
+            .update({
+                technicianCode: dispatchData.technicianCode,
+                bedId: dispatchData.bedId,
+                roomName: dispatchData.roomName,
+                notes: dispatchData.notes,
+                updatedAt: new Date().toISOString()
+            })
+            .eq('id', bookingId);
+
+        if (bError) {
+            console.error('❌ [Server] Booking draft update error:', bError);
+            throw bError;
+        }
+
+        // 2. Update BookingItems (Dữ liệu chi tiết từng dịch vụ, không đổi status)
+        if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
+            for (const item of dispatchData.itemUpdates) {
+                await supabase
+                    .from('BookingItems')
+                    .update({ 
+                        roomName: item.roomName,
+                        bedId: item.bedId,
+                        technicianCodes: item.technicianCodes || [],
+                        segments: item.segments || [],
+                        options: item.options 
+                    })
+                    .eq('id', item.id);
+            }
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('❌ [Server] saveDraftDispatch error:', error);
         return { success: false, error: error.message };
     }
 }
