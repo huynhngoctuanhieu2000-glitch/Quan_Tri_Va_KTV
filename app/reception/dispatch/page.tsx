@@ -579,12 +579,12 @@ if (!hasPermission('dispatch_board')) {
     return missing;
   };
 
-  const addServiceBlock = (svcName: string, duration: number) => {
+  const addServiceBlock = (svcId: string, svcName: string, duration: number) => {
     if (!selectedOrderId) return;
 
     if (selectedOrder?.dispatchStatus !== 'pending') {
       // 🚀 MUA THÊM DỊCH VỤ (ADD-ON) TRỰC TIẾP
-      handleDirectAddon(svcName, duration);
+      handleDirectAddon(svcId, svcName, duration);
       return;
     }
 
@@ -592,6 +592,7 @@ if (!hasPermission('dispatch_board')) {
     const startTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const newBlock: ServiceBlock = {
       id: `svc-${genId()}`,
+      serviceId: svcId,
       serviceName: svcName,
       duration,
       selectedRoomId: null,
@@ -624,15 +625,20 @@ if (!hasPermission('dispatch_board')) {
     setShowAddSvcModal(false);
   };
 
-  const handleDirectAddon = async (svcName: string, duration: number) => {
+  const handleDirectAddon = async (svcId: string, svcName: string, duration: number) => {
       if (!selectedOrderId) return;
-      // Tìm service bằng cách so tên đã parse (vì nameVN có thể là object multi-lang)
-      const svcDef = allServices.find((s: any) => {
-          const parsedName = (typeof s.nameVN === 'object' && s.nameVN !== null) 
-            ? (s.nameVN.vn || s.nameVN.en || s.nameVN) 
-            : (s.nameVN || s.nameEN || '');
-          return parsedName === svcName || s.nameEN === svcName || s.id === svcName;
-      });
+      // Tìm service bằng cách so id trước (để đảm bảo không bị trùng tên như Gội đầu 30p/45p/60p)
+      let svcDef = allServices.find((s: any) => s.id === svcId);
+      
+      if (!svcDef) {
+          svcDef = allServices.find((s: any) => {
+              const parsedName = (typeof s.nameVN === 'object' && s.nameVN !== null) 
+                ? (s.nameVN.vn || s.nameVN.en || s.nameVN) 
+                : (s.nameVN || s.nameEN || '');
+              return parsedName === svcName || s.nameEN === svcName || s.id === svcName;
+          });
+      }
+
       if (!svcDef) {
           alert('Không tìm thấy ID dịch vụ!');
           return;
@@ -1424,7 +1430,7 @@ if (!hasPermission('dispatch_board')) {
                     return (
                       <button 
                         key={svc.id} 
-                        onClick={() => addServiceBlock(name, dur)} 
+                        onClick={() => addServiceBlock(svc.id, name, dur)} 
                         className="group p-5 text-left border-2 border-gray-100 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/30 transition-all flex items-center justify-between active:scale-[0.98]"
                       >
                         <div>
