@@ -11,6 +11,7 @@ import {
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useKTVHistory, HistoryRecord } from './KTVHistory.logic';
+import PullToRefresh from '@/components/PullToRefresh/PullToRefresh';
 
 // 🔧 UI CONFIGURATION
 const PRESET_BUTTONS = [
@@ -241,96 +242,98 @@ export default function KTVHistoryPage() {
 
   return (
     <AppLayout title="Lịch Sử">
-      <div className="space-y-4 max-w-xl mx-auto">
+      <PullToRefresh onRefresh={async () => { await refetch(); }}>
+        <div className="space-y-4 max-w-xl mx-auto pb-6">
 
-        {/* Header */}
-        <div>
-            <p className="text-xs text-gray-400">Bấm vào đơn để xem chi tiết & nhập tip</p>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-2">
-          <div className="bg-indigo-600 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-indigo-100">
-            <p className="text-[8px] font-bold uppercase tracking-widest text-indigo-200">Tiền tua</p>
-            <p className="text-base font-black tabular-nums mt-0.5">{summary.totalCommission.toLocaleString('vi-VN')}đ</p>
-          </div>
-          <div className="bg-emerald-500 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-emerald-100">
-            <p className="text-[8px] font-bold uppercase tracking-widest text-emerald-100">Tip</p>
-            <p className="text-base font-black tabular-nums mt-0.5">{summary.totalTip.toLocaleString('vi-VN')}đ</p>
-          </div>
-          <div className="bg-amber-500 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-amber-100">
-            <p className="text-[8px] font-bold uppercase tracking-widest text-amber-100">Bonus</p>
-            <p className="text-base font-black tabular-nums mt-0.5">{summary.totalBonus}đ</p>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl px-2.5 py-3 shadow-sm">
-            <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Đơn</p>
-            <p className="text-base font-black text-gray-900 tabular-nums mt-0.5">{summary.totalOrders}</p>
-          </div>
-        </div>
-
-        {/* Date Picker */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3 space-y-2.5">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <CalendarDays size={14} className="text-gray-400 shrink-0" />
-            {PRESET_BUTTONS.map(b => (
-              <button
-                key={b.key}
-                onClick={() => setDatePreset(b.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  datePreset === b.key
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 active:bg-gray-200'
-                }`}
-              >
-                {b.label}
-              </button>
-            ))}
+          {/* Header */}
+          <div>
+              <p className="text-xs text-gray-400">Bấm vào đơn để xem chi tiết & nhập tip</p>
           </div>
 
-          {datePreset === 'custom' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={e => setDateFrom(e.target.value)}
-                className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-[120px]"
-              />
-              <ChevronRight size={14} className="text-gray-300 shrink-0" />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={e => setDateTo(e.target.value)}
-                className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-[120px]"
-              />
-              <button
-                onClick={applyCustomDate}
-                className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
-              >
-                Xem
-              </button>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-4 gap-2">
+            <div className="bg-indigo-600 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-indigo-100">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-indigo-200">Tiền tua</p>
+              <p className="text-base font-black tabular-nums mt-0.5">{summary.totalCommission.toLocaleString('vi-VN')}đ</p>
             </div>
-          )}
-        </div>
+            <div className="bg-emerald-500 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-emerald-100">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-emerald-100">Tip</p>
+              <p className="text-base font-black tabular-nums mt-0.5">{summary.totalTip.toLocaleString('vi-VN')}đ</p>
+            </div>
+            <div className="bg-amber-500 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-amber-100">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-amber-100">Bonus</p>
+              <p className="text-base font-black tabular-nums mt-0.5">{summary.totalBonus}đ</p>
+            </div>
+            <div className="bg-white border border-gray-100 rounded-2xl px-2.5 py-3 shadow-sm">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Đơn</p>
+              <p className="text-base font-black text-gray-900 tabular-nums mt-0.5">{summary.totalOrders}</p>
+            </div>
+          </div>
 
-        {/* Order List */}
-        <div className="space-y-2.5">
-          {isLoading ? (
-            <div className="py-20 text-center">
-              <Loader2 size={28} className="animate-spin text-indigo-400 mx-auto" />
-              <p className="mt-3 text-sm text-gray-400">Đang tải...</p>
+          {/* Date Picker */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3 space-y-2.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <CalendarDays size={14} className="text-gray-400 shrink-0" />
+              {PRESET_BUTTONS.map(b => (
+                <button
+                  key={b.key}
+                  onClick={() => setDatePreset(b.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    datePreset === b.key
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
             </div>
-          ) : history.length === 0 ? (
-            <div className="py-20 text-center">
-              <History size={36} className="text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">Chưa có đơn hàng nào.</p>
-            </div>
-          ) : (
-            history.map(order => (
-              <OrderCard key={order.id} order={order} getStatusLabel={getStatusLabel} techCode={user?.id || ''} refetch={refetch} />
-            ))
-          )}
+
+            {datePreset === 'custom' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-[120px]"
+                />
+                <ChevronRight size={14} className="text-gray-300 shrink-0" />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-[120px]"
+                />
+                <button
+                  onClick={applyCustomDate}
+                  className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
+                >
+                  Xem
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Order List */}
+          <div className="space-y-2.5">
+            {isLoading ? (
+              <div className="py-20 text-center">
+                <Loader2 size={28} className="animate-spin text-indigo-400 mx-auto" />
+                <p className="mt-3 text-sm text-gray-400">Đang tải...</p>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="py-20 text-center">
+                <History size={36} className="text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">Chưa có đơn hàng nào.</p>
+              </div>
+            ) : (
+              history.map(order => (
+                <OrderCard key={order.id} order={order} getStatusLabel={getStatusLabel} techCode={user?.id || ''} refetch={refetch} />
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      </PullToRefresh>
     </AppLayout>
   );
 }
