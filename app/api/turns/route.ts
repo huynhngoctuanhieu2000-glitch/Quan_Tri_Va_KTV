@@ -49,9 +49,14 @@ export async function GET(request: Request) {
                 const ktvBills = new Map<string, Set<string>>();
                 
                 for (const item of items) {
+                    const bookingStatus = bookingStatusMap.get(item.bookingId) || '';
+                    
+                    // KHÔNG BAO GIỜ tính tua cho đơn đã bị huỷ
+                    if (bookingStatus === 'CANCELLED') continue;
+
                     // Tính tua khi: item COMPLETED/DONE HOẶC Booking cha đã COMPLETED/DONE
                     const itemDone = ['COMPLETED', 'DONE'].includes(item.status);
-                    const bookingDone = ['COMPLETED', 'DONE'].includes(bookingStatusMap.get(item.bookingId) || '');
+                    const bookingDone = ['COMPLETED', 'DONE'].includes(bookingStatus);
                     
                     if (!itemDone && !bookingDone) continue;
                     
