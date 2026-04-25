@@ -71,6 +71,39 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
     const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
+    // 🚀 Auto-Finisher (Backup for KTV's device)
+    // Runs on the Receptionist's dashboard to ensure orders complete when time is up.
+    React.useEffect(() => {
+        const checkAutoFinish = () => {
+            const now = new Date();
+            
+            orders.forEach(order => {
+                if (order.dispatchStatus === 'in_progress') {
+                    const estEndStr = getEstimatedEndTime(order);
+                    if (estEndStr && estEndStr !== '--:--') {
+                        const [h, m] = estEndStr.split(':').map(Number);
+                        const estEnd = new Date();
+                        estEnd.setHours(h, m, 0, 0);
+                        
+                        // Handle midnight crossing
+                        if (h > 20 && now.getHours() < 4) {
+                             estEnd.setDate(estEnd.getDate() - 1);
+                        }
+                        
+                        // Allow 5 seconds grace period
+                        if (now.getTime() >= estEnd.getTime() + 5000) {
+                             console.log(`🤖 [Kanban AutoFinish] Time is up for order ${order.id} (${estEndStr}). Moving to COMPLETED...`);
+                             onUpdateStatus(order.id, 'COMPLETED');
+                        }
+                    }
+                }
+            });
+        };
+
+        const interval = setInterval(checkAutoFinish, 30000);
+        return () => clearInterval(interval);
+    }, [orders, onUpdateStatus]);
+
     const getStatusConfig = (id: string) => STATUS_CONFIG.find(s => s.id === id) || STATUS_CONFIG[0];
 
     const advanceStatus = (orderId: string) => {
