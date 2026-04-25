@@ -19,17 +19,23 @@ export async function GET(request: Request) {
 
         if (error) throw error;
 
-        // Lấy danh sách BookingItems đã và đang làm trong ngày để tính số bill thực tế
+        // Lấy danh sách Bookings trong ngày để tính số bill thực tế
         const fromFilter = `${date}T00:00:00`;
         const toFilter = `${date}T23:59:59`;
         
         const { data: bookings } = await supabase
             .from('Bookings')
-            .select('id')
+            .select('id, status')
             .gte('createdAt', fromFilter)
             .lte('createdAt', toFilter);
             
         const bookingIds = (bookings || []).map(b => b.id);
+        
+        // Tạo map trạng thái Booking cha để fallback
+        const bookingStatusMap = new Map<string, string>();
+        for (const b of bookings || []) {
+            bookingStatusMap.set(b.id, b.status);
+        }
         
         let realTurnsMap: Record<string, number> = {};
         
@@ -43,6 +49,12 @@ export async function GET(request: Request) {
                 const ktvBills = new Map<string, Set<string>>();
                 
                 for (const item of items) {
+                    // Tính tua khi: item COMPLETED/DONE HOẶC Booking cha đã COMPLETED/DONE
+                    const itemDone = ['COMPLETED', 'DONE'].includes(item.status);
+                    const bookingDone = ['COMPLETED', 'DONE'].includes(bookingStatusMap.get(item.bookingId) || '');
+                    
+                    if (!itemDone && !bookingDone) continue;
+                    
                     if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
                         for (const ktvId of item.technicianCodes) {
                             if (!ktvBills.has(ktvId)) {
