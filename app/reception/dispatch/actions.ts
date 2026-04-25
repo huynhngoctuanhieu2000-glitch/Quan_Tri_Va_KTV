@@ -662,7 +662,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
             console.error('⚠️ [Add-on] Failed to send push notification:', pushErr);
         }
 
-        return { success: true, newTotalAmount };
+        return { success: true, newTotalAmount, newItems: itemsToInsert };
     } catch (error: any) {
         console.error("❌ [Server] Lỗi thêm dịch vụ phụ (Add-on):", error.message);
         return { success: false, error: error.message };

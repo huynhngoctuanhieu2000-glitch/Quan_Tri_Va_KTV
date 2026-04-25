@@ -579,7 +579,7 @@ if (!hasPermission('dispatch_board')) {
     return missing;
   };
 
-  const addServiceBlock = (svcId: string, svcName: string, duration: number) => {
+  const addServiceBlock = async (svcId: string, svcName: string, duration: number) => {
     if (!selectedOrderId) return;
 
     if (selectedOrder?.dispatchStatus !== 'pending') {
@@ -588,41 +588,60 @@ if (!hasPermission('dispatch_board')) {
       return;
     }
 
-    const now = new Date();
-    const startTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const newBlock: ServiceBlock = {
-      id: `svc-${genId()}`,
-      serviceId: svcId,
-      serviceName: svcName,
-      duration,
-      selectedRoomId: null,
-      bedId: null,
-      staffList: [{ 
-        id: `sr-${genId()}`, 
-        ktvId: '', 
-        ktvName: '', 
-        segments: [{
-            id: `seg-${genId()}`,
-            roomId: null,
-            bedId: null,
-            startTime,
-            duration,
-            endTime: calcEndTime(startTime, duration)
-        }],
-        noteForKtv: '' 
-      }],
-      adminNote: '',
-      genderReq: '',
-      strength: '',
-      focus: '',
-      avoid: '',
-      customerNote: '',
-      options: { isAddon: true, isPaid: false }
-    };
-    setOrders(prev => prev.map(o =>
-      o.id === selectedOrderId ? { ...o, services: [...o.services, newBlock] } : o
-    ));
-    setShowAddSvcModal(false);
+    try {
+        const { addAddonServices } = await import('./actions');
+        // Thêm dịch vụ vào DB ngay lập tức để lấy ID chuẩn, nhưng KHÔNG fetchData để tránh mất dữ liệu đang sửa dở
+        const res = await addAddonServices(selectedOrderId, [{ serviceId: svcId, qty: 1 }], 'ADMIN');
+        
+        if (res.success && res.newItems && res.newItems.length > 0) {
+            const newItem = res.newItems[0];
+            const realId = newItem.id;
+            
+            const now = new Date();
+            const startTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const newBlock: ServiceBlock = {
+              id: realId, // Dùng ID thật từ DB
+              serviceId: svcId,
+              serviceName: svcName,
+              duration,
+              selectedRoomId: null,
+              bedId: null,
+              staffList: [{ 
+                id: `sr-${genId()}`, 
+                ktvId: '', 
+                ktvName: '', 
+                segments: [{
+                    id: `seg-${genId()}`,
+                    roomId: null,
+                    bedId: null,
+                    startTime,
+                    duration,
+                    endTime: calcEndTime(startTime, duration)
+                }],
+                noteForKtv: '' 
+              }],
+              adminNote: '',
+              genderReq: '',
+              strength: '',
+              focus: '',
+              avoid: '',
+              customerNote: '',
+              options: { isAddon: true, isPaid: false }
+            };
+            
+            setOrders(prev => prev.map(o =>
+              o.id === selectedOrderId 
+                  ? { ...o, services: [...o.services, newBlock], totalAmount: res.newTotalAmount } 
+                  : o
+            ));
+            setShowAddSvcModal(false);
+        } else {
+            alert('Lỗi thêm dịch vụ: ' + (res.error || 'Unknown error'));
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Lỗi hệ thống khi thêm dịch vụ!');
+    }
   };
 
   const handleDirectAddon = async (svcId: string, svcName: string, duration: number) => {
