@@ -420,11 +420,8 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
             if (turnsToRelease && turnsToRelease.length > 0) {
                 for (const turn of turnsToRelease) {
-                    // Tăng tua khi chuyển sang COMPLETED hoặc DONE và KTV đang working
+                    // Tua đã được tính tự động từ lúc gán đơn (qua API /api/turns), nên ở đây không cộng thêm nữa.
                     let newTurnsCompleted = turn.turns_completed || 0;
-                    if ((newStatus === 'COMPLETED' || newStatus === 'DONE') && turn.status === 'working') {
-                        newTurnsCompleted += 1;
-                    }
 
                     const { error: tError } = await supabase
                         .from('TurnQueue')

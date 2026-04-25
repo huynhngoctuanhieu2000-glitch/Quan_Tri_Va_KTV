@@ -54,11 +54,9 @@ export async function GET(request: Request) {
                     // KHÔNG BAO GIỜ tính tua cho đơn đã bị huỷ
                     if (bookingStatus === 'CANCELLED') continue;
 
-                    // Tính tua khi: item COMPLETED/DONE HOẶC Booking cha đã COMPLETED/DONE
-                    const itemDone = ['COMPLETED', 'DONE'].includes(item.status);
-                    const bookingDone = ['COMPLETED', 'DONE'].includes(bookingStatus);
-                    
-                    if (!itemDone && !bookingDone) continue;
+                    // Tính tua ngay khi KTV được gán vào đơn (cho tất cả các trạng thái trừ CANCELLED)
+                    // Không cần đợi item hay booking phải DONE nữa
+                    // Xoá điều kiện lọc theo itemDone/bookingDone
                     
                     if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
                         for (const rawCode of item.technicianCodes) {
