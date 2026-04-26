@@ -9,12 +9,13 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { DispatchServiceBlock } from './_components/DispatchServiceBlock';
 import { KanbanBoard } from './_components/KanbanBoard';
+import { QuickDispatchTable } from './_components/QuickDispatchTable';
 import { getDispatchData, processDispatch, cancelBooking, updateBookingStatus, createQuickBooking, addAddonServices } from './actions';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AddOrderModal } from './_components/AddOrderModal';
@@ -110,6 +111,7 @@ export default function DispatchBoardPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
+  const [dispatchMode, setDispatchMode] = useState<'quick' | 'detail'>('detail');
   // 🔧 QR CONFIGURATION
   const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
   const QR_SIZE = 250;
@@ -1300,7 +1302,35 @@ if (!hasPermission('dispatch_board')) {
                     <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
                     <h2 className="font-black text-gray-900 text-base truncate">Đơn {selectedOrder.id} — {selectedOrder.customerName}</h2>
                   </div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5 ml-4">Đang trong quá trình điều phối</p>
+                  <div className="flex items-center gap-2 mt-1 ml-4">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Đang điều phối</p>
+                    {/* Toggle Quick/Detail */}
+                    {(() => {
+                      const nameCounts = new Map<string, number>();
+                      selectedOrder.services.forEach(s => {
+                        if (s.serviceName?.toLowerCase().includes('phòng riêng')) return;
+                        nameCounts.set(s.serviceName, (nameCounts.get(s.serviceName) || 0) + 1);
+                      });
+                      const hasGroupable = [...nameCounts.values()].some(c => c >= 2);
+                      if (!hasGroupable) return null;
+                      return (
+                        <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
+                          <button
+                            onClick={() => setDispatchMode('quick')}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${dispatchMode === 'quick' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            <Zap size={10} /> Nhanh
+                          </button>
+                          <button
+                            onClick={() => setDispatchMode('detail')}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${dispatchMode === 'detail' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                          >
+                            <LayoutList size={10} /> Chi tiết
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   
                   {/* Cảnh báo Phát sinh chưa thu */}
                   {selectedOrder.services.some(s => s.options?.isAddon && !s.options?.isPaid) && (
@@ -1324,93 +1354,114 @@ if (!hasPermission('dispatch_board')) {
 
             {selectedOrder ? (
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 bg-slate-50/30">
-                <Reorder.Group
-                  axis="y"
-                  values={selectedOrder.services}
-                  onReorder={(newServices) => {
-                    const recalculated = recalculateAllTimes({ ...selectedOrder, services: newServices }, roomTransitionTime);
-                    updateOrder(selectedOrder.id, o => ({ ...o, services: recalculated.services }));
-                  }}
-                  className="space-y-6"
-                >
-                  {selectedOrder.services.map((svc, idx) => {
-                    // 🚩 LOGIC: Xác định các giường đang bận
-                    // 1. Giường bận do đơn hàng khác (đang làm hoặc đang dọn)
-                    const busyInOtherOrders = orders
+                {/* Quick Dispatch Mode */}
+                {dispatchMode === 'quick' ? (
+                  <QuickDispatchTable
+                    services={selectedOrder.services}
+                    orderId={selectedOrder.id}
+                    rooms={rooms}
+                    beds={beds}
+                    availableTurns={turns}
+                    busyBedIds={orders
                       .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
                       .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
-                      .filter(Boolean) as string[];
+                      .filter(Boolean) as string[]
+                    }
+                    onUpdateServices={(updatedServices) => {
+                      updateOrder(selectedOrder.id, o => ({ ...o, services: updatedServices }));
+                    }}
+                    onPrintGroup={(group) => {
+                      // TODO: QuickPrintTicket integration
+                      alert(`🖨️ In phiếu: ${group.displayName || group.serviceName} x${group.items.length}\nKTV: ${group.selectedKtvIds.join(', ')}\n${group.startTime} → ${group.endTime}`);
+                    }}
+                    customerReqs={selectedOrder.services[0] ? {
+                      genderReq: selectedOrder.services[0].genderReq,
+                      strength: selectedOrder.services[0].strength,
+                      focus: selectedOrder.services[0].focus,
+                      avoid: selectedOrder.services[0].avoid,
+                      customerNote: selectedOrder.services[0].customerNote,
+                    } : undefined}
+                  />
+                ) : (
+                  /* Detail Dispatch Mode */
+                  <Reorder.Group
+                    axis="y"
+                    values={selectedOrder.services}
+                    onReorder={(newServices) => {
+                      const recalculated = recalculateAllTimes({ ...selectedOrder, services: newServices }, roomTransitionTime);
+                      updateOrder(selectedOrder.id, o => ({ ...o, services: recalculated.services }));
+                    }}
+                    className="space-y-6"
+                  >
+                    {selectedOrder.services.map((svc, idx) => {
+                      const busyInOtherOrders = orders
+                        .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
+                        .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
+                        .filter(Boolean) as string[];
+                      const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
+                      const busyInCurrentOrder = selectedOrder.services
+                        .filter(s => s.id !== svc.id)
+                        .flatMap(s => s.staffList
+                          .filter(r => !currentSvcKtvIds.includes(r.ktvId))
+                          .flatMap(r => r.segments.map(seg => seg.bedId)))
+                        .filter(Boolean) as string[];
+                      const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
 
-                    // 2. Giường bận do DV KHÁC trong cùng đơn — nhưng CHO PHÉP nếu cùng KTV
-                    const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
-                    const busyInCurrentOrder = selectedOrder.services
-                      .filter(s => s.id !== svc.id)
-                      .flatMap(s => s.staffList
-                        .filter(r => !currentSvcKtvIds.includes(r.ktvId)) // Cùng KTV → cho chung giường
-                        .flatMap(r => r.segments.map(seg => seg.bedId)))
-                      .filter(Boolean) as string[];
-
-                    const allBusyBedIds = [...new Set([...busyInOtherOrders, ...busyInCurrentOrder])];
-
-                    // ✅ Cho phép 1 KTV gán cho nhiều DV trong cùng đơn (1KH + 2DV + 1KTV)
-
-                    return (
-                      <Reorder.Item key={svc.id} value={svc} dragListener={!expandedSvcIds.includes(svc.id)}>
-                        <DispatchServiceBlock
-                          svc={svc}
-                          svcIndex={idx}
-                          orderId={selectedOrder.id}
-                          rooms={rooms}
-                          beds={beds}
-                          busyBedIds={allBusyBedIds}
-                          usedKtvIds={[]}
-                          availableTurns={turns}
-                          onUpdateSvc={updateSvcField}
-                          onUpdateStaff={updateStaffRow}
-                          onAddStaff={addStaffRow}
-                          onRemoveStaff={removeStaffRow}
-                          onRemoveSvc={removeServiceBlock}
-                          selectedDate={selectedDate}
-                          isExpanded={expandedSvcIds.includes(svc.id)}
-                          onToggleExpand={() => {
-                            const isOpening = !expandedSvcIds.includes(svc.id);
-                            setExpandedSvcIds(prev => 
-                                isOpening ? [...prev, svc.id] : prev.filter(id => id !== svc.id)
-                            );
-                            
-                            // 🕐 Khi MỞ panel → cập nhật startTime cho tất cả segments thành thời gian hiện tại
-                            if (isOpening && selectedOrder?.dispatchStatus === 'pending') {
-                              const now = new Date();
-                              const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                              setOrders(prev => prev.map(o => 
-                                o.id === selectedOrderId ? {
-                                  ...o,
-                                  services: o.services.map(s => s.id === svc.id ? {
-                                    ...s,
-                                    staffList: s.staffList.map(r => ({
-                                      ...r,
-                                      segments: r.segments.map((seg, segIdx) => {
-                                        if (segIdx === 0) {
-                                          return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
-                                        }
-                                        // Nối giờ cho các chặng sau
-                                        const prevEnd = r.segments[segIdx - 1] 
-                                          ? calcEndTime(segIdx === 1 ? nowStr : r.segments[segIdx - 1].startTime, r.segments[segIdx - 1].duration)
-                                          : nowStr;
-                                        return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
-                                      })
-                                    }))
-                                  } : s)
-                                } : o
-                              ));
-                            }
-                          }}
-                          onDispatchSvc={(oId, svcId) => handleDispatch(false, svcId)}
-                        />
-                      </Reorder.Item>
-                    );
-                  })}
-                </Reorder.Group>
+                      return (
+                        <Reorder.Item key={svc.id} value={svc} dragListener={!expandedSvcIds.includes(svc.id)}>
+                          <DispatchServiceBlock
+                            svc={svc}
+                            svcIndex={idx}
+                            orderId={selectedOrder.id}
+                            rooms={rooms}
+                            beds={beds}
+                            busyBedIds={allBusyBedIds}
+                            usedKtvIds={[]}
+                            availableTurns={turns}
+                            onUpdateSvc={updateSvcField}
+                            onUpdateStaff={updateStaffRow}
+                            onAddStaff={addStaffRow}
+                            onRemoveStaff={removeStaffRow}
+                            onRemoveSvc={removeServiceBlock}
+                            selectedDate={selectedDate}
+                            isExpanded={expandedSvcIds.includes(svc.id)}
+                            onToggleExpand={() => {
+                              const isOpening = !expandedSvcIds.includes(svc.id);
+                              setExpandedSvcIds(prev => 
+                                  isOpening ? [...prev, svc.id] : prev.filter(id => id !== svc.id)
+                              );
+                              if (isOpening && selectedOrder?.dispatchStatus === 'pending') {
+                                const now = new Date();
+                                const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                                setOrders(prev => prev.map(o => 
+                                  o.id === selectedOrderId ? {
+                                    ...o,
+                                    services: o.services.map(s => s.id === svc.id ? {
+                                      ...s,
+                                      staffList: s.staffList.map(r => ({
+                                        ...r,
+                                        segments: r.segments.map((seg, segIdx) => {
+                                          if (segIdx === 0) {
+                                            return { ...seg, startTime: nowStr, endTime: calcEndTime(nowStr, seg.duration) };
+                                          }
+                                          const prevEnd = r.segments[segIdx - 1] 
+                                            ? calcEndTime(segIdx === 1 ? nowStr : r.segments[segIdx - 1].startTime, r.segments[segIdx - 1].duration)
+                                            : nowStr;
+                                          return { ...seg, startTime: prevEnd, endTime: calcEndTime(prevEnd, seg.duration) };
+                                        })
+                                      }))
+                                    } : s)
+                                  } : o
+                                ));
+                              }
+                            }}
+                            onDispatchSvc={(oId, svcId) => handleDispatch(false, svcId)}
+                          />
+                        </Reorder.Item>
+                      );
+                    })}
+                  </Reorder.Group>
+                )}
 
                 <button
                   onClick={() => setShowAddSvcModal(true)}
