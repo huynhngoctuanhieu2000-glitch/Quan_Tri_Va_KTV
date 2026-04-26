@@ -250,7 +250,7 @@ export default function DispatchBoardPage() {
             customerName: b.customerName || 'Khách vãng lai',
             customerLang: b.customerLang || 'vi',
             phone: b.customerPhone || '',
-            time: b.timeBooking || (b.createdAt ? b.createdAt.substring(11, 16) : '--:--'),
+            time: b.timeBooking || (b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'),
             dispatchStatus: dStatus,
             createdAt: b.createdAt || new Date().toISOString(),
             totalAmount: b.totalAmount || 0,

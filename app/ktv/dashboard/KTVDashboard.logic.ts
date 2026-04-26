@@ -555,6 +555,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
                     if (!isPostService) {
                         setBooking(null);
+                        setScreen('DASHBOARD');
+                        setIsTimerRunning(false);
+                        setIsPrepping(false);
+                        setPrepTimeRemaining(0);
+                        setTimeRemaining(60 * 60);
+                        manualSegmentOverrideRef.current = false;
+                        setActiveSegmentIndex(0);
                     } else {
                         console.log("🕯️ [KTV] Booking released from DB, but keeping UI for cleanup...");
                     }
