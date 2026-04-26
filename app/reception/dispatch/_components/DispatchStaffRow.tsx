@@ -57,7 +57,9 @@ const SERVICE_TO_SKILL: Record<string, string> = {
     'Đá Nóng': 'hotStoneBody',
     'Massage Body': 'thaiBody',
     'Foot Dầu': 'oilFoot',
-    'Ráy tai': 'earCleaning',
+    'Ráy tai': 'earCombo', // fallback for old data
+    'Ráy Combo': 'earCombo',
+    'Ráy Chuyên': 'earChuyen',
     'Chăm sóc da': 'facial',
     'Massage Chân': 'oilFoot',
 };

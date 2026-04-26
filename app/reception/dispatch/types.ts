@@ -32,7 +32,10 @@ export interface ServiceBlock {
   focus: string;
   avoid: string;
   customerNote: string;
+  timeStart?: string | null;
+  timeEnd?: string | null;
   options?: any;
+  status?: string; // Tình trạng của dịch vụ con (NEW, PREPARING, IN_PROGRESS, COMPLETED...)
 }
 
 export type DispatchStatus = 'pending' | 'dispatched' | 'in_progress' | 'cleaning' | 'waiting_rating' | 'done';

@@ -226,7 +226,7 @@ export async function PATCH(request: Request) {
         
         // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
         if (action === 'APPEND_NOTES' && body.notes) {
-            const { data: currentB } = await supabase.from('Bookings').select('notes, billCode').eq('id', bookingId).single();
+            const { data: currentB } = await supabase.from('Bookings').select('timeStart, notes, billCode').eq('id', bookingId).single();
             const oldNotes = currentB?.notes || '';
             // Nối thêm nếu chưa có nội dung tương tự (tránh lặp lại khi refresh)
             if (!oldNotes.includes(body.notes)) {
@@ -325,10 +325,15 @@ export async function PATCH(request: Request) {
             // 🔧 FIX: Dùng 1 timestamp duy nhất cho cả Booking + BookingItem
             const sharedTimeStart = new Date().toISOString();
             
-            // KHÔNG GHI ĐÈ timeStart của Bookings NẾU là Resume/Next Segment
+            // KHÔNG GHI ĐÈ timeStart của Bookings NẾU đã có người bấm Bắt đầu trước đó
+            const { data: currentBookingForTime } = await supabase.from('Bookings').select('timeStart').eq('id', bookingId).single();
+            
+            let shouldUpdateItemTimeStart = false;
             if (action !== 'RESUME_TIMER' && action !== 'NEXT_SEGMENT' && action !== 'NEXT_SEGMENT_PREPARE') {
-                updatePayload.timeStart = sharedTimeStart;
-                itemUpdatePayload.timeStart = sharedTimeStart;
+                if (!currentBookingForTime?.timeStart) {
+                    updatePayload.timeStart = sharedTimeStart; // Chỉ gán mốc bắt đầu chung nếu chưa có ai gán
+                }
+                shouldUpdateItemTimeStart = true;
             }
 
             // 🚀 CẬP NHẬT SEGMENTS (thời gian chặng)
@@ -385,12 +390,43 @@ export async function PATCH(request: Request) {
                     }
                 }
 
+                let maxTimeEndStr: string | null = null;
+                let maxTimeEndMs = 0;
+
                 // 3. Đẩy lại các cập nhật vào DB
                 for (const [itemId, segs] of Array.from(itemSegmentsMap.entries())) {
+                    const payload: any = { segments: JSON.stringify(segs) };
+                    
+                    if (shouldUpdateItemTimeStart) {
+                        payload.timeStart = sharedTimeStart;
+                        let totalDur = 0;
+                        segs.forEach((seg: any) => { totalDur += Number(seg.duration || 0); });
+                        const endTimeMs = new Date(sharedTimeStart).getTime() + totalDur * 60000;
+                        payload.timeEnd = new Date(endTimeMs).toISOString();
+
+                        if (endTimeMs > maxTimeEndMs) {
+                            maxTimeEndMs = endTimeMs;
+                            maxTimeEndStr = payload.timeEnd;
+                        }
+                    }
+
                     await supabase
                         .from('BookingItems')
-                        .update({ segments: JSON.stringify(segs) })
+                        .update(payload)
                         .eq('id', itemId);
+                }
+
+                // 4. Đồng bộ thời gian kết thúc (thực tế) sang TurnQueue để màn Lễ Tân Real-time
+                if (maxTimeEndStr && turnForSync && action === 'START_TIMER') {
+                    const d = new Date(maxTimeEndStr);
+                    const vnOffsetMs = 7 * 60 * 60 * 1000;
+                    const dVn = new Date(d.getTime() + vnOffsetMs);
+                    const estEndTime = `${String(dVn.getUTCHours()).padStart(2, '0')}:${String(dVn.getUTCMinutes()).padStart(2, '0')}:00`;
+                    
+                    await supabase
+                        .from('TurnQueue')
+                        .update({ estimated_end_time: estEndTime })
+                        .eq('id', turnForSync.id);
                 }
             }
 

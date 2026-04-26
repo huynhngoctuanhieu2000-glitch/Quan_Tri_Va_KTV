@@ -7,7 +7,7 @@ import { getStaffList, deleteStaffMember } from './actions';
 
 // 🔧 CONFIGURATION
 const DEFAULT_SKILLS = {
-    hairCut: false, shampoo: true, hairExtensionShampoo: false, earCleaning: false,
+    hairCut: false, shampoo: true, hairExtensionShampoo: false, earCombo: false, earChuyen: false,
     machineShave: false, razorShave: false, facial: false, thaiBody: false,
     shiatsuBody: false, oilBody: true, hotStoneBody: false, scrubBody: false,
     oilFoot: false, hotStoneFoot: false, acupressureFoot: false, heelScrub: false, nailCombo: false, nailChuyen: false

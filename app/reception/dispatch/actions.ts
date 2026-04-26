@@ -106,6 +106,9 @@ export async function getDispatchData(date: string) {
                             serviceName: svcInfo?.name || `DV ${sId.toUpperCase()}`, // Thêm camelCase cho đồng bộ
                             service_description: svcInfo?.description || '',
                             duration: finalDuration,
+                            timeStart: i.timeStart || null,
+                            timeEnd: i.timeEnd || null,
+                            status: i.status || 'NEW',
                         };
                     })
             }));
@@ -472,6 +475,91 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         return { success: true };
     } catch (error: any) {
         console.error('❌ [Server] updateBookingStatus error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // Cập nhật trạng thái các BookingItems
+        const { error: itemError } = await supabase
+            .from('BookingItems')
+            .update({ status: newStatus })
+            .in('id', itemIds);
+            
+        if (itemError) throw itemError;
+
+        if (newStatus === 'IN_PROGRESS') {
+            const now = new Date().toISOString();
+            
+            // Cập nhật timeStart cho Bookings nếu chưa có
+            await supabase.from('Bookings').update({ timeStart: now }).eq('id', bookingId).is('timeStart', null);
+
+            // Cập nhật timeStart cho các items
+            await supabase
+                .from('BookingItems')
+                .update({ timeStart: now })
+                .in('id', itemIds);
+
+            // Cập nhật TurnQueue thành working
+            await supabase
+                .from('TurnQueue')
+                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
+                .eq('current_order_id', bookingId)
+                .in('booking_item_id', itemIds)
+                .eq('date', date)
+                .in('status', ['waiting', 'working']);
+        }
+
+        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
+            // Lấy tất cả KTV đang làm các item này
+            const { data: turnsToRelease } = await supabase
+                .from('TurnQueue')
+                .select('id, turns_completed, status')
+                .eq('current_order_id', bookingId)
+                .in('booking_item_id', itemIds)
+                .eq('date', date);
+
+            if (turnsToRelease && turnsToRelease.length > 0) {
+                for (const turn of turnsToRelease) {
+                    let newTurnsCompleted = turn.turns_completed || 0;
+                    await supabase
+                        .from('TurnQueue')
+                        .update({
+                            status: 'waiting',
+                            current_order_id: null,
+                            booking_item_id: null,
+                            start_time: null,
+                            estimated_end_time: null,
+                            turns_completed: newTurnsCompleted
+                        })
+                        .eq('id', turn.id);
+                }
+            }
+        }
+        
+        // Auto-update Booking status based on remaining items
+        const { data: allItems } = await supabase.from('BookingItems').select('status').eq('bookingId', bookingId);
+        if (allItems && allItems.length > 0) {
+            const statuses = allItems.map(i => i.status);
+            let bStatus = 'NEW';
+            if (statuses.includes('IN_PROGRESS')) bStatus = 'IN_PROGRESS';
+            else if (statuses.includes('PREPARING')) bStatus = 'PREPARING';
+            else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED'].includes(s))) bStatus = 'COMPLETED';
+            else if (statuses.includes('WAITING') || statuses.includes('NEW')) bStatus = 'NEW';
+            
+            await supabase.from('Bookings').update({ status: bStatus }).eq('id', bookingId);
+        }
+
+        const { syncTurnsForDate } = await import('@/lib/turn-sync');
+        await syncTurnsForDate(date);
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('❌ [Server] updateBookingItemStatus error:', error);
         return { success: false, error: error.message };
     }
 }

@@ -370,7 +370,10 @@ export default function DispatchBoardPage() {
                 ].filter(Boolean).join(' | '),
                 price: Number(bi.price) || 0,
                 quantity: Number(bi.quantity) || 1,
-                options: parsedOptions
+                options: parsedOptions,
+                status: bi.status || 'NEW',
+                timeStart: bi.timeStart || null,
+                timeEnd: bi.timeEnd || null
               };
             })
           };
@@ -787,7 +790,7 @@ if (!hasPermission('dispatch_board')) {
       console.error(err);
     }
   };
-  const handleDispatch = async (skipValidation: boolean = false) => {
+  const handleDispatch = async (skipValidation: boolean = false, specificSvcId?: string) => {
     if (!selectedOrder) return;
     if (!skipValidation) {
       const missing = getMissingInfo(selectedOrder);
@@ -803,7 +806,11 @@ if (!hasPermission('dispatch_board')) {
       const allStaffAssignments = [];
       const techCodesSet = new Set<string>();
 
-      for (const svc of clonedOrder.services) {
+      const targetServices = specificSvcId 
+        ? clonedOrder.services.filter(s => s.id === specificSvcId) 
+        : clonedOrder.services;
+
+      for (const svc of targetServices) {
         for (const row of svc.staffList) {
           if (!row.ktvId) continue;
           
@@ -860,7 +867,7 @@ if (!hasPermission('dispatch_board')) {
       const primaryStaff = primaryService?.staffList[0];
       const primarySeg = primaryStaff?.segments[0];
       
-      const itemUpdates = clonedOrder.services.map(svc => {
+      const itemUpdates = targetServices.map(svc => {
           // Lưu toàn bộ lộ trình của tất cả KTV trong dịch vụ này
           const allSegments = svc.staffList.flatMap(r => 
             r.segments.map(seg => ({ ...seg, ktvId: r.ktvId }))
@@ -903,11 +910,26 @@ if (!hasPermission('dispatch_board')) {
       });
 
       if (res.success) {
-        setOrders(prev => prev.map(o =>
-          o.id === clonedOrder.id ? { ...o, dispatchStatus: 'dispatched' } : o
-        ));
-        setSelectedOrderId(null);
-        setLeftPanelTab('dispatched');
+        if (!specificSvcId || targetServices.length === clonedOrder.services.length) {
+            setOrders(prev => prev.map(o =>
+            o.id === clonedOrder.id ? { ...o, dispatchStatus: 'dispatched' } : o
+            ));
+            setSelectedOrderId(null);
+            setLeftPanelTab('dispatched');
+        } else {
+            // Update local state for just the specific service
+            setOrders(prev => prev.map(o => {
+                if (o.id !== clonedOrder.id) return o;
+                return {
+                    ...o,
+                    services: o.services.map(s => {
+                        if (s.id !== specificSvcId) return s;
+                        return { ...s, options: { ...s.options, status: 'PREPARING' } }; // Mark as dispatched visually
+                    })
+                };
+            }));
+            alert(`✅ Đã điều phối riêng dịch vụ thành công!`);
+        }
         fetchData();
       } else {
         alert('Lỗi khi điều phối: ' + res.error);
@@ -935,32 +957,60 @@ if (!hasPermission('dispatch_board')) {
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, newStatus: string, bypassConfirm: boolean = false) => {
-    if (!bypassConfirm) {
-      let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
-      if (newStatus === 'COMPLETED') {
-        confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở kiểm tra đồ và đánh giá, nhân viên bắt đầu dọn phòng.`;
-      } else if (newStatus === 'DONE') {
-        confirmMsg = `Xác nhận ĐÃ DỌN XONG PHÒNG VÀ HOÀN TẤT? Giường sẽ được nhả ra để đón khách mới.`;
-      } else if (newStatus === 'IN_PROGRESS') {
-        confirmMsg = `Xác nhận BẮT ĐẦU LÀM thay cho KTV? Hệ thống sẽ bắt đầu tính giờ làm dịch vụ ngay lập tức.`;
+  const handleUpdateStatus = async (orderId: string, newStatus: string, itemIds?: string[]) => {
+    // Determine context for confirmation
+    const isPartial = itemIds && itemIds.length > 0;
+    
+    let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
+    if (newStatus === 'COMPLETED') {
+      confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở kiểm tra đồ và đánh giá, nhân viên bắt đầu dọn phòng.`;
+    } else if (newStatus === 'DONE') {
+      confirmMsg = `Xác nhận ĐÃ DỌN XONG PHÒNG VÀ HOÀN TẤT? Giường sẽ được nhả ra để đón khách mới.`;
+    } else if (newStatus === 'IN_PROGRESS') {
+      confirmMsg = `Xác nhận BẮT ĐẦU LÀM thay cho KTV? Hệ thống sẽ bắt đầu tính giờ làm dịch vụ ngay lập tức.`;
+    }
+    
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      let res;
+      if (isPartial) {
+          const { updateBookingItemStatus } = await import('./actions');
+          res = await updateBookingItemStatus(itemIds, newStatus, selectedDate, orderId);
+      } else {
+          res = await updateBookingStatus(orderId, newStatus, selectedDate);
       }
       
-      if (!confirm(confirmMsg)) return;
-    }
-    try {
-      const res = await updateBookingStatus(orderId, newStatus, selectedDate);
       if (res.success) {
-        // Cập nhật local state hoặc refetch
-        setOrders(prev => prev.filter(o => o.id !== orderId));
-        if (selectedOrderId === orderId) setSelectedOrderId(null);
+        setOrders(prev => prev.map(o => {
+            if (o.id !== orderId) return o;
+            if (!isPartial) {
+                // If it's a full update, hide the order if it's completed (if needed) or let fetchData handle it.
+                // We'll just rely on fetchData, no need to hide it if we don't want it to jump weirdly
+                return o;
+            }
+            // Optimistic update for partial services
+            return {
+                ...o,
+                services: o.services.map(s => {
+                    if (itemIds.includes(s.id)) {
+                        return { ...s, status: newStatus };
+                    }
+                    return s;
+                })
+            };
+        }));
+        
+        if (!isPartial && selectedOrderId === orderId) {
+            setSelectedOrderId(null);
+        }
         setContextMenu(null);
         fetchData();
       } else {
-        alert(`Lỗi khi cập nhật trạng thái: ${res.error}`);
+        alert('Lỗi cập nhật trạng thái: ' + res.error);
       }
     } catch (err) {
-      alert('Lỗi hệ thống khi cập nhật trạng thái.');
+      alert('Lỗi hệ thống khi cập nhật.');
     }
   };
 
@@ -1353,6 +1403,7 @@ if (!hasPermission('dispatch_board')) {
                               ));
                             }
                           }}
+                          onDispatchSvc={(oId, svcId) => handleDispatch(false, svcId)}
                         />
                       </Reorder.Item>
                     );

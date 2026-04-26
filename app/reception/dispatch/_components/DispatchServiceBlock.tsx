@@ -33,12 +33,13 @@ interface DispatchServiceBlockProps {
     selectedDate?: string;
     isExpanded?: boolean;
     onToggleExpand?: () => void;
+    onDispatchSvc?: (orderId: string, svcId: string) => void;
 }
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], usedKtvIds = [], availableTurns,
     onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc, selectedDate,
-    isExpanded = true, onToggleExpand
+    isExpanded = true, onToggleExpand, onDispatchSvc
 }: DispatchServiceBlockProps) => {
 
     return (
@@ -176,6 +177,22 @@ export const DispatchServiceBlock = ({
                             className="w-full px-4 py-3 border border-gray-100 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none bg-gray-50/50 transition-all resize-none shadow-inner"
                         />
                     </div>
+                    
+                    {onDispatchSvc && (
+                        <div className="pt-4 flex justify-end">
+                            <button
+                                onClick={() => onDispatchSvc(orderId, svc.id)}
+                                disabled={!svc.staffList.every(r => r.ktvId && r.segments.every(seg => seg.roomId && seg.bedId && seg.startTime))}
+                                className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm
+                                    ${svc.staffList.every(r => r.ktvId && r.segments.every(seg => seg.roomId && seg.bedId && seg.startTime))
+                                        ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 active:scale-95 cursor-pointer'
+                                        : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                                    }`}
+                            >
+                                ĐIỀU PHỐI DỊCH VỤ NÀY
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

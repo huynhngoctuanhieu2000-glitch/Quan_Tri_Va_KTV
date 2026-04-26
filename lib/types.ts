@@ -37,7 +37,8 @@ export interface EmployeeSkills {
   hairCut: SkillLevel;
   shampoo: SkillLevel;
   hairExtensionShampoo: SkillLevel;
-  earCleaning: SkillLevel;
+  earCombo: SkillLevel;
+  earChuyen: SkillLevel;
   machineShave: SkillLevel;
   razorShave: SkillLevel;
   facial: SkillLevel;

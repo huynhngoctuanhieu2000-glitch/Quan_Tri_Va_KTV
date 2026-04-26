@@ -7,7 +7,7 @@ import { createStaffMember } from '@/app/admin/employees/actions';
 import { SkillLevel } from '@/lib/types';
 
 const DEFAULT_SKILLS = {
-    hairCut: false, shampoo: false, hairExtensionShampoo: false, earCleaning: false,
+    hairCut: false, shampoo: false, hairExtensionShampoo: false, earCombo: false, earChuyen: false,
     machineShave: false, razorShave: false, facial: false, thaiBody: false,
     shiatsuBody: false, oilBody: false, hotStoneBody: false, scrubBody: false,
     oilFoot: false, hotStoneFoot: false, acupressureFoot: false, heelScrub: false, nailCombo: false, nailChuyen: false
@@ -15,7 +15,7 @@ const DEFAULT_SKILLS = {
 
 const skillLabels: Record<string, string> = {
     hairCut: 'Cắt Tóc', shampoo: 'Gội đầu', hairExtensionShampoo: 'Gội Tóc Nối',
-    earCleaning: 'Ráy Tai', machineShave: 'Cạo Máy', razorShave: 'Cạo Dao',
+    earCombo: 'Ráy Combo', earChuyen: 'Ráy Chuyên', machineShave: 'Cạo Máy', razorShave: 'Cạo Dao',
     facial: 'Facial', thaiBody: 'Body Thái', shiatsuBody: 'Shiatsu',
     oilBody: 'Body Dầu', hotStoneBody: 'Body Đá Nóng', scrubBody: 'Scrub Body',
     oilFoot: 'Foot Dầu', hotStoneFoot: 'Foot Đá Nóng', acupressureFoot: 'Foot ấn huyệt',
