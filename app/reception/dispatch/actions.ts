@@ -247,7 +247,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
 
             // 4b. Send Push Notification for OS level alerts
             if (staffIds.length > 0) {
-                await sendPushNotification({
+                sendPushNotification({
                     title: 'Bạn có ca làm mới! 💆',
                     message: `Bạn được phân công cho đơn hàng ${bookingId}. Vui lòng kiểm tra ứng dụng.`,
                     targetStaffIds: staffIds,
@@ -548,7 +548,7 @@ export async function createQuickBooking(data: {
         });
 
         // 5. Send background push to Receptionists/Admins
-        await sendPushNotification({
+        sendPushNotification({
             title: 'Có Đơn Hàng Mới! 📋',
             message: msg,
             targetRoles: ['ADMIN', 'RECEPTIONIST'],
@@ -703,7 +703,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
 
         // 8. Gửi Push Notification cho Lễ tân
         try {
-            await sendPushNotification({
+            sendPushNotification({
                 title: 'Dịch vụ phát sinh (Chưa thu)',
                 message: `Đơn ${booking.billCode || bookingId} vừa thêm: ${addedServiceNames}`,
                 targetRoles: ['RECEPTIONIST', 'ADMIN'],
