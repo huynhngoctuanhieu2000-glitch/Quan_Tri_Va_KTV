@@ -24,20 +24,15 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
 
   const toggleSkill = (skillKey: keyof Employee['skills']) => {
     if (!isEditing) return;
-    const levels: SkillLevel[] = ['none', 'basic', 'expert', 'training'];
 
     setEditedEmployee(prev => {
       if (!prev) return null;
-      const currentLevel = prev.skills[skillKey];
-      const currentIndex = levels.indexOf(currentLevel);
-      const nextIndex = (currentIndex + 1) % levels.length;
-      const nextLevel = levels[nextIndex];
 
       return {
         ...prev,
         skills: {
           ...prev.skills,
-          [skillKey]: nextLevel
+          [skillKey]: !prev.skills[skillKey]
         }
       };
     });
@@ -75,14 +70,13 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
     hotStoneFoot: 'Foot Đá Nóng',
     acupressureFoot: 'Foot ấn huyệt',
     heelScrub: 'Bào Gót',
-    maniPedi: 'Manicure + Pedicure',
+    nailCombo: 'Nail Combo',
+    nailChuyen: 'Nail Chuyên',
   };
 
-  const levelInfo: Record<SkillLevel, { label: string, color: string, icon: React.ReactNode }> = {
-    none: { label: 'Chưa có', color: 'text-gray-400 bg-gray-50 border-gray-100 opacity-50', icon: <X size={12} /> },
-    basic: { label: 'Cơ bản', color: 'text-blue-700 bg-blue-50 border-blue-100', icon: <BookOpen size={12} /> },
-    expert: { label: 'Chuyên', color: 'text-emerald-700 bg-emerald-50 border-emerald-100', icon: <Zap size={12} /> },
-    training: { label: 'Đào tạo', color: 'text-amber-700 bg-amber-50 border-amber-100', icon: <GraduationCap size={12} /> },
+  const levelInfo: Record<string, { label: string, color: string, icon: React.ReactNode }> = {
+    'false': { label: 'Chưa có', color: 'text-gray-400 bg-gray-50 border-gray-100 opacity-50', icon: <X size={12} /> },
+    'true': { label: 'Có tay nghề', color: 'text-emerald-700 bg-emerald-50 border-emerald-100', icon: <CheckCircle2 size={12} /> },
   };
 
   return (
@@ -209,19 +203,16 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {(Object.entries(editedEmployee.skills) as [keyof Employee['skills'], SkillLevel][]).map(([key, level]) => {
-                  const info = levelInfo[level];
+                  const info = levelInfo[String(level)];
                   return (
                     <button
                       key={key}
                       onClick={() => toggleSkill(key)}
                       disabled={!isEditing}
-                      className={`flex flex-col gap-1 p-2 rounded-lg border text-left transition-all ${info.color} ${isEditing ? 'hover:border-indigo-400 hover:shadow-sm cursor-pointer' : 'cursor-default'}`}
+                      className={`flex items-center justify-between p-2.5 rounded-lg border text-left transition-all ${info.color} ${isEditing ? 'hover:border-indigo-400 hover:shadow-sm cursor-pointer' : 'cursor-default'}`}
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-xs font-bold truncate">{skillLabels[key]}</span>
-                        {info.icon}
-                      </div>
-                      <span className="text-[10px] font-medium uppercase tracking-wider opacity-80">{info.label}</span>
+                      <span className="text-xs font-bold truncate">{skillLabels[key]}</span>
+                      {info.icon}
                     </button>
                   );
                 })}

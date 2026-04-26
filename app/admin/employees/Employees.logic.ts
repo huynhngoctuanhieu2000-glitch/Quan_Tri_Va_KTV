@@ -7,10 +7,10 @@ import { getStaffList, deleteStaffMember } from './actions';
 
 // 🔧 CONFIGURATION
 const DEFAULT_SKILLS = {
-    hairCut: 'none', shampoo: 'basic', hairExtensionShampoo: 'none', earCleaning: 'none',
-    machineShave: 'none', razorShave: 'none', facial: 'none', thaiBody: 'none',
-    shiatsuBody: 'none', oilBody: 'basic', hotStoneBody: 'none', scrubBody: 'none',
-    oilFoot: 'none', hotStoneFoot: 'none', acupressureFoot: 'none', heelScrub: 'none', maniPedi: 'none'
+    hairCut: false, shampoo: true, hairExtensionShampoo: false, earCleaning: false,
+    machineShave: false, razorShave: false, facial: false, thaiBody: false,
+    shiatsuBody: false, oilBody: true, hotStoneBody: false, scrubBody: false,
+    oilFoot: false, hotStoneFoot: false, acupressureFoot: false, heelScrub: false, nailCombo: false, nailChuyen: false
 };
 
 /**
@@ -55,7 +55,16 @@ export const useEmployeeManagement = () => {
                 baseSalary: 0,
                 commissionRate: 0,
                 rating: 5.0,
-                skills: s.skills && Object.keys(s.skills).length > 0 ? s.skills : DEFAULT_SKILLS
+                skills: (() => {
+                    const dbSkills = s.skills && Object.keys(s.skills).length > 0 ? s.skills : DEFAULT_SKILLS;
+                    const parsedSkills: any = {};
+                    for (const key in DEFAULT_SKILLS) {
+                        const val = dbSkills[key];
+                        // Nếu DB cũ chứa 'basic', 'expert', 'training' hoặc `true` -> true
+                        parsedSkills[key] = val === true || val === 'basic' || val === 'expert' || val === 'training';
+                    }
+                    return parsedSkills;
+                })()
             })) as Employee[];
             setEmployees(mapped);
         }

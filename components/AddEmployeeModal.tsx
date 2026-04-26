@@ -7,10 +7,10 @@ import { createStaffMember } from '@/app/admin/employees/actions';
 import { SkillLevel } from '@/lib/types';
 
 const DEFAULT_SKILLS = {
-    hairCut: 'none', shampoo: 'none', hairExtensionShampoo: 'none', earCleaning: 'none',
-    machineShave: 'none', razorShave: 'none', facial: 'none', thaiBody: 'none',
-    shiatsuBody: 'none', oilBody: 'none', hotStoneBody: 'none', scrubBody: 'none',
-    oilFoot: 'none', hotStoneFoot: 'none', acupressureFoot: 'none', heelScrub: 'none', maniPedi: 'none'
+    hairCut: false, shampoo: false, hairExtensionShampoo: false, earCleaning: false,
+    machineShave: false, razorShave: false, facial: false, thaiBody: false,
+    shiatsuBody: false, oilBody: false, hotStoneBody: false, scrubBody: false,
+    oilFoot: false, hotStoneFoot: false, acupressureFoot: false, heelScrub: false, nailCombo: false, nailChuyen: false
 };
 
 const skillLabels: Record<string, string> = {
@@ -19,14 +19,12 @@ const skillLabels: Record<string, string> = {
     facial: 'Facial', thaiBody: 'Body Thái', shiatsuBody: 'Shiatsu',
     oilBody: 'Body Dầu', hotStoneBody: 'Body Đá Nóng', scrubBody: 'Scrub Body',
     oilFoot: 'Foot Dầu', hotStoneFoot: 'Foot Đá Nóng', acupressureFoot: 'Foot ấn huyệt',
-    heelScrub: 'Bào Gót', maniPedi: 'Manicure + Pedicure',
+    heelScrub: 'Bào Gót', nailCombo: 'Nail Combo', nailChuyen: 'Nail Chuyên',
 };
 
 const levelInfo: Record<string, { label: string, color: string }> = {
-    none: { label: 'Chưa có', color: 'text-gray-400 bg-gray-50 border-gray-100 opacity-50' },
-    basic: { label: 'Cơ bản', color: 'text-blue-700 bg-blue-50 border-blue-100' },
-    expert: { label: 'Chuyên', color: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
-    training: { label: 'Đào tạo', color: 'text-amber-700 bg-amber-50 border-amber-100' },
+    'false': { label: 'Chưa có', color: 'text-gray-400 bg-gray-50 border-gray-100 opacity-50' },
+    'true': { label: 'Có tay nghề', color: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
 };
 
 interface AddEmployeeModalProps {
@@ -60,14 +58,10 @@ export function AddEmployeeModal({ isOpen, onClose, onSuccess }: AddEmployeeModa
     });
 
     const toggleSkill = (skillKey: string) => {
-        const levels: SkillLevel[] = ['none', 'basic', 'expert', 'training'];
         setFormData(prev => {
-            const currentLevel = prev.skills[skillKey];
-            const currentIndex = levels.indexOf(currentLevel);
-            const nextLevel = levels[(currentIndex + 1) % levels.length];
             return {
                 ...prev,
-                skills: { ...prev.skills, [skillKey]: nextLevel }
+                skills: { ...prev.skills, [skillKey]: !prev.skills[skillKey] }
             };
         });
     };
@@ -207,16 +201,15 @@ export function AddEmployeeModal({ isOpen, onClose, onSuccess }: AddEmployeeModa
                                 </div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                     {Object.entries(formData.skills).map(([key, level]) => {
-                                        const info = levelInfo[level];
+                                        const info = levelInfo[String(level)];
                                         return (
                                             <button
                                                 key={key}
                                                 type="button"
                                                 onClick={() => toggleSkill(key)}
-                                                className={`flex flex-col gap-1 p-2 rounded-lg border text-left transition-all hover:border-indigo-400 hover:shadow-sm cursor-pointer ${info.color}`}
+                                                className={`flex items-center justify-center p-2.5 rounded-lg border text-center transition-all hover:border-indigo-400 hover:shadow-sm cursor-pointer ${info.color}`}
                                             >
                                                 <span className="text-xs font-bold truncate w-full">{skillLabels[key]}</span>
-                                                <span className="text-[10px] font-medium uppercase tracking-wider opacity-80">{info.label}</span>
                                             </button>
                                         );
                                     })}

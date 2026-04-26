@@ -229,8 +229,7 @@ export const DispatchStaffRow = ({
                                                 return t.employee_id.toLowerCase().includes(term) || (t.staff?.full_name || '').toLowerCase().includes(term);
                                             })
                                             .map((turn) => {
-                                                const hasSkill = targetSkill ? (turn.staff?.skills?.[targetSkill] === 'expert' || turn.staff?.skills?.[targetSkill] === 'basic') : true;
-                                                const isExpert = targetSkill && turn.staff?.skills?.[targetSkill] === 'expert';
+                                                const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true;
                                                 const isUsedInOtherSvc = usedKtvIds.includes(turn.employee_id);
                                                 
                                                 return (
@@ -252,7 +251,6 @@ export const DispatchStaffRow = ({
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span>
                                                                 <span>[{turn.employee_id}] {turn.staff?.full_name}</span>
-                                                                {isExpert && <Star size={12} className="fill-amber-500 text-amber-500" />}
                                                             </div>
                                                         </div>
                                                         <div className="text-[10px] font-semibold flex gap-2">
@@ -331,17 +329,11 @@ export const DispatchStaffRow = ({
                 </div>
 
                 {/* Skill Badge */}
-                {row.ktvId && (
+                {row.ktvId && availableTurns.find(t => t.employee_id === row.ktvId)?.staff?.skills?.[targetSkill || ''] === true && (
                     <div className="px-1">
-                        {availableTurns.find(t => t.employee_id === row.ktvId)?.staff?.skills?.[targetSkill || ''] === 'expert' ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black border border-amber-100 uppercase tracking-tighter">
-                                <Star size={10} className="fill-amber-500" /> Chuyên gia
-                            </span>
-                        ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black border border-emerald-100 uppercase tracking-tighter">
-                                <CheckCircle2 size={10} /> Đạt yêu cầu
-                            </span>
-                        )}
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black border border-emerald-100 uppercase tracking-tighter">
+                            <CheckCircle2 size={10} /> Đạt yêu cầu
+                        </span>
                     </div>
                 )}
 

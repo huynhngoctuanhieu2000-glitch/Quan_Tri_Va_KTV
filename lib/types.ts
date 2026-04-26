@@ -31,7 +31,7 @@ export interface ModuleDefinition {
   group: string;
 }
 
-export type SkillLevel = 'none' | 'basic' | 'expert' | 'training';
+export type SkillLevel = boolean;
 
 export interface EmployeeSkills {
   hairCut: SkillLevel;
@@ -50,7 +50,8 @@ export interface EmployeeSkills {
   hotStoneFoot: SkillLevel;
   acupressureFoot: SkillLevel;
   heelScrub: SkillLevel;
-  maniPedi: SkillLevel;
+  nailCombo: SkillLevel;
+  nailChuyen: SkillLevel;
 }
 
 export interface Employee {
