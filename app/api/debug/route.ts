@@ -5,14 +5,8 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin();
     if (!supabase) return NextResponse.json({ error: 'No supabase' });
 
-    const msg = `Test message`;
-    const { data, error } = await supabase.from('StaffNotifications').insert({
-        bookingId: null, // wait, bookingId is text FK -> Bookings. Is it nullable?
-        employeeId: null, // Global cho quầy
-        type: 'NEW_ORDER',
-        message: msg,
-        isRead: false
-    });
+    const { data: users } = await supabase.from('Users').select('id, username, code').limit(5);
+    const { data: staff } = await supabase.from('Staff').select('id, full_name').limit(5);
 
-    return NextResponse.json({ data, error });
+    return NextResponse.json({ users, staff });
 }

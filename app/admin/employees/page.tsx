@@ -19,15 +19,8 @@ import { t } from './Employees.i18n';
 
 // 🔧 UI CONFIGURATION
 const SKILL_LEVEL_STYLES = {
-    expert: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-    basic: 'bg-blue-50 text-blue-600 border-blue-100',
-    default: 'bg-amber-50 text-amber-600 border-amber-100',
+    active: 'bg-emerald-50 text-emerald-600 border-emerald-100',
 } as const;
-
-const getSkillStyle = (level: string) =>
-    level === 'expert' ? SKILL_LEVEL_STYLES.expert
-        : level === 'basic' ? SKILL_LEVEL_STYLES.basic
-            : SKILL_LEVEL_STYLES.default;
 
 export default function EmployeeManagementPage() {
     const {
@@ -155,18 +148,18 @@ export default function EmployeeManagementPage() {
                                         </td>
                                         <td className="p-4">
                                             <div className="flex flex-wrap gap-1">
-                                                {emp.skills.shampoo !== 'none' && (
-                                                    <span className={`px-2 py-0.5 text-[10px] rounded border ${getSkillStyle(emp.skills.shampoo)}`}>
+                                                {emp.skills.shampoo && (
+                                                    <span className={`px-2 py-0.5 text-[10px] rounded border ${SKILL_LEVEL_STYLES.active}`}>
                                                         {t.skillShampoo}
                                                     </span>
                                                 )}
-                                                {emp.skills.oilBody !== 'none' && (
-                                                    <span className={`px-2 py-0.5 text-[10px] rounded border ${getSkillStyle(emp.skills.oilBody)}`}>
+                                                {emp.skills.oilBody && (
+                                                    <span className={`px-2 py-0.5 text-[10px] rounded border ${SKILL_LEVEL_STYLES.active}`}>
                                                         {t.skillOilBody}
                                                     </span>
                                                 )}
-                                                {emp.skills.facial !== 'none' && (
-                                                    <span className={`px-2 py-0.5 text-[10px] rounded border ${getSkillStyle(emp.skills.facial)}`}>
+                                                {emp.skills.facial && (
+                                                    <span className={`px-2 py-0.5 text-[10px] rounded border ${SKILL_LEVEL_STYLES.active}`}>
                                                         {t.skillFacial}
                                                     </span>
                                                 )}

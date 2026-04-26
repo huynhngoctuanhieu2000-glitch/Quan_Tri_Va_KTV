@@ -61,7 +61,7 @@ export type StaffData = {
   full_name: string;
   status: string;
   gender: string;
-  skills: Record<string, string>;
+  skills: Record<string, boolean>;
   phone: string;
   position: string;
   avatar_url: string;
