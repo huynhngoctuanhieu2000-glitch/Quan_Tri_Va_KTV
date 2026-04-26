@@ -230,11 +230,25 @@ export async function processDispatch(bookingId: string, dispatchData: {
             }
         }
 
-        // 4. Send background push to KTVs
+        // 4. Send background push and realtime notification to KTVs
         if (dispatchData.staffAssignments && dispatchData.staffAssignments.length > 0) {
             const staffIds = dispatchData.staffAssignments.map(a => a.ktvId).filter(Boolean);
+            
+            // 4a. Insert StaffNotifications for realtime UI updates
+            for (const staffId of staffIds) {
+                await supabase.from('StaffNotifications').insert({
+                    bookingId: bookingId,
+                    employeeId: staffId,
+                    type: 'NEW_ORDER',
+                    message: `Bạn được phân công cho đơn hàng ${bookingId}. Vui lòng kiểm tra ứng dụng.`,
+                    isRead: false
+                });
+            }
+
+            // 4b. Send Push Notification for OS level alerts
             if (staffIds.length > 0) {
-                sendPushNotification({
+                const { sendPushNotification } = await import('@/lib/push-helper');
+                await sendPushNotification({
                     title: 'Bạn có ca làm mới! 💆',
                     message: `Bạn được phân công cho đơn hàng ${bookingId}. Vui lòng kiểm tra ứng dụng.`,
                     targetStaffIds: staffIds,
@@ -524,10 +538,21 @@ export async function createQuickBooking(data: {
 
         if (iError) throw iError;
 
-        // 4. Send background push to Receptionists/Admins
-        sendPushNotification({
+        // 4. Insert Realtime StaffNotification
+        const msg = `Khách ${data.customerName} vừa được tạo đơn. Hãy nhanh chóng điều phối!`;
+        await supabase.from('StaffNotifications').insert({
+            bookingId: bookingId,
+            employeeId: null, // Global cho quầy
+            type: 'NEW_ORDER',
+            message: msg,
+            isRead: false
+        });
+
+        // 5. Send background push to Receptionists/Admins
+        const { sendPushNotification } = await import('@/lib/push-helper');
+        await sendPushNotification({
             title: 'Có Đơn Hàng Mới! 📋',
-            message: `Khách ${data.customerName} vừa được tạo đơn. Hãy nhanh chóng điều phối!`,
+            message: msg,
             targetRoles: ['ADMIN', 'RECEPTIONIST'],
             url: '/reception/dispatch'
         }).catch(err => console.error('Push error:', err));

@@ -159,10 +159,21 @@ export async function confirmWebBooking(bookingId: string) {
 
     if (error) throw error;
 
-    // Notify reception/admin about confirmed booking ready for dispatch
+    const msg = `Đơn ${bookingId} đã được xác nhận. Vui lòng vào Điều Phối để phân công KTV.`;
+    
+    // 1. Insert Realtime StaffNotification for UI Toasts
+    await supabase.from('StaffNotifications').insert({
+        bookingId: bookingId,
+        employeeId: null, // Global cho quầy
+        type: 'NEW_ORDER',
+        message: msg,
+        isRead: false
+    });
+
+    // 2. Notify reception/admin via OS push notification
     sendPushNotification({
       title: '✅ Đơn web đã xác nhận!',
-      message: `Đơn ${bookingId} đã được xác nhận. Vui lòng vào Điều Phối để phân công KTV.`,
+      message: msg,
       targetRoles: ['ADMIN', 'RECEPTIONIST'],
       url: '/reception/dispatch',
     }).catch((err) => console.error('Push error:', err));
