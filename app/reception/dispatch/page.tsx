@@ -1040,10 +1040,10 @@ if (!hasPermission('dispatch_board')) {
     <AppLayout title="Điều Phối">
       <div className="h-[calc(100dvh-3.5rem)] lg:h-[calc(100vh-3rem)] flex flex-col overflow-hidden" style={{ overscrollBehaviorY: 'contain' }}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 shrink-0 mb-2 lg:mb-4 px-1 lg:px-0 mt-1 sm:mt-0">
-          <div className="hidden lg:flex items-center justify-between sm:block">
-            <div>
-              <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 mb-2 lg:mb-4 px-1 lg:px-0 mt-1 sm:mt-0">
+          <div className="flex lg:flex items-center justify-between sm:block w-full sm:w-auto">
+            <div className="w-full">
+              <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight hidden sm:flex items-center gap-3">
                 <span className="hidden lg:inline">Bảng Điều Phối Trung Tâm</span>
                 <div className="hidden sm:flex items-center gap-1 ml-4 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200">
                   <button
@@ -1068,11 +1068,36 @@ if (!hasPermission('dispatch_board')) {
                   </button>
                 </div>
               </h1>
+              
+              {/* Mobile Mode Switcher */}
+              <div className="flex sm:hidden items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200 w-full mb-1">
+                <button
+                  onClick={() => setActiveMode('DISPATCH')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                    activeMode === 'DISPATCH'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <LayoutList size={14} /> Điều Phối
+                </button>
+                <button
+                  onClick={() => setActiveMode('MONITOR')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                    activeMode === 'MONITOR'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Columns3 size={14} /> Giám Sát Đơn
+                </button>
+              </div>
+
               <p className="text-[10px] lg:text-xs text-gray-500 mt-1 font-medium hidden sm:block">{activeMode === 'DISPATCH' ? 'Điều phối KTV & Phòng chuyên nghiệp' : 'Theo dõi tiến trình phục vụ đơn hàng'}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar ml-auto">
+          <div className="flex items-center justify-end gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar w-full sm:w-auto">
             {renderSoundToggle()}
 
             <div className="relative flex-shrink-0 group">
