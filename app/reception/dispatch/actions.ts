@@ -86,6 +86,21 @@ export async function getDispatchData(date: string) {
                 ...b,
                 BookingItems: (items || [])
                     .filter(i => i.bookingId === b.id)
+                    .sort((a, b) => {
+                        const matchA = a.id.match(/-item(\d+)$/);
+                        const matchB = b.id.match(/-item(\d+)$/);
+                        
+                        if (matchA && matchB) {
+                            return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
+                        } else if (matchA && !matchB) {
+                            return 1; // a is add-on, b is original -> a comes after b
+                        } else if (!matchA && matchB) {
+                            return -1; // a is original, b is add-on -> a comes before b
+                        }
+                        
+                        // Both are original items, fallback to localeCompare
+                        return a.id.localeCompare(b.id);
+                    })
                     .map(i => {
                         const sId = String(i.serviceId || '').trim().toLowerCase();
                         const svcInfo = servicesMap[sId];

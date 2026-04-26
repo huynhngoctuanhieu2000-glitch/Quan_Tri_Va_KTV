@@ -288,7 +288,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                     </span>
                                                                 )}
                                                                 {(() => {
-                                                                    const unpaidAmount = order.services.reduce((acc: number, svc: any) => acc + (svc.options?.isPaid === false ? ((svc.price || 0) * (svc.quantity || 1)) : 0), 0);
+                                                                    const unpaidAmount = services.reduce((acc: number, svc: any) => acc + (svc.options?.isPaid === false ? ((svc.price || 0) * (svc.quantity || 1)) : 0), 0);
                                                                     if (unpaidAmount > 0) {
                                                                         return (
                                                                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100 flex items-center gap-1 w-fit">
@@ -301,7 +301,10 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <p className="text-sm font-black text-gray-900 shrink-0">{formatVND(order.totalAmount || 0)}</p>
+                                                    {(() => {
+                                                        const subOrderTotal = services.reduce((acc: number, svc: any) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0);
+                                                        return <p className="text-sm font-black text-gray-900 shrink-0">{formatVND(subOrderTotal)}</p>;
+                                                    })()}
                                                 </div>
 
                                                 <div className="bg-gray-50/50 rounded-xl p-3 space-y-3 mb-4">

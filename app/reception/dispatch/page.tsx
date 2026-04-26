@@ -109,7 +109,7 @@ export default function DispatchBoardPage() {
   const push = usePushNotifications(user?.id);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string } | null>(null);
-  const [expandedSvcId, setExpandedSvcId] = useState<string | null>(null);
+  const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
   // 🔧 QR CONFIGURATION
   const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
   const QR_SIZE = 250;
@@ -879,7 +879,7 @@ if (!hasPermission('dispatch_board')) {
               roomName: allSegments[0]?.roomId || primarySeg?.roomId, 
               bedId: allSegments[0]?.bedId || primarySeg?.bedId,
               technicianCodes: svc.staffList.map(r => r.ktvId).filter(Boolean),
-              status: 'PREPARING', 
+              status: (svc.status && !['NEW', 'WAITING'].includes(svc.status)) ? svc.status : 'PREPARING', 
               segments: allSegments,
               options: {
                   ...(svc.options || {}),
@@ -924,7 +924,7 @@ if (!hasPermission('dispatch_board')) {
                     ...o,
                     services: o.services.map(s => {
                         if (s.id !== specificSvcId) return s;
-                        return { ...s, options: { ...s.options, status: 'PREPARING' } }; // Mark as dispatched visually
+                        return { ...s, options: { ...s.options }, status: (s.status && !['NEW', 'WAITING'].includes(s.status)) ? s.status : 'PREPARING' }; 
                     })
                 };
             }));
@@ -1355,7 +1355,7 @@ if (!hasPermission('dispatch_board')) {
                     // ✅ Cho phép 1 KTV gán cho nhiều DV trong cùng đơn (1KH + 2DV + 1KTV)
 
                     return (
-                      <Reorder.Item key={svc.id} value={svc} dragListener={expandedSvcId !== svc.id}>
+                      <Reorder.Item key={svc.id} value={svc} dragListener={!expandedSvcIds.includes(svc.id)}>
                         <DispatchServiceBlock
                           svc={svc}
                           svcIndex={idx}
@@ -1371,10 +1371,12 @@ if (!hasPermission('dispatch_board')) {
                           onRemoveStaff={removeStaffRow}
                           onRemoveSvc={removeServiceBlock}
                           selectedDate={selectedDate}
-                          isExpanded={expandedSvcId === svc.id}
+                          isExpanded={expandedSvcIds.includes(svc.id)}
                           onToggleExpand={() => {
-                            const isOpening = expandedSvcId !== svc.id;
-                            setExpandedSvcId(isOpening ? svc.id : null);
+                            const isOpening = !expandedSvcIds.includes(svc.id);
+                            setExpandedSvcIds(prev => 
+                                isOpening ? [...prev, svc.id] : prev.filter(id => id !== svc.id)
+                            );
                             
                             // 🕐 Khi MỞ panel → cập nhật startTime cho tất cả segments thành thời gian hiện tại
                             if (isOpening && selectedOrder?.dispatchStatus === 'pending') {
