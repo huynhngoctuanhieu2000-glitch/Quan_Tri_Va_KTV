@@ -171,7 +171,7 @@ export async function confirmWebBooking(bookingId: string) {
     });
 
     // 2. Notify reception/admin via OS push notification
-    sendPushNotification({
+    await sendPushNotification({
       title: '✅ Đơn web đã xác nhận!',
       message: msg,
       targetRoles: ['ADMIN', 'RECEPTIONIST'],
