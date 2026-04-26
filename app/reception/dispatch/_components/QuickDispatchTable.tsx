@@ -59,8 +59,10 @@ export const QuickDispatchTable = ({
 }: QuickDispatchTableProps) => {
 
   const isInitializedRef = useRef(false);
+  // Fingerprint to detect services changes (e.g. after switching from detail mode)
+  const servicesFingerprintRef = useRef('');
 
-  // Group services by serviceName + duration (VD: "Đá nóng_90" vs "Đá nóng_70")
+  // Group services by serviceName + duration
   const initialGroups = useMemo(() => {
     const map = new Map<string, ServiceBlock[]>();
     services.forEach(svc => {
@@ -72,31 +74,44 @@ export const QuickDispatchTable = ({
     return map;
   }, [services]);
 
-  // State per group
-  const [groupStates, setGroupStates] = useState<Map<string, { displayName: string; startTime: string; endTime: string; selectedKtvIds: string[]; note: string; duration: number; }>>(new Map());
+  // State per group (includes selectedRoomIds for manual room pick)
+  type GroupState = {
+    displayName: string; startTime: string; endTime: string;
+    selectedKtvIds: string[]; selectedRoomIds: string[];
+    note: string; duration: number;
+  };
+  const [groupStates, setGroupStates] = useState<Map<string, GroupState>>(new Map());
 
-  // Initialize group states from services — only once on mount
+  // Build fingerprint from current services data
+  const buildFingerprint = (svcs: ServiceBlock[]) =>
+    svcs.map(s => `${s.id}|${s.staffList?.[0]?.ktvId || ''}|${s.staffList?.[0]?.segments?.[0]?.roomId || ''}|${s.staffList?.[0]?.segments?.[0]?.startTime || ''}`).join(';');
+
+  // Initialize / re-initialize group states when services change
   useEffect(() => {
-    if (isInitializedRef.current) return;
-    const newStates = new Map<string, { displayName: string; startTime: string; endTime: string; selectedKtvIds: string[]; note: string; duration: number; }>();
+    const fp = buildFingerprint(services);
+    if (fp === servicesFingerprintRef.current) return;
+    servicesFingerprintRef.current = fp;
+
+    const newStates = new Map<string, GroupState>();
     initialGroups.forEach((items, groupKey) => {
       const duration = items[0]?.duration || 0;
       const existingKtvIds = items.flatMap(item => item.staffList.map(s => s.ktvId)).filter(Boolean);
+      const existingRoomIds = items.map(item => item.staffList?.[0]?.segments?.[0]?.roomId || '');
       const st = items[0]?.staffList?.[0]?.segments?.[0]?.startTime || getCurrentTime();
       newStates.set(groupKey, {
         displayName: items[0]?.options?.displayName || '',
         startTime: st,
         endTime: calcEndTime(st, duration),
         selectedKtvIds: existingKtvIds,
+        selectedRoomIds: existingRoomIds,
         note: items[0]?.staffList?.[0]?.noteForKtv || '',
         duration,
       });
     });
     if (newStates.size > 0) {
       setGroupStates(newStates);
-      isInitializedRef.current = true;
     }
-  }, [initialGroups]);
+  }, [initialGroups, services]);
 
   // All selected KTV IDs across all groups
   const allSelectedKtvIds = useMemo(() => {
@@ -105,27 +120,24 @@ export const QuickDispatchTable = ({
     return ids;
   }, [groupStates]);
 
-  // Get free rooms/beds
-  const getAvailableRoomBed = (excludeBedIds: string[]): { roomId: string; bedId: string } | null => {
+  // Auto-assign first available bed in a room (avoiding duplicates)
+  const getAvailableBedInRoom = (roomId: string, excludeBedIds: string[]): string | null => {
     const allExcluded = [...busyBedIds, ...excludeBedIds];
-    for (const room of rooms) {
-      const roomBeds = beds.filter(b => b.roomId === room.id);
-      for (const bed of roomBeds) {
-        if (!allExcluded.includes(bed.id)) {
-          return { roomId: room.id, bedId: bed.id };
-        }
-      }
+    const roomBeds = beds.filter(b => b.roomId === roomId);
+    for (const bed of roomBeds) {
+      if (!allExcluded.includes(bed.id)) return bed.id;
     }
     return null;
   };
 
   // Sync group states back to parent services
-  const syncToServices = (nextStates: Map<string, { displayName: string; startTime: string; endTime: string; selectedKtvIds: string[]; note: string; duration: number; }>) => {
+  const syncToServices = (nextStates: Map<string, GroupState>) => {
     const updatedServices = [...services];
+    const globalUsedBedIds: string[] = [];
+
     nextStates.forEach((state, groupKey) => {
       const items = initialGroups.get(groupKey);
       if (!items) return;
-      const usedBedIds: string[] = [];
 
       items.forEach((item, idx) => {
         const svcIdx = updatedServices.findIndex(s => s.id === item.id);
@@ -134,13 +146,19 @@ export const QuickDispatchTable = ({
         const ktvId = state.selectedKtvIds[idx] || '';
         const ktvTurn = availableTurns.find(t => t.employee_id === ktvId);
         const ktvName = ktvTurn?.staff?.full_name || ktvId;
-        const roomId = (state as any).selectedRoomIds?.[idx] || null;
-        const bedForRoom = roomId ? beds.find(b => b.roomId === roomId) : null;
+        const roomId = state.selectedRoomIds?.[idx] || null;
+
+        // Auto-pick first available bed in chosen room
+        let bedId: string | null = null;
+        if (roomId) {
+          bedId = getAvailableBedInRoom(roomId, globalUsedBedIds);
+          if (bedId) globalUsedBedIds.push(bedId);
+        }
 
         const segment: WorkSegment = {
           id: updatedServices[svcIdx].staffList?.[0]?.segments?.[0]?.id || `seg-${genId()}`,
           roomId: roomId,
-          bedId: bedForRoom?.id || null,
+          bedId: bedId,
           startTime: state.startTime,
           duration: item.duration,
           endTime: calcEndTime(state.startTime, item.duration),
@@ -174,7 +192,6 @@ export const QuickDispatchTable = ({
       const current = next.get(groupKey);
       if (!current) return prev;
       const updated = { ...current, ...patch };
-      // Auto-calc endTime when startTime changes
       if (patch.startTime) {
         updated.endTime = calcEndTime(patch.startTime, current.duration);
       }
@@ -184,10 +201,12 @@ export const QuickDispatchTable = ({
     pendingSyncRef.current = true;
   };
 
-  // Deferred sync — runs AFTER groupStates has settled
+  // Deferred sync — runs AFTER groupStates has settled (avoids setState-during-render)
   useEffect(() => {
     if (!pendingSyncRef.current) return;
     pendingSyncRef.current = false;
+    // Update fingerprint to match what we're about to push to parent
+    servicesFingerprintRef.current = '___pending___';
     syncToServices(groupStates);
   }, [groupStates]);
 

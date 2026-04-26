@@ -111,7 +111,7 @@ export default function DispatchBoardPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, orderId: string } | null>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
-  const [dispatchMode, setDispatchMode] = useState<'quick' | 'detail'>('detail');
+  const [dispatchMode, setDispatchMode] = useState<'quick' | 'detail'>('quick');
   // 🔧 QR CONFIGURATION
   const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
   const QR_SIZE = 250;
@@ -1306,13 +1306,6 @@ if (!hasPermission('dispatch_board')) {
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Đang điều phối</p>
                     {/* Toggle Quick/Detail */}
                     {(() => {
-                      const nameCounts = new Map<string, number>();
-                      selectedOrder.services.forEach(s => {
-                        if (s.serviceName?.toLowerCase().includes('phòng riêng')) return;
-                        nameCounts.set(s.serviceName, (nameCounts.get(s.serviceName) || 0) + 1);
-                      });
-                      const hasGroupable = [...nameCounts.values()].some(c => c >= 2);
-                      if (!hasGroupable) return null;
                       return (
                         <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5">
                           <button
