@@ -97,6 +97,7 @@ export default function DispatchBoardPage() {
   const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR'>('DISPATCH');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
+  const [editingSvc, setEditingSvc] = useState<{ orderId: string, svcId: string, oldSvcName: string } | null>(null);
   const [showDispatchConfirmModal, setShowDispatchConfirmModal] = useState(false);
   const [svcSearchQuery, setSvcSearchQuery] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
@@ -670,6 +671,66 @@ if (!hasPermission('dispatch_board')) {
     } catch (err) {
         console.error(err);
         alert('Lỗi hệ thống khi thêm dịch vụ!');
+    }
+  };
+
+  const handleEditService = async (newServiceId: string, newServiceName: string, newDuration: number) => {
+    if (!editingSvc) return;
+    const { orderId, svcId, oldSvcName } = editingSvc;
+
+    const isConfirm = confirm(`Xác nhận đổi "${oldSvcName}" thành "${newServiceName}"? Hệ thống sẽ tự tính lại tiền và thời gian kết thúc.`);
+    if (!isConfirm) return;
+
+    try {
+        const { editBookingService } = await import('./actions');
+        // Fetch new service def to be safe
+        let svcDef = allServices.find((s: any) => s.id === newServiceId);
+        if (!svcDef) {
+            alert('Không tìm thấy ID dịch vụ!');
+            return;
+        }
+
+        const res = await editBookingService(orderId, svcId, newServiceId);
+        if (res.success) {
+            const priceDiff = res.priceDiff || 0;
+            const diffMsg = priceDiff > 0 ? `Cần thu thêm: ${priceDiff.toLocaleString()}đ` 
+                          : priceDiff < 0 ? `Cần thối lại: ${Math.abs(priceDiff).toLocaleString()}đ` 
+                          : 'Không chênh lệch giá.';
+            alert(`✅ Đổi dịch vụ thành công!\nTổng tiền mới: ${(res.newTotalAmount || 0).toLocaleString()}đ\n${diffMsg}`);
+            
+            // Cập nhật local state
+            setOrders(prev => prev.map(o => 
+                o.id === orderId ? {
+                    ...o,
+                    totalAmount: res.newTotalAmount,
+                    services: o.services.map(s => s.id === svcId ? {
+                        ...s,
+                        serviceId: newServiceId,
+                        serviceName: res.newServiceName,
+                        duration: res.newDuration,
+                        // Update the end time of segments if we can
+                        staffList: s.staffList.map(st => ({
+                            ...st,
+                            segments: st.segments.map(seg => ({
+                                ...seg,
+                                duration: res.newDuration,
+                                endTime: calcEndTime(seg.startTime, res.newDuration)
+                            }))
+                        }))
+                    } : s)
+                } : o
+            ));
+            
+            setEditingSvc(null);
+            setShowAddSvcModal(false);
+            setSvcSearchQuery('');
+            // fetchData(); // Không bắt buộc vì đã patch state
+        } else {
+            alert('Lỗi đổi dịch vụ: ' + (res.error || 'Unknown error'));
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Lỗi hệ thống khi đổi dịch vụ!');
     }
   };
 
@@ -1440,6 +1501,7 @@ if (!hasPermission('dispatch_board')) {
                             onAddStaff={addStaffRow}
                             onRemoveStaff={removeStaffRow}
                             onRemoveSvc={removeServiceBlock}
+                            onEditSvc={(orderId, svcId) => setEditingSvc({ orderId, svcId, oldSvcName: svc.serviceName })}
                             selectedDate={selectedDate}
                             isExpanded={expandedSvcIds.includes(svc.id)}
                             onToggleExpand={() => {
@@ -1547,14 +1609,14 @@ if (!hasPermission('dispatch_board')) {
 
       {/* Add Svc Modal */}
       <AnimatePresence>
-        {showAddSvcModal && (
+        {(showAddSvcModal || editingSvc) && (
           <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-black/60 backdrop-blur-md" 
-              onClick={() => setShowAddSvcModal(false)} 
+              onClick={() => { setShowAddSvcModal(false); setEditingSvc(null); }} 
             />
             <motion.div 
               initial={{ y: '100%', opacity: 0 }} 
@@ -1565,11 +1627,11 @@ if (!hasPermission('dispatch_board')) {
             >
               <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                 <div>
-                  <h3 className="font-black text-gray-900 text-lg uppercase tracking-tight">Thêm dịch vụ</h3>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Chọn từ danh mục phổ biến</p>
+                  <h3 className="font-black text-gray-900 text-lg uppercase tracking-tight">{editingSvc ? 'Đổi Dịch Vụ' : 'Thêm Dịch Vụ'}</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{editingSvc ? `Đang đổi cho: ${editingSvc.oldSvcName}` : 'Chọn từ danh mục phổ biến'}</p>
                 </div>
                 <button 
-                  onClick={() => setShowAddSvcModal(false)}
+                  onClick={() => { setShowAddSvcModal(false); setEditingSvc(null); }}
                   className="p-3 hover:bg-gray-100 rounded-2xl text-gray-400 transition-colors"
                 >
                   <Plus className="rotate-45" size={24} />
@@ -1599,7 +1661,7 @@ if (!hasPermission('dispatch_board')) {
                     return (
                       <button 
                         key={svc.id} 
-                        onClick={() => addServiceBlock(svc.id, name, dur)} 
+                        onClick={() => editingSvc ? handleEditService(svc.id, name, dur) : addServiceBlock(svc.id, name, dur)} 
                         className="group p-5 text-left border-2 border-gray-100 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/30 transition-all flex items-center justify-between active:scale-[0.98]"
                       >
                         <div>

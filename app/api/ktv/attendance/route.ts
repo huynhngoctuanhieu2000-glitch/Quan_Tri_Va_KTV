@@ -219,14 +219,22 @@ export async function POST(request: Request) {
                     if (!existingTurn) {
                         const { data: maxPosRow } = await supabase
                             .from('TurnQueue')
-                            .select('queue_position, check_in_order')
+                            .select('queue_position')
                             .eq('date', today)
                             .order('queue_position', { ascending: false })
                             .limit(1)
                             .maybeSingle();
 
+                        const { data: maxCheckInRow } = await supabase
+                            .from('TurnQueue')
+                            .select('check_in_order')
+                            .eq('date', today)
+                            .order('check_in_order', { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
+
                         const nextPosition = (maxPosRow?.queue_position ?? 0) + 1;
-                        const nextCheckIn = (maxPosRow?.check_in_order ?? 0) + 1;
+                        const nextCheckIn = (maxCheckInRow?.check_in_order ?? 0) + 1;
 
                         const { error: turnQueueError } = await supabase
                             .from('TurnQueue')

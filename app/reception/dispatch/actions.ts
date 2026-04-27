@@ -717,9 +717,10 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
 
         const nextIndex = (currentItemCount || 0) + 1;
 
+        const timestamp = Date.now();
         const itemsToInsert = detailedItems.map((item, index) => {
             return {
-                id: `${bookingId}-item${nextIndex + index}`,
+                id: `${bookingId}-addon-${timestamp}-${index}`,
                 bookingId: bookingId,
                 serviceId: item.serviceId,
                 quantity: item.qty,
@@ -942,3 +943,145 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
     }
 }
 
+export async function editBookingService(bookingId: string, itemId: string, newServiceId: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        const vnTimeStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+        // 1. Lấy thông tin Booking hiện tại
+        const { data: booking, error: bError } = await supabase
+            .from('Bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .single();
+        if (bError || !booking) throw new Error('Không tìm thấy đơn hàng');
+
+        // 2. Lấy thông tin BookingItem cũ
+        const { data: oldItem, error: iError } = await supabase
+            .from('BookingItems')
+            .select('*')
+            .eq('id', itemId)
+            .single();
+        if (iError || !oldItem) throw new Error('Không tìm thấy dịch vụ cũ');
+
+        // 3. Lấy thông tin Service mới
+        const { data: newService, error: sError } = await supabase
+            .from('Services')
+            .select('*')
+            .eq('id', newServiceId)
+            .single();
+        if (sError || !newService) throw new Error('Không tìm thấy dịch vụ thay thế');
+
+        // 4. Tính toán chênh lệch giá & thời gian
+        const oldPrice = oldItem.price || 0;
+        const newPrice = newService.priceVND || 0;
+        const priceDiff = (newPrice - oldPrice) * (oldItem.quantity || 1);
+        
+        // Thời lượng cũ có thể lưu trong bảng khác hoặc mặc định
+        // Chúng ta tạm dùng duration của newService để thay thế
+        const newDuration = newService.duration || 60;
+        // Thực tế không có duration trong BookingItems, nó được map khi load UI. 
+        // Ta cần tự trừ durationDiff cho TurnQueue nếu nó đang active. Nhưng ta cần biết duration cũ.
+        // Tốt nhất là fetch từ Services theo oldItem.serviceId
+        const { data: oldService } = await supabase
+            .from('Services')
+            .select('duration, nameVN')
+            .eq('id', oldItem.serviceId)
+            .single();
+            
+        const oldDuration = oldService?.duration || 60;
+        const durationDiff = newDuration - oldDuration;
+
+        const oldServiceName = typeof oldService?.nameVN === 'object' ? oldService?.nameVN?.vn || oldService?.nameVN?.en : oldService?.nameVN || 'Dịch vụ cũ';
+        const newServiceName = typeof newService.nameVN === 'object' ? newService.nameVN.vn || newService.nameVN.en : newService.nameVN || 'Dịch vụ mới';
+
+        // 5. Cập nhật BookingItem
+        const { error: updItemError } = await supabase
+            .from('BookingItems')
+            .update({
+                serviceId: newServiceId,
+                price: newPrice
+            })
+            .eq('id', itemId);
+        if (updItemError) throw updItemError;
+
+        // 6. Cập nhật Bookings.totalAmount
+        const newTotalAmount = Math.max(0, (Number(booking.totalAmount) || 0) + priceDiff);
+        const { error: updBookingError } = await supabase
+            .from('Bookings')
+            .update({ 
+                totalAmount: newTotalAmount,
+                updatedAt: vnTimeStr
+            })
+            .eq('id', bookingId);
+        if (updBookingError) throw updBookingError;
+
+        // 7. Cập nhật TurnQueue (nếu đang trong tua)
+        if (booking.technicianCode) {
+            const ktvIds = booking.technicianCode.split(',').map((id: string) => id.trim());
+            for (const ktvId of ktvIds) {
+                const { data: turn } = await supabase
+                    .from('TurnQueue')
+                    .select('*')
+                    .eq('current_order_id', bookingId)
+                    .eq('employee_id', ktvId)
+                    .like('booking_item_id', `%${itemId}%`)
+                    .maybeSingle();
+
+                if (turn && turn.estimated_end_time && durationDiff !== 0) {
+                    const [h, m, s] = turn.estimated_end_time.split(':').map(Number);
+                    const d = new Date();
+                    d.setHours(h, m, s || 0);
+                    d.setMinutes(d.getMinutes() + durationDiff);
+                    
+                    const updatedEndTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+                    
+                    await supabase
+                        .from('TurnQueue')
+                        .update({ estimated_end_time: updatedEndTime })
+                        .eq('id', turn.id);
+                }
+            }
+        }
+
+        // 8. Ghi log Notifications
+        let diffText = priceDiff > 0 ? `Thu thêm ${(priceDiff).toLocaleString()}đ` : priceDiff < 0 ? `Thối lại ${Math.abs(priceDiff).toLocaleString()}đ` : 'Không chênh lệch giá';
+        const notifMsg = `Đổi dịch vụ đơn ${booking.billCode || bookingId}: từ "${oldServiceName}" thành "${newServiceName}". Tính tiền: ${diffText}.`;
+
+        await supabase
+            .from('StaffNotifications')
+            .insert({
+                bookingId: bookingId,
+                type: 'SYSTEM_LOG',
+                message: notifMsg,
+                isRead: false,
+                createdAt: vnTimeStr
+            });
+
+        // 9. Gửi Push Notification (Tùy chọn)
+        try {
+            await sendPushNotification({
+                title: 'Thay đổi dịch vụ đơn hàng',
+                message: notifMsg,
+                targetRoles: ['RECEPTIONIST', 'ADMIN'],
+                url: `/reception/dispatch?bookingId=${bookingId}`
+            });
+        } catch (e) {
+            console.error('Push error on edit service:', e);
+        }
+
+        return { 
+            success: true, 
+            newTotalAmount, 
+            newPrice, 
+            newDuration, 
+            newServiceName,
+            priceDiff
+        };
+    } catch (error: any) {
+        console.error("❌ [Server] Lỗi sửa dịch vụ:", error.message);
+        return { success: false, error: error.message };
+    }
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Plus, AlertTriangle, UserCheck, Trash2 } from 'lucide-react';
+import { Plus, AlertTriangle, UserCheck, Trash2, Pencil } from 'lucide-react';
 import { DispatchStaffRow } from './DispatchStaffRow';
 import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
 
@@ -30,6 +30,7 @@ interface DispatchServiceBlockProps {
     onAddStaff: (orderId: string, svcId: string) => void;
     onRemoveStaff: (orderId: string, svcId: string, rowId: string) => void;
     onRemoveSvc?: (orderId: string, svcId: string) => void;
+    onEditSvc?: (orderId: string, svcId: string) => void;
     selectedDate?: string;
     isExpanded?: boolean;
     onToggleExpand?: () => void;
@@ -38,7 +39,7 @@ interface DispatchServiceBlockProps {
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], usedKtvIds = [], availableTurns,
-    onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc, selectedDate,
+    onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc, onEditSvc, selectedDate,
     isExpanded = true, onToggleExpand, onDispatchSvc
 }: DispatchServiceBlockProps) => {
 
@@ -64,7 +65,19 @@ export const DispatchServiceBlock = ({
                     <span className="hidden sm:inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 lg:gap-3">
+                    {onEditSvc && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onEditSvc(orderId, svc.id);
+                            }}
+                            className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-600 border border-blue-100 rounded-2xl transition-all active:scale-90 shadow-sm"
+                            title="Đổi dịch vụ"
+                        >
+                            <Pencil size={18} strokeWidth={2.5} />
+                        </button>
+                    )}
                     {onRemoveSvc && (
                         <button
                             onClick={(e) => {
