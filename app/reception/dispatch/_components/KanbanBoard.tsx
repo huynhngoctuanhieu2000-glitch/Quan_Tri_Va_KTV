@@ -320,7 +320,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {s.staffList.map((st: any, idx: number) => (
                                                                         <span key={idx} className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
-                                                                            👤 {st.ktvName || 'Chưa gán'}
+                                                                            👤 {st.ktvId || 'Chưa gán'}
                                                                         </span>
                                                                     ))}
                                                                 </div>

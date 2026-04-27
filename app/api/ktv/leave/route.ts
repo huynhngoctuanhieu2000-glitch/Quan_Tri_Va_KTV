@@ -50,31 +50,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, date, reason } = body;
+        const { employeeId, employeeName, date, dates, reason } = body;
 
-        if (!employeeId || !date || !reason) {
-            return NextResponse.json(
-                { success: false, error: 'Missing required fields: employeeId, date, reason' },
-                { status: 400 }
-            );
-        }
+        const targetDates = dates || (date ? [date] : []);
 
-        // ── DEADLINE CHECK: Must register before 19:00 ICT the day before ──
-        // VD: OFF ngày 6/4 → phải đăng ký trước 19h ngày 5/4
-        const nowUtc = new Date();
-        const vnOffsetMs = 7 * 60 * 60 * 1000;
-        const vnNowMs = nowUtc.getTime() + vnOffsetMs;
-        
-        // Parse leave date as VN midnight
-        const [yyyy, mm, dd] = date.split('-').map(Number);
-        const leaveDateVnMidnight = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0)).getTime() - vnOffsetMs;
-        
-        // Deadline = 19:00 ICT the day before = leave date midnight VN - 5 hours in UTC
-        const deadlineMs = leaveDateVnMidnight - (5 * 60 * 60 * 1000); // 24h - 19h = 5h before midnight
-        
-        if (nowUtc.getTime() > deadlineMs) {
+        if (!employeeId || targetDates.length === 0 || !reason) {
             return NextResponse.json(
-                { success: false, error: 'Đã quá hạn đăng ký. Phải đăng ký OFF trước 19h ngày hôm trước.' },
+                { success: false, error: 'Missing required fields: employeeId, date/dates, reason' },
                 { status: 400 }
             );
         }
@@ -84,59 +66,81 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        // Check if employee already requested OFF for this date
-        const { data: existing } = await supabase
-            .from('KTVLeaveRequests')
-            .select('id')
-            .eq('employeeId', employeeId)
-            .eq('date', date)
-            .neq('status', 'REJECTED')
-            .maybeSingle();
+        const nowUtc = new Date();
+        const vnOffsetMs = 7 * 60 * 60 * 1000;
+        
+        const validDates: string[] = [];
+        const errors: string[] = [];
 
-        if (existing) {
+        // Check deadlines and existing requests
+        for (const d of targetDates) {
+            // Parse leave date as VN midnight
+            const [yyyy, mm, dd] = d.split('-').map(Number);
+            const leaveDateVnMidnight = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0)).getTime() - vnOffsetMs;
+            
+            // Deadline = 19:00 ICT the day before = leave date midnight VN - 5 hours in UTC
+            const deadlineMs = leaveDateVnMidnight - (5 * 60 * 60 * 1000);
+            
+            if (nowUtc.getTime() > deadlineMs) {
+                errors.push(`Ngày ${d} đã quá hạn đăng ký (trước 19h hôm trước).`);
+                continue;
+            }
+
+            // Check if existing
+            const { data: existing } = await supabase
+                .from('KTVLeaveRequests')
+                .select('id')
+                .eq('employeeId', employeeId)
+                .eq('date', d)
+                .neq('status', 'REJECTED')
+                .maybeSingle();
+
+            if (existing) {
+                errors.push(`Ngày ${d} đã đăng ký OFF rồi.`);
+                continue;
+            }
+
+            validDates.push(d);
+        }
+
+        if (validDates.length === 0) {
             return NextResponse.json(
-                { success: false, error: 'Bạn đã đăng ký OFF cho ngày này rồi.' },
-                { status: 409 }
+                { success: false, error: errors.join(' ') || 'Không có ngày hợp lệ nào.' },
+                { status: 400 }
             );
         }
 
-        // Insert leave request
-        const { data: record, error: insertError } = await supabase
+        // Insert valid requests
+        const insertPayloads = validDates.map(d => ({
+            employeeId,
+            employeeName: employeeName || employeeId,
+            date: d,
+            reason,
+            status: 'PENDING'
+        }));
+
+        const { data: records, error: insertError } = await supabase
             .from('KTVLeaveRequests')
-            .insert({
-                employeeId,
-                employeeName: employeeName || employeeId,
-                date,
-                reason,
-                status: 'PENDING',
-            })
-            .select()
-            .single();
+            .insert(insertPayloads)
+            .select();
 
         if (insertError) {
             console.error('❌ [Leave POST] Insert error:', insertError);
             return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
 
-        // Send notification to admin/reception
-        const notifMessage = `📋 ${employeeName || employeeId} đăng ký OFF ngày ${date} (Lý do: ${reason})`;
-        
+        // Send notification
+        const notifMessage = `📋 ${employeeName || employeeId} đăng ký OFF ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
         const { error: notifError } = await supabase
             .from('StaffNotifications')
-            .insert({
-                type: 'CHECK_IN',
-                message: notifMessage,
-            });
+            .insert({ type: 'CHECK_IN', message: notifMessage });
 
-        if (notifError) {
-            console.error('❌ [Leave] StaffNotifications insert FAILED:', JSON.stringify(notifError));
-        }
-
-        console.log(`✅ [Leave] ${employeeName} requested OFF on ${date}`);
+        if (notifError) console.error('❌ [Leave] StaffNotifications insert FAILED:', notifError);
 
         return NextResponse.json({
             success: true,
-            data: record,
+            data: records,
+            errors: errors.length > 0 ? errors : undefined
         });
 
     } catch (error: any) {

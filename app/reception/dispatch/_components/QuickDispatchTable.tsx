@@ -515,7 +515,7 @@ const ServiceGroupCard = ({
                   {filteredTurns.map(turn => { const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true; const isUsed = allSelectedKtvIds.includes(turn.employee_id) && !state.selectedKtvIds.includes(turn.employee_id); return (
                     <div key={turn.employee_id} onClick={() => { if (!isUsed) addKtv(turn.employee_id); }}
                       className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center justify-between ${isUsed ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-indigo-50 active:scale-[0.98]'} ${!hasSkill ? 'text-gray-400' : 'text-gray-700'}`}>
-                      <div className="flex items-center gap-2"><span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span><span>[{turn.employee_id}] {turn.staff?.full_name}</span></div>
+                      <div className="flex items-center gap-2"><span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span><span>{turn.employee_id}</span></div>
                       <span className={`text-[10px] font-semibold ${turn.status === 'working' ? 'text-amber-500' : 'text-emerald-500'}`}>{isUsed ? '🚫 Đã gán nhóm khác' : turn.status === 'working' ? `⌛ Đến ${turn.estimated_end_time || '--:--'}` : '✅ Sẵn sàng'}</span>
                     </div>); })}
                   {ktvSearch.trim() && !availableTurns.some(t => t.employee_id.toLowerCase() === ktvSearch.trim().toLowerCase() || t.staff?.full_name?.toLowerCase() === ktvSearch.trim().toLowerCase()) && (

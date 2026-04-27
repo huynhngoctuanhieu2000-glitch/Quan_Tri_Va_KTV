@@ -53,7 +53,7 @@ export const useKTVSchedule = () => {
 
     // ── OFF state ──
     const [reason, setReason] = useState('');
-    const [date, setDate] = useState('');
+    const [dates, setDates] = useState<string[]>(['']);
     const [isSubmittingOff, setIsSubmittingOff] = useState(false);
     const [leaveList, setLeaveList] = useState<LeaveRequest[]>([]);
     const [isLoadingLeaves, setIsLoadingLeaves] = useState(true);
@@ -158,7 +158,8 @@ export const useKTVSchedule = () => {
     // ── Submit OFF request ──
     const handleSubmitOff = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!date || !reason || !user?.id) return;
+        const validDates = dates.filter(d => d.trim() !== '');
+        if (validDates.length === 0 || !reason || !user?.id) return;
 
         setIsSubmittingOff(true);
         setOffError(null);
@@ -171,7 +172,7 @@ export const useKTVSchedule = () => {
                 body: JSON.stringify({
                     employeeId: user.id,
                     employeeName: user.name || user.id,
-                    date,
+                    dates: validDates,
                     reason,
                 }),
             });
@@ -185,7 +186,7 @@ export const useKTVSchedule = () => {
 
             setOffSuccess(true);
             setReason('');
-            setDate('');
+            setDates(['']);
             fetchLeaveList();
             setTimeout(() => setOffSuccess(false), 3000);
         } catch (err: any) {
@@ -244,14 +245,15 @@ export const useKTVSchedule = () => {
 
         // OFF
         reason,
-        date,
+        dates,
         isSubmittingOff,
         leaveList,
         isLoadingLeaves,
         offError,
         offSuccess,
+        setOffSuccess,
         setReason,
-        setDate,
+        setDates,
         setOffError,
         handleSubmitOff,
 

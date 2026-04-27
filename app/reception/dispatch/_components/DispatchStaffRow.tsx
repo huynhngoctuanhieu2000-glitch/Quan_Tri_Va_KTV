@@ -184,7 +184,7 @@ export const DispatchStaffRow = ({
                             <input
                                 type="text"
                                 placeholder="— Nhập tên hoặc mã KTV —"
-                                value={isDropdownOpen ? searchQuery : (row.ktvId ? (row.ktvId === row.ktvName ? row.ktvName : `[${row.ktvId}] ${row.ktvName}`) : '')}
+                                value={isDropdownOpen ? searchQuery : (row.ktvId ? row.ktvId : '')}
                                 onChange={(e) => {
                                     setSearchQuery(e.target.value);
                                     if (!isDropdownOpen) setIsDropdownOpen(true);
@@ -252,7 +252,7 @@ export const DispatchStaffRow = ({
                                                         <div className="flex items-center justify-between">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span>
-                                                                <span>[{turn.employee_id}] {turn.staff?.full_name}</span>
+                                                                <span>{turn.employee_id}</span>
                                                             </div>
                                                         </div>
                                                         <div className="text-[10px] font-semibold flex gap-2">

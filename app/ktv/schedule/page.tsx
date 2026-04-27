@@ -123,8 +123,8 @@ const KTVSchedulePage = () => {
 
 const OffTab = ({ logic }: { logic: ReturnType<typeof useKTVSchedule> }) => {
     const {
-        reason, date, isSubmittingOff, leaveList, isLoadingLeaves,
-        offError, offSuccess, setReason, setDate, setOffError, handleSubmitOff,
+        reason, dates, isSubmittingOff, leaveList, isLoadingLeaves,
+        offError, offSuccess, setReason, setDates, setOffError, handleSubmitOff,
     } = logic;
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -143,16 +143,42 @@ const OffTab = ({ logic }: { logic: ReturnType<typeof useKTVSchedule> }) => {
                     {/* Date picker */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">{t.labelDate}</label>
-                        <div className="relative">
-                            <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <input
-                                type="date"
-                                value={date}
-                                min={todayStr}
-                                onChange={(e) => setDate(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-400 focus:border-rose-400 outline-none text-sm bg-gray-50"
-                                required
-                            />
+                        <div className="space-y-2">
+                            {dates.map((d, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                        <input
+                                            type="date"
+                                            value={d}
+                                            min={todayStr}
+                                            onChange={(e) => {
+                                                const newDates = [...dates];
+                                                newDates[idx] = e.target.value;
+                                                setDates(newDates);
+                                            }}
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-400 focus:border-rose-400 outline-none text-sm bg-gray-50"
+                                            required
+                                        />
+                                    </div>
+                                    {dates.length > 1 && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setDates(dates.filter((_, i) => i !== idx))}
+                                            className="text-red-400 hover:text-red-600 p-2 rounded-xl transition-colors shrink-0 bg-red-50"
+                                        >
+                                            <XCircle size={20} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => setDates([...dates, ''])}
+                                className="text-sm font-bold text-rose-600 flex items-center gap-1 mt-2 px-2 hover:opacity-80"
+                            >
+                                + Thêm ngày khác
+                            </button>
                         </div>
                     </div>
 
@@ -201,7 +227,7 @@ const OffTab = ({ logic }: { logic: ReturnType<typeof useKTVSchedule> }) => {
                     {/* Submit button */}
                     <button
                         type="submit"
-                        disabled={isSubmittingOff || !date || !reason}
+                        disabled={isSubmittingOff || dates.filter(d => d.trim() !== '').length === 0 || !reason}
                         className="w-full py-3.5 bg-rose-600 text-white font-bold rounded-2xl hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-md shadow-rose-200"
                     >
                         {isSubmittingOff ? (
