@@ -140,10 +140,10 @@ export const useLeaveManagement = () => {
     }, [dateRange]);
 
     useEffect(() => {
-        if (mounted && canAccessPage) {
+        if (mounted) {
             fetchLeaveList();
         }
-    }, [mounted, canAccessPage, fetchLeaveList]);
+    }, [mounted, fetchLeaveList]);
 
     // Reset offset when view mode changes
     const changeViewMode = useCallback((mode: ViewMode) => {
