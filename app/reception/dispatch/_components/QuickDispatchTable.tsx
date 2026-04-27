@@ -480,8 +480,8 @@ const ServiceGroupCard = ({
   const getBadgeBg = (i: number) => ['bg-indigo-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-cyan-500'][i % 5];
 
   return (<>
-    <div className="border border-gray-100 rounded-3xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all">
-      <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+    <div className="border border-gray-100 rounded-3xl overflow-visible bg-white shadow-sm hover:shadow-md transition-all">
+      <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl">
         <div className="flex items-center gap-2">
           <h3 className="font-black text-gray-900 text-sm">{serviceName}</h3>
           <span className="bg-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-xl">x{count}</span>
