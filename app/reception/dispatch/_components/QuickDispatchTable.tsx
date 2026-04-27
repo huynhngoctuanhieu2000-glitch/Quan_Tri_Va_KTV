@@ -4,7 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Printer, X, ChevronDown, Plus, Clock } from 'lucide-react';
 import { ServiceBlock, StaffData, TurnQueueData, WorkSegment } from '../types';
 
-// 🔧 UI CONFIGURATION
+// 🛠 UI CONFIGURATION
 const TAG_COLORS = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700', 'bg-cyan-100 text-cyan-700'];
 
 interface Room { id: string; name: string; type: string; }
@@ -14,10 +14,13 @@ interface ServiceGroup {
   serviceName: string;
   items: ServiceBlock[];
   displayName: string;
-  startTime: string;
-  endTime: string;
   selectedKtvIds: string[];
+  selectedRoomIds: string[];
+  ktvStartTimes: string[];
+  ktvEndTimes: string[];
+  ktvNotes: string[];
   note: string;
+  duration: number;
 }
 
 interface QuickDispatchTableProps {
@@ -74,17 +77,19 @@ export const QuickDispatchTable = ({
     return map;
   }, [services]);
 
-  // State per group (includes selectedRoomIds for manual room pick)
+  // State per group (includes per-KTV times, rooms, durations)
   type GroupState = {
-    displayName: string; startTime: string; endTime: string;
+    displayName: string;
     selectedKtvIds: string[]; selectedRoomIds: string[];
+    ktvStartTimes: string[]; ktvEndTimes: string[];
+    ktvDurations: number[]; ktvNotes: string[]; ktvBedIds: string[];
     note: string; duration: number;
   };
   const [groupStates, setGroupStates] = useState<Map<string, GroupState>>(new Map());
 
   // Build fingerprint from current services data
   const buildFingerprint = (svcs: ServiceBlock[]) =>
-    svcs.map(s => `${s.id}|${s.staffList?.[0]?.ktvId || ''}|${s.staffList?.[0]?.segments?.[0]?.roomId || ''}|${s.staffList?.[0]?.segments?.[0]?.startTime || ''}`).join(';');
+    svcs.map(s => `${s.id}|${s.staffList?.map(st => `${st.ktvId}:${st.segments?.[0]?.roomId || ''}:${st.segments?.[0]?.startTime || ''}`).join(',')}`).join(';');
 
   // Initialize / re-initialize group states when services change
   useEffect(() => {
@@ -92,18 +97,52 @@ export const QuickDispatchTable = ({
     if (fp === servicesFingerprintRef.current) return;
     servicesFingerprintRef.current = fp;
 
+    const defaultTime = getCurrentTime();
     const newStates = new Map<string, GroupState>();
     initialGroups.forEach((items, groupKey) => {
       const duration = items[0]?.duration || 0;
-      const existingKtvIds = items.flatMap(item => item.staffList.map(s => s.ktvId)).filter(Boolean);
-      const existingRoomIds = items.map(item => item.staffList?.[0]?.segments?.[0]?.roomId || '');
-      const st = items[0]?.staffList?.[0]?.segments?.[0]?.startTime || getCurrentTime();
+      // Collect all KTVs across all items (including multi-staff per item)
+      const ktvIds: string[] = [];
+      const roomIds: string[] = [];
+      const startTimes: string[] = [];
+      const endTimes: string[] = [];
+      const ktvNotesList: string[] = [];
+      const bedIdsList: string[] = [];
+      items.forEach(item => {
+        if (item.staffList.length > 0) {
+          item.staffList.forEach(staff => {
+            if (staff.ktvId) {
+              ktvIds.push(staff.ktvId);
+              roomIds.push(staff.segments?.[0]?.roomId || '');
+              startTimes.push(staff.segments?.[0]?.startTime || defaultTime);
+              endTimes.push(staff.segments?.[0]?.endTime || calcEndTime(staff.segments?.[0]?.startTime || defaultTime, duration));
+              ktvNotesList.push(staff.noteForKtv || '');
+              bedIdsList.push(staff.segments?.[0]?.bedId || '');
+            }
+          });
+        }
+      });
+      if (ktvIds.length === 0) {
+        startTimes.push(defaultTime);
+        endTimes.push(calcEndTime(defaultTime, duration));
+      }
       newStates.set(groupKey, {
         displayName: items[0]?.options?.displayName || '',
-        startTime: st,
-        endTime: calcEndTime(st, duration),
-        selectedKtvIds: existingKtvIds,
-        selectedRoomIds: existingRoomIds,
+        selectedKtvIds: ktvIds,
+        selectedRoomIds: roomIds,
+        ktvStartTimes: startTimes,
+        ktvEndTimes: endTimes,
+        ktvDurations: ktvIds.map((_, i) => {
+          const st = startTimes[i] || defaultTime;
+          const et = endTimes[i] || '';
+          if (!st || !et) return duration;
+          const [sh, sm] = st.split(':').map(Number);
+          const [eh, em] = et.split(':').map(Number);
+          const diff = (eh * 60 + em) - (sh * 60 + sm);
+          return diff > 0 ? diff : duration;
+        }),
+        ktvNotes: ktvNotesList,
+        ktvBedIds: bedIdsList,
         note: items[0]?.staffList?.[0]?.noteForKtv || '',
         duration,
       });
@@ -138,47 +177,63 @@ export const QuickDispatchTable = ({
     nextStates.forEach((state, groupKey) => {
       const items = initialGroups.get(groupKey);
       if (!items) return;
+      const ktvCount = state.selectedKtvIds.length;
+      const itemCount = items.length;
 
-      items.forEach((item, idx) => {
-        const svcIdx = updatedServices.findIndex(s => s.id === item.id);
-        if (svcIdx === -1) return;
-
-        const ktvId = state.selectedKtvIds[idx] || '';
-        const ktvTurn = availableTurns.find(t => t.employee_id === ktvId);
-        const ktvName = ktvTurn?.staff?.full_name || ktvId;
-        const roomId = state.selectedRoomIds?.[idx] || null;
-
-        // Auto-pick first available bed in chosen room
-        let bedId: string | null = null;
-        if (roomId) {
-          bedId = getAvailableBedInRoom(roomId, globalUsedBedIds);
-          if (bedId) globalUsedBedIds.push(bedId);
-        }
-
-        const segment: WorkSegment = {
-          id: updatedServices[svcIdx].staffList?.[0]?.segments?.[0]?.id || `seg-${genId()}`,
-          roomId: roomId,
-          bedId: bedId,
-          startTime: state.startTime,
-          duration: item.duration,
-          endTime: calcEndTime(state.startTime, item.duration),
-        };
-
-        updatedServices[svcIdx] = {
-          ...updatedServices[svcIdx],
-          staffList: [{
-            id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`,
-            ktvId,
-            ktvName,
-            segments: [segment],
-            noteForKtv: state.note,
-          }],
-          options: {
-            ...updatedServices[svcIdx].options,
-            displayName: state.displayName || undefined,
-          },
-        };
-      });
+      if (ktvCount <= itemCount) {
+        // Normal: 1 KTV per service item
+        items.forEach((item, idx) => {
+          const svcIdx = updatedServices.findIndex(s => s.id === item.id);
+          if (svcIdx === -1) return;
+          const ktvId = state.selectedKtvIds[idx] || '';
+          const ktvTurn = availableTurns.find(t => t.employee_id === ktvId);
+          const ktvName = ktvTurn?.staff?.full_name || ktvId;
+          const roomId = state.selectedRoomIds?.[idx] || null;
+          let bedId: string | null = null;
+          if (roomId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
+          const st = state.ktvStartTimes?.[idx] || getCurrentTime();
+          const segment: WorkSegment = {
+            id: updatedServices[svcIdx].staffList?.[0]?.segments?.[0]?.id || `seg-${genId()}`,
+            roomId, bedId, startTime: st, duration: item.duration,
+            endTime: state.ktvEndTimes?.[idx] || calcEndTime(st, item.duration),
+          };
+          updatedServices[svcIdx] = {
+            ...updatedServices[svcIdx],
+            staffList: [{ id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`, ktvId, ktvName, segments: [segment], noteForKtv: state.ktvNotes?.[idx] || state.note || '' }],
+            options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
+          };
+        });
+      } else {
+        // Multi-KTV per service: distribute KTVs across items, extras go as additional staffList entries
+        items.forEach((item, itemIdx) => {
+          const svcIdx = updatedServices.findIndex(s => s.id === item.id);
+          if (svcIdx === -1) return;
+          // Find which KTVs belong to this item
+          const staffEntries: { ktvId: string; ktvName: string; roomId: string | null; bedId: string | null; startTime: string; endTime: string; }[] = [];
+          // Each item gets at least 1 KTV, extras distributed round-robin
+          for (let ki = 0; ki < ktvCount; ki++) {
+            if (ki % itemCount !== itemIdx) continue;
+            const ktvId = state.selectedKtvIds[ki] || '';
+            const ktvTurn = availableTurns.find(t => t.employee_id === ktvId);
+            const ktvName = ktvTurn?.staff?.full_name || ktvId;
+            const roomId = state.selectedRoomIds?.[ki] || null;
+            let bedId: string | null = null;
+            if (roomId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
+            const st = state.ktvStartTimes?.[ki] || getCurrentTime();
+            staffEntries.push({ ktvId, ktvName, roomId, bedId, startTime: st, endTime: state.ktvEndTimes?.[ki] || calcEndTime(st, item.duration) });
+          }
+          updatedServices[svcIdx] = {
+            ...updatedServices[svcIdx],
+            staffList: staffEntries.map((e, si) => ({
+              id: updatedServices[svcIdx].staffList?.[si]?.id || `st-${item.id}-${e.ktvId}`,
+              ktvId: e.ktvId, ktvName: e.ktvName,
+              segments: [{ id: updatedServices[svcIdx].staffList?.[si]?.segments?.[0]?.id || `seg-${genId()}`, roomId: e.roomId, bedId: e.bedId, startTime: e.startTime, duration: item.duration, endTime: e.endTime }],
+              noteForKtv: state.ktvNotes?.[staffEntries.indexOf(e)] || state.note || '',
+            })),
+            options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
+          };
+        });
+      }
     });
     onUpdateServices(updatedServices);
   };
@@ -186,22 +241,19 @@ export const QuickDispatchTable = ({
   // Track user-driven changes for deferred sync
   const pendingSyncRef = useRef(false);
 
-  const updateGroup = (groupKey: string, patch: Partial<{ displayName: string; startTime: string; endTime: string; selectedKtvIds: string[]; note: string; selectedRoomIds: string[]; }>) => {
+  const updateGroup = (groupKey: string, patch: Partial<GroupState>) => {
     setGroupStates(prev => {
       const next = new Map(prev);
       const current = next.get(groupKey);
       if (!current) return prev;
       const updated = { ...current, ...patch };
-      if (patch.startTime) {
-        updated.endTime = calcEndTime(patch.startTime, current.duration);
-      }
       next.set(groupKey, updated);
       return next;
     });
     pendingSyncRef.current = true;
   };
 
-  // Deferred sync — runs AFTER groupStates has settled (avoids setState-during-render)
+  // Deferred sync â€” runs AFTER groupStates has settled (avoids setState-during-render)
   useEffect(() => {
     if (!pendingSyncRef.current) return;
     pendingSyncRef.current = false;
@@ -261,6 +313,7 @@ export const QuickDispatchTable = ({
             allSelectedKtvIds={allSelectedKtvIds}
             rooms={rooms}
             beds={beds}
+            busyBedIds={busyBedIds}
             onUpdate={(patch) => updateGroup(groupKey, patch)}
             onPrint={() => onPrintGroup({ serviceName: displayServiceName, items, ...state })}
             customerReqs={customerReqs}
@@ -271,26 +324,30 @@ export const QuickDispatchTable = ({
   );
 };
 
-// ─── Service Group Card ──────────────────────────────────────────
+
+// --- Service Group Card ---
 
 interface ServiceGroupCardProps {
   serviceName: string;
   count: number;
   duration: number;
-  state: { displayName: string; startTime: string; endTime: string; selectedKtvIds: string[]; note: string; selectedRoomIds?: string[]; };
+  state: { displayName: string; selectedKtvIds: string[]; selectedRoomIds?: string[]; ktvStartTimes?: string[]; ktvEndTimes?: string[]; ktvDurations?: number[]; ktvNotes?: string[]; ktvBedIds?: string[]; note: string; duration: number; };
   targetSkill: string | null;
   availableTurns: (TurnQueueData & { staff?: StaffData })[];
   allSelectedKtvIds: string[];
   rooms: Room[];
   beds: Bed[];
-  onUpdate: (patch: Partial<{ displayName: string; startTime: string; endTime: string; selectedKtvIds: string[]; note: string; selectedRoomIds: string[]; }>) => void;
+  busyBedIds: string[];
+  onUpdate: (patch: Record<string, unknown>) => void;
   onPrint: () => void;
   customerReqs?: { genderReq?: string; strength?: string; focus?: string; avoid?: string; customerNote?: string; };
 }
 
+const MAX_KTV_PER_GROUP = 10;
+
 const ServiceGroupCard = ({
   serviceName, count, duration, state, targetSkill,
-  availableTurns, allSelectedKtvIds, rooms, beds, onUpdate, onPrint, customerReqs
+  availableTurns, allSelectedKtvIds, rooms, beds, busyBedIds, onUpdate, onPrint, customerReqs
 }: ServiceGroupCardProps) => {
   const [isKtvDropdownOpen, setIsKtvDropdownOpen] = useState(false);
   const [ktvSearch, setKtvSearch] = useState('');
@@ -299,10 +356,7 @@ const ServiceGroupCard = ({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsKtvDropdownOpen(false);
-        setKtvSearch('');
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) { setIsKtvDropdownOpen(false); setKtvSearch(''); }
     };
     if (isKtvDropdownOpen) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -311,325 +365,241 @@ const ServiceGroupCard = ({
   const removeKtv = (ktvId: string) => {
     const idx = state.selectedKtvIds.indexOf(ktvId);
     const newRoomIds = [...(state.selectedRoomIds || [])];
-    if (idx >= 0) newRoomIds.splice(idx, 1);
-    onUpdate({ selectedKtvIds: state.selectedKtvIds.filter(id => id !== ktvId), selectedRoomIds: newRoomIds });
+    const newStarts = [...(state.ktvStartTimes || [])];
+    const newEnds = [...(state.ktvEndTimes || [])];
+    const newDurs = [...(state.ktvDurations || [])];
+    const newNotes = [...(state.ktvNotes || [])];
+    const newBeds = [...(state.ktvBedIds || [])];
+    if (idx >= 0) { newRoomIds.splice(idx, 1); newStarts.splice(idx, 1); newEnds.splice(idx, 1); newDurs.splice(idx, 1); newNotes.splice(idx, 1); newBeds.splice(idx, 1); }
+    onUpdate({ selectedKtvIds: state.selectedKtvIds.filter(id => id !== ktvId), selectedRoomIds: newRoomIds, ktvStartTimes: newStarts, ktvEndTimes: newEnds, ktvDurations: newDurs, ktvNotes: newNotes, ktvBedIds: newBeds });
   };
 
   const addKtv = (ktvId: string) => {
-    if (state.selectedKtvIds.length >= count) return;
-    onUpdate({ selectedKtvIds: [...state.selectedKtvIds, ktvId] });
+    if (state.selectedKtvIds.length >= MAX_KTV_PER_GROUP) return;
+    const defaultStart = (state.ktvStartTimes || [])[0] || getCurrentTime();
+    const defaultEnd = calcEndTime(defaultStart, duration);
+    onUpdate({ selectedKtvIds: [...state.selectedKtvIds, ktvId], ktvStartTimes: [...(state.ktvStartTimes || []), defaultStart], ktvEndTimes: [...(state.ktvEndTimes || []), defaultEnd], ktvDurations: [...(state.ktvDurations || []), duration], ktvNotes: [...(state.ktvNotes || []), ''], ktvBedIds: [...(state.ktvBedIds || []), ''] });
     setKtvSearch('');
-    if (state.selectedKtvIds.length + 1 >= count) setIsKtvDropdownOpen(false);
   };
 
   const updateRoomForIdx = (idx: number, roomId: string) => {
-    const newRoomIds = [...(state.selectedRoomIds || [])];
-    while (newRoomIds.length <= idx) newRoomIds.push('');
-    newRoomIds[idx] = roomId;
-    onUpdate({ selectedRoomIds: newRoomIds });
+    const arr = [...(state.selectedRoomIds || [])]; while (arr.length <= idx) arr.push(''); arr[idx] = roomId;
+    // Auto-assign bed
+    const bedArr = [...(state.ktvBedIds || [])]; while (bedArr.length <= idx) bedArr.push('');
+    if (roomId) {
+      const usedBeds = bedArr.filter((_, i) => i !== idx).filter(Boolean);
+      const roomBeds = beds.filter(b => b.roomId === roomId);
+      const allExcluded = [...busyBedIds, ...usedBeds];
+      const freeBed = roomBeds.find(b => !allExcluded.includes(b.id));
+      bedArr[idx] = freeBed?.id || '';
+    } else {
+      bedArr[idx] = '';
+    }
+    onUpdate({ selectedRoomIds: arr, ktvBedIds: bedArr });
   };
 
-  const filteredTurns = availableTurns
-    .filter(t => t.status !== 'off')
-    .filter(t => !state.selectedKtvIds.includes(t.employee_id))
-    .filter(t => {
-      if (!ktvSearch) return true;
-      const term = ktvSearch.toLowerCase();
-      return t.employee_id.toLowerCase().includes(term) || (t.staff?.full_name || '').toLowerCase().includes(term);
-    });
+  const updateNoteForIdx = (idx: number, note: string) => {
+    const arr = [...(state.ktvNotes || [])]; while (arr.length <= idx) arr.push(''); arr[idx] = note; onUpdate({ ktvNotes: arr });
+  };
 
-  const isFull = state.selectedKtvIds.length >= count;
+  // Duration presets for sequential split (always include full service duration)
+  const DURATION_PRESETS = [30, 45, 60, 70, 90, 120].filter(d => d <= duration);
+
+  const isSequentialMode = state.selectedKtvIds.length > count;
+
+  const updateDurationForIdx = (idx: number, newDur: number) => {
+    const durations = [...(state.ktvDurations || state.selectedKtvIds.map(() => duration))];
+    const starts = [...(state.ktvStartTimes || [])];
+    const ends = [...(state.ktvEndTimes || [])];
+    while (durations.length <= idx) durations.push(duration);
+    while (starts.length <= idx) starts.push(getCurrentTime());
+    while (ends.length <= idx) ends.push('');
+
+    durations[idx] = newDur;
+    ends[idx] = calcEndTime(starts[idx], newDur);
+
+    // Chain subsequent KTVs: each starts where previous ends
+    for (let i = idx + 1; i < state.selectedKtvIds.length; i++) {
+      while (durations.length <= i) durations.push(0);
+      while (starts.length <= i) starts.push('');
+      while (ends.length <= i) ends.push('');
+      starts[i] = ends[i - 1];
+      // Remaining = total - sum of all previous
+      const usedSoFar = durations.slice(0, i).reduce((a, b) => a + b, 0);
+      durations[i] = Math.max(0, duration - usedSoFar);
+      ends[i] = calcEndTime(starts[i], durations[i]);
+    }
+    onUpdate({ ktvDurations: durations, ktvStartTimes: starts, ktvEndTimes: ends });
+  };
+
+  const updateTimeForIdx = (idx: number, field: 'start' | 'end', value: string) => {
+    if (field === 'start') {
+      const s = [...(state.ktvStartTimes || [])]; const e = [...(state.ktvEndTimes || [])];
+      const d = [...(state.ktvDurations || state.selectedKtvIds.map(() => duration))];
+      while (s.length <= idx) s.push(getCurrentTime()); while (e.length <= idx) e.push('');
+      while (d.length <= idx) d.push(duration);
+      s[idx] = value; e[idx] = calcEndTime(value, d[idx]);
+      // Chain next KTVs
+      for (let i = idx + 1; i < state.selectedKtvIds.length; i++) {
+        while (s.length <= i) s.push(''); while (e.length <= i) e.push('');
+        while (d.length <= i) d.push(0);
+        s[i] = e[i - 1];
+        e[i] = calcEndTime(s[i], d[i]);
+      }
+      onUpdate({ ktvStartTimes: s, ktvEndTimes: e, ktvDurations: d });
+    } else {
+      const e = [...(state.ktvEndTimes || [])]; while (e.length <= idx) e.push(''); e[idx] = value; onUpdate({ ktvEndTimes: e });
+    }
+  };
+
+  const filteredTurns = availableTurns.filter(t => t.status !== 'off').filter(t => !state.selectedKtvIds.includes(t.employee_id)).filter(t => {
+    if (!ktvSearch) return true; const term = ktvSearch.toLowerCase();
+    return t.employee_id.toLowerCase().includes(term) || (t.staff?.full_name || '').toLowerCase().includes(term);
+  });
+
   const dateFormatted = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const getBadgeBg = (i: number) => ['bg-indigo-500','bg-emerald-500','bg-amber-500','bg-rose-500','bg-cyan-500'][i % 5];
 
-  // Color for KTV badge background
-  const getBadgeBg = (idx: number) => {
-    const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500'];
-    return colors[idx % colors.length];
-  };
-
-  return (
-    <>
+  return (<>
     <div className="border border-gray-100 rounded-3xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all">
-      {/* Header */}
       <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <h3 className="font-black text-gray-900 text-sm">{serviceName}</h3>
           <span className="bg-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-xl">x{count}</span>
           <span className="text-xs text-gray-400 font-bold">{duration}p</span>
+          {state.selectedKtvIds.length > count && <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-amber-200">+{state.selectedKtvIds.length - count} nối tiếp</span>}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-gray-400 font-bold shrink-0">Tên in phiếu:</span>
-          <input
-            type="text"
-            value={state.displayName}
-            onChange={e => onUpdate({ displayName: e.target.value })}
-            placeholder={serviceName}
-            className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-bold w-40 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none bg-white"
-          />
+          <input type="text" value={state.displayName} onChange={e => onUpdate({ displayName: e.target.value })} placeholder={serviceName}
+            className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-bold w-40 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none bg-white" />
         </div>
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Time Row */}
-        <div className="flex items-center gap-3 bg-indigo-50/70 rounded-2xl px-4 py-3 border border-indigo-100/50">
-          <Clock size={14} className="text-indigo-500 shrink-0" />
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-indigo-600 uppercase">Bắt đầu</span>
-            <input
-              type="time"
-              value={state.startTime}
-              onChange={e => onUpdate({ startTime: e.target.value })}
-              className="px-2 py-1 border border-indigo-200 rounded-xl text-xs font-black text-indigo-700 bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none"
-            />
-          </div>
-          <span className="text-indigo-300">→</span>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-indigo-600 uppercase">Kết thúc</span>
-            <span className="px-2 py-1 border border-indigo-200 rounded-xl text-xs font-black text-indigo-700 bg-indigo-50">{state.endTime || '--:--'}</span>
-          </div>
-        </div>
-
-        {/* KTV Multi-Select */}
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">
-            Nhân viên ({state.selectedKtvIds.length}/{count})
-          </label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nhân viên ({state.selectedKtvIds.length})</label>
           <div className="relative" ref={dropdownRef}>
-            <div
-              className="min-h-[44px] w-full px-3 py-2 border-2 border-gray-100 rounded-2xl bg-gray-50/30 flex flex-wrap gap-1.5 items-center cursor-text"
-              onClick={() => !isFull && setIsKtvDropdownOpen(true)}
-            >
-              {state.selectedKtvIds.map((ktvId, idx) => {
-                const turn = availableTurns.find(t => t.employee_id === ktvId);
-                const name = turn?.staff?.full_name || ktvId;
-                return (
-                  <span key={ktvId} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black ${TAG_COLORS[idx % TAG_COLORS.length]} border`}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {name}
-                    <button onClick={(e) => { e.stopPropagation(); removeKtv(ktvId); }} className="ml-0.5 hover:opacity-60">
-                      <X size={12} />
-                    </button>
-                  </span>
-                );
-              })}
-              {!isFull && (
-                <input
-                  type="text"
-                  value={ktvSearch}
-                  onChange={e => { setKtvSearch(e.target.value); if (!isKtvDropdownOpen) setIsKtvDropdownOpen(true); }}
-                  onFocus={() => setIsKtvDropdownOpen(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && ktvSearch.trim()) {
-                      e.preventDefault();
-                      const term = ktvSearch.toLowerCase().trim();
-                      const match = availableTurns.find(t => t.employee_id.toLowerCase() === term || t.staff?.full_name?.toLowerCase() === term);
-                      if (match) {
-                        addKtv(match.employee_id);
-                      } else {
-                        addKtv(ktvSearch.trim());
-                      }
-                      setKtvSearch('');
-                    }
-                  }}
-                  placeholder={state.selectedKtvIds.length === 0 ? '+ Chọn KTV...' : '+ Thêm...'}
-                  className="flex-1 min-w-[80px] bg-transparent border-none outline-none text-xs font-bold placeholder:text-gray-400"
-                />
-              )}
+            <div className="min-h-[44px] w-full px-3 py-2 border-2 border-gray-100 rounded-2xl bg-gray-50/30 flex flex-wrap gap-1.5 items-center cursor-text" onClick={() => setIsKtvDropdownOpen(true)}>
+              {state.selectedKtvIds.map((ktvId, idx) => { const t = availableTurns.find(t => t.employee_id === ktvId); const n = t?.staff?.full_name || ktvId; return (
+                <span key={`${ktvId}-${idx}`} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black ${TAG_COLORS[idx % TAG_COLORS.length]} border`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{n}
+                  <button onClick={(e) => { e.stopPropagation(); removeKtv(ktvId); }} className="ml-0.5 hover:opacity-60"><X size={12} /></button>
+                </span>); })}
+              <input type="text" value={ktvSearch} onChange={e => { setKtvSearch(e.target.value); if (!isKtvDropdownOpen) setIsKtvDropdownOpen(true); }} onFocus={() => setIsKtvDropdownOpen(true)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && ktvSearch.trim()) { e.preventDefault(); const term = ktvSearch.toLowerCase().trim(); const m = availableTurns.find(t => t.employee_id.toLowerCase() === term || t.staff?.full_name?.toLowerCase() === term); if (m) addKtv(m.employee_id); else addKtv(ktvSearch.trim()); setKtvSearch(''); } }}
+                placeholder={state.selectedKtvIds.length === 0 ? '+ Chọn KTV...' : '+ Thêm...'} className="flex-1 min-w-[80px] bg-transparent border-none outline-none text-xs font-bold placeholder:text-gray-400" />
             </div>
-
-            {/* Dropdown */}
             {isKtvDropdownOpen && (
               <div className="absolute z-50 w-full mt-1 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 overflow-hidden">
                 <div className="max-h-52 overflow-y-auto p-1.5 space-y-0.5">
-                  {filteredTurns.map(turn => {
-                    const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true;
-                    const isUsedElsewhere = allSelectedKtvIds.includes(turn.employee_id) && !state.selectedKtvIds.includes(turn.employee_id);
-                    return (
-                      <div
-                        key={turn.employee_id}
-                        onClick={() => { if (!isUsedElsewhere) addKtv(turn.employee_id); }}
-                        className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center justify-between
-                          ${isUsedElsewhere ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-indigo-50 active:scale-[0.98]'}
-                          ${!hasSkill ? 'text-gray-400' : 'text-gray-700'}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span>
-                          <span>[{turn.employee_id}] {turn.staff?.full_name}</span>
-                        </div>
-                        <span className={`text-[10px] font-semibold ${turn.status === 'working' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                          {isUsedElsewhere ? '🚫 Đã gán nhóm khác' : turn.status === 'working' ? `⌛ Đến ${turn.estimated_end_time || '--:--'}` : '✅ Sẵn sàng'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {/* Nhập ngoài custom text */}
+                  {filteredTurns.map(turn => { const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true; const isUsed = allSelectedKtvIds.includes(turn.employee_id) && !state.selectedKtvIds.includes(turn.employee_id); return (
+                    <div key={turn.employee_id} onClick={() => { if (!isUsed) addKtv(turn.employee_id); }}
+                      className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center justify-between ${isUsed ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-indigo-50 active:scale-[0.98]'} ${!hasSkill ? 'text-gray-400' : 'text-gray-700'}`}>
+                      <div className="flex items-center gap-2"><span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span><span>[{turn.employee_id}] {turn.staff?.full_name}</span></div>
+                      <span className={`text-[10px] font-semibold ${turn.status === 'working' ? 'text-amber-500' : 'text-emerald-500'}`}>{isUsed ? '🚫 Đã gán nhóm khác' : turn.status === 'working' ? `⌛ Đến ${turn.estimated_end_time || '--:--'}` : '✅ Sẵn sàng'}</span>
+                    </div>); })}
                   {ktvSearch.trim() && !availableTurns.some(t => t.employee_id.toLowerCase() === ktvSearch.trim().toLowerCase() || t.staff?.full_name?.toLowerCase() === ktvSearch.trim().toLowerCase()) && (
-                    <div
-                      onClick={() => {
-                        addKtv(ktvSearch.trim());
-                        setKtvSearch('');
-                      }}
-                      className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer hover:bg-emerald-50 text-emerald-700 active:scale-[0.98] border border-dashed border-emerald-200 mt-2"
-                    >
-                      <Plus size={16} className="text-emerald-500" />
-                      <span>Nhập tên ngoài: <strong className="text-emerald-800">{ktvSearch.trim()}</strong></span>
-                    </div>
-                  )}
-                  {filteredTurns.length === 0 && !ktvSearch.trim() && (
-                    <p className="text-center text-xs text-gray-400 py-4 font-bold">Không tìm thấy KTV phù hợp</p>
-                  )}
+                    <div onClick={() => { addKtv(ktvSearch.trim()); setKtvSearch(''); }} className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer hover:bg-emerald-50 text-emerald-700 active:scale-[0.98] border border-dashed border-emerald-200 mt-2">
+                      <Plus size={16} className="text-emerald-500" /><span>Nhập tên ngoài: <strong className="text-emerald-800">{ktvSearch.trim()}</strong></span>
+                    </div>)}
+                  {filteredTurns.length === 0 && !ktvSearch.trim() && <p className="text-center text-xs text-gray-400 py-4 font-bold">Không tìm thấy KTV phù hợp</p>}
                 </div>
-              </div>
-            )}
+              </div>)}
           </div>
         </div>
 
-        {/* Per-KTV Room Selection + Print */}
         {state.selectedKtvIds.length > 0 && (
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Phòng & In phiếu</label>
             <div className="space-y-2">
               {state.selectedKtvIds.map((ktvId, idx) => {
-                const turn = availableTurns.find(t => t.employee_id === ktvId);
-                const name = turn?.staff?.full_name || ktvId;
-                const selectedRoom = (state.selectedRoomIds || [])[idx] || '';
+                const t = availableTurns.find(t => t.employee_id === ktvId);
+                const name = t?.staff?.full_name || ktvId;
+                const selRoom = (state.selectedRoomIds || [])[idx] || '';
+                const selBed = (state.ktvBedIds || [])[idx] || '';
+                const startT = (state.ktvStartTimes || [])[idx] || '';
+                const endT = (state.ktvEndTimes || [])[idx] || '';
+                const ktvDur = (state.ktvDurations || [])[idx] || duration;
+                const ktvNote = (state.ktvNotes || [])[idx] || '';
+                const roomBedsList = selRoom ? beds.filter(b => b.roomId === selRoom) : [];
                 return (
-                  <div key={ktvId} className="flex items-center gap-2 bg-gray-50/50 rounded-xl px-3 py-2 border border-gray-100">
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white ${getBadgeBg(idx)}`}>
-                      {idx + 1}
-                    </span>
-                    <span className="text-xs font-bold text-gray-700 truncate min-w-[60px]">{name}</span>
-                    <select
-                      value={selectedRoom}
-                      onChange={e => updateRoomForIdx(idx, e.target.value)}
-                      className="flex-1 px-2 py-1.5 border border-gray-200 rounded-xl text-xs font-bold bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                    >
-                      <option value="">— Chọn phòng —</option>
-                      {rooms.map(r => (
-                        <option key={r.id} value={r.id}>{r.name || r.id}</option>
-                      ))}
+                <div key={`${ktvId}-${idx}`} className="bg-gray-50/50 rounded-xl px-3 py-2.5 border border-gray-100 space-y-1.5">
+                  {/* Row 1: Name | Room | Bed | Duration | Time | Print */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shrink-0 ${getBadgeBg(idx)}`}>{idx + 1}</span>
+                    <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">{name}</span>
+                    <select value={selRoom} onChange={e => updateRoomForIdx(idx, e.target.value)} className="w-[70px] px-1.5 py-1 border border-gray-200 rounded-lg text-[11px] font-bold bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none">
+                      <option value="">P.</option>
+                      {rooms.map(r => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
                     </select>
-                    <button
-                      onClick={() => setShowTicketForIdx(idx)}
-                      className="p-1.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-lg transition-all active:scale-90"
-                      title="In phiếu KTV"
-                    >
-                      <Printer size={13} />
-                    </button>
+                    {selRoom && (<span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 shrink-0">{selBed ? `G.${roomBedsList.findIndex(b => b.id === selBed) + 1}` : String.fromCharCode(8212)}</span>)}
+                    <select value={ktvDur} onChange={e => updateDurationForIdx(idx, Number(e.target.value))} className="w-[65px] px-1 py-1 border border-amber-200 rounded-lg text-[11px] font-black text-amber-700 bg-amber-50 focus:ring-2 focus:ring-amber-400/20 outline-none">
+                      {[...DURATION_PRESETS, ktvDur].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b).map(d => (<option key={d} value={d}>{d}p</option>))}
+                    </select>
+                    <div className="flex items-center gap-1">
+                      <input type="time" value={startT} onChange={e => updateTimeForIdx(idx, 'start', e.target.value)} className="px-1.5 py-1 border border-indigo-200 rounded-lg text-[11px] font-black text-indigo-700 bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none w-[82px]" />
+                      <span className="text-indigo-300 text-[10px]">&rarr;</span>
+                      <span className="px-1.5 py-1 border border-indigo-200 rounded-lg text-[11px] font-black text-indigo-700 bg-indigo-50/50 w-[60px] text-center">{endT || '--:--'}</span>
+                    </div>
+                    <button onClick={() => setShowTicketForIdx(idx)} className="p-1.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-lg transition-all active:scale-90 shrink-0" title="In phiếu"><Printer size={12} /></button>
                   </div>
-                );
-              })}
+                  {/* Row 2: Per-KTV Note | Dispatch button */}
+                  <div className="flex items-center gap-2 ml-6">
+                    <input type="text" value={ktvNote} onChange={e => updateNoteForIdx(idx, e.target.value)} placeholder="Ghi chú riêng..." className="flex-1 px-2.5 py-1.5 border border-gray-100 rounded-xl text-[11px] font-medium focus:ring-2 focus:ring-indigo-500/10 outline-none bg-white placeholder:text-gray-300" />
+                    <button onClick={() => onPrint()} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black rounded-xl transition-all active:scale-95 shrink-0 flex items-center gap-1"><ChevronDown size={10} className="rotate-[-90deg]" />DP</button>
+                  </div>
+                </div>
+              ); })}
             </div>
           </div>
         )}
-
-        {/* Note Row */}
-        <input
-          type="text"
-          value={state.note}
-          onChange={e => onUpdate({ note: e.target.value })}
-          placeholder="Ghi chú chung cho KTV..."
-          className="w-full px-4 py-2.5 border border-gray-100 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none bg-gray-50/50"
-        />
       </div>
     </div>
 
-    {/* 🖨️ Ticket Preview Modal — same style as DispatchStaffRow */}
     {showTicketForIdx !== null && (() => {
-      const idx = showTicketForIdx;
-      const ktvId = state.selectedKtvIds[idx] || '';
-      const turn = availableTurns.find(t => t.employee_id === ktvId);
-      const roomId = (state.selectedRoomIds || [])[idx] || '';
-      const roomName = rooms.find(r => r.id === roomId)?.name || roomId || '—';
-      const ticketServiceName = state.displayName || serviceName;
-      const ticketNote = state.note;
-
+      const idx = showTicketForIdx; const ktvId = state.selectedKtvIds[idx] || ''; const rId = (state.selectedRoomIds || [])[idx] || '';
+      const rName = rooms.find(r => r.id === rId)?.name || rId || '---'; const tName = state.displayName || serviceName;
+      const sT = (state.ktvStartTimes || [])[idx] || '--:--'; const eT = (state.ktvEndTimes || [])[idx] || '--:--';
+      const ticketDur = (state.ktvDurations || [])[idx] || duration;
+      const ticketNote = (state.ktvNotes || [])[idx] || '';
       return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={() => setShowTicketForIdx(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-          <div
-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto"
-          >
-            <button
-              onClick={() => setShowTicketForIdx(null)}
-              className="absolute top-4 right-4 z-10 p-2 bg-white/80 hover:bg-white rounded-full shadow-lg border border-gray-200 transition-all active:scale-90"
-            >
-              <X size={18} className="text-gray-500" />
-            </button>
-
-            {/* Ticket Header */}
+          <div onClick={(e: React.MouseEvent) => e.stopPropagation()} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setShowTicketForIdx(null)} className="absolute top-4 right-4 z-10 p-2 bg-white/80 hover:bg-white rounded-full shadow-lg border border-gray-200 transition-all active:scale-90"><X size={18} className="text-gray-500" /></button>
             <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center rounded-t-3xl">
               <div className="text-4xl font-black italic tracking-tight">{ktvId}</div>
-              <div className="text-right">
-                <div className="text-[11px] font-bold tracking-wider opacity-70">Phiếu Tua KTV</div>
-                <div className="text-base font-black mt-0.5">{dateFormatted}</div>
-              </div>
+              <div className="text-right"><div className="text-[11px] font-bold tracking-wider opacity-70">Phiếu Tua KTV</div><div className="text-base font-black mt-0.5">{dateFormatted}</div></div>
             </div>
-
-            {/* Ticket Content */}
             <div className="px-5 py-5 space-y-4">
-              <div>
-                <div className="text-2xl font-black text-red-600 uppercase leading-tight">
-                  {ticketServiceName} ({duration}&apos;)
-                </div>
-              </div>
-
-              {/* Time */}
+              <div className="text-2xl font-black text-red-600 uppercase leading-tight">{tName} ({ticketDur}&apos;)</div>
               <div className="border-[2.5px] border-dashed border-amber-400 rounded-2xl px-4 py-4 text-center">
                 <p className="text-[10px] font-black text-amber-800 uppercase tracking-[3px] mb-2">Thời gian thực hiện</p>
-                <p className="text-[32px] font-black text-red-600 leading-none tracking-tight">
-                  {state.startTime || '--:--'} <span className="text-red-400">→</span> {state.endTime || '--:--'}
-                </p>
+                <p className="text-[32px] font-black text-red-600 leading-none tracking-tight">{sT} <span className="text-red-400">&rarr;</span> {eT}</p>
               </div>
-
-              {/* Room */}
               <div className="bg-slate-100 rounded-xl px-4 py-3 border-l-4 border-slate-500">
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phòng</p>
-                <p className="text-xl font-black text-red-600 mt-0.5">{roomName}</p>
+                <p className="text-xl font-black text-red-600 mt-0.5">{rName}</p>
               </div>
-
-              {/* Customer Requirements */}
               {customerReqs && (customerReqs.strength || customerReqs.focus || customerReqs.avoid || customerReqs.customerNote) && (
                 <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 space-y-3 shadow-inner">
-                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">⚠️ Yêu Cầu Khách Hàng</p>
+                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">⚠️ Yêu Cầu Khách Hàng</p>
                   <div className="flex flex-wrap gap-2">
-                    {customerReqs.strength && (
-                      <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">💪 Lực: {customerReqs.strength}</span>
-                    )}
-                    {customerReqs.focus && (
-                      <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">🎯 Tập trung: {customerReqs.focus}</span>
-                    )}
-                    {customerReqs.avoid && (
-                      <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">🚫 Tránh: {customerReqs.avoid}</span>
-                    )}
+                    {customerReqs.strength && <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100">💪 Lực: {customerReqs.strength}</span>}
+                    {customerReqs.focus && <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100">{customerReqs.focus}</span>}
+                    {customerReqs.avoid && <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100">🚫 Tránh: {customerReqs.avoid}</span>}
                   </div>
-                  {customerReqs.customerNote && (
-                    <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-amber-200/50">
-                      <p className="text-xs font-bold text-amber-900 italic flex items-start gap-2"><span className="text-amber-400 mt-0.5">📌</span> {customerReqs.customerNote}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Admin Note */}
+                  {customerReqs.customerNote && <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-amber-200/50"><p className="text-xs font-bold text-amber-900 italic">{customerReqs.customerNote}</p></div>}
+                </div>)}
               {ticketNote && (
                 <div className="bg-green-50/50 border border-green-200 rounded-2xl p-4 space-y-3 shadow-inner">
-                  <p className="text-[10px] font-black text-green-700 uppercase tracking-widest flex items-center gap-2">📝 Admin Dặn Dò</p>
-                  <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-green-200/50">
-                    <p className="text-xs font-bold text-green-900 flex items-start gap-2 uppercase"><span className="text-green-500 mt-0.5">💬</span> &quot;{ticketNote}&quot;</p>
-                  </div>
-                </div>
-              )}
+                  <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">📝 Admin Dặn Dò</p>
+                  <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-green-200/50"><p className="text-xs font-bold text-green-900 uppercase">{ticketNote}</p></div>
+                </div>)}
             </div>
-
-            <div className="text-center py-4 border-t border-gray-200 mt-2">
-              <p className="text-xs text-gray-400 font-semibold italic">Hệ thống Spa Ngân Hà</p>
-            </div>
+            <div className="text-center py-4 border-t border-gray-200 mt-2"><p className="text-xs text-gray-400 font-semibold italic">Hệ thống Spa Ngân Hà</p></div>
           </div>
-        </div>
-      );
+        </div>);
     })()}
-    </>
-  );
+    </>);
 };

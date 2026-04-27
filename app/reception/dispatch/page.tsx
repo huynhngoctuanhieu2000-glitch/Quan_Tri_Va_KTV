@@ -1365,7 +1365,7 @@ if (!hasPermission('dispatch_board')) {
                     }}
                     onPrintGroup={(group) => {
                       // TODO: QuickPrintTicket integration
-                      alert(`🖨️ In phiếu: ${group.displayName || group.serviceName} x${group.items.length}\nKTV: ${group.selectedKtvIds.join(', ')}\n${group.startTime} → ${group.endTime}`);
+                      alert(`🖨️ In phiếu: ${group.displayName || group.serviceName} x${group.items.length}\nKTV: ${group.selectedKtvIds.join(', ')}\n${(group.ktvStartTimes || [])[0] || '--:--'} → ${(group.ktvEndTimes || [])[0] || '--:--'}`);
                     }}
                     customerReqs={selectedOrder.services[0] ? {
                       genderReq: selectedOrder.services[0].genderReq,
