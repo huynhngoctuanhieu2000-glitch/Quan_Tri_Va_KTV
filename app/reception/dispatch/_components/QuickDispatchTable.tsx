@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Printer, X, ChevronDown, Plus, Clock } from 'lucide-react';
+import { Printer, X, ChevronDown, ChevronUp, Plus, Clock } from 'lucide-react';
 import { ServiceBlock, StaffData, TurnQueueData, WorkSegment } from '../types';
 
 // 🛠 UI CONFIGURATION
@@ -374,6 +374,25 @@ const ServiceGroupCard = ({
     onUpdate({ selectedKtvIds: state.selectedKtvIds.filter(id => id !== ktvId), selectedRoomIds: newRoomIds, ktvStartTimes: newStarts, ktvEndTimes: newEnds, ktvDurations: newDurs, ktvNotes: newNotes, ktvBedIds: newBeds });
   };
 
+  const moveKtv = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= state.selectedKtvIds.length) return;
+    const swap = <T,>(arr: T[] | undefined): T[] => {
+      if (!arr) return [];
+      const copy = [...arr];
+      [copy[fromIdx], copy[toIdx]] = [copy[toIdx], copy[fromIdx]];
+      return copy;
+    };
+    onUpdate({
+      selectedKtvIds: swap(state.selectedKtvIds),
+      selectedRoomIds: swap(state.selectedRoomIds),
+      ktvStartTimes: swap(state.ktvStartTimes),
+      ktvEndTimes: swap(state.ktvEndTimes),
+      ktvDurations: swap(state.ktvDurations as number[]),
+      ktvNotes: swap(state.ktvNotes),
+      ktvBedIds: swap(state.ktvBedIds),
+    });
+  };
+
   const addKtv = (ktvId: string) => {
     if (state.selectedKtvIds.length >= MAX_KTV_PER_GROUP) return;
     const defaultStart = (state.ktvStartTimes || [])[0] || getCurrentTime();
@@ -527,6 +546,12 @@ const ServiceGroupCard = ({
                   {/* Row 1: Name | Room | Bed | Duration | Time | Print */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shrink-0 ${getBadgeBg(idx)}`}>{idx + 1}</span>
+                    {state.selectedKtvIds.length >= 2 && (
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button onClick={() => moveKtv(idx, idx - 1)} disabled={idx === 0} className={`p-0.5 rounded leading-none ${idx === 0 ? 'text-gray-200' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 active:scale-90'} transition-all`}><ChevronUp size={16} strokeWidth={2.5} /></button>
+                        <button onClick={() => moveKtv(idx, idx + 1)} disabled={idx === state.selectedKtvIds.length - 1} className={`p-0.5 rounded leading-none ${idx === state.selectedKtvIds.length - 1 ? 'text-gray-200' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 active:scale-90'} transition-all`}><ChevronDown size={16} strokeWidth={2.5} /></button>
+                      </div>
+                    )}
                     <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">{name}</span>
                     <select value={selRoom} onChange={e => updateRoomForIdx(idx, e.target.value)} className="w-[70px] px-1.5 py-1 border border-gray-200 rounded-lg text-[11px] font-bold bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none">
                       <option value="">P.</option>
