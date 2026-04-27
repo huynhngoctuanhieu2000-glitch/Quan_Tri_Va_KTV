@@ -186,6 +186,29 @@ export default function DispatchBoardPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedDate]); // REMOVED soundEnabled from deps
 
+  // 🧹 Auto-transition Bookings in CLEANING/FEEDBACK/COMPLETED to DONE
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      orders.forEach(order => {
+        if (order.rawStatus === 'COMPLETED' || order.rawStatus === 'FEEDBACK' || order.rawStatus === 'CLEANING') {
+          if (order.updatedAt) {
+            const updatedAt = new Date(order.updatedAt);
+            const diffMins = (now.getTime() - updatedAt.getTime()) / 60000;
+            if (diffMins >= roomTransitionTime) {
+              console.log(`🧹 [Auto-Transition] Order ${order.billCode} is older than ${roomTransitionTime}m. Auto marking as DONE.`);
+              updateBookingStatus(order.id, 'DONE', selectedDate).then(res => {
+                if (res.success) fetchData();
+              });
+            }
+          }
+        }
+      });
+    }, 30000); // Check every 30s
+    
+    return () => clearInterval(interval);
+  }, [orders, roomTransitionTime, selectedDate]);
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -255,6 +278,7 @@ export default function DispatchBoardPage() {
             time: b.timeBooking || (b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'),
             dispatchStatus: dStatus,
             createdAt: b.createdAt || new Date().toISOString(),
+            updatedAt: b.updatedAt,
             totalAmount: b.totalAmount || 0,
             paymentMethod: b.paymentMethod || 'Chưa rõ',
             rawStatus: b.status,

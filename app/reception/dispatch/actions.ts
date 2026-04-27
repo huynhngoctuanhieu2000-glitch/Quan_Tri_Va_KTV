@@ -144,7 +144,7 @@ export async function getDispatchData(date: string) {
         const { data: configs } = await supabase.from('SystemConfigs').select('*');
 
         const transitionConfig = configs?.find((c: any) => c.key === 'room_transition_time' || c.key === 'thoi_gian_doi_phong');
-        const roomTransitionTime = transitionConfig ? (parseInt(transitionConfig.value, 10) || 5) : 5;
+        const roomTransitionTime = transitionConfig ? (parseInt(transitionConfig.value, 10) || 1) : 1;
 
         return {
             success: true,

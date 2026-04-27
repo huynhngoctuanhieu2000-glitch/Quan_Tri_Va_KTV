@@ -49,6 +49,7 @@ export interface PendingOrder {
   services: ServiceBlock[];
   dispatchStatus: DispatchStatus;
   createdAt: string;
+  updatedAt?: string;
   totalAmount?: number;
   paymentMethod?: string;
   rawStatus?: string;
