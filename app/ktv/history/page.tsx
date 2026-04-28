@@ -241,7 +241,7 @@ export default function KTVHistoryPage() {
   }
 
   return (
-    <AppLayout title="Lịch Sử">
+    <AppLayout title="Lịch Sử" disablePullToRefresh>
       <PullToRefresh onRefresh={async () => { await refetch(); }}>
         <div className="space-y-4 max-w-xl mx-auto pb-6">
 

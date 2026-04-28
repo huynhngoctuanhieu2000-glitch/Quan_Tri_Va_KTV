@@ -6,13 +6,24 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 const DEFAULT_MILESTONES: Record<string, number> = {
     '1': 2000, '30': 50000, '45': 75000, '60': 100000,
-    '70': 117000, '90': 150000, '120': 200000, '180': 300000, '300': 500000
+    '70': 115000, '90': 150000, '120': 200000, '180': 300000, '300': 500000
 };
 
 const calcCommission = (durationMins: number, milestones: Record<string, number>, rate: number): number => {
     const key = String(durationMins);
     if (milestones[key]) return Number(milestones[key]);
     return Math.round((durationMins / 60) * rate / 1000) * 1000;
+};
+
+const getMinsFromTimes = (start: string, end: string) => {
+    if (!start || !end) return 0;
+    const [h1, m1] = start.split(':').map(Number);
+    const [h2, m2] = end.split(':').map(Number);
+    if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
+    let mins1 = h1 * 60 + m1;
+    let mins2 = h2 * 60 + m2;
+    if (mins2 < mins1) mins2 += 24 * 60; // cross midnight
+    return mins2 - mins1;
 };
 
 /**
@@ -152,7 +163,13 @@ export async function GET(request: Request) {
                     seg.ktvId && seg.ktvId.toLowerCase().includes(techCode.toLowerCase())
                 );
                 if (mySegs.length > 0) {
-                    totalDuration += mySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
+                    totalDuration += mySegs.reduce((sum: number, seg: any) => {
+                        // Ưu tiên tính thời gian thực tế quầy gán (endTime - startTime)
+                        const realMins = getMinsFromTimes(seg.startTime, seg.endTime);
+                        if (realMins > 0) return sum + realMins;
+                        // Fallback về thuộc tính duration nếu không parse được thời gian
+                        return sum + (Number(seg.duration) || 0);
+                    }, 0);
                 } else {
                     // Fallback: dùng service duration nếu không có segments
                     totalDuration += svcDurationMap[String(item.serviceId)] || 60;

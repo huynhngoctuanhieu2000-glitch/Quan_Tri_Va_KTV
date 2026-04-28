@@ -5,6 +5,17 @@ import { supabase } from '@/lib/supabase';
 
 export type ScreenState = 'DASHBOARD' | 'TIMER' | 'REVIEW' | 'REWARD' | 'HANDOVER';
 
+const getMinsFromTimes = (start: string, end: string) => {
+    if (!start || !end) return 0;
+    const [h1, m1] = start.split(':').map(Number);
+    const [h2, m2] = end.split(':').map(Number);
+    if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
+    let mins1 = h1 * 60 + m1;
+    let mins2 = h2 * 60 + m2;
+    if (mins2 < mins1) mins2 += 24 * 60; // cross midnight
+    return mins2 - mins1;
+};
+
 // 🔧 DEFAULT PROCEDURES (Fallback when room has no config)
 const DEFAULT_PREP_PROCEDURE = [
     'Vệ sinh máy lạnh & quạt',
@@ -1044,7 +1055,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             seg.ktvId && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
                         );
                         if (mySegs.length > 0) {
-                            totalMins += mySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
+                            totalMins += mySegs.reduce((sum: number, seg: any) => {
+                                const realMins = getMinsFromTimes(seg.startTime, seg.endTime);
+                                if (realMins > 0) return sum + realMins;
+                                return sum + (Number(seg.duration) || 0);
+                            }, 0);
                         } else {
                             totalMins += item.duration || 60;
                         }
@@ -1074,7 +1089,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
 
             const milestones = settings.ktv_commission_milestones || {
-                '1': 2000, '30': 50000, '45': 75000, '60': 100000, '70': 117000, 
+                '1': 2000, '30': 50000, '45': 75000, '60': 100000, '70': 115000, 
                 '90': 150000, '120': 200000, '180': 300000, '300': 500000
             };
             

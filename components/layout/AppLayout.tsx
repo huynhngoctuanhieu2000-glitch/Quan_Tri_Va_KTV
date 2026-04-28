@@ -7,8 +7,16 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { AIAssistant } from '@/components/AIAssistant';
 import { useNotifications } from '@/components/NotificationProvider';
+import PullToRefresh from '@/components/PullToRefresh/PullToRefresh';
 
-export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa' }: { children: React.ReactNode, hideAI?: boolean, title?: string }) {
+interface AppLayoutProps {
+  children: React.ReactNode;
+  hideAI?: boolean;
+  title?: string;
+  disablePullToRefresh?: boolean;
+}
+
+export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa', disablePullToRefresh = false }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar state
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true); // Desktop sidebar state
   const [mounted, setMounted] = useState(false);
@@ -34,6 +42,24 @@ export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa' }:
       </div>
     );
   }
+
+  const handleGlobalRefresh = async () => {
+    window.location.reload();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  };
+
+  const MainContent = (
+    <div className="pt-2 px-4 pb-4 lg:p-8 min-h-screen">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="max-w-7xl mx-auto"
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
 
   return (
     <div 
@@ -62,16 +88,13 @@ export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa' }:
           </div>
         </div>
 
-        <div className="pt-2 px-4 pb-4 lg:p-8">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="max-w-7xl mx-auto"
-          >
-            {children}
-          </motion.div>
-        </div>
+        {disablePullToRefresh ? (
+          MainContent
+        ) : (
+          <PullToRefresh onRefresh={handleGlobalRefresh}>
+            {MainContent}
+          </PullToRefresh>
+        )}
       </main>
       {!hideAI && <AIAssistant />}
     </div>
