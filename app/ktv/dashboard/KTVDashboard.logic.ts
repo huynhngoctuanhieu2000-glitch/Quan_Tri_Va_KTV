@@ -1224,7 +1224,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         alert('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.');
     };
 
-    const handleCloseReward = () => {
+    const goToDashboard = () => {
         lastAcknowledgedIdRef.current = prevBookingIdRef.current;
         setBooking(null);
         setScreen('DASHBOARD');
