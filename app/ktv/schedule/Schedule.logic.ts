@@ -16,6 +16,25 @@ export interface LeaveRequest {
     status: 'PENDING' | 'APPROVED' | 'REJECTED';
     createdAt: string;
 }
+export interface ShiftRecord {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    shiftType: string;
+    effectiveFrom: string;
+    previousShift: string | null;
+    reason: string | null;
+    status: 'ACTIVE' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'REPLACED';
+    reviewedBy: string | null;
+    reviewedAt: string | null;
+    createdAt: string;
+}
+
+export interface ShiftTypes {
+    [key: string]: { label: string; start: string; end: string };
+}
+
+export type ScheduleTab = 'off' | 'shift';
 
 export const useKTVSchedule = () => {
     const { hasPermission, user } = useAuth();
@@ -23,6 +42,9 @@ export const useKTVSchedule = () => {
     // Common
     const [mounted, setMounted] = useState(false);
     const canAccessPage = hasPermission('ktv_schedule');
+
+    // Tab state
+    const [activeTab, setActiveTab] = useState<ScheduleTab>('off');
 
     // ── OFF state ──
     const [selectedDates, setSelectedDates] = useState<string[]>([]);
@@ -32,11 +54,22 @@ export const useKTVSchedule = () => {
     const [offError, setOffError] = useState<string | null>(null);
     const [offSuccess, setOffSuccess] = useState(false);
 
-    // ── Calendar state ──
     const [calendarMonth, setCalendarMonth] = useState(() => {
         const now = new Date();
         return { year: now.getFullYear(), month: now.getMonth() }; // 0-indexed
     });
+
+    // ── Shift state ──
+    const [currentShift, setCurrentShift] = useState<ShiftRecord | null>(null);
+    const [pendingRequest, setPendingRequest] = useState<ShiftRecord | null>(null);
+    const [shiftHistory, setShiftHistory] = useState<ShiftRecord[]>([]);
+    const [shiftTypes, setShiftTypes] = useState<ShiftTypes>({});
+    const [isLoadingShift, setIsLoadingShift] = useState(true);
+    const [newShiftType, setNewShiftType] = useState('');
+    const [shiftReason, setShiftReason] = useState('');
+    const [isSubmittingShift, setIsSubmittingShift] = useState(false);
+    const [shiftError, setShiftError] = useState<string | null>(null);
+    const [shiftSuccess, setShiftSuccess] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -84,11 +117,35 @@ export const useKTVSchedule = () => {
         setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
     }, []);
 
+    // ── Fetch shift data ──
+    const fetchShiftData = useCallback(async () => {
+        if (!user?.id) return;
+        setIsLoadingShift(true);
+        try {
+            const res = await fetch(`/api/ktv/shift?employeeId=${user.id}`);
+            const result = await res.json();
+
+            if (result.success) {
+                setCurrentShift(result.data.currentShift);
+                setPendingRequest(result.data.pendingRequest);
+                setShiftHistory(result.data.history || []);
+                setShiftTypes(result.shiftTypes || {});
+            } else {
+                console.error('❌ [Schedule] Fetch shift error:', result.error);
+            }
+        } catch (err) {
+            console.error('❌ [Schedule] Fetch shift failed:', err);
+        } finally {
+            setIsLoadingShift(false);
+        }
+    }, [user?.id]);
+
     useEffect(() => {
         if (mounted && canAccessPage) {
             fetchLeaveList();
+            fetchShiftData();
         }
-    }, [mounted, canAccessPage, fetchLeaveList]);
+    }, [mounted, canAccessPage, fetchLeaveList, fetchShiftData]);
 
     const toggleDate = (date: string) => {
         setSelectedDates(prev => {
@@ -132,9 +189,55 @@ export const useKTVSchedule = () => {
             fetchLeaveList();
             setTimeout(() => setOffSuccess(false), 3000);
         } catch (err: any) {
-            setOffError(err.message || 'Lỗi không xác định');
+            setOffError(err.message || 'Lỗi hệ thống');
         } finally {
             setIsSubmittingOff(false);
+        }
+    };
+
+    // ── Submit shift change request ──
+    const handleSubmitShift = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newShiftType || !user?.id) return;
+
+        // Ràng buộc: sau 19h không cho đổi ca (áp dụng cho ngày hôm sau)
+        const nowHour = new Date().getHours();
+        if (nowHour >= 19) {
+            setShiftError('Sau 19h00 không thể đổi ca. Vui lòng đổi trước 19h.');
+            return;
+        }
+
+        setIsSubmittingShift(true);
+        setShiftError(null);
+        setShiftSuccess(false);
+
+        try {
+            const res = await fetch('/api/ktv/shift', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    employeeId: user.id,
+                    employeeName: user.name || user.id,
+                    shiftType: newShiftType,
+                }),
+            });
+
+            const result = await res.json();
+
+            if (!result.success) {
+                setShiftError(result.error || 'Lỗi gửi yêu cầu');
+                return;
+            }
+
+            setShiftSuccess(true);
+            setNewShiftType('');
+            setShiftReason('');
+            fetchShiftData();
+            setTimeout(() => setShiftSuccess(false), 3000);
+        } catch (err: any) {
+            setShiftError(err.message || 'Lỗi không xác định');
+        } finally {
+            setIsSubmittingShift(false);
         }
     };
 
@@ -142,6 +245,8 @@ export const useKTVSchedule = () => {
         mounted,
         canAccessPage,
         user,
+        activeTab,
+        setActiveTab,
 
         // OFF
         selectedDates,
@@ -161,5 +266,21 @@ export const useKTVSchedule = () => {
         goToNextMonth,
         goToToday,
         WEEKDAY_LABELS,
+
+        // Shift
+        currentShift,
+        pendingRequest,
+        shiftHistory,
+        shiftTypes,
+        isLoadingShift,
+        newShiftType,
+        shiftReason,
+        isSubmittingShift,
+        shiftError,
+        shiftSuccess,
+        setNewShiftType,
+        setShiftReason,
+        setShiftError,
+        handleSubmitShift,
     };
 };

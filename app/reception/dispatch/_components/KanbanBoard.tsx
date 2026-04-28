@@ -36,7 +36,7 @@ const formatToHourMinute = (isoString?: string | null) => {
 
 interface KanbanBoardProps {
     orders: PendingOrder[];
-    onUpdateStatus: (orderId: string, newStatus: string, itemIds?: string[]) => void;
+    onUpdateStatus: (orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean) => void;
     onOpenDetail: (orderId: string) => void;
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
@@ -53,12 +53,7 @@ interface SubOrder {
 }
 
 const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services) => {
-    let maxDate: Date | null = null;
-    
-    // Nếu có timeEnd tổng từ DB thì format thẳng (nếu check toàn order)
-    if (order.timeEnd && servicesToCheck === order.services) {
-        return formatToHourMinute(order.timeEnd);
-    }
+    let maxTime = 0;
 
     if (!servicesToCheck || servicesToCheck.length === 0) return null;
 
@@ -69,32 +64,43 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
         return d;
     };
 
+    // 🔥 FIX: Luôn quét TẤT CẢ segments để lấy max endTime chính xác
+    // Không tin mù quáng booking.timeEnd vì nó có thể bị ghi đè sai khi chỉ 1 DV xong
     for (const svc of servicesToCheck) {
-        if (svc.timeEnd) {
+        // Ưu tiên segment endTime (thời gian phân bổ chính xác nhất)
+        if (svc.staffList) {
+            for (const staff of svc.staffList) {
+                if (!staff.segments) continue;
+                for (const seg of staff.segments) {
+                    if (seg.endTime && seg.endTime !== '--:--') {
+                        const d = parseHHMM(seg.endTime);
+                        if (d.getTime() > maxTime) maxTime = d.getTime();
+                    }
+                }
+            }
+        }
+        
+        // Fallback: dùng item.timeEnd nếu không có segment
+        if (maxTime === 0 && svc.timeEnd) {
             let tEnd = svc.timeEnd;
             if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
                 tEnd = tEnd.replace(' ', 'T') + 'Z';
             }
             const d = new Date(tEnd);
             if (!isNaN(d.getTime())) {
-                if (!maxDate || d > maxDate) maxDate = d;
-            }
-        }
-        
-        if (!svc.staffList) continue;
-        for (const staff of svc.staffList) {
-            if (!staff.segments) continue;
-            for (const seg of staff.segments) {
-                if (seg.endTime && seg.endTime !== '--:--') {
-                    const d = parseHHMM(seg.endTime);
-                    if (!maxDate || d > maxDate) maxDate = d;
-                }
+                if (d.getTime() > maxTime) maxTime = d.getTime();
             }
         }
     }
 
-    if (maxDate) {
-        return `${String(maxDate.getHours()).padStart(2, '0')}:${String(maxDate.getMinutes()).padStart(2, '0')}`;
+    if (maxTime > 0) {
+        const mDate = new Date(maxTime);
+        return `${String(mDate.getHours()).padStart(2, '0')}:${String(mDate.getMinutes()).padStart(2, '0')}`;
+    }
+
+    // Fallback cuối: dùng booking.timeEnd nếu có (chỉ khi không tìm được gì khác)
+    if (order.timeEnd && servicesToCheck === order.services) {
+        return formatToHourMinute(order.timeEnd);
     }
 
     return order.time; 
@@ -152,12 +158,18 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
         return result;
     }, [orders]);
 
+    // 🔥 FIX: Track đơn đã auto-finish để không hỏi lại liên tục
+    const autoFinishedRef = React.useRef<Set<string>>(new Set());
+
     React.useEffect(() => {
         const checkAutoFinish = () => {
             const now = new Date();
             
             orders.forEach(order => {
                 if (order.dispatchStatus === 'in_progress') {
+                    // Skip nếu đơn này đã được auto-finish trước đó
+                    if (autoFinishedRef.current.has(order.id)) return;
+
                     const estEndStr = getEstimatedEndTime(order);
                     if (estEndStr && estEndStr !== '--:--') {
                         const [h, m] = estEndStr.split(':').map(Number);
@@ -171,8 +183,9 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                         
                         // Allow 5 seconds grace period
                         if (now.getTime() >= estEnd.getTime() + 5000) {
-                             console.log(`🤖 [Kanban AutoFinish] Time is up for order ${order.id} (${estEndStr}). Moving to COMPLETED...`);
-                             onUpdateStatus(order.id, 'COMPLETED');
+                             console.log(`🤖 [Kanban AutoFinish] Time is up for order ${order.id} (${estEndStr}). Auto-completing silently...`);
+                             autoFinishedRef.current.add(order.id);
+                             onUpdateStatus(order.id, 'COMPLETED', undefined, true); // skipConfirm = true
                         }
                     }
                 }

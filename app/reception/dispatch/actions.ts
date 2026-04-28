@@ -432,13 +432,22 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             // Cập nhật timeStart cho Bookings nếu chưa có
             await supabase.from('Bookings').update({ timeStart: now }).eq('id', bookingId).is('timeStart', null);
 
-            // Cập nhật tất cả các items đang chờ thành IN_PROGRESS
+            // Cập nhật tất cả các items đang chờ thành IN_PROGRESS (CHỈ items chưa bắt đầu)
             const { error: itemError } = await supabase
                 .from('BookingItems')
                 .update({ status: 'IN_PROGRESS', timeStart: now })
                 .eq('bookingId', bookingId)
                 .in('status', ['WAITING', 'PREPARING', 'NEW']);
             if (itemError) console.error('❌ [Server] BookingItems start error:', itemError);
+
+            // 🔥 FIX: Items đã từng IN_PROGRESS (bị kéo nhầm sang COMPLETED rồi kéo lại)
+            // → Chỉ update status, KHÔNG ghi đè timeStart
+            await supabase
+                .from('BookingItems')
+                .update({ status: 'IN_PROGRESS' })
+                .eq('bookingId', bookingId)
+                .in('status', ['COMPLETED', 'CLEANING'])
+                .not('timeStart', 'is', null);
 
             // Cập nhật TurnQueue thành working cho các KTV liên quan
             const { error: tError } = await supabase
@@ -512,11 +521,31 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             // Cập nhật timeStart cho Bookings nếu chưa có
             await supabase.from('Bookings').update({ timeStart: now }).eq('id', bookingId).is('timeStart', null);
 
-            // Cập nhật timeStart cho các items
-            await supabase
+            // 🔥 FIX: Chỉ set timeStart cho items CHƯA có timeStart (tránh ghi đè giờ KTV đã bấm)
+            // Lấy danh sách items hiện tại để kiểm tra
+            const { data: currentItems } = await supabase
                 .from('BookingItems')
-                .update({ timeStart: now })
+                .select('id, timeStart, status')
                 .in('id', itemIds);
+
+            const itemsNeedTimeStart = (currentItems || []).filter(i => !i.timeStart).map(i => i.id);
+            const itemsAlreadyStarted = (currentItems || []).filter(i => i.timeStart).map(i => i.id);
+
+            // Items chưa có timeStart → set cả status + timeStart
+            if (itemsNeedTimeStart.length > 0) {
+                await supabase
+                    .from('BookingItems')
+                    .update({ status: 'IN_PROGRESS', timeStart: now })
+                    .in('id', itemsNeedTimeStart);
+            }
+
+            // Items đã có timeStart → CHỈ update status, bảo toàn timeStart gốc
+            if (itemsAlreadyStarted.length > 0) {
+                await supabase
+                    .from('BookingItems')
+                    .update({ status: 'IN_PROGRESS' })
+                    .in('id', itemsAlreadyStarted);
+            }
 
             // Cập nhật TurnQueue thành working
             await supabase

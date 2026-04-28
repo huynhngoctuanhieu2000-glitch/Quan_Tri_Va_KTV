@@ -395,7 +395,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                   <WorkingTimeline 
                     segments={ktvSegments} 
                     activeIndex={booking.status === 'IN_PROGRESS' ? activeSegmentIndex : undefined}
-                    actualStartTime={item.timeStart || booking.timeStart}
+                    actualStartTime={item.timeStart || null}
                   />
                 </div>
               )}
@@ -601,7 +601,7 @@ function ScreenTimer({ logic }: { logic: any }) {
           <WorkingTimeline 
             segments={ktvSegments} 
             activeIndex={activeSegmentIndex} 
-            actualStartTime={item.timeStart || booking.timeStart}
+            actualStartTime={item.timeStart || null}
           />
         </div>
       )}

@@ -35,7 +35,10 @@ export const t = {
 
     // ── Shift Tab ──
     shiftCurrentTitle: 'Ca Hiện Tại',
+    shiftCurrent: 'Ca Hiện Tại',
+    shiftCurrentEmpty: 'Chưa có ca',
     shiftNoShift: 'Chưa được gán ca. Liên hệ Admin.',
+    shiftFormTitle: 'Yêu Cầu Đổi Ca',
     shiftChangeTitle: 'Yêu Cầu Đổi Ca',
     shiftSelectNew: 'Chọn ca mới',
     shiftReason: 'Lý do đổi ca',
@@ -43,6 +46,9 @@ export const t = {
     shiftSubmit: 'Gửi Yêu Cầu Đổi Ca',
     shiftSubmitting: 'Đang gửi...',
     shiftSubmitSuccess: '✅ Đã gửi yêu cầu đổi ca!',
+    shiftPendingTitle: 'Yêu cầu chờ duyệt',
+    shiftRequestFrom: 'Từ',
+    shiftRequestTo: 'Sang',
     shiftPendingNote: '⏳ Bạn đang có yêu cầu đổi ca chờ duyệt.',
     shiftHistoryTitle: 'Lịch Sử Đổi Ca',
     shiftHistoryEmpty: 'Chưa có lịch sử đổi ca.',

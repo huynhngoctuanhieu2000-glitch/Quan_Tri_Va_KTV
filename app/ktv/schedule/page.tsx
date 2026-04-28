@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
-    ShieldAlert, Loader2, CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle, ChevronRight, ChevronLeft, Send, Lock
+    ShieldAlert, Loader2, CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle, ChevronRight, ChevronLeft, Send, Lock, Briefcase, CalendarDays, ArrowRightLeft
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -36,10 +36,21 @@ const STATUS_DOT_COLORS: Record<string, string> = {
 
 const BLOCKED_HOLIDAYS = ['04-30', '05-01', '09-02', '01-01'];
 
+
+const SHIFT_LABELS: Record<string, string> = { SHIFT_1: t.SHIFT_1, SHIFT_2: t.SHIFT_2, SHIFT_3: t.SHIFT_3 };
+const SHIFT_COLORS: Record<string, string> = { SHIFT_1: 'bg-blue-600', SHIFT_2: 'bg-amber-600', SHIFT_3: 'bg-indigo-600' };
+type ScheduleTab = 'off' | 'shift';
+const TAB_CONFIG: { id: ScheduleTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'off', label: t.tabOff, icon: <CalendarOff size={16} /> },
+    { id: 'shift', label: t.tabShift, icon: <Briefcase size={16} /> },
+];
+
 const KTVSchedulePage = () => {
     const logic = useKTVSchedule();
     const {
         mounted, canAccessPage, user,
+        activeTab, setActiveTab,
+        currentShift, shiftHistory, isLoadingShift, newShiftType, isSubmittingShift, shiftError, shiftSuccess, setNewShiftType, setShiftError, handleSubmitShift,
         selectedDates, toggleDate, isSubmittingOff, leaveList, isLoadingLeaves,
         offError, offSuccess, setOffError, handleSubmitOff,
         calendarMonth, goToPrevMonth, goToNextMonth, goToToday, WEEKDAY_LABELS,
@@ -112,6 +123,12 @@ const KTVSchedulePage = () => {
                 }
             }
             
+            // Cảnh báo nếu đã có 3 người OFF
+            if (!isSelected && dayLeaves.length >= 3) {
+                if (!window.confirm(`Ngày này đã có ${dayLeaves.length} người xin nghỉ. Bạn có chắc chắn muốn xin nghỉ thêm không?`)) {
+                    return;
+                }
+            }
             // Clear error and toggle
             setOffError(null);
             toggleDate(dateStr);
@@ -134,6 +151,17 @@ const KTVSchedulePage = () => {
                     <p className="text-sm text-gray-500">{t.pageSubtitle}</p>
                 </div>
 
+                {/* ── TAB SWITCHER ── */}
+                <div className="flex bg-gray-100 rounded-2xl p-1 gap-1 mb-5">
+                    {TAB_CONFIG.map(tab => (
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                            {tab.icon}{tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                {activeTab === 'off' && (<>
                 {/* ── CALENDAR ── */}
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
                     <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -346,8 +374,128 @@ const KTVSchedulePage = () => {
                         })}
                     </div>
                 )}
+            </>)}
+
+                {activeTab === 'shift' && (
+                    <ShiftTab
+                        currentShift={currentShift}
+                        shiftHistory={shiftHistory}
+                        isLoadingShift={isLoadingShift}
+                        newShiftType={newShiftType}
+                        isSubmittingShift={isSubmittingShift}
+                        shiftError={shiftError}
+                        shiftSuccess={shiftSuccess}
+                        setNewShiftType={setNewShiftType}
+                        setShiftError={setShiftError}
+                        handleSubmitShift={handleSubmitShift}
+                    />
+                )}
             </div>
         </AppLayout>
+    );
+};
+
+// ════════════════════════════════════════════════════════════════
+// SHIFT TAB COMPONENT
+// ════════════════════════════════════════════════════════════════
+const ShiftTab = ({ currentShift, shiftHistory, isLoadingShift, newShiftType, isSubmittingShift, shiftError, shiftSuccess, setNewShiftType, setShiftError, handleSubmitShift }: any) => {
+    if (isLoadingShift) {
+        return (<div className="flex items-center justify-center py-16 gap-2 text-gray-400"><Loader2 size={20} className="animate-spin" /><span className="text-sm">{t.shiftLoading}</span></div>);
+    }
+    const availableShifts = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].filter(s => s !== currentShift?.shiftType);
+    return (
+        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4">
+            {currentShift ? (
+                <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-3xl p-6 text-white shadow-lg shadow-indigo-200">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-indigo-100 text-sm font-medium">{t.shiftCurrent}</span>
+                        <Briefcase size={20} className="text-indigo-200" />
+                    </div>
+                    <div className="text-2xl font-black tracking-tight">{SHIFT_LABELS[currentShift.shiftType] || currentShift.shiftType}</div>
+                </div>
+            ) : (
+                <div className="bg-gray-100 rounded-3xl p-6 text-gray-500 text-center border-2 border-dashed border-gray-200">
+                    <Briefcase size={32} className="mx-auto mb-3 opacity-50" />
+                    <p className="font-medium">{t.shiftCurrentEmpty}</p>
+                </div>
+            )}
+
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
+                <div className="px-6 pt-6 pb-2">
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                        <ArrowRightLeft size={20} className="text-indigo-500" />{t.shiftFormTitle}
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-1">Đổi ca sẽ có hiệu lực ngay lập tức.</p>
+                </div>
+                <form onSubmit={handleSubmitShift} className="px-6 pb-6 space-y-5">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">{t.shiftSelectNew}</label>
+                        <div className="space-y-2">
+                            {availableShifts.map(shift => (
+                                <button key={shift} type="button" onClick={() => setNewShiftType(shift)}
+                                    className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all text-left ${newShiftType === shift ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-100 bg-gray-50 text-gray-700 hover:border-gray-200'}`}>
+                                    <div className={`w-3 h-3 rounded-full ${SHIFT_COLORS[shift] || 'bg-gray-400'}`} />
+                                    <span className="text-sm font-bold">{SHIFT_LABELS[shift] || shift}</span>
+                                    {newShiftType === shift && <CheckCircle2 size={16} className="ml-auto text-indigo-500" />}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {shiftError && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-2xl px-4 py-3 flex items-center gap-2">
+                            <AlertCircle size={16} className="shrink-0" /><span>{shiftError}</span>
+                            <button type="button" onClick={() => setShiftError(null)} className="ml-auto"><XCircle size={16} /></button>
+                        </div>
+                    )}
+                    {shiftSuccess && (
+                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-2xl px-4 py-3 flex items-center gap-2">
+                            <CheckCircle2 size={16} className="shrink-0" /><span>{t.shiftSubmitSuccess}</span>
+                        </div>
+                    )}
+                    <button type="submit" disabled={isSubmittingShift || !newShiftType}
+                        className="w-full py-3.5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-200">
+                        {isSubmittingShift ? (<><Loader2 size={18} className="animate-spin" />{t.shiftSubmitting}</>) : (<><ArrowRightLeft size={18} />{t.shiftSubmit}</>)}
+                    </button>
+                </form>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
+                <div className="px-6 pt-6 pb-3">
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                        <CalendarDays size={20} className="text-gray-500" />{t.shiftHistoryTitle}
+                    </h3>
+                </div>
+                <div className="px-6 pb-6">
+                    {shiftHistory.length === 0 ? (
+                        <div className="text-center py-6"><ArrowRightLeft size={30} className="text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-400">{t.shiftHistoryEmpty}</p></div>
+                    ) : (
+                        <div className="space-y-2.5">
+                            {shiftHistory.map((record: any) => {
+                                const statusConfig = STATUS_COLORS[record.status as keyof typeof STATUS_COLORS] || STATUS_COLORS.APPROVED;
+                                const StatusIcon = statusConfig.icon;
+                                return (
+                                    <div key={record.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${statusConfig.border} ${statusConfig.bg}`}>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                                                <span>{SHIFT_LABELS[record.previousShift || ''] || '—'}</span>
+                                                <ChevronRight size={12} className="text-gray-400" />
+                                                <span>{SHIFT_LABELS[record.shiftType] || record.shiftType}</span>
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                                {(() => { try { return format(new Date(record.createdAt), 'dd/MM/yyyy'); } catch { return record.createdAt; } })()}
+                                            </p>
+                                        </div>
+                                        <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${statusConfig.text}`}>
+                                            <StatusIcon size={11} /><span>{STATUS_LABELS[record.status] || record.status}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 };
 

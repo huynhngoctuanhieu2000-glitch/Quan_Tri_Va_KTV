@@ -206,7 +206,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, data: record });
         }
 
-        // KTV requests shift change — create PENDING record
+        // KTV requests shift change — AUTO APPROVE (no admin review needed)
         if (currentActive?.shiftType === shiftType) {
             return NextResponse.json(
                 { success: false, error: 'Bạn đang ở ca này rồi.' },
@@ -214,6 +214,16 @@ export async function POST(request: Request) {
             );
         }
 
+        // 1. Mark old ACTIVE shift as REPLACED
+        if (currentActive) {
+            await supabase
+                .from('KTVShifts')
+                .update({ status: 'REPLACED' })
+                .eq('employeeId', employeeId)
+                .eq('status', 'ACTIVE');
+        }
+
+        // 2. Insert new shift as ACTIVE directly (auto-approved)
         const { data: record, error: insertError } = await supabase
             .from('KTVShifts')
             .insert({
@@ -223,7 +233,8 @@ export async function POST(request: Request) {
                 effectiveFrom: new Date().toISOString().split('T')[0],
                 previousShift: currentActive?.shiftType || null,
                 reason: reason || '',
-                status: 'PENDING',
+                status: 'ACTIVE',
+                reviewedAt: new Date().toISOString(),
             })
             .select()
             .single();
@@ -233,7 +244,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
 
-        // Notify admin about shift change request
+        // Notify about shift change (informational)
         const shiftLabel = SHIFT_TYPES[shiftType as keyof typeof SHIFT_TYPES]?.label || shiftType;
         const prevLabel = currentActive?.shiftType
             ? SHIFT_TYPES[currentActive.shiftType as keyof typeof SHIFT_TYPES]?.label
@@ -241,11 +252,11 @@ export async function POST(request: Request) {
         
         await supabase.from('StaffNotifications').insert({
             type: 'CHECK_IN',
-            message: `📋 ${employeeName || employeeId} xin đổi ca: ${prevLabel} → ${shiftLabel}${reason ? ` (${reason})` : ''}`,
+            message: `📋 ${employeeName || employeeId} đã đổi ca: ${prevLabel} → ${shiftLabel}`,
             isRead: false,
         });
 
-        console.log(`✅ [Shift] ${employeeName} requested shift change to ${shiftLabel}`);
+        console.log(`✅ [Shift] ${employeeName} changed shift to ${shiftLabel} (auto-approved)`);
         return NextResponse.json({ success: true, data: record });
 
     } catch (error: any) {

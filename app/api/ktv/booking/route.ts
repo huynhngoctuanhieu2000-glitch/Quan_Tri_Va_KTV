@@ -447,9 +447,8 @@ export async function PATCH(request: Request) {
         } else if (status === 'DONE' || status === 'COMPLETED') {
             // ✅ NEW FLOW: KTV hoàn thành → chỉ update BookingItem.status = COMPLETED
             // Booking-level status sẽ được update sau khi tất cả items được RATED bởi khách
-            updatePayload.timeEnd = new Date().toISOString();
             itemUpdatePayload.timeEnd = new Date().toISOString();
-            // itemUpdatePayload.status đã = 'COMPLETED' từ dòng khởi tạo ở trên
+            // ⚠️ KHÔNG ghi booking.timeEnd ở đây — chờ kiểm tra tất cả items bên dưới
 
             // 🔑 FIX RACE CONDITION: Update TẤT CẢ items của KTV này
             if (allItemIdsForThisKTV.length > 0) {
@@ -479,9 +478,12 @@ export async function PATCH(request: Request) {
                 );
 
             if (allItemsCompleted) {
-                // Tất cả KTV đã xong → Booking giữ IN_PROGRESS (chờ khách rate)
-                // Không cần set booking.status ở đây — chờ tất cả itemRating được lưu
-                console.log(`[KTV API] All items completed for booking ${bookingId}. Waiting for customer ratings.`);
+                // 🔥 TẤT CẢ items đã xong → BÂY GIỜ mới ghi booking.timeEnd
+                updatePayload.timeEnd = new Date().toISOString();
+                console.log(`[KTV API] All items completed for booking ${bookingId}. Setting booking.timeEnd now.`);
+            } else {
+                // Còn items đang làm → KHÔNG ghi booking.timeEnd để Kanban không bị nhầm
+                console.log(`[KTV API] Some items still in progress for booking ${bookingId}. Skipping booking.timeEnd.`);
             }
         } else if (validBookingStatuses.includes(status)) {
             updatePayload.status = status;

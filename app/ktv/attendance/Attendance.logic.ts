@@ -55,6 +55,7 @@ export const useKTVAttendance = () => {
     const [activeShiftType, setActiveShiftType] = useState<string | null>(null);
     const [isLoadingShift, setIsLoadingShift] = useState(false);
     const [isLate, setIsLate] = useState(false);
+    const [isOffToday, setIsOffToday] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -107,8 +108,21 @@ export const useKTVAttendance = () => {
                 } else {
                     setActiveShiftType(null); // no shift assigned → allow checkout
                 }
+                // Check if they are OFF today
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const { data: offData } = await supabase
+                    .from('LeaveRequests')
+                    .select('id')
+                    .eq('employeeId', user.id)
+                    .eq('date', todayStr)
+                    .in('status', ['APPROVED', 'PENDING']);
+                
+                setIsOffToday(offData && offData.length > 0 ? true : false);
+
             } catch {
                 setActiveShiftType(null);
+                setIsOffToday(false);
             } finally {
                 setIsLoadingShift(false);
             }
@@ -304,5 +318,6 @@ export const useKTVAttendance = () => {
         handleAttendance,
         handleRetry,
         clearError,
+        isOffToday,
     };
 };

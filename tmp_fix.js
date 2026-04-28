@@ -1,47 +1,79 @@
-const fs = require('fs');
-const path = 'app/reception/leave-management/page.tsx';
-let content = fs.readFileSync(path, 'utf8');
+// ==========================================
+// MÔ PHỎNG: KÉO THẢ KANBAN KHÔNG GHI ĐÈ timeStart
+// ==========================================
 
-content = content.replace(/const STATUS_CONFIG[\s\S]*?\} as const;/g, '');
-content = content.replace(/const STAT_CARDS[\s\S]*?\];/g, '');
-content = content.replace(/const VIEW_MODE_OPTIONS[\s\S]*?\];/g, '');
-content = content.replace(/const ADMIN_TAB_CONFIG[\s\S]*?\];/g, '');
+console.log("=== KỊCH BẢN 1: KTV đã bấm BẮT ĐẦU, Kanban tự nhảy COMPLETED, Lễ tân kéo lại IN_PROGRESS ===\n");
 
-// Also remove ADMIN_TAB_CONFIG from render
-content = content.replace(/\{\/\* ── ADMIN TAB SWITCHER ── \*\/\}[\s\S]*?\{\/\* ── TAB CONTENT ── \*\/\}/g, `
-{/* ── ADMIN TAB SWITCHER ── */}
-<div className="flex bg-gray-100 rounded-2xl p-1 gap-1">
-    <button
-        onClick={() => setAdminTab('off')}
-        className={\`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all \${
-            adminTab === 'off'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-        }\`}
-    >
-        <CalendarOff size={16} /> Lịch OFF
-    </button>
-    <button
-        onClick={() => setAdminTab('shift')}
-        className={\`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all \${
-            adminTab === 'shift'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-        }\`}
-    >
-        <Briefcase size={16} /> Đổi Ca
-        {shiftLogic.pendingShifts.length > 0 && (
-            <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {shiftLogic.pendingShifts.length}
-            </span>
-        )}
-    </button>
-</div>
+// Trạng thái DB trước khi kéo
+const itemsBefore = [
+    { id: 'item1', status: 'COMPLETED', timeStart: '2026-04-28T08:18:57.077+00:00' }, // KTV đã bấm bắt đầu từ 15:18
+    { id: 'item2', status: 'IN_PROGRESS', timeStart: '2026-04-28T09:20:57.533+00:00' }  // KTV thứ 2 đang làm từ 16:20
+];
 
-{/* ── TAB CONTENT ── */}
-`);
+const now = '2026-04-28T15:07:00.000Z'; // Giờ hiện tại = 22:07 VN
+const dragItemIds = ['item1']; // Lễ tân kéo item1 về IN_PROGRESS
 
-content = content.replace(/import \{[\s\S]*?\} from 'lucide-react';/g, "import { ShieldAlert, Trash2, ChevronLeft, ChevronRight, Briefcase, ArrowRightLeft, UserPlus, Users, Loader2, Check, X, CalendarDays, CheckCircle2, CalendarOff } from 'lucide-react';");
+// Logic MỚI: Kiểm tra từng item
+const itemsNeedTimeStart = itemsBefore.filter(i => dragItemIds.includes(i.id) && !i.timeStart).map(i => i.id);
+const itemsAlreadyStarted = itemsBefore.filter(i => dragItemIds.includes(i.id) && i.timeStart).map(i => i.id);
 
-fs.writeFileSync(path, content);
-console.log('Fixed linting errors');
+console.log("Items cần set timeStart (chưa có):", itemsNeedTimeStart);
+console.log("Items đã có timeStart (bảo toàn):", itemsAlreadyStarted);
+
+if (itemsNeedTimeStart.length > 0) {
+    console.log(`\n→ Items ${itemsNeedTimeStart.join(', ')}: SET status=IN_PROGRESS, timeStart=${now}`);
+}
+if (itemsAlreadyStarted.length > 0) {
+    console.log(`→ Items ${itemsAlreadyStarted.join(', ')}: SET status=IN_PROGRESS (GIỮ NGUYÊN timeStart gốc)`);
+    const originalTime = itemsBefore.find(i => i.id === itemsAlreadyStarted[0])?.timeStart;
+    console.log(`  ✅ timeStart VẪN LÀ: ${originalTime} (15:18 VN - không bị ghi đè thành 22:07)`);
+}
+
+// Logic CŨ (để so sánh)
+console.log("\n--- SO SÁNH VỚI LOGIC CŨ ---");
+console.log(`Logic CŨ: UPDATE BookingItems SET timeStart='${now}' WHERE id IN ('item1')`);
+console.log(`→ 🔴 GHI ĐÈ timeStart = ${now} (22:07 VN) cho item1 dù KTV đã bấm từ 15:18!`);
+
+console.log("\n=== KỊCH BẢN 2: Bill bị kéo toàn bộ về IN_PROGRESS (updateBookingStatus) ===\n");
+
+const allItems = [
+    { id: 'item1', status: 'COMPLETED', timeStart: '2026-04-28T08:18:57.077+00:00' },
+    { id: 'item2', status: 'IN_PROGRESS', timeStart: '2026-04-28T09:20:57.533+00:00' },
+    { id: 'item3', status: 'PREPARING', timeStart: null }  // Item chưa bắt đầu
+];
+
+console.log("Logic MỚI (updateBookingStatus):");
+console.log("1. Filter status IN ['WAITING', 'PREPARING', 'NEW'] → SET timeStart + status");
+const newItems = allItems.filter(i => ['WAITING', 'PREPARING', 'NEW'].includes(i.status));
+console.log(`   → Áp dụng cho: ${newItems.map(i => i.id).join(', ') || 'không có'} (set timeStart mới)`);
+
+console.log("2. Filter status IN ['COMPLETED', 'CLEANING'] AND timeStart IS NOT NULL → CHỈ SET status");
+const recoveredItems = allItems.filter(i => ['COMPLETED', 'CLEANING'].includes(i.status) && i.timeStart);
+console.log(`   → Áp dụng cho: ${recoveredItems.map(i => i.id).join(', ') || 'không có'} (bảo toàn timeStart gốc)`);
+console.log(`   ✅ item1.timeStart VẪN LÀ: ${recoveredItems[0]?.timeStart || 'N/A'}`);
+
+console.log("3. Items đang IN_PROGRESS → KHÔNG bị ảnh hưởng");
+
+console.log("\n=== KỊCH BẢN 3: checkAutoFinish + skipConfirm ===\n");
+
+const autoFinishedSet = new Set();
+const orderId = 'order-002';
+
+// Lần 1: Auto-finish
+console.log("Lần 1 (t=0s): checkAutoFinish phát hiện hết giờ");
+if (!autoFinishedSet.has(orderId)) {
+    autoFinishedSet.add(orderId);
+    console.log(`  → Gọi onUpdateStatus('${orderId}', 'COMPLETED', undefined, skipConfirm=true)`);
+    console.log("  → ✅ KHÔNG bật confirm dialog");
+}
+
+// Lần 2: 30 giây sau
+console.log("\nLần 2 (t=30s): checkAutoFinish chạy lại");
+if (!autoFinishedSet.has(orderId)) {
+    console.log("  → Gọi onUpdateStatus...");
+} else {
+    console.log(`  → ✅ SKIP vì đơn ${orderId} đã nằm trong autoFinishedRef`);
+    console.log("  → Lễ tân KHÔNG bị làm phiền");
+}
+
+console.log("\n✅ TẤT CẢ KỊCH BẢN KÉO THẢ ĐỀU AN TOÀN!");

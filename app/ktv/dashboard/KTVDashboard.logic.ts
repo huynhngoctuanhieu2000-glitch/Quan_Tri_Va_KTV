@@ -1065,7 +1065,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
     handleFinishTimerRef.current = handleFinishTimer;
 
     const handleSubmitReview = async (customerProfile: any) => {
-        if (!booking || !user?.id) return;
+        if (!booking || !user?.id) {
+            console.log("🚨 [KTV Logic] Mất dữ liệu phiên làm việc, ép thoát về DASHBOARD");
+            setScreen('DASHBOARD');
+            try {
+                localStorage.removeItem('ktv_active_screen');
+                localStorage.removeItem('ktv_active_booking_id');
+            } catch(e) {}
+            return;
+        }
         
         setIsLoading(true);
         try {
@@ -1099,7 +1107,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
 
     const handleFinishHandover = async () => {
-        if (!booking || !user?.id) return;
+        if (!booking || !user?.id) {
+            console.log("🚨 [KTV Logic] Mất dữ liệu phiên làm việc ở bước Dọn phòng, ép thoát về DASHBOARD");
+            setScreen('DASHBOARD');
+            try {
+                localStorage.removeItem('ktv_active_screen');
+                localStorage.removeItem('ktv_active_booking_id');
+            } catch(e) {}
+            return;
+        }
         setIsLoading(true);
         try {
             // 🔥 TÍNH TIỀN TUA CHÍNH XÁC: Theo thời gian admin gán trong segments

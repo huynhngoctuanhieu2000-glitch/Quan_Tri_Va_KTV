@@ -4,7 +4,7 @@ import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
     ShieldAlert, MapPin, Clock, CheckCircle2,
-    ExternalLink, Loader2, XCircle, LogOut, LogIn, Camera
+    ExternalLink, Loader2, XCircle, LogOut, LogIn, Camera, AlertCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useKTVAttendance } from './Attendance.logic';
@@ -27,6 +27,7 @@ const KTVAttendancePage = () => {
         handleRetry,
         clearError,
         activeShiftType,
+        isOffToday,
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
@@ -282,17 +283,38 @@ const KTVAttendancePage = () => {
                             {formType === 'CHECK_IN' && (
                                 <div className="space-y-2">
                                     <label className="text-sm font-semibold text-gray-700 block">Ca làm việc hôm nay</label>
-                                    <select 
-                                        value={selectedShiftType}
-                                        onChange={(e) => setSelectedShiftType(e.target.value)}
-                                        className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white font-medium text-gray-700"
-                                    >
-                                        <option value="SHIFT_1">Ca 1 (09:00 - 17:00)</option>
-                                        <option value="SHIFT_2">Ca 2 (11:00 - 19:00)</option>
-                                        <option value="SHIFT_3">Ca 3 (17:00 - 00:00)</option>
-                                        <option value="FREE">Ca tự do (Linh hoạt)</option>
-                                        <option value="REQUEST">Làm khách yêu cầu</option>
-                                    </select>
+                                    {activeShiftType ? (
+                                        <select 
+                                            value={selectedShiftType}
+                                            disabled
+                                            className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-gray-50 text-gray-500 font-medium cursor-not-allowed"
+                                        >
+                                            <option value={activeShiftType}>
+                                                {activeShiftType === 'SHIFT_1' ? 'Ca 1 (09:00 - 17:00)' :
+                                                 activeShiftType === 'SHIFT_2' ? 'Ca 2 (11:00 - 19:00)' :
+                                                 activeShiftType === 'SHIFT_3' ? 'Ca 3 (17:00 - 00:00)' : 
+                                                 activeShiftType === 'FREE' ? 'Ca tự do (Linh hoạt)' :
+                                                 activeShiftType === 'REQUEST' ? 'Làm khách yêu cầu' : activeShiftType}
+                                            </option>
+                                        </select>
+                                    ) : (
+                                        <>
+                                            {isOffToday && (
+                                                <div className="bg-blue-50 text-blue-700 p-2.5 rounded-lg text-xs mb-2 font-medium flex items-center gap-2">
+                                                    <AlertCircle size={14} className="shrink-0" />
+                                                    <span>Hôm nay là ngày OFF của bạn.</span>
+                                                </div>
+                                            )}
+                                            <select 
+                                                value={selectedShiftType}
+                                                onChange={(e) => setSelectedShiftType(e.target.value)}
+                                                className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white font-medium text-gray-700"
+                                            >
+                                                <option value="FREE">Ca tự do (Linh hoạt)</option>
+                                                <option value="REQUEST">Làm khách yêu cầu</option>
+                                            </select>
+                                        </>
+                                    )}
                                 </div>
                             )}
                             
