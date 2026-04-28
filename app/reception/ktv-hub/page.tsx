@@ -12,7 +12,7 @@ import {
     UserCheck, Star, Moon, CalendarOff, Briefcase, ArrowRightLeft,
     UserPlus, AlertTriangle, Award, Camera,
     Check, X, Loader2, History
-} from 'lucide-react';
+, Trash2, CalendarDays } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -1041,43 +1041,58 @@ const LeaveOffTab = () => {
     const leaveLogic = useLeaveManagement();
     const shiftLogic = useShiftManagement();
 
+    const [subTab, setSubTab] = useState<'off' | 'shift'>('off');
+
+    // KTV Leave Logic (New Calendar)
     const {
-        isLoading, pendingList, processedList, actionLoading, leaveList,
-        viewMode, changeViewMode, offset, setOffset, rangeLabel,
-        handleAction, handleDelete,
+        isLoading,
+        actionLoading,
+        leaveList,
+        handleDelete,
+        calendarMonth,
+        selectedDate,
+        setSelectedDate,
+        goToPrevMonth,
+        goToNextMonth,
+        goToToday,
     } = leaveLogic;
 
+    // Shift Logic
     const {
-        allShifts, pendingShifts, isLoadingShifts, shiftActionLoading,
-        handleShiftAction, staffList, isLoadingStaff, unassignedStaff,
-        assignModalOpen, setAssignModalOpen, assignEmployeeId, setAssignEmployeeId,
-        assignShiftType, setAssignShiftType, isAssigning, handleAssignShift, openAssignModal,
+        allShifts,
+        pendingShifts,
+        isLoadingShifts,
+        shiftActionLoading,
+        handleShiftAction,
+        staffList,
+        isLoadingStaff,
+        unassignedStaff,
+        assignModalOpen,
+        setAssignModalOpen,
+        assignEmployeeId,
+        setAssignEmployeeId,
+        assignShiftType,
+        setAssignShiftType,
+        isAssigning,
+        handleAssignShift,
+        openAssignModal,
     } = shiftLogic;
 
-    // Inner sub-tab: 'off' | 'shift'
-    const [subTab, setSubTab] = React.useState<'off' | 'shift'>('off');
-    const [isAccordionOpen, setIsAccordionOpen] = React.useState(true);
-    const [selectedDate, setSelectedDate] = React.useState<string | null>(null);
+    // --- CALENDAR LOGIC ---
+    const MONTH_NAMES = [
+        'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+        'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
+    ];
+    const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    const BLOCKED_HOLIDAYS = ['04-30', '05-01', '09-02', '01-01'];
 
-    const formatLeaveDate = (d: string) => {
-        try { return format(new Date(d + 'T00:00:00'), 'EEEE, dd/MM', { locale: vi }); }
-        catch { return d; }
-    };
-
-    // Calendar logic
-    const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    const currentYear = vnNow.getFullYear();
-    const currentMonth = vnNow.getMonth() + offset;
-    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const { year, month } = calendarMonth;
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
     const daysInMonth = lastDayOfMonth.getDate();
-    const year = firstDayOfMonth.getFullYear();
-    const month = firstDayOfMonth.getMonth();
 
     let startDow = firstDayOfMonth.getDay(); 
-    startDow = startDow === 0 ? 6 : startDow - 1; // Mon=0
-
-    const todayStr = `${vnNow.getFullYear()}-${String(vnNow.getMonth() + 1).padStart(2, '0')}-${String(vnNow.getDate()).padStart(2, '0')}`;
+    startDow = startDow === 0 ? 6 : startDow - 1; 
 
     const leaveByDate: Record<string, typeof leaveList> = {};
     leaveList.forEach(leave => {
@@ -1085,10 +1100,29 @@ const LeaveOffTab = () => {
         leaveByDate[leave.date].push(leave);
     });
 
+    const todayStr = (() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    })();
+
+    const handleDateClick = (dateStr: string) => {
+        setSelectedDate(dateStr === selectedDate ? null : dateStr);
+    };
+
+    const selectedLeaves = selectedDate ? (leaveByDate[selectedDate] || []) : [];
+
+    const formatLeaveDate = (dateStr: string) => {
+        try {
+            return format(new Date(dateStr + 'T00:00:00'), 'EEEE, dd/MM', { locale: vi });
+        } catch {
+            return dateStr;
+        }
+    };
+
     return (
         <div className="space-y-4">
-            {/* Sub-tab switcher */}
-            <div className="flex bg-gray-100 rounded-2xl p-1 gap-1">
+            {/* ── TABS ── */}
+            <div className="flex bg-gray-100 rounded-2xl p-1 gap-1 w-full max-w-sm mx-auto mb-4">
                 <button
                     onClick={() => setSubTab('off')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'off' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -1110,205 +1144,161 @@ const LeaveOffTab = () => {
 
             {/* ── OFF SUB-TAB ── */}
             {subTab === 'off' && (
-                <div className="space-y-4">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
-                            <Loader2 size={20} className="animate-spin" /> Đang tải...
+                <div className="space-y-5">
+                    {/* ── CALENDAR ── */}
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
+                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                            <button onClick={goToPrevMonth} className="p-2 hover:bg-white rounded-xl transition-colors shadow-sm border border-transparent hover:border-gray-200">
+                                <ChevronLeft size={18} className="text-gray-500" />
+                            </button>
+                            <button onClick={goToToday} className="text-base font-black text-gray-800 px-4 py-1.5 hover:bg-white rounded-xl transition-colors shadow-sm border border-transparent hover:border-gray-200">
+                                {MONTH_NAMES[month]} {year}
+                            </button>
+                            <button onClick={goToNextMonth} className="p-2 hover:bg-white rounded-xl transition-colors shadow-sm border border-transparent hover:border-gray-200">
+                                <ChevronRight size={18} className="text-gray-500" />
+                            </button>
                         </div>
-                    ) : (
-                        <>
-                            {/* Accordion for Pending / Processed */}
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                                <button 
-                                    onClick={() => setIsAccordionOpen(!isAccordionOpen)}
-                                    className="w-full px-4 py-3 border-b border-gray-100 flex items-center gap-2 hover:bg-gray-50 transition-colors"
-                                >
-                                    <Clock size={16} className="text-amber-500" />
-                                    <h3 className="text-sm font-bold text-gray-900">Yêu cầu OFF chờ duyệt</h3>
-                                    {pendingList.length > 0 && (
-                                        <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                                            {pendingList.length}
-                                        </span>
-                                    )}
-                                    <ChevronRight size={16} className={`ml-auto text-gray-400 transition-transform ${isAccordionOpen ? 'rotate-90' : ''}`} />
-                                </button>
-                                
-                                {isAccordionOpen && (
-                                    <div>
-                                        {pendingList.length === 0 ? (
-                                            <div className="text-center py-8">
-                                                <CalendarOff size={28} className="text-gray-300 mx-auto mb-2" />
-                                                <p className="text-sm text-gray-400">Không có yêu cầu chờ duyệt</p>
+
+                        <div className="px-4 py-4">
+                            {isLoading ? (
+                                <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+                                    <Loader2 size={20} className="animate-spin" />
+                                    <span className="text-sm">Đang tải lịch...</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-7 gap-1 mb-2">
+                                        {WEEKDAY_LABELS.map((day, i) => (
+                                            <div key={day} className={`text-center text-[10px] font-bold uppercase tracking-wider py-1 ${i === 6 ? 'text-red-400' : i === 5 ? 'text-blue-400' : 'text-gray-400'}`}>
+                                                {day}
                                             </div>
-                                        ) : (
-                                            <div className="divide-y divide-gray-50">
-                                                {pendingList.map(leave => {
-                                                    const ls = actionLoading[leave.id];
-                                                    return (
-                                                        <div key={leave.id} className="px-4 py-3 flex items-center gap-3">
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="font-bold text-sm text-gray-900">{leave.employeeName}</p>
-                                                                <p className="text-xs text-gray-500 capitalize">{formatLeaveDate(leave.date)}</p>
-                                                                {leave.reason && <p className="text-xs text-gray-400 italic truncate">"{leave.reason}"</p>}
-                                                            </div>
-                                                            <div className="flex gap-1.5 shrink-0">
-                                                                <button onClick={() => handleAction(leave.id, 'APPROVE')} disabled={!!ls}
-                                                                    className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50">
-                                                                    {ls === 'APPROVE' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} strokeWidth={3} />}
-                                                                </button>
-                                                                <button onClick={() => handleAction(leave.id, 'REJECT')} disabled={!!ls}
-                                                                    className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-xl transition-all disabled:opacity-50">
-                                                                    {ls === 'REJECT' ? <Loader2 size={13} className="animate-spin" /> : <X size={13} strokeWidth={3} />}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                        {/* Processed (small list inside accordion) */}
-                                        {processedList.length > 0 && (
-                                            <div className="border-t border-gray-100 bg-gray-50/50">
-                                                <div className="px-4 py-2 flex items-center gap-2">
-                                                    <History size={14} className="text-gray-400" />
-                                                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Đã Xử Lý</h4>
-                                                </div>
-                                                <div className="divide-y divide-gray-100">
-                                                    {processedList.map(leave => (
-                                                        <div key={leave.id} className="px-4 py-2.5 flex items-center gap-3">
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="font-bold text-xs text-gray-900">{leave.employeeName}</p>
-                                                                <p className="text-[10px] text-gray-500 capitalize">{formatLeaveDate(leave.date)}</p>
-                                                            </div>
-                                                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${leave.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                                                                {leave.status === 'APPROVED' ? '✓ Duyệt' : '✗ Từ chối'}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                        ))}
                                     </div>
-                                )}
-                            </div>
 
-                            {/* Calendar Grid */}
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mt-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <button onClick={() => setOffset(prev => prev - 1)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                                        <ChevronLeft size={18} className="text-gray-500" />
-                                    </button>
-                                    <span className="text-sm font-bold text-gray-800">
-                                        Tháng {month + 1} {year}
-                                    </span>
-                                    <button onClick={() => setOffset(prev => prev + 1)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                                        <ChevronRight size={18} className="text-gray-500" />
-                                    </button>
-                                </div>
+                                    <div className="grid grid-cols-7 gap-1">
+                                        {Array.from({ length: startDow }).map((_, i) => (
+                                            <div key={`empty-${i}`} className="aspect-square" />
+                                        ))}
 
-                                <div className="grid grid-cols-7 gap-1 mb-2">
-                                    {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((day, i) => (
-                                        <div key={day} className={`text-center text-[10px] font-bold uppercase tracking-wider py-1 ${i === 6 ? 'text-red-400' : i === 5 ? 'text-blue-400' : 'text-gray-400'}`}>
-                                            {day}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-7 gap-1">
-                                    {Array.from({ length: startDow }).map((_, i) => (
-                                        <div key={`empty-${i}`} className="aspect-square" />
-                                    ))}
-
-                                    {Array.from({ length: daysInMonth }).map((_, i) => {
-                                        const day = i + 1;
-                                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                                        const dayLeaves = leaveByDate[dateStr] || [];
-                                        const approvedLeaves = dayLeaves.filter(l => l.status === 'APPROVED');
-                                        
-                                        const isToday = dateStr === todayStr;
-                                        const isSelected = dateStr === selectedDate;
-                                        const hasOff = approvedLeaves.length > 0;
-                                        const dow = (startDow + i) % 7;
-
-                                        return (
-                                            <button
-                                                key={dateStr}
-                                                onClick={() => setSelectedDate(isSelected ? null : dateStr)}
-                                                className={`
-                                                    aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all
-                                                    ${isSelected ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 scale-105'
-                                                        : isToday ? 'bg-indigo-50 text-indigo-700 border-2 border-indigo-300 font-black'
-                                                        : hasOff ? 'bg-rose-50 text-rose-700 font-bold border border-rose-100'
-                                                        : dow === 6 ? 'text-red-300 hover:bg-red-50/50'
-                                                        : dow === 5 ? 'text-blue-300 hover:bg-blue-50/50'
-                                                        : 'text-gray-500 hover:bg-gray-50'
-                                                    }
-                                                `}
-                                            >
-                                                <span className="text-sm leading-none">{day}</span>
-                                                {hasOff && (
-                                                    <div className="flex gap-0.5 mt-1">
-                                                        <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-rose-500'}`} />
-                                                    </div>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Selected Date Details Box */}
-                            {selectedDate && (
-                                <div className="bg-gray-900 rounded-2xl p-5 shadow-lg text-white animate-in fade-in slide-in-from-top-4 duration-200">
-                                    <h3 className="text-sm font-bold flex items-center gap-2 mb-3">
-                                        <span className="text-rose-400">❤️</span>
-                                        {formatLeaveDate(selectedDate)}
-                                    </h3>
-                                    
-                                    {/* Shifts Breakdown */}
-                                    <div className="grid grid-cols-3 gap-2 mb-4">
-                                        {['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].map(sType => {
-                                            const shiftStaffs = allShifts.filter(s => s.shiftType === sType);
-                                            const dateLeaves = leaveByDate[selectedDate] || [];
-                                            const approvedOffIds = dateLeaves.filter(l => l.status === 'APPROVED').map(l => l.employeeId);
-                                            const activeInShift = shiftStaffs.filter(s => !approvedOffIds.includes(s.employeeId)).length;
-                                            const label = sType === 'SHIFT_1' ? 'Ca sáng' : sType === 'SHIFT_2' ? 'Ca trưa' : 'Ca chiều';
+                                        {Array.from({ length: daysInMonth }).map((_, i) => {
+                                            const day = i + 1;
+                                            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                            const dayLeaves = leaveByDate[dateStr] || [];
+                                            const isToday = dateStr === todayStr;
+                                            const isSelected = dateStr === selectedDate;
+                                            const isBlocked = BLOCKED_HOLIDAYS.includes(dateStr.slice(5));
+                                            const offCount = dayLeaves.length;
+                                            const dow = (startDow + i) % 7;
                                             
+                                            let cellStyle = 'text-gray-600 hover:bg-gray-50 border border-transparent';
+                                            
+                                            if (isSelected) {
+                                                cellStyle = 'bg-indigo-600 text-white shadow-md shadow-indigo-200 scale-105 font-bold border-indigo-600 z-10';
+                                            } else if (isBlocked) {
+                                                cellStyle = 'bg-gray-100 text-gray-400 cursor-not-allowed';
+                                            } else if (isToday) {
+                                                cellStyle = 'bg-indigo-50 text-indigo-700 border-indigo-200 font-black';
+                                            } else if (offCount > 0) {
+                                                cellStyle = 'bg-rose-50 text-rose-700 border-rose-100 font-bold hover:bg-rose-100';
+                                            } else if (dow === 6) {
+                                                cellStyle = 'text-red-400 hover:bg-red-50/50';
+                                            } else if (dow === 5) {
+                                                cellStyle = 'text-blue-400 hover:bg-blue-50/50';
+                                            }
+
                                             return (
-                                                <div key={sType} className="bg-gray-800 rounded-xl p-2 text-center border border-gray-700">
-                                                    <p className="text-[10px] text-gray-400 mb-0.5">{label}</p>
-                                                    <p className="text-sm font-black text-white">{activeInShift}</p>
-                                                </div>
+                                                <button
+                                                    key={dateStr}
+                                                    onClick={() => handleDateClick(dateStr)}
+                                                    className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all text-sm ${cellStyle}`}
+                                                >
+                                                    <span className="leading-none">{day}</span>
+                                                    
+                                                    {offCount > 0 && !isSelected && (
+                                                        <div className="absolute -bottom-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-sm border-2 border-white">
+                                                            {offCount}
+                                                        </div>
+                                                    )}
+                                                </button>
                                             );
                                         })}
                                     </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
 
-                                    {/* Off List */}
-                                    <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-                                        <div className="px-3 py-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center text-xs">
-                                            <span className="font-medium text-gray-300">Danh sách nghỉ</span>
-                                            <span className="text-rose-400 font-bold">
-                                                {(leaveByDate[selectedDate] || []).filter(l => l.status === 'APPROVED').length} người
-                                            </span>
+                    {/* ── CHI TIẾT NGÀY ĐƯỢC CHỌN ── */}
+                    {selectedDate && (
+                        <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 bg-indigo-50/50">
+                                <div className="bg-indigo-100 text-indigo-600 p-2 rounded-xl">
+                                    <CalendarDays size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-900">Chi tiết ngày {format(new Date(selectedDate), 'dd/MM/yyyy')}</h3>
+                                    <p className="text-xs text-gray-500">Có {selectedLeaves.length} nhân sự đăng ký OFF</p>
+                                </div>
+                            </div>
+
+                            <div className="p-4 space-y-5">
+                                {/* KHU VỰC NGƯỜI NGHỈ */}
+                                <div>
+                                    <h4 className="text-[11px] font-black text-rose-500 mb-2 uppercase tracking-wider flex items-center justify-between">
+                                        Nhân sự OFF
+                                        <span className="bg-rose-100 text-rose-700 py-0.5 px-2 rounded-full text-[10px]">
+                                            {selectedLeaves.length}
+                                        </span>
+                                    </h4>
+                                    {selectedLeaves.length === 0 ? (
+                                        <div className="text-center py-4 bg-gray-50/50 rounded-2xl border border-gray-100 border-dashed">
+                                            <p className="text-xs text-gray-400 font-medium">Không có ai OFF.</p>
                                         </div>
-                                        <div className="p-3">
-                                            {(leaveByDate[selectedDate] || []).filter(l => l.status === 'APPROVED').length === 0 ? (
-                                                <p className="text-xs text-gray-500 text-center">Không có ai đăng ký OFF</p>
-                                            ) : (
-                                                <div className="flex flex-wrap gap-2">
-                                                    {(leaveByDate[selectedDate] || []).filter(l => l.status === 'APPROVED').map(l => (
-                                                        <div key={l.id} className="flex items-center gap-1.5 bg-gray-900 border border-gray-700 px-2.5 py-1 rounded-lg">
-                                                            <span className="text-xs font-bold text-gray-200">{l.employeeId}</span>
-                                                            {l.reason && <span className="text-[10px] text-gray-500 italic max-w-[120px] truncate">{l.reason}</span>}
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {selectedLeaves.map(leave => {
+                                                const loadState = actionLoading[leave.id];
+                                                return (
+                                                    <div key={leave.id} className="flex items-center justify-between p-2 rounded-xl border border-rose-100 bg-rose-50/50 group">
+                                                        <div className="min-w-0 flex-1">
+                                                                <p className="font-bold text-[13px] text-rose-700">{leave.employeeId}</p>
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                                        
+                                                        <button
+                                                            onClick={() => handleDelete(leave.id)}
+                                                            disabled={!!loadState}
+                                                            className="p-1.5 text-rose-300 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-all disabled:opacity-50"
+                                                            title="Huỷ ngày OFF này"
+                                                        >
+                                                            {loadState === 'delete' ? <Loader2 size={12} className="animate-spin text-rose-500" /> : <Trash2 size={12} />}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
+                                    )}
+                                </div>
+
+                                {/* KHU VỰC NGƯỜI LÀM */}
+                                <div>
+                                    <h4 className="text-[11px] font-black text-emerald-600 mb-2 uppercase tracking-wider flex items-center justify-between">
+                                        Nhân sự làm việc
+                                        <span className="bg-emerald-100 text-emerald-700 py-0.5 px-2 rounded-full text-[10px]">
+                                            {allShifts.filter(shift => !selectedLeaves.some(l => l.employeeId === shift.employeeId)).length}
+                                        </span>
+                                    </h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {allShifts
+                                            .filter(shift => !selectedLeaves.some(l => l.employeeId === shift.employeeId))
+                                            .map(shift => (
+                                                <div key={shift.id} className="flex items-center justify-center py-1.5 px-2 rounded-xl border border-emerald-100/50 bg-emerald-50/50">
+                                                    <p className="font-bold text-[12px] text-emerald-700 truncate">{shift.employeeId}</p>
+                                                </div>
+                                        ))}
                                     </div>
                                 </div>
-                            )}
-                        </>
+                            </div>
+                        </div>
                     )}
                 </div>
             )}

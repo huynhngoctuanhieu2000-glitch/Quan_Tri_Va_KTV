@@ -26,7 +26,6 @@ const STATUS_LABELS: Record<string, string> = {
 
 const KTVLeavePage = () => {
     const {
-        reason,
         date,
         isSubmitting,
         mounted,
@@ -35,7 +34,6 @@ const KTVLeavePage = () => {
         isLoadingList,
         submitError,
         submitSuccess,
-        setReason,
         setDate,
         setSubmitError,
         handleSubmit,
@@ -91,17 +89,7 @@ const KTVLeavePage = () => {
                             </div>
                         </div>
 
-                        {/* Reason */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t.labelReason}</label>
-                            <textarea
-                                value={reason}
-                                onChange={(e) => setReason(e.target.value)}
-                                placeholder={t.placeholderReason}
-                                className="w-full p-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-rose-400 focus:border-rose-400 outline-none resize-none h-24 text-sm bg-gray-50"
-                                required
-                            />
-                        </div>
+
 
                         {/* Warning */}
                         <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-sm text-amber-800">
@@ -127,10 +115,9 @@ const KTVLeavePage = () => {
                             </div>
                         )}
 
-                        {/* Submit button */}
                         <button
                             type="submit"
-                            disabled={isSubmitting || !date || !reason}
+                            disabled={isSubmitting || !date}
                             className="w-full py-3.5 bg-rose-600 text-white font-bold rounded-2xl hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-md shadow-rose-200"
                         >
                             {isSubmitting ? (
@@ -210,7 +197,6 @@ const KTVLeavePage = () => {
                                                 </span>
                                             </div>
 
-                                            {/* Middle: Info */}
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-sm text-gray-900 truncate">
                                                     {leave.employeeName}
@@ -218,11 +204,6 @@ const KTVLeavePage = () => {
                                                 <p className="text-xs text-gray-500 capitalize truncate">
                                                     {formattedDate}
                                                 </p>
-                                                {leave.reason && (
-                                                    <p className="text-xs text-gray-400 mt-0.5 truncate">
-                                                        {leave.reason}
-                                                    </p>
-                                                )}
                                             </div>
 
                                             {/* Right: Status */}

@@ -23,7 +23,6 @@ export interface LeaveRequest {
  */
 export const useKTVLeave = () => {
     const { hasPermission, user } = useAuth();
-    const [reason, setReason] = useState('');
     const [date, setDate] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -71,7 +70,7 @@ export const useKTVLeave = () => {
     // --- Submit leave request ---
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!date || !reason || !user?.id) return;
+        if (!date || !user?.id) return;
 
         setIsSubmitting(true);
         setSubmitError(null);
@@ -85,7 +84,7 @@ export const useKTVLeave = () => {
                     employeeId: user.id,
                     employeeName: user.name || user.id,
                     date,
-                    reason,
+                    reason: "Xin nghỉ",
                 }),
             });
 
@@ -97,7 +96,6 @@ export const useKTVLeave = () => {
             }
 
             setSubmitSuccess(true);
-            setReason('');
             setDate('');
 
             // Refresh the leave list
@@ -113,7 +111,6 @@ export const useKTVLeave = () => {
     };
 
     return {
-        reason,
         date,
         isSubmitting,
         mounted,
@@ -122,7 +119,6 @@ export const useKTVLeave = () => {
         isLoadingList,
         submitError,
         submitSuccess,
-        setReason,
         setDate,
         setSubmitError,
         handleSubmit,

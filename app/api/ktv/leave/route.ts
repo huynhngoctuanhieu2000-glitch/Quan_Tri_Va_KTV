@@ -110,13 +110,13 @@ export async function POST(request: Request) {
             );
         }
 
-        // Insert valid requests
+        // Insert valid requests (Auto-approved)
         const insertPayloads = validDates.map(d => ({
             employeeId,
             employeeName: employeeName || employeeId,
             date: d,
             reason,
-            status: 'PENDING'
+            status: 'APPROVED'
         }));
 
         const { data: records, error: insertError } = await supabase

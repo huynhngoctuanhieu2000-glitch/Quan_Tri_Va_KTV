@@ -13,7 +13,6 @@ export interface StaffOption {
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 // --- TYPES ---
-export type ViewMode = 'day' | 'week' | 'month';
 export type AdminTab = 'off' | 'shift';
 
 export interface LeaveRequest {
@@ -49,10 +48,10 @@ const getVnNow = () => new Date(Date.now() + VN_OFFSET_MS);
 
 /**
  * Custom hook for Admin Leave Management page.
- * Supports Day / Week / Month view modes with offset navigation.
+ * Supports Calendar Month view.
  */
 export const useLeaveManagement = () => {
-    const { hasPermission, user } = useAuth();
+    const { hasPermission } = useAuth();
     const [mounted, setMounted] = useState(false);
     const [leaveList, setLeaveList] = useState<LeaveRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -61,70 +60,29 @@ export const useLeaveManagement = () => {
     // Admin tab state
     const [adminTab, setAdminTab] = useState<AdminTab>('off');
 
-    // View mode + offset (0 = current, -1 = previous, 1 = next)
-    const [viewMode, setViewMode] = useState<ViewMode>('month');
-    const [offset, setOffset] = useState(0);
+    // ── Calendar state ──
+    const [calendarMonth, setCalendarMonth] = useState(() => {
+        const now = new Date();
+        return { year: now.getFullYear(), month: now.getMonth() }; // 0-indexed
+    });
+    
+    // Day selected by manager to view details
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
     useEffect(() => { setMounted(true); }, []);
 
     const canAccessPage = hasPermission('leave_management');
 
-    // Calculate date range from viewMode + offset
-    const dateRange = useMemo(() => {
-        const vnNow = getVnNow();
-        let from: Date;
-        let to: Date;
-
-        if (viewMode === 'day') {
-            const target = new Date(vnNow);
-            target.setDate(target.getDate() + offset);
-            from = target;
-            to = target;
-        } else if (viewMode === 'week') {
-            const target = new Date(vnNow);
-            target.setDate(target.getDate() + offset * 7);
-            // Start of week (Monday)
-            const dayOfWeek = target.getDay();
-            const mondayDiff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            from = new Date(target);
-            from.setDate(target.getDate() + mondayDiff);
-            to = new Date(from);
-            to.setDate(from.getDate() + 6);
-        } else {
-            // Month
-            from = new Date(vnNow.getFullYear(), vnNow.getMonth() + offset, 1);
-            to = new Date(vnNow.getFullYear(), vnNow.getMonth() + offset + 1, 0);
-        }
-
-        return {
-            from: from.toISOString().split('T')[0],
-            to: to.toISOString().split('T')[0],
-        };
-    }, [viewMode, offset]);
-
-    // Generate display label for current range
-    const rangeLabel = useMemo(() => {
-        const vnNow = getVnNow();
-
-        if (viewMode === 'day') {
-            const target = new Date(vnNow);
-            target.setDate(target.getDate() + offset);
-            const day = String(target.getDate()).padStart(2, '0');
-            const month = String(target.getMonth() + 1).padStart(2, '0');
-            return `${day}/${month}/${target.getFullYear()}`;
-        } else if (viewMode === 'week') {
-            return `${formatShortDate(dateRange.from)} — ${formatShortDate(dateRange.to)}`;
-        } else {
-            const target = new Date(vnNow.getFullYear(), vnNow.getMonth() + offset, 1);
-            return `Tháng ${target.getMonth() + 1}/${target.getFullYear()}`;
-        }
-    }, [viewMode, offset, dateRange]);
-
     // --- Fetch leave list ---
     const fetchLeaveList = useCallback(async () => {
         setIsLoading(true);
         try {
-            const res = await fetch(`/api/ktv/leave?from=${dateRange.from}&to=${dateRange.to}`);
+            const { year, month } = calendarMonth;
+            const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+            const res = await fetch(`/api/ktv/leave?from=${from}&to=${to}`);
             const result = await res.json();
 
             if (result.success) {
@@ -137,7 +95,7 @@ export const useLeaveManagement = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [dateRange]);
+    }, [calendarMonth]);
 
     useEffect(() => {
         if (mounted) {
@@ -145,33 +103,25 @@ export const useLeaveManagement = () => {
         }
     }, [mounted, fetchLeaveList]);
 
-    // Reset offset when view mode changes
-    const changeViewMode = useCallback((mode: ViewMode) => {
-        setViewMode(mode);
-        setOffset(0);
+    // Calendar navigation
+    const goToPrevMonth = useCallback(() => {
+        setCalendarMonth(prev => {
+            if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+            return { ...prev, month: prev.month - 1 };
+        });
     }, []);
 
-    // --- Approve / Reject ---
-    const handleAction = async (leaveId: string, action: 'APPROVE' | 'REJECT') => {
-        setActionLoading(prev => ({ ...prev, [leaveId]: action === 'APPROVE' ? 'approve' : 'reject' }));
-        try {
-            const res = await fetch('/api/ktv/leave', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ leaveId, action, adminId: user?.id }),
-            });
-            const result = await res.json();
-            if (result.success) {
-                fetchLeaveList();
-            } else {
-                alert(result.error || 'Lỗi xử lý');
-            }
-        } catch (err) {
-            console.error('❌ [LeaveManagement] Action error:', err);
-        } finally {
-            setActionLoading(prev => { const next = { ...prev }; delete next[leaveId]; return next; });
-        }
-    };
+    const goToNextMonth = useCallback(() => {
+        setCalendarMonth(prev => {
+            if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+            return { ...prev, month: prev.month + 1 };
+        });
+    }, []);
+
+    const goToToday = useCallback(() => {
+        const now = new Date();
+        setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
+    }, []);
 
     // --- Delete ---
     const handleDelete = async (leaveId: string) => {
@@ -193,35 +143,22 @@ export const useLeaveManagement = () => {
         }
     };
 
-    // --- Computed ---
-    const pendingList = leaveList.filter(l => l.status === 'PENDING');
-    const processedList = leaveList.filter(l => l.status !== 'PENDING');
-
-    const stats = {
-        total: leaveList.length,
-        pending: pendingList.length,
-        approved: leaveList.filter(l => l.status === 'APPROVED').length,
-        rejected: leaveList.filter(l => l.status === 'REJECTED').length,
-    };
-
     return {
         mounted,
         canAccessPage,
         isLoading,
         actionLoading,
         leaveList,
-        pendingList,
-        processedList,
-        stats,
-        viewMode,
-        changeViewMode,
-        offset,
-        setOffset,
-        rangeLabel,
-        handleAction,
         handleDelete,
         adminTab,
         setAdminTab,
+        // Calendar
+        calendarMonth,
+        selectedDate,
+        setSelectedDate,
+        goToPrevMonth,
+        goToNextMonth,
+        goToToday,
     };
 };
 
