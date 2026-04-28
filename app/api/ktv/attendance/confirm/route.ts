@@ -38,6 +38,14 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ success: false, error: 'Attendance record not found' }, { status: 404 });
         }
 
+        // Lấy staffCode từ Users table vì TurnQueue.employee_id lưu staffCode (vd: NH014)
+        const { data: userRow } = await supabase
+            .from('Users')
+            .select('code')
+            .eq('id', attendance.employeeId)
+            .maybeSingle();
+        const staffCode = userRow?.code || attendance.employeeId;
+
         const newStatus = action === 'CONFIRM' ? 'CONFIRMED' : 'REJECTED';
 
         // ─── Update KTVAttendance status ────────────────────────────────
@@ -64,7 +72,7 @@ export async function PATCH(request: Request) {
             const { data: existingTurn } = await supabase
                 .from('TurnQueue')
                 .select('id')
-                .eq('employee_id', attendance.employeeId)
+                .eq('employee_id', staffCode)
                 .eq('date', today)
                 .maybeSingle();
 
@@ -82,7 +90,7 @@ export async function PATCH(request: Request) {
                 const { error: turnError } = await supabase
                     .from('TurnQueue')
                     .insert({
-                        employee_id: attendance.employeeId,
+                        employee_id: staffCode,
                         date: today,
                         queue_position: nextPosition,
                         status: 'waiting',
@@ -103,7 +111,7 @@ export async function PATCH(request: Request) {
             await supabase
                 .from('TurnQueue')
                 .update({ status: 'off' })
-                .eq('employee_id', attendance.employeeId)
+                .eq('employee_id', staffCode)
                 .eq('date', today);
         }
 
