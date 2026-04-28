@@ -4,7 +4,7 @@ import React from 'react';
 import { ShieldAlert, Trash2, ChevronLeft, ChevronRight, Briefcase, ArrowRightLeft, UserPlus, Users, Loader2, Check, X, CalendarDays, CheckCircle2, CalendarOff } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { useLeaveManagement, useShiftManagement, ViewMode, AdminTab } from './LeaveManagement.logic';
+import { useLeaveManagement, useShiftManagement, AdminTab } from './LeaveManagement.logic';
 import { t } from './LeaveManagement.i18n';
 import { AppLayout } from '@/components/layout/AppLayout';
 
@@ -90,7 +90,7 @@ const LeaveManagementPage = () => {
 {/* ── TAB CONTENT ── */}
 
                 {adminTab === 'off' ? (
-                    <OffTab logic={leaveLogic} />
+                    <OffTab logic={leaveLogic} allShifts={shiftLogic.allShifts} />
                 ) : (
                     <ShiftManagementTab logic={shiftLogic} />
                 )}
@@ -110,7 +110,7 @@ const MONTH_NAMES = [
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const BLOCKED_HOLIDAYS = ['04-30', '05-01', '09-02', '01-01'];
 
-const OffTab = ({ logic }: { logic: ReturnType<typeof useLeaveManagement> }) => {
+const OffTab = ({ logic, allShifts }: { logic: ReturnType<typeof useLeaveManagement>, allShifts: any[] }) => {
     const {
         isLoading,
         actionLoading,
