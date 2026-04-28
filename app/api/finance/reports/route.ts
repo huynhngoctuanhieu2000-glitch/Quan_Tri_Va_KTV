@@ -20,6 +20,17 @@ export async function GET(request: Request) {
     const hourTo = searchParams.get('hourTo') ? parseInt(searchParams.get('hourTo')!, 10) : null;
     const lang = searchParams.get('lang') || 'all';
 
+    const getMinsFromTimes = (start: string, end: string) => {
+        if (!start || !end) return 0;
+        const [h1, m1] = start.split(':').map(Number);
+        const [h2, m2] = end.split(':').map(Number);
+        if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
+        let mins1 = h1 * 60 + m1;
+        let mins2 = h2 * 60 + m2;
+        if (mins2 < mins1) mins2 += 24 * 60; // cross midnight
+        return mins2 - mins1;
+    };
+
     if (!dateFrom || !dateTo) {
         return NextResponse.json({ success: false, error: 'dateFrom and dateTo are required' }, { status: 400 });
     }
@@ -75,7 +86,7 @@ export async function GET(request: Request) {
                 const batch = bookingIds.slice(i, i + batchSize);
                 const { data: batchItems } = await supabase
                     .from('BookingItems')
-                    .select('id, bookingId, serviceId, price, tip, itemRating, technicianCodes, roomName, quantity')
+                    .select('id, bookingId, serviceId, price, tip, itemRating, technicianCodes, roomName, quantity, segments')
                     .in('bookingId', batch);
                 if (batchItems) items.push(...batchItems);
             }
@@ -215,19 +226,10 @@ export async function GET(request: Request) {
         const bedOccupancy = occupancy; // alias for clarity
         const revenuePerBed = bedCount > 0 ? Math.round(revenue / bedCount) : 0;
 
-        // Total Commission (Tiền tua) — tính từ duration dịch vụ × số lượng items
+        // Note: totalCommission is now calculated during KTV processing below to ensure segments are considered
         let totalCommission = 0;
-        items.forEach(i => {
-            const dur = svcDurationMap[String(i.serviceId)] || 60;
-            const qty = Number(i.quantity) || 1;
-            totalCommission += calcCommission(dur) * qty;
-        });
 
-        // #4 Cost per Service = commission / service count
-        const costPerService = totalServiceCount > 0 ? Math.round(totalCommission / totalServiceCount) : 0;
-
-        // #5 Cost Ratio = commission / revenue × 100%
-        const costRatio = revenue > 0 ? Math.round((totalCommission / revenue) * 1000) / 10 : 0;
+        // #6 Unique customers from completed bookings
 
         // #6 Unique customers from completed bookings
         const uniqueCustomerIds = new Set(completedBookings.map(b => b.customerId).filter(Boolean));
@@ -366,15 +368,38 @@ export async function GET(request: Request) {
         items.forEach(i => {
             const techs = Array.isArray(i.technicianCodes) ? i.technicianCodes : [];
             if (techs.length === 0) return;
-            const dur = svcDurationMap[String(i.serviceId)] || 60;
+            
             const qty = Number(i.quantity) || 1;
-            const itemCommission = calcCommission(dur) * qty;
-            const perKtvCommission = itemCommission / techs.length;
-            const perKtvTip = (Number(i.tip) || 0) / techs.length;
-            const hasRating = i.itemRating && Number(i.itemRating) > 0;
+            
             techs.forEach((tc: string) => {
                 const code = tc.trim();
                 if (!code) return;
+                
+                let myTotalMins = 0;
+                if (i.segments) {
+                    try {
+                        const segs = typeof i.segments === 'string' ? JSON.parse(i.segments) : i.segments;
+                        const mySegs = segs.filter((seg: any) => 
+                            seg.ktvId && seg.ktvId.toLowerCase().includes(code.toLowerCase())
+                        );
+                        if (mySegs.length > 0) {
+                            myTotalMins = mySegs.reduce((sum: number, seg: any) => {
+                                const realMins = getMinsFromTimes(seg.startTime, seg.endTime);
+                                return sum + (realMins > 0 ? realMins : (Number(seg.duration) || 0));
+                            }, 0);
+                        }
+                    } catch {}
+                }
+                
+                if (myTotalMins === 0) {
+                    myTotalMins = svcDurationMap[String(i.serviceId)] || 60;
+                    myTotalMins = myTotalMins / techs.length; // Fallback: divide duration by num KTVs
+                }
+                
+                const perKtvCommission = calcCommission(myTotalMins) * qty;
+                const perKtvTip = (Number(i.tip) || 0) / techs.length;
+                const hasRating = i.itemRating && Number(i.itemRating) > 0;
+                
                 if (!ktvMap[code]) ktvMap[code] = { code, orders: 0, revenue: 0, commission: 0, totalTip: 0, ratingSum: 0, ratingCount: 0 };
                 ktvMap[code].commission += perKtvCommission;
                 ktvMap[code].totalTip += perKtvTip;
@@ -384,6 +409,11 @@ export async function GET(request: Request) {
                 }
             });
         });
+        
+        // Calculate global summary fields based on computed KTV maps
+        totalCommission = Object.values(ktvMap).reduce((sum, ktv) => sum + ktv.commission, 0);
+        const costPerService = totalServiceCount > 0 ? Math.round(totalCommission / totalServiceCount) : 0;
+        const costRatio = revenue > 0 ? Math.round((totalCommission / revenue) * 1000) / 10 : 0;
         // Return ALL KTVs sorted by revenue (no top-10 limit)
         const allKTV = Object.values(ktvMap)
             .sort((a, b) => b.revenue - a.revenue);

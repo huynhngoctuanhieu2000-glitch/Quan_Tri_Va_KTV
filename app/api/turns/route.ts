@@ -15,6 +15,7 @@ export async function GET(request: Request) {
             .from('TurnQueue')
             .select('*')
             .eq('date', date)
+            .order('turns_completed', { ascending: true })
             .order('queue_position', { ascending: true });
 
         if (error) throw error;
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
             .from('TurnQueue')
             .select('*')
             .eq('date', date)
+            .order('turns_completed', { ascending: true })
             .order('queue_position', { ascending: true });
 
         if (newError) throw newError;

@@ -378,19 +378,25 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 <div className="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
                     <AnimatePresence>
                         {sortedToasts.filter(n => !n.isRead).map((n) => (
-                            <KtvMessageToast 
-                                key={n.id} 
-                                notification={n} 
-                                currentScreen={ktvScreen}
-                                onRedirect={() => {
-                                    const t = (n.type || '').toUpperCase();
-                                    if (t === 'KTV_NEW_ORDER') {
-                                        router.push('/ktv/dashboard');
-                                    } else {
-                                        router.push('/ktv/history');
-                                    }
-                                }}
-                            />
+                                <KtvMessageToast 
+                                    key={n.id} 
+                                    notification={n} 
+                                    currentScreen={ktvScreen}
+                                    onRedirect={() => {
+                                        const t = (n.type || '').toUpperCase();
+                                        if (t === 'KTV_NEW_ORDER') {
+                                            if (ktvScreen === 'REVIEW') {
+                                                alert('Vui lòng đánh giá tính cách khách hàng trước khi chuyển ca!');
+                                            } else if (ktvScreen === 'HANDOVER') {
+                                                window.dispatchEvent(new Event('KTV_FAST_TRACK'));
+                                            } else {
+                                                router.push('/ktv/dashboard');
+                                            }
+                                        } else {
+                                            router.push('/ktv/history');
+                                        }
+                                    }}
+                                />
                         ))}
                     </AnimatePresence>
                 </div>
@@ -444,7 +450,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 };
 
 const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notification: Notification, currentScreen: string, onRedirect: () => void }) => {
-    const isLocked = ['REVIEW', 'HANDOVER'].includes(currentScreen);
+    const isLocked = currentScreen === 'REVIEW';
     const type = notification.type?.toUpperCase();
     const isComplaint = type === 'COMPLAINT';
     const isCheckIn = type === 'CHECK_IN';

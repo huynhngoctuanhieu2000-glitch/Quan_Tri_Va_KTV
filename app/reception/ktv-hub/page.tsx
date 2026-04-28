@@ -565,11 +565,15 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         fetchTurns();
     };
 
-    // Sắp xếp: waiting/working lên trước, off xuống cuối
+    // Sắp xếp: waiting/working lên trước, off xuống cuối, sau đó theo số tua, sau đó theo queue_position (mặc định = check_in_order)
     const sortedTurns = [...turns].sort((a, b) => {
         if (a.status === 'off' && b.status !== 'off') return 1;
         if (a.status !== 'off' && b.status === 'off') return -1;
-        return 0;
+        
+        if (a.turns_completed !== b.turns_completed) {
+            return a.turns_completed - b.turns_completed;
+        }
+        return a.queue_position - b.queue_position;
     });
 
     const readyCount = turns.filter(t => t.status === 'waiting').length;

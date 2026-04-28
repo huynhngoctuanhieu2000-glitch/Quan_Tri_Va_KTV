@@ -48,7 +48,12 @@ export interface DashboardConfig {
 
 export function useKTVDashboard(config?: DashboardConfig) {
     const { user } = useAuth();
-    const [screen, setScreen] = useState<ScreenState>('DASHBOARD');
+    const [screen, setScreenState] = useState<ScreenState>('DASHBOARD');
+    const setScreen = useCallback((val: ScreenState) => {
+        setScreenState(val);
+        try { localStorage.setItem('ktv_active_screen', val); } catch(e) {}
+    }, []);
+
     const [booking, setBooking] = useState<any>(null);
     const [showProcedure, setShowProcedure] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -102,10 +107,66 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const manualSegmentOverrideRef = useRef<boolean>(false);
     const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
 
-    useEffect(() => { screenRef.current = screen; }, [screen]);
+    useEffect(() => { 
+        screenRef.current = screen; 
+    }, [screen]);
+
+    useEffect(() => {
+        try {
+            const savedScreen = localStorage.getItem('ktv_active_screen') as ScreenState;
+            const savedBookingId = localStorage.getItem('ktv_active_booking_id');
+            if (savedScreen && ['REVIEW', 'HANDOVER', 'REWARD'].includes(savedScreen) && savedBookingId) {
+                setScreenState(savedScreen);
+                prevBookingIdRef.current = savedBookingId;
+            } else {
+                localStorage.removeItem('ktv_active_screen');
+                localStorage.removeItem('ktv_active_booking_id');
+            }
+        } catch (e) {}
+    }, []);
     useEffect(() => { bookingRef.current = booking; }, [booking]);
     useEffect(() => { isPreppingRef.current = isPrepping; }, [isPrepping]);
     useEffect(() => { isTimerRunningRef.current = isTimerRunning; }, [isTimerRunning]);
+
+    // 🚀 Fast-Track Handover Skip
+    useEffect(() => {
+        const handleFastTrack = async () => {
+            if (screenRef.current === 'HANDOVER') {
+                console.log("🚀 [KTV] Fast-tracking to new order...");
+                
+                // 1. Auto-complete the current order in DB
+                if (bookingRef.current) {
+                    try {
+                        await fetch('/api/ktv/booking', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                bookingId: bookingRef.current.id, 
+                                status: 'DONE',
+                                action: 'RELEASE_KTV', // Ensure release just in case
+                                techCode: user?.id 
+                            })
+                        });
+                    } catch (e) {
+                        console.error('Failed to auto-complete booking during fast-track', e);
+                    }
+                }
+                
+                // 2. Clear UI state and local storage immediately
+                lastAcknowledgedIdRef.current = prevBookingIdRef.current;
+                setHasSubmittedReview(false);
+                setBooking(null);
+                setScreen('DASHBOARD');
+                try {
+                    localStorage.removeItem('ktv_active_screen');
+                    localStorage.removeItem('ktv_active_booking_id');
+                } catch(e) {}
+            }
+        };
+
+        window.addEventListener('KTV_FAST_TRACK', handleFastTrack);
+        return () => window.removeEventListener('KTV_FAST_TRACK', handleFastTrack);
+    }, [user?.id, setScreen]);
 
     // 🔒 Start Lock Logic
     useEffect(() => {
@@ -421,6 +482,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         const oldRating = Number(prev?.rating || 0);
                         
                         const isNew = !prev || prev.id !== res.data.id;
+                        if (isNew) {
+                            prevBookingIdRef.current = res.data.id;
+                            try { localStorage.setItem('ktv_active_booking_id', res.data.id); } catch(e) {}
+                        }
                         
                         // 1. Tìm dịch vụ được gán cho KTV này
                         const assignedItem = res.data.assignedItemId 
@@ -601,6 +666,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 if (payload.new.status === 'CANCELLED') {
                     setBooking(null);
                     setScreen('DASHBOARD');
+                    try {
+                        localStorage.removeItem('ktv_active_screen');
+                        localStorage.removeItem('ktv_active_booking_id');
+                    } catch(e) {}
                     return;
                 }
 
@@ -1155,13 +1224,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
         alert('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.');
     };
 
-    const goToDashboard = () => {
-        if (booking?.id) {
-            lastAcknowledgedIdRef.current = booking.id;
-        }
-        setHasSubmittedReview(false);
+    const handleCloseReward = () => {
+        lastAcknowledgedIdRef.current = prevBookingIdRef.current;
         setBooking(null);
         setScreen('DASHBOARD');
+        try {
+            localStorage.removeItem('ktv_active_screen');
+            localStorage.removeItem('ktv_active_booking_id');
+        } catch(e) {}
     };
 
     return {

@@ -11,7 +11,12 @@ const getTodayVn = () => {
     return d.toISOString().split('T')[0];
 };
 
-export type DatePreset = 'today' | 'week' | 'month' | 'year' | 'custom';
+const getYesterdayVn = () => {
+    const d = new Date(Date.now() - 86400000 + VN_OFFSET_MS);
+    return d.toISOString().split('T')[0];
+};
+
+export type DatePreset = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom';
 export type GroupBy = 'hour' | 'day' | 'week' | 'month';
 
 export interface ReportSummary {
@@ -210,6 +215,10 @@ export const useRevenueReport = () => {
         if (datePreset === 'today') {
             from = t;
             to = t;
+        } else if (datePreset === 'yesterday') {
+            const y = getYesterdayVn();
+            from = y;
+            to = y;
         } else if (datePreset === 'week') {
             const now = new Date();
             from = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');

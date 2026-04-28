@@ -19,6 +19,7 @@ import { useRevenueReport, GroupBy } from './RevenueReport.logic';
 const PIE_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 const DATE_PRESETS = [
     { key: 'today', label: 'Hôm nay' },
+    { key: 'yesterday', label: 'Hôm qua' },
     { key: 'week', label: 'Tuần này' },
     { key: 'month', label: 'Tháng này' },
     { key: 'year', label: 'Năm này' },
