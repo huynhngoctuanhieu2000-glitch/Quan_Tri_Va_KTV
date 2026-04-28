@@ -26,6 +26,7 @@ const KTVAttendancePage = () => {
         handleAttendance,
         handleRetry,
         clearError,
+        activeShiftType,
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
@@ -35,6 +36,7 @@ const KTVAttendancePage = () => {
     const [formType, setFormType] = React.useState<'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN'>('CHECK_IN');
     const [photos, setPhotos] = React.useState<string[]>([]);
     const [reason, setReason] = React.useState<string>('');
+    const [selectedShiftType, setSelectedShiftType] = React.useState<string>('');
 
     if (!mounted) return null;
 
@@ -56,6 +58,7 @@ const KTVAttendancePage = () => {
         setFormType(type);
         setPhotos([]);
         setReason('');
+        setSelectedShiftType(activeShiftType || 'FREE');
         setIsFormOpen(true);
     };
 
@@ -122,7 +125,7 @@ const KTVAttendancePage = () => {
 
     const handleSubmitForm = () => {
         setIsFormOpen(false);
-        handleAttendance(formType, photos.length > 0 ? photos : null, reason);
+        handleAttendance(formType, photos.length > 0 ? photos : null, reason, formType === 'CHECK_IN' ? selectedShiftType : null);
     };
 
     return (
@@ -275,6 +278,23 @@ const KTVAttendancePage = () => {
                                  formType === 'CHECK_OUT' ? 'Điểm danh tan ca' :
                                  'Điểm danh bổ sung'}
                             </h3>
+
+                            {formType === 'CHECK_IN' && (
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-gray-700 block">Ca làm việc hôm nay</label>
+                                    <select 
+                                        value={selectedShiftType}
+                                        onChange={(e) => setSelectedShiftType(e.target.value)}
+                                        className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white font-medium text-gray-700"
+                                    >
+                                        <option value="SHIFT_1">Ca 1 (09:00 - 17:00)</option>
+                                        <option value="SHIFT_2">Ca 2 (11:00 - 19:00)</option>
+                                        <option value="SHIFT_3">Ca 3 (17:00 - 00:00)</option>
+                                        <option value="FREE">Ca tự do (Linh hoạt)</option>
+                                        <option value="REQUEST">Làm khách yêu cầu</option>
+                                    </select>
+                                </div>
+                            )}
                             
                             {/* Camera input (Multiple Photos) */}
                             <div className="space-y-2">

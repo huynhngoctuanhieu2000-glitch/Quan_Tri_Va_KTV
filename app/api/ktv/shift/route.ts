@@ -6,6 +6,8 @@ const SHIFT_TYPES = {
     SHIFT_1: { label: 'Ca 1', start: '09:00', end: '17:00' },
     SHIFT_2: { label: 'Ca 2', start: '11:00', end: '19:00' },
     SHIFT_3: { label: 'Ca 3', start: '17:00', end: '00:00' },
+    FREE: { label: 'Ca tự do', start: '00:00', end: '23:59' },
+    REQUEST: { label: 'Làm khách yêu cầu', start: '00:00', end: '23:59' },
 } as const;
 
 /**
@@ -125,9 +127,9 @@ export async function POST(request: Request) {
             );
         }
 
-        if (!['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].includes(shiftType)) {
+        if (!['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'FREE', 'REQUEST'].includes(shiftType)) {
             return NextResponse.json(
-                { success: false, error: 'Invalid shiftType. Must be SHIFT_1, SHIFT_2, or SHIFT_3' },
+                { success: false, error: 'Invalid shiftType. Must be SHIFT_1, SHIFT_2, SHIFT_3, FREE, or REQUEST' },
                 { status: 400 }
             );
         }

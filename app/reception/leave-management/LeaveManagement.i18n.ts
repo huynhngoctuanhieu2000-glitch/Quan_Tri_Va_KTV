@@ -56,4 +56,6 @@ export const t = {
     SHIFT_1: 'Ca 1 (09:00 - 17:00)',
     SHIFT_2: 'Ca 2 (11:00 - 19:00)',
     SHIFT_3: 'Ca 3 (17:00 - 00:00)',
+    FREE: 'Ca tự do',
+    REQUEST: 'Làm khách yêu cầu',
 } as const;

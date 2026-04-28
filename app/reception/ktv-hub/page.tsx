@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-// 🔧 UI CONFIGURATION
+// ðŸ”§ UI CONFIGURATION
 const ANIMATION_DURATION = 0.2;
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -23,7 +23,7 @@ import { EmployeeDetailModal } from '@/components/EmployeeDetailModal';
 import { getStaffList, updateStaffMember } from '@/app/admin/employees/actions';
 import { Employee } from '@/lib/types';
 
-// ─── TYPES ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ TYPES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type Tab = 'turns' | 'leave-off' | 'ktv-list';
 
@@ -61,24 +61,24 @@ type TurnQueueData = {
     last_served_at?: string | null;
 };
 
-// ─── TAB CONFIG ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ TAB CONFIG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type AttendanceStatus = 'on_duty' | 'absent' | 'off_leave' | 'off_duty';
 const ATT_OPTIONS: { id: AttendanceStatus; label: string; color: string }[] = [
-    { id: 'on_duty', label: 'Có mặt', color: 'bg-emerald-500 text-white' },
-    { id: 'absent', label: 'Vắng', color: 'bg-rose-500 text-white' },
+    { id: 'on_duty', label: 'CÃ³ máº·t', color: 'bg-emerald-500 text-white' },
+    { id: 'absent', label: 'Váº¯ng', color: 'bg-rose-500 text-white' },
     { id: 'off_duty', label: 'Tan ca', color: 'bg-amber-500 text-white' },
-    { id: 'off_leave', label: 'Nghỉ phép', color: 'bg-slate-500 text-white' },
+    { id: 'off_leave', label: 'Nghá»‰ phÃ©p', color: 'bg-slate-500 text-white' },
 ];
 const TABS: { id: Tab; label: string; icon: React.ReactNode; short: string }[] = [
-    { id: 'turns', label: 'Sổ Tua', short: 'Sổ tua', icon: <ClipboardList size={16} /> },
-    { id: 'leave-off', label: 'Lịch OFF & Ca', short: 'Lịch OFF', icon: <CalendarOff size={16} /> },
-    { id: 'ktv-list', label: 'Danh Sách KTV', short: 'DS KTV', icon: <Users size={16} /> },
+    { id: 'turns', label: 'Sá»• Tua', short: 'Sá»• tua', icon: <ClipboardList size={16} /> },
+    { id: 'leave-off', label: 'Lá»‹ch OFF & Ca', short: 'Lá»‹ch OFF', icon: <CalendarOff size={16} /> },
+    { id: 'ktv-list', label: 'Danh SÃ¡ch KTV', short: 'DS KTV', icon: <Users size={16} /> },
 ];
 
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PHOTO VIEWER MODAL
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const PhotoViewerModal = ({ photos, onClose }: { photos: string[] | null, onClose: () => void }) => {
     return (
         <AnimatePresence>
@@ -95,7 +95,7 @@ const PhotoViewerModal = ({ photos, onClose }: { photos: string[] | null, onClos
                         <X size={24} />
                     </button>
                     <div className="text-white mb-4 text-sm font-bold bg-white/10 px-4 py-2 rounded-full backdrop-blur-md border border-white/20 shadow-lg">
-                        {photos.length} ảnh (Cuộn xuống để xem thêm)
+                        {photos.length} áº£nh (Cuá»™n xuá»‘ng Ä‘á»ƒ xem thÃªm)
                     </div>
                     <div 
                         className="w-full max-w-lg max-h-[85vh] overflow-y-auto space-y-4 rounded-xl pb-10"
@@ -112,9 +112,9 @@ const PhotoViewerModal = ({ photos, onClose }: { photos: string[] | null, onClos
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// ATTENDANCE PENDING SECTION (Duyệt điểm danh)
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ATTENDANCE PENDING SECTION (Duyá»‡t Ä‘iá»ƒm danh)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface PendingRecord {
     id: string;
@@ -171,7 +171,7 @@ const AttendancePendingSection = () => {
         >
             <div className="px-4 py-3 border-b border-amber-100 flex items-center gap-2">
                 <MapPin size={16} className="text-amber-600 animate-pulse" />
-                <h2 className="font-bold text-amber-800 text-sm">Yêu Cầu Điểm Danh / OFF Chờ Duyệt</h2>
+                <h2 className="font-bold text-amber-800 text-sm">YÃªu Cáº§u Äiá»ƒm Danh / OFF Chá» Duyá»‡t</h2>
                 <span className="ml-auto bg-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
                     {records.length}
                 </span>
@@ -182,12 +182,12 @@ const AttendancePendingSection = () => {
                         ? `https://maps.google.com/?q=${rec.latitude},${rec.longitude}`
                         : null;
                         
-                    let typeLabel = 'VÀO CA';
+                    let typeLabel = 'VÃ€O CA';
                     let typeColor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
                     if (rec.checkType === 'CHECK_OUT') {
                          typeLabel = 'TAN CA'; typeColor = 'bg-amber-100 text-amber-700 border-amber-200';
                     } else if (rec.checkType === 'LATE_CHECKIN') {
-                         typeLabel = 'BỔ SUNG'; typeColor = 'bg-orange-100 text-orange-700 border-orange-200';
+                         typeLabel = 'Bá»” SUNG'; typeColor = 'bg-orange-100 text-orange-700 border-orange-200';
                     } else if (rec.checkType === 'OFF_REQUEST') {
                          typeLabel = 'XIN OFF'; typeColor = 'bg-rose-100 text-rose-700 border-rose-200';
                     }
@@ -233,7 +233,7 @@ const AttendancePendingSection = () => {
                                         >
                                             <Camera size={10} /> Xem {(() => {
                                                 try { const p = JSON.parse(rec.photoUrl || ''); return Array.isArray(p) ? p.length : 1; } catch { return 1; }
-                                            })()} ảnh
+                                            })()} áº£nh
                                         </button>
                                     )}
                                 </div>
@@ -248,7 +248,7 @@ const AttendancePendingSection = () => {
                                     onClick={() => handleAction(rec.id, 'CONFIRM')}
                                     disabled={!!loadState}
                                     className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50 shadow-sm"
-                                    title="Xác nhận"
+                                    title="XÃ¡c nháº­n"
                                 >
                                     {loadState === 'confirm' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} strokeWidth={3} />}
                                 </button>
@@ -256,7 +256,7 @@ const AttendancePendingSection = () => {
                                     onClick={() => handleAction(rec.id, 'REJECT')}
                                     disabled={!!loadState}
                                     className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-xl transition-all disabled:opacity-50"
-                                    title="Từ chối"
+                                    title="Tá»« chá»‘i"
                                 >
                                     {loadState === 'reject' ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
                                 </button>
@@ -270,9 +270,9 @@ const AttendancePendingSection = () => {
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// ATTENDANCE HISTORY SECTION (Lịch sử điểm danh hôm nay - Collapsible)
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ATTENDANCE HISTORY SECTION (Lá»‹ch sá»­ Ä‘iá»ƒm danh hÃ´m nay - Collapsible)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface HistoryRecord {
     id: string;
@@ -321,17 +321,17 @@ const AttendanceHistorySection = () => {
             >
                 <div className="flex items-center gap-2">
                     <History size={14} className="text-gray-400" />
-                    <span className="font-bold text-gray-700 text-sm">Lịch sử điểm danh hôm nay</span>
+                    <span className="font-bold text-gray-700 text-sm">Lá»‹ch sá»­ Ä‘iá»ƒm danh hÃ´m nay</span>
                 </div>
                 <div className="flex items-center gap-2">
                     {confirmedCount > 0 && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                            ✓ {confirmedCount}
+                            âœ“ {confirmedCount}
                         </span>
                     )}
                     {rejectedCount > 0 && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
-                            ✗ {rejectedCount}
+                            âœ— {rejectedCount}
                         </span>
                     )}
                     <ChevronDown
@@ -364,7 +364,7 @@ const AttendanceHistorySection = () => {
                                             <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full shrink-0 ${
                                                 isCheckIn ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                                             }`}>
-                                                {rec.checkType === 'CHECK_IN' ? 'VÀO' : rec.checkType === 'CHECK_OUT' ? 'RA' : rec.checkType === 'OFF_REQUEST' ? 'OFF' : 'BỔ SUNG'}
+                                                {rec.checkType === 'CHECK_IN' ? 'VÃ€O' : rec.checkType === 'CHECK_OUT' ? 'RA' : rec.checkType === 'OFF_REQUEST' ? 'OFF' : 'Bá»” SUNG'}
                                             </span>
                                             {rec.latitude && rec.longitude && (
                                                 <a
@@ -392,7 +392,7 @@ const AttendanceHistorySection = () => {
                                                 >
                                                     <Camera size={10} /> Xem {(() => {
                                                         try { const p = JSON.parse(rec.photoUrl || ''); return Array.isArray(p) ? p.length : 1; } catch { return 1; }
-                                                    })()} ảnh
+                                                    })()} áº£nh
                                                 </button>
                                             )}
                                         </div>
@@ -405,7 +405,7 @@ const AttendanceHistorySection = () => {
                                                     ? 'bg-emerald-50 text-emerald-600' 
                                                     : 'bg-red-50 text-red-500'
                                             }`}>
-                                                {isConfirmed ? '✓ Đã duyệt' : '✗ Từ chối'}
+                                                {isConfirmed ? 'âœ“ ÄÃ£ duyá»‡t' : 'âœ— Tá»« chá»‘i'}
                                             </span>
                                         </div>
                                     </div>
@@ -420,9 +420,9 @@ const AttendanceHistorySection = () => {
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // TAB 1: CANH TUA
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     const [turns, setTurns] = useState<(TurnQueueData & { staff?: StaffData })[]>([]);
@@ -434,34 +434,34 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         }
     }, [staffs]);
 
-    // 🔄 REALTIME: Lắng nghe 3 bảng quan trọng liên quan đến điều phối
+    // ðŸ”„ REALTIME: Láº¯ng nghe 3 báº£ng quan trá»ng liÃªn quan Ä‘áº¿n Ä‘iá»u phá»‘i
     useEffect(() => {
         if (staffs.length === 0) return;
 
         const channel = supabase.channel('turn-realtime-sync')
-            // Bảng BookingItems: Gán KTV, đổi KTV, thêm dịch vụ add-on
+            // Báº£ng BookingItems: GÃ¡n KTV, Ä‘á»•i KTV, thÃªm dá»‹ch vá»¥ add-on
             .on('postgres_changes', { event: '*', schema: 'public', table: 'BookingItems' }, () => {
-                console.log('🔄 [Realtime] BookingItems changed → syncing turns...');
+                console.log('ðŸ”„ [Realtime] BookingItems changed â†’ syncing turns...');
                 fetchTurns();
             })
-            // Bảng Bookings: Cập nhật trạng thái đơn (DONE, CANCELLED, NEW...)
+            // Báº£ng Bookings: Cáº­p nháº­t tráº¡ng thÃ¡i Ä‘Æ¡n (DONE, CANCELLED, NEW...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, () => {
-                console.log('🔄 [Realtime] Bookings changed → syncing turns...');
+                console.log('ðŸ”„ [Realtime] Bookings changed â†’ syncing turns...');
                 fetchTurns();
             })
-            // Bảng TurnQueue: Thay đổi tua trực tiếp (swap vị trí, reset, tan ca...)
+            // Báº£ng TurnQueue: Thay Ä‘á»•i tua trá»±c tiáº¿p (swap vá»‹ trÃ­, reset, tan ca...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
-                console.log('🔄 [Realtime] TurnQueue changed → refreshing...');
+                console.log('ðŸ”„ [Realtime] TurnQueue changed â†’ refreshing...');
                 fetchTurnsFromDB();
             })
-            // Bảng DailyAttendance: Điểm danh, đổi trạng thái (on_duty, off_duty, absent...)
+            // Báº£ng DailyAttendance: Äiá»ƒm danh, Ä‘á»•i tráº¡ng thÃ¡i (on_duty, off_duty, absent...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'DailyAttendance' }, () => {
-                console.log('🔄 [Realtime] DailyAttendance changed → syncing turns...');
+                console.log('ðŸ”„ [Realtime] DailyAttendance changed â†’ syncing turns...');
                 fetchTurnsFromDB();
             })
-            // Bảng KTVAttendance: KTV bấm điểm danh / tan ca trên app
+            // Báº£ng KTVAttendance: KTV báº¥m Ä‘iá»ƒm danh / tan ca trÃªn app
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVAttendance' }, () => {
-                console.log('🔄 [Realtime] KTVAttendance changed → syncing turns...');
+                console.log('ðŸ”„ [Realtime] KTVAttendance changed â†’ syncing turns...');
                 fetchTurnsFromDB();
             })
             .subscribe();
@@ -471,7 +471,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         };
     }, [staffs]);
 
-    // Fetch qua API (trigger sync logic đếm tua chính xác)
+    // Fetch qua API (trigger sync logic Ä‘áº¿m tua chÃ­nh xÃ¡c)
     const fetchTurns = async () => {
         setLoading(true);
         try {
@@ -490,7 +490,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         setLoading(false);
     };
 
-    // Fetch trực tiếp từ DB (dùng khi TurnQueue thay đổi, không cần re-sync)
+    // Fetch trá»±c tiáº¿p tá»« DB (dÃ¹ng khi TurnQueue thay Ä‘á»•i, khÃ´ng cáº§n re-sync)
     const fetchTurnsFromDB = async () => {
         const today = new Date().toISOString().split('T')[0];
         const { data } = await supabase
@@ -565,7 +565,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         fetchTurns();
     };
 
-    // Sắp xếp: waiting/working lên trước, off xuống cuối, sau đó theo số tua, sau đó theo queue_position (mặc định = check_in_order)
+    // Sáº¯p xáº¿p: waiting/working lÃªn trÆ°á»›c, off xuá»‘ng cuá»‘i, sau Ä‘Ã³ theo sá»‘ tua, sau Ä‘Ã³ theo queue_position (máº·c Ä‘á»‹nh = check_in_order)
     const sortedTurns = [...turns].sort((a, b) => {
         if (a.status === 'off' && b.status !== 'off') return 1;
         if (a.status !== 'off' && b.status === 'off') return -1;
@@ -581,18 +581,18 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     const offCount = turns.filter(t => t.status === 'off').length;
     const activeCount = turns.length - offCount;
 
-    if (loading) return <div className="p-10 text-center text-gray-500">Đang tải hàng đợi...</div>;
+    if (loading) return <div className="p-10 text-center text-gray-500">Äang táº£i hÃ ng Ä‘á»£i...</div>;
 
     return (
         <div className="space-y-4">
-            {/* Attendance Pending - Duyệt điểm danh */}
+            {/* Attendance Pending - Duyá»‡t Ä‘iá»ƒm danh */}
             <AttendancePendingSection />
             {/* Stats */}
             <div className="grid grid-cols-3 gap-3">
                 {[
-                    { label: 'Sẵn Sàng', value: readyCount, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-                    { label: 'Đang Làm', value: workingCount, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
-                    { label: 'Tổng Ca', value: activeCount, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
+                    { label: 'Sáºµn SÃ ng', value: readyCount, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+                    { label: 'Äang LÃ m', value: workingCount, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' },
+                    { label: 'Tá»•ng Ca', value: activeCount, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
                 ].map(s => (
                     <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl p-3 text-center`}>
                         <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
@@ -604,19 +604,19 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             {/* Queue */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-bold text-gray-900 text-sm">Sổ hàng đợi tua</h3>
+                    <h3 className="font-bold text-gray-900 text-sm">Sá»• hÃ ng Ä‘á»£i tua</h3>
                     <button
                         onClick={resetTurns}
                         className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 font-semibold transition-colors"
                     >
-                        <RotateCcw size={12} /> Đặt lại theo chấm công
+                        <RotateCcw size={12} /> Äáº·t láº¡i theo cháº¥m cÃ´ng
                     </button>
                 </div>
 
                 <div className="divide-y divide-gray-50 min-h-[100px]">
                     {turns.length === 0 ? (
                         <div className="p-8 text-center text-gray-400 text-sm">
-                            Chưa có KTV nào điểm danh hôm nay
+                            ChÆ°a cÃ³ KTV nÃ o Ä‘iá»ƒm danh hÃ´m nay
                         </div>
                     ) : sortedTurns.map((turn, idx) => (
                         <motion.div
@@ -635,12 +635,12 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
 
                             {/* Name */}
                             <div className="flex-1 min-w-0">
-                                <p className="font-bold text-sm text-gray-900 truncate">{turn.staff?.full_name || 'Không rõ'}</p>
+                                <p className="font-bold text-sm text-gray-900 truncate">{turn.staff?.full_name || 'KhÃ´ng rÃµ'}</p>
                                 <div className="flex items-center gap-2 mt-0.5">
                                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{turn.employee_id}</span>
                                     {turn.turns_completed > 0 && (
                                         <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold border border-indigo-100">
-                                            Đã làm {turn.turns_completed} tua
+                                            ÄÃ£ lÃ m {turn.turns_completed} tua
                                         </span>
                                     )}
                                 </div>
@@ -655,11 +655,11 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                                     turn.status === 'working' ? <Timer size={10} className="animate-spin" /> :
                                         <Moon size={10} />}
                                 <span className="hidden sm:inline">
-                                    {turn.status === 'waiting' ? 'Sẵn sàng' : turn.status === 'working' ? 'Đang làm' : 'Tan ca'}
+                                    {turn.status === 'waiting' ? 'Sáºµn sÃ ng' : turn.status === 'working' ? 'Äang lÃ m' : 'Tan ca'}
                                 </span>
                             </div>
 
-                            {/* Move buttons - ẩn khi tan ca */}
+                            {/* Move buttons - áº©n khi tan ca */}
                             {turn.status !== 'off' && (
                             <div className="flex flex-col gap-0.5 shrink-0 ml-2">
                                 <button
@@ -689,13 +689,13 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             {/* Rules */}
             <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
                 <h4 className="font-bold text-indigo-800 text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <Clock size={12} /> Quy Tắc Sổ Tua
+                    <Clock size={12} /> Quy Táº¯c Sá»• Tua
                 </h4>
                 <ul className="space-y-2 text-xs text-indigo-700 font-medium">
                     {[
-                        'KTV điểm danh trước → Tua trước',
-                        'KTV hoàn thành đơn → Xuống cuối hàng đợi',
-                        'Chỉ tính tua khi phục vụ 2 bill khác nhau',
+                        'KTV Ä‘iá»ƒm danh trÆ°á»›c â†’ Tua trÆ°á»›c',
+                        'KTV hoÃ n thÃ nh Ä‘Æ¡n â†’ Xuá»‘ng cuá»‘i hÃ ng Ä‘á»£i',
+                        'Chá»‰ tÃ­nh tua khi phá»¥c vá»¥ 2 bill khÃ¡c nhau',
                     ].map((rule, i) => (
                         <li key={i} className="flex items-start gap-2">
                             <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full mt-1 shrink-0" />
@@ -708,9 +708,9 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// TAB 2: ĐIỂM DANH (Admin view)
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// TAB 2: ÄIá»‚M DANH (Admin view)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
     const [attendances, setAttendances] = useState<Record<string, AttendanceRecord>>({});
@@ -758,7 +758,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
             .single();
 
         if (attError) {
-            console.error("❌ [KTVHub] Error saving attendance:", attError.message, attError.details, attError.hint);
+            console.error("âŒ [KTVHub] Error saving attendance:", attError.message, attError.details, attError.hint);
             return;
         }
 
@@ -826,7 +826,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
         if (a.status === 'off_duty') counts.off_duty++;
     });
 
-    if (loading) return <div className="p-10 text-center text-gray-500">Đang tải dữ liệu...</div>;
+    if (loading) return <div className="p-10 text-center text-gray-500">Äang táº£i dá»¯ liá»‡u...</div>;
 
     return (
         <div className="space-y-4">
@@ -834,7 +834,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
             <div className="bg-white border border-gray-200 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
                     <div>
-                        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Ngày điểm danh</p>
+                        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">NgÃ y Ä‘iá»ƒm danh</p>
                         <p className="font-black text-gray-900 text-sm">{format(now, 'EEEE, dd/MM/yyyy')}</p>
                     </div>
                     <p className="text-2xl font-black text-indigo-600">{format(now, 'HH:mm')}</p>
@@ -843,13 +843,13 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
                     <div className="flex-1 text-center">
                         <p className="text-2xl font-black text-emerald-600">{counts.on_duty}</p>
                         <p className="text-[10px] text-gray-500 flex items-center justify-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Có mặt
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> CÃ³ máº·t
                         </p>
                     </div>
                     <div className="flex-1 text-center">
                         <p className="text-2xl font-black text-rose-500">{counts.absent}</p>
                         <p className="text-[10px] text-gray-500 flex items-center justify-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full" /> Vắng
+                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full" /> Váº¯ng
                         </p>
                     </div>
                     <div className="flex-1 text-center">
@@ -861,7 +861,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
                     <div className="flex-1 text-center">
                         <p className="text-2xl font-black text-slate-500">{counts.off_leave}</p>
                         <p className="text-[10px] text-gray-500 flex items-center justify-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" /> Nghỉ phép
+                            <span className="w-1.5 h-1.5 bg-slate-500 rounded-full" /> Nghá»‰ phÃ©p
                         </p>
                     </div>
                 </div>
@@ -870,7 +870,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
             {/* KTV Attendance List */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100">
-                    <h3 className="font-bold text-gray-900 text-sm">Danh Sách Chấm Công Hôm Nay</h3>
+                    <h3 className="font-bold text-gray-900 text-sm">Danh SÃ¡ch Cháº¥m CÃ´ng HÃ´m Nay</h3>
                 </div>
                 <div className="divide-y divide-gray-50 max-h-[500px] overflow-y-auto">
                     {staffs.map(staff => {
@@ -896,7 +896,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
                                         <p className="text-[10px] text-gray-400 font-bold uppercase">{staff.id}</p>
                                         {checkInTime && currentStatus === 'on_duty' && (
                                             <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5 mt-0.5">
-                                                <CheckCircle2 size={9} /> Tới lúc {checkInTime.substring(0, 5)}
+                                                <CheckCircle2 size={9} /> Tá»›i lÃºc {checkInTime.substring(0, 5)}
                                             </p>
                                         )}
                                     </div>
@@ -916,7 +916,7 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
                                                 : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'
                                                 }`}
                                         >
-                                            {s === 'on_duty' ? 'Có mặt' : s === 'absent' ? 'Vắng' : s === 'off_duty' ? 'Tan ca' : 'Nghỉ phép'}
+                                            {s === 'on_duty' ? 'CÃ³ máº·t' : s === 'absent' ? 'Váº¯ng' : s === 'off_duty' ? 'Tan ca' : 'Nghá»‰ phÃ©p'}
                                         </button>
                                     ))}
                                 </div>
@@ -929,9 +929,9 @@ const AttendanceTab = ({ staffs }: { staffs: StaffData[] }) => {
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// TAB 3: DANH SÁCH KTV
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// TAB 3: DANH SÃCH KTV
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) => void }) => {
     const typeofSkillValue = (val: any) => typeof val === 'string' ? val : 'basic';
@@ -939,9 +939,9 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
         Object.entries(skills || {}).filter(([, v]) => typeofSkillValue(v) === 'expert' || typeofSkillValue(v) === 'basic');
 
     const SKILL_LABELS: Record<string, string> = {
-        shampoo: 'Gội đầu', thaiBody: 'Massage Thái', oilBody: 'Massage Dầu',
-        hotStoneBody: 'Đá Nóng', oilFoot: 'Foot Dầu', acupressureFoot: 'Foot Bấm Huyệt',
-        facial: 'Chăm Sóc Da', hairCut: 'Cắt Tóc', earCleaning: 'Ráy Tai',
+        shampoo: 'Gá»™i Ä‘áº§u', thaiBody: 'Massage ThÃ¡i', oilBody: 'Massage Dáº§u',
+        hotStoneBody: 'ÄÃ¡ NÃ³ng', oilFoot: 'Foot Dáº§u', acupressureFoot: 'Foot Báº¥m Huyá»‡t',
+        facial: 'ChÄƒm SÃ³c Da', hairCut: 'Cáº¯t TÃ³c', earCleaning: 'RÃ¡y Tai',
     };
 
     return (
@@ -956,7 +956,7 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
                             {/* Avatar */}
                             <div className="relative shrink-0">
                                 <img src={Avatar} alt={emp.full_name} className="w-14 h-14 rounded-2xl object-cover border-2 border-gray-100 shadow-sm" />
-                                <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${emp.status === 'ĐANG LÀM' ? 'bg-emerald-400' : 'bg-gray-400'}`} />
+                                <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${emp.status === 'ÄANG LÃ€M' ? 'bg-emerald-400' : 'bg-gray-400'}`} />
                             </div>
 
                             {/* Main info */}
@@ -964,17 +964,17 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
                                 <div className="flex items-center gap-2 flex-wrap mb-0.5">
                                     <p className="font-black text-gray-900 text-base">{emp.full_name}</p>
                                     <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">{emp.id}</span>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${emp.gender === 'Nữ' || emp.gender === 'Female' ? 'bg-pink-100 text-pink-600 border border-pink-200' : 'bg-blue-100 text-blue-600 border border-blue-200'}`}>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${emp.gender === 'Ná»¯' || emp.gender === 'Female' ? 'bg-pink-100 text-pink-600 border border-pink-200' : 'bg-blue-100 text-blue-600 border border-blue-200'}`}>
                                         {emp.gender || 'Nam'}
                                     </span>
                                 </div>
-                                <p className="text-[11px] text-gray-500 font-medium">{emp.position || 'Kỹ Thuật Viên'} · {emp.experience || '1 năm kinh nghiệm'}</p>
+                                <p className="text-[11px] text-gray-500 font-medium">{emp.position || 'Ká»¹ Thuáº­t ViÃªn'} Â· {emp.experience || '1 nÄƒm kinh nghiá»‡m'}</p>
 
                                 {/* Rating (mock for real DB) */}
                                 <div className="flex items-center gap-1 mt-1.5">
                                     <Star size={12} className="text-amber-400 fill-amber-400" />
                                     <span className="text-xs font-bold text-amber-600">5.0</span>
-                                    <span className="text-[10px] text-gray-400 ml-1.5 font-medium">Hoa hồng 10%</span>
+                                    <span className="text-[10px] text-gray-400 ml-1.5 font-medium">Hoa há»“ng 10%</span>
                                 </div>
 
                                 {/* Skills */}
@@ -995,17 +995,17 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
                             </div>
                         </div>
                         {/* Status dot mobile/desktop adapt */}
-                        <div className={`shrink-0 flex flex-col gap-2 items-center justify-center p-3 sm:px-4 sm:border-l border-t sm:border-t-0 border-gray-100 ${emp.status === 'ĐANG LÀM' ? 'bg-emerald-50/30' : 'bg-gray-50'}`}>
-                            <div className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm ${emp.status === 'ĐANG LÀM' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-500 border border-gray-300'
+                        <div className={`shrink-0 flex flex-col gap-2 items-center justify-center p-3 sm:px-4 sm:border-l border-t sm:border-t-0 border-gray-100 ${emp.status === 'ÄANG LÃ€M' ? 'bg-emerald-50/30' : 'bg-gray-50'}`}>
+                            <div className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm ${emp.status === 'ÄANG LÃ€M' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-gray-200 text-gray-500 border border-gray-300'
                                 }`}>
-                                {emp.status === 'ĐANG LÀM' ? '● Đang làm việc' : '○ Đã nghỉ'}
+                                {emp.status === 'ÄANG LÃ€M' ? 'â— Äang lÃ m viá»‡c' : 'â—‹ ÄÃ£ nghá»‰'}
                             </div>
                             <button
                                 onClick={() => onEdit(emp)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold text-[10px] transition-colors border border-indigo-100"
                             >
                                 <Award size={14} />
-                                Sửa tay nghề
+                                Sá»­a tay nghá»
                             </button>
                         </div>
                     </div>
@@ -1015,26 +1015,30 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
             {staffs.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                     <Users size={36} className="mx-auto mb-3 text-gray-200" />
-                    <p className="text-sm font-medium">Chưa có KTV nào trong database</p>
+                    <p className="text-sm font-medium">ChÆ°a cÃ³ KTV nÃ o trong database</p>
                 </div>
             )}
         </div>
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// TAB: LỊCH OFF & CA (from leave-management)
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// TAB: Lá»ŠCH OFF & CA (from leave-management)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const SHIFT_LABELS_HUB: Record<string, string> = {
     SHIFT_1: 'Ca 1 (09:00 - 17:00)',
     SHIFT_2: 'Ca 2 (11:00 - 19:00)',
     SHIFT_3: 'Ca 3 (17:00 - 00:00)',
+    FREE: 'Ca tự do',
+    REQUEST: 'Làm khách yêu c?u',
 };
 const SHIFT_COLORS_HUB: Record<string, { bg: string; text: string; border: string }> = {
     SHIFT_1: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
     SHIFT_2: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
     SHIFT_3: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+    FREE: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
+    REQUEST: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
 };
 
 const LeaveOffTab = () => {
@@ -1080,8 +1084,8 @@ const LeaveOffTab = () => {
 
     // --- CALENDAR LOGIC ---
     const MONTH_NAMES = [
-        'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
-        'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
+        'ThÃ¡ng 1', 'ThÃ¡ng 2', 'ThÃ¡ng 3', 'ThÃ¡ng 4', 'ThÃ¡ng 5', 'ThÃ¡ng 6',
+        'ThÃ¡ng 7', 'ThÃ¡ng 8', 'ThÃ¡ng 9', 'ThÃ¡ng 10', 'ThÃ¡ng 11', 'ThÃ¡ng 12',
     ];
     const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
     const BLOCKED_HOLIDAYS = ['04-30', '05-01', '09-02', '01-01'];
@@ -1121,19 +1125,19 @@ const LeaveOffTab = () => {
 
     return (
         <div className="space-y-4">
-            {/* ── TABS ── */}
+            {/* â”€â”€ TABS â”€â”€ */}
             <div className="flex bg-gray-100 rounded-2xl p-1 gap-1 w-full max-w-sm mx-auto mb-4">
                 <button
                     onClick={() => setSubTab('off')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'off' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                    <CalendarOff size={15} /> Lịch OFF
+                    <CalendarOff size={15} /> Lá»‹ch OFF
                 </button>
                 <button
                     onClick={() => setSubTab('shift')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${subTab === 'shift' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                    <Briefcase size={15} /> Phân Ca
+                    <Briefcase size={15} /> PhÃ¢n Ca
                     {pendingShifts.length > 0 && (
                         <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
                             {pendingShifts.length}
@@ -1142,10 +1146,10 @@ const LeaveOffTab = () => {
                 </button>
             </div>
 
-            {/* ── OFF SUB-TAB ── */}
+            {/* â”€â”€ OFF SUB-TAB â”€â”€ */}
             {subTab === 'off' && (
                 <div className="space-y-5">
-                    {/* ── CALENDAR ── */}
+                    {/* â”€â”€ CALENDAR â”€â”€ */}
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
                         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                             <button onClick={goToPrevMonth} className="p-2 hover:bg-white rounded-xl transition-colors shadow-sm border border-transparent hover:border-gray-200">
@@ -1163,7 +1167,7 @@ const LeaveOffTab = () => {
                             {isLoading ? (
                                 <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
                                     <Loader2 size={20} className="animate-spin" />
-                                    <span className="text-sm">Đang tải lịch...</span>
+                                    <span className="text-sm">Äang táº£i lá»‹ch...</span>
                                 </div>
                             ) : (
                                 <>
@@ -1228,7 +1232,7 @@ const LeaveOffTab = () => {
                         </div>
                     </div>
 
-                    {/* ── CHI TIẾT NGÀY ĐƯỢC CHỌN ── */}
+                    {/* â”€â”€ CHI TIáº¾T NGÃ€Y ÄÆ¯á»¢C CHá»ŒN â”€â”€ */}
                     {selectedDate && (
                         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 bg-indigo-50/50">
@@ -1236,23 +1240,23 @@ const LeaveOffTab = () => {
                                     <CalendarDays size={18} />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-bold text-gray-900">Chi tiết ngày {format(new Date(selectedDate), 'dd/MM/yyyy')}</h3>
-                                    <p className="text-xs text-gray-500">Có {selectedLeaves.length} nhân sự đăng ký OFF</p>
+                                    <h3 className="text-sm font-bold text-gray-900">Chi tiáº¿t ngÃ y {format(new Date(selectedDate), 'dd/MM/yyyy')}</h3>
+                                    <p className="text-xs text-gray-500">CÃ³ {selectedLeaves.length} nhÃ¢n sá»± Ä‘Äƒng kÃ½ OFF</p>
                                 </div>
                             </div>
 
                             <div className="p-4 space-y-5">
-                                {/* KHU VỰC NGƯỜI NGHỈ */}
+                                {/* KHU Vá»°C NGÆ¯á»œI NGHá»ˆ */}
                                 <div>
                                     <h4 className="text-[11px] font-black text-rose-500 mb-2 uppercase tracking-wider flex items-center justify-between">
-                                        Nhân sự OFF
+                                        NhÃ¢n sá»± OFF
                                         <span className="bg-rose-100 text-rose-700 py-0.5 px-2 rounded-full text-[10px]">
                                             {selectedLeaves.length}
                                         </span>
                                     </h4>
                                     {selectedLeaves.length === 0 ? (
                                         <div className="text-center py-4 bg-gray-50/50 rounded-2xl border border-gray-100 border-dashed">
-                                            <p className="text-xs text-gray-400 font-medium">Không có ai OFF.</p>
+                                            <p className="text-xs text-gray-400 font-medium">KhÃ´ng cÃ³ ai OFF.</p>
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-2 gap-2">
@@ -1268,7 +1272,7 @@ const LeaveOffTab = () => {
                                                             onClick={() => handleDelete(leave.id)}
                                                             disabled={!!loadState}
                                                             className="p-1.5 text-rose-300 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-all disabled:opacity-50"
-                                                            title="Huỷ ngày OFF này"
+                                                            title="Huá»· ngÃ y OFF nÃ y"
                                                         >
                                                             {loadState === 'delete' ? <Loader2 size={12} className="animate-spin text-rose-500" /> : <Trash2 size={12} />}
                                                         </button>
@@ -1279,10 +1283,10 @@ const LeaveOffTab = () => {
                                     )}
                                 </div>
 
-                                {/* KHU VỰC NGƯỜI LÀM */}
+                                {/* KHU Vá»°C NGÆ¯á»œI LÃ€M */}
                                 <div>
                                     <h4 className="text-[11px] font-black text-emerald-600 mb-2 uppercase tracking-wider flex items-center justify-between">
-                                        Nhân sự làm việc
+                                        NhÃ¢n sá»± lÃ m viá»‡c
                                         <span className="bg-emerald-100 text-emerald-700 py-0.5 px-2 rounded-full text-[10px]">
                                             {allShifts.filter(shift => !selectedLeaves.some(l => l.employeeId === shift.employeeId)).length}
                                         </span>
@@ -1303,12 +1307,12 @@ const LeaveOffTab = () => {
                 </div>
             )}
 
-            {/* ── SHIFT SUB-TAB ── */}
+            {/* â”€â”€ SHIFT SUB-TAB â”€â”€ */}
             {subTab === 'shift' && (
                 <div className="space-y-4">
                     {isLoadingShifts ? (
                         <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
-                            <Loader2 size={20} className="animate-spin" /> Đang tải...
+                            <Loader2 size={20} className="animate-spin" /> Äang táº£i...
                         </div>
                     ) : (
                         <>
@@ -1317,7 +1321,7 @@ const LeaveOffTab = () => {
                                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                                     <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                                         <ArrowRightLeft size={16} className="text-amber-500" />
-                                        <h3 className="text-sm font-bold text-gray-900">Yêu Cầu Đổi Ca</h3>
+                                        <h3 className="text-sm font-bold text-gray-900">YÃªu Cáº§u Äá»•i Ca</h3>
                                         <span className="ml-auto bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full">{pendingShifts.length}</span>
                                     </div>
                                     <div className="divide-y divide-gray-50">
@@ -1328,7 +1332,7 @@ const LeaveOffTab = () => {
                                                     <div className="flex-1 min-w-0">
                                                         <p className="font-bold text-sm text-gray-900">{shift.employeeName}</p>
                                                         <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                                            <span>{SHIFT_LABELS_HUB[shift.previousShift || ''] || 'Chưa có'}</span>
+                                                            <span>{SHIFT_LABELS_HUB[shift.previousShift || ''] || 'ChÆ°a cÃ³'}</span>
                                                             <ChevronRight size={11} />
                                                             <span className="font-bold text-indigo-600">{SHIFT_LABELS_HUB[shift.shiftType]}</span>
                                                         </div>
@@ -1354,16 +1358,16 @@ const LeaveOffTab = () => {
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                                 <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                                     <Users size={16} className="text-indigo-500" />
-                                    <h3 className="text-sm font-bold text-gray-900">Ca Hiện Tại</h3>
+                                    <h3 className="text-sm font-bold text-gray-900">Ca Hiá»‡n Táº¡i</h3>
                                     <button onClick={() => openAssignModal()}
                                         className="ml-auto flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-xl transition-colors">
-                                        <UserPlus size={12} /> Gán Ca
+                                        <UserPlus size={12} /> GÃ¡n Ca
                                     </button>
                                 </div>
                                 {allShifts.length === 0 ? (
                                     <div className="text-center py-8">
                                         <Briefcase size={28} className="text-gray-300 mx-auto mb-2" />
-                                        <p className="text-sm text-gray-400">Chưa có ca được gán</p>
+                                        <p className="text-sm text-gray-400">ChÆ°a cÃ³ ca Ä‘Æ°á»£c gÃ¡n</p>
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-gray-50">
@@ -1401,11 +1405,11 @@ const LeaveOffTab = () => {
                                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center gap-2">
                                     <AlertTriangle size={16} className="text-amber-600 shrink-0" />
                                     <p className="text-sm text-amber-700 font-semibold">
-                                        {unassignedStaff.length} KTV chưa được gán ca
+                                        {unassignedStaff.length} KTV chÆ°a Ä‘Æ°á»£c gÃ¡n ca
                                     </p>
                                     <button onClick={() => openAssignModal()}
                                         className="ml-auto text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-xl shrink-0 transition-colors">
-                                        Gán ngay
+                                        GÃ¡n ngay
                                     </button>
                                 </div>
                             )}
@@ -1418,28 +1422,28 @@ const LeaveOffTab = () => {
             {assignModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 shadow-2xl">
-                        <h3 className="text-lg font-black text-gray-900 text-center">Gán Ca KTV</h3>
+                        <h3 className="text-lg font-black text-gray-900 text-center">GÃ¡n Ca KTV</h3>
 
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-gray-700 block">
-                                Chọn KTV
+                                Chá»n KTV
                                 {unassignedStaff.length > 0 && (
                                     <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                                        {unassignedStaff.length} chưa có ca
+                                        {unassignedStaff.length} chÆ°a cÃ³ ca
                                     </span>
                                 )}
                             </label>
                             <select value={assignEmployeeId} onChange={e => setAssignEmployeeId(e.target.value)}
                                 disabled={isLoadingStaff}
                                 className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                                <option value="">{isLoadingStaff ? 'Đang tải...' : '-- Chọn nhân viên --'}</option>
+                                <option value="">{isLoadingStaff ? 'Äang táº£i...' : '-- Chá»n nhÃ¢n viÃªn --'}</option>
                                 {unassignedStaff.length > 0 && (
-                                    <optgroup label="⚠️ Chưa có ca">
+                                    <optgroup label="âš ï¸ ChÆ°a cÃ³ ca">
                                         {unassignedStaff.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.id})</option>)}
                                     </optgroup>
                                 )}
                                 {staffList.filter(s => !unassignedStaff.find(u => u.id === s.id)).length > 0 && (
-                                    <optgroup label="✅ Đã có ca">
+                                    <optgroup label="âœ… ÄÃ£ cÃ³ ca">
                                         {staffList.filter(s => !unassignedStaff.find(u => u.id === s.id)).map(s => (
                                             <option key={s.id} value={s.id}>{s.full_name} ({s.id})</option>
                                         ))}
@@ -1449,12 +1453,12 @@ const LeaveOffTab = () => {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700 block">Chọn Ca</label>
+                            <label className="text-sm font-semibold text-gray-700 block">Chá»n Ca</label>
                             <div className="space-y-2">
-                                {['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].map(shift => (
+                                {['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'FREE', 'REQUEST'].map(shift => (
                                     <button key={shift} type="button" onClick={() => setAssignShiftType(shift)}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left ${assignShiftType === shift ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-100 bg-gray-50 text-gray-700 hover:border-gray-200'}`}>
-                                        <div className={`w-2.5 h-2.5 rounded-full ${shift === 'SHIFT_1' ? 'bg-blue-600' : shift === 'SHIFT_2' ? 'bg-amber-600' : 'bg-indigo-600'}`} />
+                                        <div className={`w-2.5 h-2.5 rounded-full ${shift === 'SHIFT_1' ? 'bg-blue-600' : shift === 'SHIFT_2' ? 'bg-amber-600' : shift === 'SHIFT_3' ? 'bg-indigo-600' : shift === 'FREE' ? 'bg-teal-500' : 'bg-pink-500'}`} />
                                         <span className="text-sm font-bold">{SHIFT_LABELS_HUB[shift]}</span>
                                         {assignShiftType === shift && <CheckCircle2 size={14} className="ml-auto text-indigo-500" />}
                                     </button>
@@ -1464,11 +1468,11 @@ const LeaveOffTab = () => {
 
                         <div className="flex gap-3 pt-2">
                             <button onClick={() => setAssignModalOpen(false)}
-                                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
+                                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Há»§y</button>
                             <button onClick={handleAssignShift} disabled={!assignEmployeeId || !assignShiftType || isAssigning}
                                 className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
                                 {isAssigning ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                                Gán Ca
+                                GÃ¡n Ca
                             </button>
                         </div>
                     </div>
@@ -1478,9 +1482,9 @@ const LeaveOffTab = () => {
     );
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // MAIN PAGE
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function KTVHubPage() {
     const { hasPermission } = useAuth();
@@ -1504,12 +1508,12 @@ export default function KTVHubPage() {
             const res = await getStaffList();
             if (res.success && res.data) {
                 setStaffs(res.data);
-                console.log(`✅ [KTVHub] Fetched ${res.data.length} staff members`);
+                console.log(`âœ… [KTVHub] Fetched ${res.data.length} staff members`);
             } else if (res.error) {
-                console.error("❌ [KTVHub] Error fetching staff:", res.error);
+                console.error("âŒ [KTVHub] Error fetching staff:", res.error);
             }
         } catch (e) {
-            console.error("❌ [KTVHub] Unexpected error:", e);
+            console.error("âŒ [KTVHub] Unexpected error:", e);
         } finally {
             setLoadingStaff(false);
         }
@@ -1523,14 +1527,14 @@ export default function KTVHubPage() {
             name: staff.full_name,
             username: staff.username,
             password: staff.password,
-            position: staff.position || 'Kỹ Thuật Viên',
-            experience: staff.experience || '1 năm',
-            status: staff.status === 'ĐANG LÀM' ? 'active' : 'inactive',
+            position: staff.position || 'Ká»¹ Thuáº­t ViÃªn',
+            experience: staff.experience || '1 nÄƒm',
+            status: staff.status === 'ÄANG LÃ€M' ? 'active' : 'inactive',
             photoUrl: staff.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(staff.full_name)}&background=random`,
             phone: staff.phone || '',
             email: staff.email || '',
             dob: staff.birthday || '',
-            gender: staff.gender || 'Nữ',
+            gender: staff.gender || 'Ná»¯',
             idCard: staff.id_card || '',
             bankAccount: staff.bank_account || '',
             bankName: staff.bank_name || '',
@@ -1558,7 +1562,7 @@ export default function KTVHubPage() {
             fetchStaff();
             setIsDetailOpen(false);
         } else {
-            alert("Lỗi khi cập nhật tay nghề: " + res.error);
+            alert("Lá»—i khi cáº­p nháº­t tay nghá»: " + res.error);
         }
     };
 
@@ -1566,21 +1570,21 @@ export default function KTVHubPage() {
 
     if (!hasPermission('turn_tracking') && !hasPermission('ktv_attendance')) {
         return (
-            <AppLayout title="Quản Lý KTV">
+            <AppLayout title="Quáº£n LÃ½ KTV">
                 <div className="flex flex-col items-center justify-center h-64 text-center">
                     <UserCheck size={48} className="text-red-500 mb-4" />
-                    <h2 className="text-xl font-bold text-gray-900">Không có quyền truy cập</h2>
+                    <h2 className="text-xl font-bold text-gray-900">KhÃ´ng cÃ³ quyá»n truy cáº­p</h2>
                 </div>
             </AppLayout>
         );
     }
 
     return (
-        <AppLayout title="Quản Lý KTV">
+        <AppLayout title="Quáº£n LÃ½ KTV">
             <div className="max-w-3xl mx-auto space-y-5">
                 {/* Header */}
                 <div>
-                    <p className="text-xs text-gray-500">Sổ tua · Lịch OFF & Ca · Danh sách kỹ thuật viên</p>
+                    <p className="text-xs text-gray-500">Sá»• tua Â· Lá»‹ch OFF & Ca Â· Danh sÃ¡ch ká»¹ thuáº­t viÃªn</p>
                 </div>
 
                 {/* Tab Bar */}
@@ -1617,7 +1621,7 @@ export default function KTVHubPage() {
                         {loadingStaff ? (
                             <div className="flex flex-col items-center justify-center py-20 gap-3">
                                 <RotateCcw size={32} className="text-indigo-400 animate-spin" />
-                                <p className="text-sm font-medium text-gray-400 font-black italic">Đang tải danh sách KTV...</p>
+                                <p className="text-sm font-medium text-gray-400 font-black italic">Äang táº£i danh sÃ¡ch KTV...</p>
                             </div>
                         ) : (
                             <>
@@ -1629,7 +1633,7 @@ export default function KTVHubPage() {
                     </motion.div>
                 </AnimatePresence>
 
-                {/* Modal Sửa Tay Nghề / Chi Tiết */}
+                {/* Modal Sá»­a Tay Nghá» / Chi Tiáº¿t */}
                 <EmployeeDetailModal
                     key={selectedEmployee?.id || 'none'}
                     employee={selectedEmployee}

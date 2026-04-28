@@ -15,11 +15,15 @@ const SHIFT_START_TIMES: Record<string, string> = {
     SHIFT_1: '09:00',
     SHIFT_2: '11:00',
     SHIFT_3: '17:00',
+    FREE: '00:00',
+    REQUEST: '00:00',
 };
 const SHIFT_END_TIMES: Record<string, string> = {
     SHIFT_1: '17:00',
     SHIFT_2: '19:00',
     SHIFT_3: '00:00', // treated as 24:00 of the same day
+    FREE: '00:00',
+    REQUEST: '00:00',
 };
 
 // --- TYPES ---
@@ -172,7 +176,8 @@ export const useKTVAttendance = () => {
     const handleAttendance = useCallback(async (
         checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN',
         photosBase64?: string[] | null,
-        reason?: string | null
+        reason?: string | null,
+        selectedShiftType?: string | null
     ) => {
         setErrorMsg(null);
         setCheckStatus('LOADING_GPS'); // Will rename this state eventually, keeping string for now to avoid breaking UI
@@ -190,6 +195,7 @@ export const useKTVAttendance = () => {
                     latitude: null,
                     longitude: null,
                     locationText: null,
+                    selectedShiftType: selectedShiftType || null,
                 }),
             });
 

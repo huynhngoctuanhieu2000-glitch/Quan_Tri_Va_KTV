@@ -53,7 +53,7 @@ async function createWatermarkSvg(width: number, height: number, dateStr: string
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName: empNameInput, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason } = body;
+        const { employeeId, employeeName: empNameInput, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason, selectedShiftType } = body;
 
         if (!employeeId) {
             return NextResponse.json({ success: false, error: 'Missing employeeId' }, { status: 400 });
@@ -206,6 +206,40 @@ export async function POST(request: Request) {
             if (checkType === 'CHECK_IN') {
                 // 🔹 Active shift for User
                 await supabase.from('Users').update({ isOnShift: true }).eq('id', employeeId);
+
+                // 🔹 Update KTVShifts if selectedShiftType is provided
+                if (selectedShiftType) {
+                    const { data: currentActive } = await supabase
+                        .from('KTVShifts')
+                        .select('shiftType')
+                        .eq('employeeId', employeeId)
+                        .eq('status', 'ACTIVE')
+                        .maybeSingle();
+
+                    if (currentActive?.shiftType !== selectedShiftType) {
+                        if (currentActive) {
+                            await supabase
+                                .from('KTVShifts')
+                                .update({ status: 'REPLACED' })
+                                .eq('employeeId', employeeId)
+                                .eq('status', 'ACTIVE');
+                        }
+
+                        await supabase
+                            .from('KTVShifts')
+                            .insert({
+                                employeeId,
+                                employeeName: displayName,
+                                shiftType: selectedShiftType,
+                                effectiveFrom: today,
+                                previousShift: currentActive?.shiftType || null,
+                                reason: 'Tự chọn ca lúc điểm danh',
+                                status: 'ACTIVE',
+                                reviewedBy: 'SYSTEM',
+                                reviewedAt: nowUtc.toISOString(),
+                            });
+                    }
+                }
 
                 if (staffCode) {
                     // 🔹 Insert into TurnQueue (using staffCode)
