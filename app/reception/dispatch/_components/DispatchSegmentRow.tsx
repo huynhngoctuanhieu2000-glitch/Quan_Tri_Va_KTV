@@ -37,7 +37,7 @@ for (let h = 8; h <= 23; h++) {
     }
 }
 
-const DURATION_OPTIONS = [15, 30, 45, 60, 75, 90, 100, 120, 150, 180];
+const DURATION_OPTIONS = [30, 45, 60, 70, 90, 120, 180, 200, 240, 300];
 
 const calcEndTime = (start: string, duration: number): string => {
     if (!start || duration == null) return '';
@@ -166,10 +166,10 @@ export const DispatchSegmentRow = ({
                         <input
                             type="number"
                             min={0.1} max={300} step={0.1}
-                            value={segment.duration}
-                            onChange={e => handleChange({ duration: parseFloat(e.target.value) || 0 })}
+                            value={segment.duration || ''}
+                            onChange={e => handleChange({ duration: e.target.value ? parseFloat(e.target.value) : 0 })}
                             onFocus={() => setIsDurationOpen(true)}
-                            className="w-full px-2 py-2.5 border-2 border-gray-50 rounded-xl text-[11px] font-black text-center focus:border-indigo-500 outline-none bg-gray-50/30 transition-all pr-6"
+                            className="w-full px-2 py-2.5 border-2 border-gray-50 rounded-xl text-[11px] font-black text-center focus:border-indigo-500 outline-none bg-gray-50/30 transition-all pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             placeholder="Phút"
                         />
                         <button 

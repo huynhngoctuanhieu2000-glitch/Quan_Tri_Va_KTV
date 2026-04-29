@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Printer, X, ChevronDown, ChevronUp, Plus, Clock } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ServiceBlock, StaffData, TurnQueueData, WorkSegment } from '../types';
 
 // 🛠 UI CONFIGURATION
@@ -89,7 +90,7 @@ export const QuickDispatchTable = ({
 
   // Build fingerprint from current services data
   const buildFingerprint = (svcs: ServiceBlock[]) =>
-    svcs.map(s => `${s.id}|${s.staffList?.map(st => `${st.ktvId}:${st.segments?.[0]?.roomId || ''}:${st.segments?.[0]?.startTime || ''}`).join(',')}`).join(';');
+    svcs.map(s => `${s.id}|${s.staffList?.map(st => `${st.ktvId}:${st.segments?.[0]?.roomId || ''}:${st.segments?.[0]?.startTime || ''}:${st.segments?.[0]?.duration || ''}`).join(',')}`).join(';');
 
   // Initialize / re-initialize group states when services change
   useEffect(() => {
@@ -106,6 +107,7 @@ export const QuickDispatchTable = ({
       const roomIds: string[] = [];
       const startTimes: string[] = [];
       const endTimes: string[] = [];
+      const ktvDurationsList: number[] = [];
       const ktvNotesList: string[] = [];
       const bedIdsList: string[] = [];
       items.forEach(item => {
@@ -116,6 +118,7 @@ export const QuickDispatchTable = ({
               roomIds.push(staff.segments?.[0]?.roomId || '');
               startTimes.push(staff.segments?.[0]?.startTime || defaultTime);
               endTimes.push(staff.segments?.[0]?.endTime || calcEndTime(staff.segments?.[0]?.startTime || defaultTime, duration));
+              ktvDurationsList.push(staff.segments?.[0]?.duration || duration);
               ktvNotesList.push(staff.noteForKtv || '');
               bedIdsList.push(staff.segments?.[0]?.bedId || '');
             }
@@ -132,15 +135,7 @@ export const QuickDispatchTable = ({
         selectedRoomIds: roomIds,
         ktvStartTimes: startTimes,
         ktvEndTimes: endTimes,
-        ktvDurations: ktvIds.map((_, i) => {
-          const st = startTimes[i] || defaultTime;
-          const et = endTimes[i] || '';
-          if (!st || !et) return duration;
-          const [sh, sm] = st.split(':').map(Number);
-          const [eh, em] = et.split(':').map(Number);
-          const diff = (eh * 60 + em) - (sh * 60 + sm);
-          return diff > 0 ? diff : duration;
-        }),
+        ktvDurations: ktvDurationsList.length > 0 ? ktvDurationsList : [duration],
         ktvNotes: ktvNotesList,
         ktvBedIds: bedIdsList,
         note: items[0]?.staffList?.[0]?.noteForKtv || '',
@@ -192,10 +187,11 @@ export const QuickDispatchTable = ({
           let bedId: string | null = null;
           if (roomId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
           const st = state.ktvStartTimes?.[idx] || getCurrentTime();
+          const ktvDur = state.ktvDurations?.[idx] || item.duration;
           const segment: WorkSegment = {
             id: updatedServices[svcIdx].staffList?.[0]?.segments?.[0]?.id || `seg-${genId()}`,
-            roomId, bedId, startTime: st, duration: item.duration,
-            endTime: state.ktvEndTimes?.[idx] || calcEndTime(st, item.duration),
+            roomId, bedId, startTime: st, duration: ktvDur,
+            endTime: state.ktvEndTimes?.[idx] || calcEndTime(st, ktvDur),
           };
           updatedServices[svcIdx] = {
             ...updatedServices[svcIdx],
@@ -209,7 +205,7 @@ export const QuickDispatchTable = ({
           const svcIdx = updatedServices.findIndex(s => s.id === item.id);
           if (svcIdx === -1) return;
           // Find which KTVs belong to this item
-          const staffEntries: { ktvId: string; ktvName: string; roomId: string | null; bedId: string | null; startTime: string; endTime: string; }[] = [];
+          const staffEntries: { ktvId: string; ktvName: string; roomId: string | null; bedId: string | null; startTime: string; endTime: string; duration: number; }[] = [];
           // Each item gets at least 1 KTV, extras distributed round-robin
           for (let ki = 0; ki < ktvCount; ki++) {
             if (ki % itemCount !== itemIdx) continue;
@@ -220,15 +216,16 @@ export const QuickDispatchTable = ({
             let bedId: string | null = null;
             if (roomId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
             const st = state.ktvStartTimes?.[ki] || getCurrentTime();
-            staffEntries.push({ ktvId, ktvName, roomId, bedId, startTime: st, endTime: state.ktvEndTimes?.[ki] || calcEndTime(st, item.duration) });
+            const kd = state.ktvDurations?.[ki] || item.duration;
+            staffEntries.push({ ktvId, ktvName, roomId, bedId, startTime: st, endTime: state.ktvEndTimes?.[ki] || calcEndTime(st, kd), duration: kd });
           }
           updatedServices[svcIdx] = {
             ...updatedServices[svcIdx],
             staffList: staffEntries.map((e, si) => ({
               id: updatedServices[svcIdx].staffList?.[si]?.id || `st-${item.id}-${e.ktvId}`,
               ktvId: e.ktvId, ktvName: e.ktvName,
-              segments: [{ id: updatedServices[svcIdx].staffList?.[si]?.segments?.[0]?.id || `seg-${genId()}`, roomId: e.roomId, bedId: e.bedId, startTime: e.startTime, duration: item.duration, endTime: e.endTime }],
-              noteForKtv: state.ktvNotes?.[staffEntries.indexOf(e)] || state.note || '',
+              segments: [{ id: updatedServices[svcIdx].staffList?.[si]?.segments?.[0]?.id || `seg-${genId()}`, roomId: e.roomId, bedId: e.bedId, startTime: e.startTime, duration: e.duration, endTime: e.endTime }],
+              noteForKtv: state.ktvNotes?.[state.selectedKtvIds.indexOf(e.ktvId)] || state.note || '',
             })),
             options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
           };
@@ -352,6 +349,7 @@ const ServiceGroupCard = ({
   const [isKtvDropdownOpen, setIsKtvDropdownOpen] = useState(false);
   const [ktvSearch, setKtvSearch] = useState('');
   const [showTicketForIdx, setShowTicketForIdx] = useState<number | null>(null);
+  const [openDurationIdx, setOpenDurationIdx] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -421,8 +419,8 @@ const ServiceGroupCard = ({
     const arr = [...(state.ktvNotes || [])]; while (arr.length <= idx) arr.push(''); arr[idx] = note; onUpdate({ ktvNotes: arr });
   };
 
-  // Duration presets for sequential split (always include full service duration)
-  const DURATION_PRESETS = [30, 45, 60, 70, 90, 120].filter(d => d <= duration);
+  // Duration presets — không giới hạn theo duration dịch vụ, cho phép chọn linh hoạt
+  const DURATION_PRESETS = [30, 45, 60, 70, 90, 120, 180, 200, 240, 300];
 
   const isSequentialMode = state.selectedKtvIds.length > count;
 
@@ -437,15 +435,12 @@ const ServiceGroupCard = ({
     durations[idx] = newDur;
     ends[idx] = calcEndTime(starts[idx], newDur);
 
-    // Chain subsequent KTVs: each starts where previous ends
+    // Chain subsequent KTVs: each starts where previous ends (giữ nguyên duration riêng)
     for (let i = idx + 1; i < state.selectedKtvIds.length; i++) {
-      while (durations.length <= i) durations.push(0);
+      while (durations.length <= i) durations.push(duration);
       while (starts.length <= i) starts.push('');
       while (ends.length <= i) ends.push('');
       starts[i] = ends[i - 1];
-      // Remaining = total - sum of all previous
-      const usedSoFar = durations.slice(0, i).reduce((a, b) => a + b, 0);
-      durations[i] = Math.max(0, duration - usedSoFar);
       ends[i] = calcEndTime(starts[i], durations[i]);
     }
     onUpdate({ ktvDurations: durations, ktvStartTimes: starts, ktvEndTimes: ends });
@@ -461,7 +456,7 @@ const ServiceGroupCard = ({
       // Chain next KTVs
       for (let i = idx + 1; i < state.selectedKtvIds.length; i++) {
         while (s.length <= i) s.push(''); while (e.length <= i) e.push('');
-        while (d.length <= i) d.push(0);
+        while (d.length <= i) d.push(duration);
         s[i] = e[i - 1];
         e[i] = calcEndTime(s[i], d[i]);
       }
@@ -558,9 +553,54 @@ const ServiceGroupCard = ({
                       {rooms.map(r => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
                     </select>
                     {selRoom && (<span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 shrink-0">{selBed ? `G.${roomBedsList.findIndex(b => b.id === selBed) + 1}` : String.fromCharCode(8212)}</span>)}
-                    <select value={ktvDur} onChange={e => updateDurationForIdx(idx, Number(e.target.value))} className="w-[65px] px-1 py-1 border border-amber-200 rounded-lg text-[11px] font-black text-amber-700 bg-amber-50 focus:ring-2 focus:ring-amber-400/20 outline-none">
-                      {[...DURATION_PRESETS, ktvDur].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b).map(d => (<option key={d} value={d}>{d}p</option>))}
-                    </select>
+                    <div className="relative">
+                        <input
+                            type="number"
+                            min={0.1} max={300} step={0.1}
+                            value={ktvDur || ''}
+                            onChange={e => updateDurationForIdx(idx, e.target.value ? Number(e.target.value) : 0)}
+                            onFocus={() => setOpenDurationIdx(idx)}
+                            className="w-[75px] px-2 py-1.5 border-2 border-amber-100 rounded-xl text-[11px] font-black text-center text-amber-700 bg-amber-50 focus:border-amber-400 outline-none transition-all pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            placeholder="Phút"
+                        />
+                        <button 
+                            type="button"
+                            onClick={() => setOpenDurationIdx(openDurationIdx === idx ? null : idx)}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-amber-500 hover:text-amber-700 transition-colors"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-200 ${openDurationIdx === idx ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <AnimatePresence>
+                            {openDurationIdx === idx && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 5 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: 5 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute z-[100] w-[80px] mt-1 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden left-0"
+                                >
+                                    <div className="max-h-40 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
+                                        {DURATION_PRESETS.map(min => (
+                                            <div
+                                                key={min}
+                                                onClick={() => {
+                                                    updateDurationForIdx(idx, min);
+                                                    setOpenDurationIdx(null);
+                                                }}
+                                                className={`px-3 py-2 text-center text-[11px] font-black rounded-lg cursor-pointer transition-colors ${
+                                                    ktvDur === min 
+                                                    ? 'bg-amber-100 text-amber-800' 
+                                                    : 'hover:bg-amber-50 text-amber-700'
+                                                }`}
+                                            >
+                                                {min}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <div className="flex items-center gap-1">
                       <input type="time" value={startT} onChange={e => updateTimeForIdx(idx, 'start', e.target.value)} className="px-1.5 py-1 border border-indigo-200 rounded-lg text-[11px] font-black text-indigo-700 bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none w-[82px]" />
                       <span className="text-indigo-300 text-[10px]">&rarr;</span>

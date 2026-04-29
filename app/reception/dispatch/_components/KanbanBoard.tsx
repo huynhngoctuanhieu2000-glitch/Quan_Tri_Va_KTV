@@ -381,32 +381,40 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 </div>
                                                             )}
 
-                                                            {/* Luôn hiển thị thời gian Bắt đầu -> Kết thúc để dễ theo dõi */}
-                                                            <div className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1.5 border border-indigo-100/50 mt-1">
-                                                                <div className="flex flex-col">
-                                                                    <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
-                                                                    <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(s.timeStart)}</span>
+                                                            {/* Hiển thị thời gian THEO TỪNG KTV */}
+                                                            {s.staffList && s.staffList.length > 1 ? (
+                                                                <div className="space-y-1 mt-1">
+                                                                    {s.staffList.map((st: any, stIdx: number) => {
+                                                                        const seg = st.segments?.[0];
+                                                                        const ktvStart = seg?.startTime || s.timeStart;
+                                                                        const ktvEnd = seg?.endTime || s.timeEnd;
+                                                                        return (
+                                                                            <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
+                                                                                <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>
+                                                                                    <span className="text-indigo-300 text-[8px]">→</span>
+                                                                                    <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvEnd)}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
                                                                 </div>
-                                                                <div className="text-indigo-300">
-                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                                            ) : (
+                                                                <div className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1.5 border border-indigo-100/50 mt-1">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
+                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(s.staffList?.[0]?.segments?.[0]?.startTime || s.timeStart)}</span>
+                                                                    </div>
+                                                                    <div className="text-indigo-300">
+                                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                                                    </div>
+                                                                    <div className="flex flex-col text-right">
+                                                                        <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Kết thúc</span>
+                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(s.staffList?.[0]?.segments?.[0]?.endTime || s.timeEnd)}</span>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="flex flex-col text-right">
-                                                                    <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Kết thúc</span>
-                                                                    {(() => {
-                                                                        const calcServiceEndTime = (startTimeStr: string | null | undefined, durationMins: number) => {
-                                                                            if (!startTimeStr) return null;
-                                                                            const startHHmm = formatToHourMinute(startTimeStr);
-                                                                            if (startHHmm === '--:--') return null;
-                                                                            const [h, m] = startHHmm.split(':').map(Number);
-                                                                            const d = new Date();
-                                                                            d.setHours(h, m + (durationMins || 0), 0, 0);
-                                                                            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-                                                                        };
-                                                                        const displayTimeEnd = s.timeEnd ? formatToHourMinute(s.timeEnd) : (s.timeStart ? calcServiceEndTime(s.timeStart, s.duration) : '--:--');
-                                                                        return <span className="text-[10px] font-black text-indigo-700">{displayTimeEnd || '--:--'}</span>;
-                                                                    })()}
-                                                                </div>
-                                                            </div>
+                                                            )}
                                                         </div>
                                                     ))}
                                                 </div>

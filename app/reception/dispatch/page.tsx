@@ -343,7 +343,9 @@ export default function DispatchBoardPage() {
                       
                       if (segments.length === 0) {
                           const st = formatTime(turn?.start_time) || b.timeBooking || getCurrentTime();
-                          const dur = bi.duration ?? 0;
+                          // Chia đều duration cho từng KTV khi có nhiều KTV cùng 1 dịch vụ
+                          const totalDur = bi.duration ?? 0;
+                          const dur = techCodes.length > 1 ? Math.ceil(totalDur / techCodes.length) : totalDur;
                           segments = [{
                               id: `seg-${genId()}`,
                               roomId: turn?.room_id || bi.roomName || b.roomName,
