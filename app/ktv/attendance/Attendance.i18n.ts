@@ -26,7 +26,7 @@ export const t = {
     shiftStart: (time: string) => `Vào ca: ${time}`,
     checkOut: 'TAN CA',
     checkOutPhotoOptional: 'Chụp ảnh (tùy chọn)',
-    cannotCheckOutYet: (time: string) => `Chưa tới giờ tan ca. Bạn có thể tan ca từ ${time}`,
+    cannotCheckOutYet: (time: string) => `Lưu ý: Chưa tới giờ tan ca chuẩn (${time})`,
     noShiftAssigned: 'Bạn chưa được gán ca — vui lòng liên hệ quản lý.',
 
     // Late / Warning string

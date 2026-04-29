@@ -276,8 +276,15 @@ const KTVAttendancePage = () => {
                                         </div>
                                     ) : null}
                                     <button
-                                        onClick={() => openForm('CHECK_OUT')}
-                                        disabled={!canCheckOut || isLoadingShift}
+                                        onClick={() => {
+                                            if (!canCheckOut && checkoutBlockedUntil) {
+                                                if (!window.confirm(`Bạn chưa tới giờ tan ca (${checkoutBlockedUntil}). Bạn có chắc chắn muốn tan ca SỚM không?`)) {
+                                                    return;
+                                                }
+                                            }
+                                            openForm('CHECK_OUT');
+                                        }}
+                                        disabled={isLoadingShift}
                                         className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                                     >
                                         <LogOut size={22} /> {t.checkOut}
