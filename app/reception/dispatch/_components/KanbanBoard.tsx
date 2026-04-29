@@ -122,11 +122,38 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                     return;
                 }
                 
-                const ktvSignature = svc.staffList.map(r => r.ktvId).filter(Boolean).join(',') || 'unassigned';
-                if (!ktvGroups.has(ktvSignature)) {
-                    ktvGroups.set(ktvSignature, []);
+                if (svc.staffList && svc.staffList.length > 0) {
+                    const timeGroups = new Map<string, typeof svc.staffList>();
+                    svc.staffList.forEach(staff => {
+                        const startTime = staff.segments?.[0]?.startTime || 'unknown_time';
+                        if (!timeGroups.has(startTime)) {
+                            timeGroups.set(startTime, []);
+                        }
+                        timeGroups.get(startTime)!.push(staff);
+                    });
+                    
+                    timeGroups.forEach((staffsAtTime, startTime) => {
+                        const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).join(',') || 'unassigned';
+                        const ktvSignature = `${ktvSignatureBase}_${startTime}`;
+                        
+                        if (!ktvGroups.has(ktvSignature)) {
+                            ktvGroups.set(ktvSignature, []);
+                        }
+                        
+                        // Tạo clone của svc chỉ chứa các staff của khung giờ này
+                        const svcClone = {
+                            ...svc,
+                            staffList: staffsAtTime
+                        };
+                        ktvGroups.get(ktvSignature)!.push(svcClone);
+                    });
+                } else {
+                    const ktvSignature = 'unassigned_unknown_time';
+                    if (!ktvGroups.has(ktvSignature)) {
+                        ktvGroups.set(ktvSignature, []);
+                    }
+                    ktvGroups.get(ktvSignature)!.push(svc);
                 }
-                ktvGroups.get(ktvSignature)!.push(svc);
             });
 
             ktvGroups.forEach((services, ktvSignature) => {

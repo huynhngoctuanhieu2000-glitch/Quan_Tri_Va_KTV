@@ -509,14 +509,6 @@ function ScreenTimer({ logic }: { logic: any }) {
   // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
   const progress = (currentSecs / totalDuration) * 100;
 
-  // 🔔 Stage Transition Alert Logic: Show if current segment ends in < 3 mins
-  const [showTransitionAlert, setShowTransitionAlert] = useState(false);
-  
-  // KIỂM TRA ĐIỀU KIỆN MỚI: Bỏ đi cái TransitionAlert nhưng vẫn giữ State phòng khi hệ thống có thêm config mới
-  React.useEffect(() => {
-    // Current user request: "khi qua chặng 2 thì hk cần thông báo cho ktv đâu nhé"
-    setShowTransitionAlert(false);
-  }, []);
 
   return (
     <div className="p-4 h-full flex flex-col pt-8">
@@ -606,24 +598,7 @@ function ScreenTimer({ logic }: { logic: any }) {
         </div>
       )}
 
-      {/* Stage Transition Alert */}
-      {showTransitionAlert && nextSeg && (
-        <AnimatePresence>
-            <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="mx-2 mb-6 bg-indigo-600 text-white p-4 rounded-2xl flex items-center gap-3 shadow-lg shadow-indigo-200"
-            >
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
-                    <ArrowRight size={20} className="animate-pulse" />
-                </div>
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">Sắp chuyển chặng</p>
-                    <p className="text-xs font-bold leading-tight">Chuẩn bị chuyển sang Phòng {nextSeg.roomId}</p>
-                </div>
-            </motion.div>
-        </AnimatePresence>
-      )}
+
 
       {/* Primary Action Button */}
       <div className="px-6 mb-10">
@@ -651,7 +626,7 @@ function ScreenTimer({ logic }: { logic: any }) {
         ) : (
           <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
             <Clock size={16} className="text-emerald-600 animate-pulse" />
-            <span className="text-sm font-bold text-emerald-700">Hệ thống tự động chuyển chặng/hoàn tất khi hết giờ</span>
+            <span className="text-sm font-bold text-emerald-700">Hệ thống tự động hoàn tất khi hết giờ</span>
           </div>
         )}
       </div>
