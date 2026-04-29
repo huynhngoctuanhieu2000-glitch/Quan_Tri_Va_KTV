@@ -315,7 +315,9 @@ export async function POST(request: Request) {
         else if (checkType === 'SUDDEN_OFF') actionText = 'xin nghỉ đột xuất';
 
         const autoSuffix = isAutoApprove ? ' [AUTO]' : '';
-        const notifMessage = `📍 ${displayName} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
+        
+        // Cập nhật: Không hiển thị lý do vào thông báo (Spa thoáng)
+        const notifMessage = `📍 ${displayName} ${actionText}${mapsLink} [AID:${record.id}]${autoSuffix}`;
 
         await supabase
             .from('StaffNotifications')

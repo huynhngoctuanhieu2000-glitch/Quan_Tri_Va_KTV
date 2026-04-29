@@ -16,8 +16,8 @@ export const t = {
     loadingNetwork: 'Đang xác thực mạng...',
 
     // Pending
-    pendingTitle: 'Đang chờ xác nhận',
-    pendingDesc: 'Admin đang kiểm duyệt yêu cầu của bạn',
+    pendingTitle: 'Đang xử lý',
+    pendingDesc: 'Hệ thống đang ghi nhận yêu cầu của bạn',
     sentAt: (time: string) => `Gửi lúc: ${time}`,
 
     // Confirmed

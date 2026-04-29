@@ -238,7 +238,11 @@ export const useKTVAttendance = () => {
             if (!result.success) throw new Error(result.error || 'Lỗi gửi yêu cầu');
 
             setCurrentRecord(result.data);
-            setCheckStatus('PENDING');
+            if (result.status === 'CONFIRMED') {
+                setCheckStatus(checkType === 'CHECK_OUT' ? 'CHECKED_OUT' : 'CONFIRMED');
+            } else {
+                setCheckStatus('PENDING');
+            }
         } catch (err: any) {
             const errorMessage = err.message || 'Lỗi không xác định';
             setErrorMsg(errorMessage);

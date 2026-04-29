@@ -199,7 +199,7 @@ const KTVAttendancePage = () => {
                                     <div className="text-center space-y-2">
                                         <p className="font-bold text-amber-700 text-xl">Đang chờ duyệt</p>
                                         <p className="text-sm text-gray-600 font-medium bg-amber-50/50 p-4 rounded-xl border border-amber-100 shadow-sm leading-relaxed">
-                                            Yêu cầu <span className="font-bold text-amber-800 uppercase">Nghỉ đột xuất</span> của bạn đang được quản lý xem xét.
+                                            Yêu cầu <span className="font-bold text-amber-800 uppercase">Nghỉ đột xuất</span> của bạn đang được hệ thống ghi nhận.
                                         </p>
                                         {currentRecord?.checkedAt && (
                                             <p className="text-xs text-gray-400 font-medium mt-1">
@@ -238,12 +238,12 @@ const KTVAttendancePage = () => {
                                     <div className="text-center space-y-2">
                                         <p className="font-bold text-blue-700 text-xl">Đã xin nghỉ</p>
                                         <p className="text-sm text-gray-600 font-medium bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm leading-relaxed">
-                                            Yêu cầu <span className="font-bold text-blue-800 uppercase">Nghỉ đột xuất</span> của bạn đã được phê duyệt.<br/>
+                                            Yêu cầu <span className="font-bold text-blue-800 uppercase">Nghỉ đột xuất</span> của bạn đã được ghi nhận.<br/>
                                             <span className="text-xs font-semibold text-gray-500 mt-2 block">Chúc bạn một ngày nghỉ ngơi vui vẻ!</span>
                                         </p>
                                         {currentRecord?.checkedAt && (
                                             <p className="text-xs text-gray-400 font-medium">
-                                                Duyệt lúc: {format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy')}
+                                                Ghi nhận lúc: {format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy')}
                                             </p>
                                         )}
                                     </div>

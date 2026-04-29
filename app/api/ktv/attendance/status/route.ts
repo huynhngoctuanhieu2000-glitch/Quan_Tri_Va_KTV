@@ -49,6 +49,23 @@ export async function GET(request: Request) {
         }
 
         // Find the most relevant record (most recent non-rejected, or fallback)
+        
+        // 1. Kiểm tra xin nghỉ đột xuất
+        const confirmedOff = records.find(
+            (r) => r.checkType === 'SUDDEN_OFF' && r.status === 'CONFIRMED'
+        );
+        if (confirmedOff) {
+            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedOff });
+        }
+
+        const pendingOff = records.find(
+            (r) => r.checkType === 'SUDDEN_OFF' && r.status === 'PENDING'
+        );
+        if (pendingOff) {
+            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingOff });
+        }
+
+        // 2. Kiểm tra Tan ca
         const confirmedCheckOut = records.find(
             (r) => r.checkType === 'CHECK_OUT' && r.status === 'CONFIRMED'
         );
@@ -63,6 +80,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckOut });
         }
 
+        // 3. Kiểm tra Vào ca
         const confirmedCheckIn = records.find(
             (r) => (r.checkType === 'CHECK_IN' || r.checkType === 'LATE_CHECKIN') && r.status === 'CONFIRMED'
         );
