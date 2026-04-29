@@ -481,11 +481,13 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                     const ratingLabel = subOrder.rating >= 5 ? 'Xuất sắc' : subOrder.rating >= 4 ? 'Tốt' : subOrder.rating >= 3 ? 'Khá' : subOrder.rating >= 2 ? 'Trung bình' : 'Cần cải thiện';
                                                     const ratingColor = subOrder.rating >= 4 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : subOrder.rating >= 3 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
                                                     return (
-                                                        <div className={`mb-3 rounded-xl px-3 py-2 border flex items-center justify-between ${ratingColor}`}>
-                                                            <span className="text-[11px] font-black flex items-center gap-1.5">
-                                                                <Star size={14} fill="currentColor" strokeWidth={0} />
-                                                                {ratingLabel} ({subOrder.rating}/5)
-                                                            </span>
+                                                        <div className={`mb-3 rounded-xl px-3 py-2 border ${ratingColor}`}>
+                                                            <div className="flex items-center gap-1">
+                                                                {[1, 2, 3, 4, 5].map((s) => (
+                                                                    <Star key={s} size={14} fill={subOrder.rating >= s ? 'currentColor' : 'none'} strokeWidth={subOrder.rating >= s ? 0 : 2} className={subOrder.rating >= s ? '' : 'opacity-30'} />
+                                                                ))}
+                                                                <span className="ml-1.5 text-[11px] font-black">{ratingLabel}</span>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })()}

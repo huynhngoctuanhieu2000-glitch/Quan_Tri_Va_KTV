@@ -220,7 +220,7 @@ export async function PATCH(request: Request) {
 
         const updatePayload: any = { updatedAt: new Date().toISOString() };
         // 🚀 SMART BOOKING STATUS: Không set trực tiếp, tính toán dựa trên trạng thái tất cả items
-        const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'COMPLETED', 'FEEDBACK', 'DONE', 'CANCELLED'];
+        const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'COMPLETED', 'CLEANING', 'FEEDBACK', 'DONE', 'CANCELLED'];
 
         const itemUpdatePayload: any = { status }; // BookingItems không có column updatedAt
         
@@ -571,7 +571,22 @@ export async function PATCH(request: Request) {
                 console.log(`[KTV API] Some items still in progress for booking ${bookingId}. Skipping booking.timeEnd.`);
             }
         } else if (validBookingStatuses.includes(status)) {
-            updatePayload.status = status;
+            // Nếu KTV dọn xong (FEEDBACK) mà khách đã đánh giá rồi → DONE luôn
+            if (status === 'FEEDBACK') {
+                const { data: currentBooking } = await supabase
+                    .from('Bookings')
+                    .select('rating')
+                    .eq('id', bookingId)
+                    .single();
+                if (currentBooking?.rating) {
+                    updatePayload.status = 'DONE';
+                    console.log(`[KTV API] Booking ${bookingId} already rated (${currentBooking.rating}). Setting DONE instead of FEEDBACK.`);
+                } else {
+                    updatePayload.status = 'FEEDBACK';
+                }
+            } else {
+                updatePayload.status = status;
+            }
         }
 
         if (action === 'EARLY_EXIT') {

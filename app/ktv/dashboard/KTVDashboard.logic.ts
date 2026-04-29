@@ -943,7 +943,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const handleFinishTimer = async () => {
         if (!booking || !user?.id) return;
 
-        // 🏁 COMPLETED toàn bộ
+        // 🏁 Hết giờ DV → chuyển sang CLEANING (KTV vẫn chưa được giải phóng)
         setIsLoading(true);
         const response = await fetch('/api/ktv/booking', {
             method: 'PATCH',
@@ -951,8 +951,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
             body: JSON.stringify({ 
                 bookingId: booking.id, 
                 status: 'COMPLETED',
-                techCode: user.id,
-                action: 'RELEASE_KTV' // Trả lại trạng thái rảnh ngay khi hết giờ dịch vụ
+                techCode: user.id
+                // KHÔNG gọi RELEASE_KTV — KTV phải dọn phòng xong mới được giải phóng
             })
         });
         const res = await response.json();
@@ -992,7 +992,6 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         bookingId: booking.id, 
-                        status: 'CLEANING', // Đồng bộ nhóm: Bắt đầu dọn phòng
                         notes: noteContent,
                         action: 'APPEND_NOTES',
                         techCode: user.id
@@ -1067,8 +1066,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     bookingId: booking.id, 
-                    status: 'DONE', // Đồng bộ nhóm: Đã dọn xong hoàn toàn
-                    action: 'RELEASE_KTV',
+                    status: 'FEEDBACK', // Dọn xong → chờ khách đánh giá. Nếu đã có rating → API sẽ set DONE
+                    action: 'RELEASE_KTV', // BÂY GIỜ mới giải phóng KTV
                     techCode: user.id 
                 })
             });
