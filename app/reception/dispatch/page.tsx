@@ -201,7 +201,39 @@ export default function DispatchBoardPage() {
     return maxTime;
   };
 
-  const fetchData = async () => {
+  // 🔄 AUTO-FINISH WORKER: Tự động chuyển trạng thái dựa trên thời gian
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      
+      orders.forEach(order => {
+        // 1. IN_PROGRESS -> COMPLETED (Hết giờ làm, chuyển sang chờ đánh giá)
+        if (order.rawStatus === 'IN_PROGRESS') {
+          const estEndTime = getEstimatedEndTime(order);
+          if (estEndTime > 0 && now >= estEndTime + 5000) { // Thêm 5s buffer
+            console.log(`⏰ [Auto-Finish] Order ${order.billCode} reached end time (${new Date(estEndTime).toLocaleTimeString()}). Moving to COMPLETED.`);
+            handleUpdateStatus(order.id, 'COMPLETED', undefined, true);
+          }
+        }
+        
+        // 2. COMPLETED/FEEDBACK/CLEANING -> DONE (Dọn dẹp xong, hoàn tất đơn)
+        if (order.rawStatus === 'COMPLETED' || order.rawStatus === 'FEEDBACK' || order.rawStatus === 'CLEANING') {
+          if (order.updatedAt) {
+            const updatedAt = new Date(order.updatedAt).getTime();
+            const diffMins = (now - updatedAt) / 60000;
+            if (diffMins >= roomTransitionTime) {
+              console.log(`🧹 [Auto-Cleanup] Order ${order.billCode} cleaning time finished. Moving to DONE.`);
+              handleUpdateStatus(order.id, 'DONE', undefined, true);
+            }
+          }
+        }
+      });
+    }, 15000); // Quét nhanh hơn (15s/lần) để đảm bảo tính thời gian thực
+    
+    return () => clearInterval(interval);
+  }, [orders, roomTransitionTime, selectedDate]);
+
+  async function fetchData() {
     setLoading(true);
     console.log("📡 [Dispatch] Fetching data for date:", selectedDate);
     try {
@@ -1039,7 +1071,7 @@ if (!hasPermission('dispatch_board')) {
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean) => {
+  async function handleUpdateStatus(orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean) {
     // Determine context for confirmation
     const isPartial = itemIds && itemIds.length > 0;
     
@@ -1116,38 +1148,6 @@ if (!hasPermission('dispatch_board')) {
       alert('Lỗi hệ thống khi tạo đơn.');
     }
   };
-
-  // 🔄 AUTO-FINISH WORKER: Tự động chuyển trạng thái dựa trên thời gian
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date().getTime();
-      
-      orders.forEach(order => {
-        // 1. IN_PROGRESS -> COMPLETED (Hết giờ làm, chuyển sang chờ đánh giá)
-        if (order.rawStatus === 'IN_PROGRESS') {
-          const estEndTime = getEstimatedEndTime(order);
-          if (estEndTime > 0 && now >= estEndTime + 5000) { // Thêm 5s buffer
-            console.log(`⏰ [Auto-Finish] Order ${order.billCode} reached end time (${new Date(estEndTime).toLocaleTimeString()}). Moving to COMPLETED.`);
-            handleUpdateStatus(order.id, 'COMPLETED', undefined, true);
-          }
-        }
-        
-        // 2. COMPLETED/FEEDBACK/CLEANING -> DONE (Dọn dẹp xong, hoàn tất đơn)
-        if (order.rawStatus === 'COMPLETED' || order.rawStatus === 'FEEDBACK' || order.rawStatus === 'CLEANING') {
-          if (order.updatedAt) {
-            const updatedAt = new Date(order.updatedAt).getTime();
-            const diffMins = (now - updatedAt) / 60000;
-            if (diffMins >= roomTransitionTime) {
-              console.log(`🧹 [Auto-Cleanup] Order ${order.billCode} cleaning time finished. Moving to DONE.`);
-              handleUpdateStatus(order.id, 'DONE', undefined, true);
-            }
-          }
-        }
-      });
-    }, 15000); // Quét nhanh hơn (15s/lần) để đảm bảo tính thời gian thực
-    
-    return () => clearInterval(interval);
-  }, [orders, roomTransitionTime, selectedDate]);
 
   const renderSoundToggle = () => {
     const hasUnread = notifications.some(n => !n.isRead);

@@ -418,7 +418,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1">
                                                                 <Sparkles size={10} /> Khách Đánh Giá
                                                             </span>
-                                                            {order.rating ? (
+                                                            {subOrder.rating ? (
                                                                 <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
                                                                     <Check size={10} /> Đã xong
                                                                 </span>
@@ -426,7 +426,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 <button 
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        const ratingUrl = `${window.location.origin}/rating/${order.accessToken || order.id}`;
+                                                                        const ratingUrl = `${window.location.origin}/rating/${subOrder.accessToken || subOrder.id}`;
                                                                         alert(`Gửi link này cho khách đánh giá:\n${ratingUrl}`);
                                                                     }}
                                                                     className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-1"
@@ -444,24 +444,24 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                         e.stopPropagation();
                                                                         if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
                                                                             import('../actions').then(m => {
-                                                                                m.submitCustomerRating(order.id, star).then(() => {
+                                                                                m.submitCustomerRating(subOrder.id, star).then(() => {
                                                                                     // Refresh page logic here (done via realtime usually)
                                                                                 });
                                                                             });
                                                                         }
                                                                     }}
-                                                                    className={`p-1 transition-all ${order.rating && order.rating >= star ? 'text-amber-400 scale-110' : 'text-gray-200 hover:text-amber-200'}`}
+                                                                    className={`p-1 transition-all ${subOrder.rating && subOrder.rating >= star ? 'text-amber-400 scale-110' : 'text-gray-200 hover:text-amber-200'}`}
                                                                 >
-                                                                    <Star size={18} fill={order.rating && order.rating >= star ? 'currentColor' : 'none'} strokeWidth={3} />
+                                                                    <Star size={18} fill={subOrder.rating && subOrder.rating >= star ? 'currentColor' : 'none'} strokeWidth={3} />
                                                                 </button>
                                                             ))}
                                                             <span className="ml-auto text-[11px] font-black text-slate-400">
-                                                                {order.rating ? `${order.rating}/5 sao` : '—/5'}
+                                                                {subOrder.rating ? `${subOrder.rating}/5 sao` : '—/5'}
                                                             </span>
                                                         </div>
-                                                        {order.feedbackNote && (
+                                                        {subOrder.feedbackNote && (
                                                             <p className="mt-2 text-[10px] text-indigo-600 italic font-medium line-clamp-1">
-                                                                &quot;{order.feedbackNote}&quot;
+                                                                &quot;{subOrder.feedbackNote}&quot;
                                                             </p>
                                                         )}
                                                     </div>
