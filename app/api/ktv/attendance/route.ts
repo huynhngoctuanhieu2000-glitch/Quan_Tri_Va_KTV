@@ -174,8 +174,9 @@ export async function POST(request: Request) {
         }
 
         // ─── Step 3: Auto-Approve Logic ─────────────────
-        const isAutoApprove = checkType === 'CHECK_IN' || checkType === 'CHECK_OUT';
-        const finalStatus = isAutoApprove ? 'CONFIRMED' : 'PENDING';
+        // Chỉnh sửa: Spa có chính sách "thoáng", mọi yêu cầu điểm danh, xin đi trễ, nghỉ đột xuất đều được đồng ý tự động
+        const isAutoApprove = true;
+        const finalStatus = 'CONFIRMED';
 
         const { data: record, error: insertError } = await supabase
             .from('KTVAttendance')
@@ -203,7 +204,7 @@ export async function POST(request: Request) {
         if (isAutoApprove) {
             const today = nowVn.toISOString().split('T')[0];
 
-            if (checkType === 'CHECK_IN') {
+            if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
                 // 🔹 Active shift for User
                 await supabase.from('Users').update({ isOnShift: true }).eq('id', employeeId);
 
@@ -287,7 +288,7 @@ export async function POST(request: Request) {
                 } else {
                     console.error('❌ [TurnQueue Error]: staffCode is null for user ID:', employeeId);
                 }
-            } else if (checkType === 'CHECK_OUT') {
+            } else if (checkType === 'CHECK_OUT' || checkType === 'SUDDEN_OFF' || checkType === 'OFF_REQUEST') {
                 // 🔸 Deactivate shift for User
                 await supabase.from('Users').update({ isOnShift: false }).eq('id', employeeId);
 
