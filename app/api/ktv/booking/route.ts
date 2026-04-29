@@ -337,14 +337,15 @@ export async function PATCH(request: Request) {
             }
 
             // 🚀 CẬP NHẬT SEGMENTS (thời gian chặng)
+            let allGlobalSegs: { item: any, localIdx: number, seg: any }[] = [];
+            const activeSegmentIndex = body.activeSegmentIndex || 0;
+
             if (allItemIdsForThisKTV.length > 0) {
                 const { data: currentItems } = await supabase
                     .from('BookingItems')
                     .select('id, segments')
                     .in('id', allItemIdsForThisKTV);
 
-                // 1. Phân tách và gộp thành mảng Global Segments giống UI
-                let allGlobalSegs: { item: any, localIdx: number, seg: any }[] = [];
                 const itemSegmentsMap = new Map<string, any[]>();
 
                 for (const item of currentItems || []) {
@@ -369,7 +370,6 @@ export async function PATCH(request: Request) {
                 });
 
                 // 2. Cập nhật thời gian vào Global Segments
-                const activeSegmentIndex = body.activeSegmentIndex || 0;
 
                 if (action === 'START_TIMER') {
                     if (allGlobalSegs.length > 0) {
@@ -393,11 +393,17 @@ export async function PATCH(request: Request) {
                 let maxTimeEndStr: string | null = null;
                 let maxTimeEndMs = 0;
 
+                // 🔧 FIX CASE E: Xác định active item (item chứa segment đầu tiên)
+                const activeItemId = allGlobalSegs.length > 0 ? allGlobalSegs[0].item.id : null;
+
                 // 3. Đẩy lại các cập nhật vào DB
                 for (const [itemId, segs] of Array.from(itemSegmentsMap.entries())) {
                     const payload: any = { segments: JSON.stringify(segs) };
                     
-                    if (shouldUpdateItemTimeStart) {
+                    // 🔧 FIX CASE E: Chỉ set timeStart/timeEnd cho ACTIVE item
+                    // Queued items (DV2, DV3...) giữ nguyên, chờ NEXT_SEGMENT
+                    const isActiveItem = (itemId === activeItemId) || allItemIdsForThisKTV.length === 1;
+                    if (shouldUpdateItemTimeStart && isActiveItem) {
                         payload.timeStart = sharedTimeStart;
                         let totalDur = 0;
                         segs.forEach((seg: any) => { totalDur += Number(seg.duration || 0); });
@@ -430,12 +436,54 @@ export async function PATCH(request: Request) {
                 }
             }
 
-            // 🚀 IN_PROGRESS (hoặc PREPARING nếu là NEXT_SEGMENT_PREPARE): Update TẤT CẢ items của KTV này
+            // 🔧 FIX CASE E: Phân biệt active item vs queued items
             if (allItemIdsForThisKTV.length > 0) {
-                await supabase
-                    .from('BookingItems')
-                    .update(itemUpdatePayload)
-                    .in('id', allItemIdsForThisKTV);
+                if (allItemIdsForThisKTV.length === 1 || action === 'NEXT_SEGMENT_PREPARE') {
+                    // Case A/B (1 item) hoặc NEXT_SEGMENT_PREPARE: Update tất cả như cũ
+                    await supabase
+                        .from('BookingItems')
+                        .update(itemUpdatePayload)
+                        .in('id', allItemIdsForThisKTV);
+                } else {
+                    // Case E: Multi-item → Chỉ active item = IN_PROGRESS, queued items = PREPARING
+                    const activeItemId = allGlobalSegs.length > 0 ? allGlobalSegs[0].item.id : allItemIdsForThisKTV[0];
+                    const queuedItemIds = allItemIdsForThisKTV.filter(id => id !== activeItemId);
+
+                    // Active item → IN_PROGRESS
+                    await supabase
+                        .from('BookingItems')
+                        .update(itemUpdatePayload)
+                        .eq('id', activeItemId);
+
+                    // Queued items → PREPARING (chờ đến lượt)
+                    if (queuedItemIds.length > 0 && action === 'START_TIMER') {
+                        await supabase
+                            .from('BookingItems')
+                            .update({ status: 'PREPARING' })
+                            .in('id', queuedItemIds);
+                    }
+
+                    // NEXT_SEGMENT: Active item tiếp theo cũng cần set timeStart/IN_PROGRESS
+                    if (action === 'NEXT_SEGMENT' && activeSegmentIndex > 0 && allGlobalSegs[activeSegmentIndex]) {
+                        const nextActiveItemId = allGlobalSegs[activeSegmentIndex].item.id;
+                        if (nextActiveItemId !== activeItemId) {
+                            // Chuyển sang item mới → set timeStart/timeEnd/IN_PROGRESS
+                            const nextSegs = allGlobalSegs.filter((s: any) => s.item.id === nextActiveItemId);
+                            let nextTotalDur = 0;
+                            nextSegs.forEach((s: any) => { nextTotalDur += Number(s.seg.duration || 0); });
+                            const nextEndTimeMs = new Date(sharedTimeStart).getTime() + nextTotalDur * 60000;
+                            
+                            await supabase
+                                .from('BookingItems')
+                                .update({
+                                    status: 'IN_PROGRESS',
+                                    timeStart: sharedTimeStart,
+                                    timeEnd: new Date(nextEndTimeMs).toISOString(),
+                                })
+                                .eq('id', nextActiveItemId);
+                        }
+                    }
+                }
                 targetBookingItemId = null;
             }
 
