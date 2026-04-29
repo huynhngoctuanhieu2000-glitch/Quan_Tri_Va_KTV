@@ -216,14 +216,19 @@ export default function DispatchBoardPage() {
           }
         }
         
-        // 2. ĐANG DỌN -> CHỜ ĐÁNH GIÁ (Dọn xong, giải phóng KTV)
+        // 2. ĐANG DỌN → xong dọn: nếu đã có rating → DONE, chưa có → FEEDBACK
         if (order.rawStatus === 'CLEANING') {
           if (order.updatedAt) {
             const updatedAt = new Date(order.updatedAt).getTime();
             const diffMins = (now - updatedAt) / 60000;
             if (diffMins >= roomTransitionTime) {
-              console.log(`🧹 [Auto-Cleanup] Cleaning finished for ${order.billCode}. Moving to FEEDBACK.`);
-              handleUpdateStatus(order.id, 'FEEDBACK', undefined, true);
+              if (order.rating) {
+                console.log(`✅ [Auto] Both done for ${order.billCode}. Moving to DONE.`);
+                handleUpdateStatus(order.id, 'DONE', undefined, true);
+              } else {
+                console.log(`🧹 [Auto] Cleaning done for ${order.billCode}. Moving to FEEDBACK.`);
+                handleUpdateStatus(order.id, 'FEEDBACK', undefined, true);
+              }
             }
           }
         }

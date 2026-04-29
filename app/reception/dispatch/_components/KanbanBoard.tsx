@@ -411,50 +411,72 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                     ))}
                                                 </div>
 
-                                                {/* 🌟 RATING INPUT: Chỉ hiện ở cột "Chờ đánh giá" */}
-                                                {subOrder.dispatchStatus === 'waiting_rating' && (
-                                                    <div className="mb-4 bg-indigo-50/50 rounded-2xl p-3 border border-indigo-100/50">
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1">
-                                                                <Sparkles size={10} /> Khách Đánh Giá
-                                                            </span>
-                                                            <button 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    const ratingUrl = `${window.location.origin}/rating/${subOrder.accessToken || subOrder.id}`;
-                                                                    alert(`Gửi link này cho khách đánh giá:\n${ratingUrl}`);
-                                                                }}
-                                                                className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-1"
-                                                            >
-                                                                <QrCode size={10} /> QR Code
-                                                            </button>
+                                                {/* 🏷️ 2 TAGS: Hiện ở cả cột "Dọn phòng" và "Chờ đánh giá" */}
+                                                {(subOrder.dispatchStatus === 'cleaning' || subOrder.dispatchStatus === 'waiting_rating') && (
+                                                    <div className="mb-3 space-y-1.5">
+                                                        {/* TAG 1: Dọn phòng */}
+                                                        <div className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-bold border ${
+                                                            subOrder.dispatchStatus === 'waiting_rating' || subOrder.rawStatus === 'FEEDBACK'
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                : 'bg-orange-50 text-orange-600 border-orange-200'
+                                                        }`}>
+                                                            {subOrder.dispatchStatus === 'waiting_rating' || subOrder.rawStatus === 'FEEDBACK'
+                                                                ? <><Check size={12} /> Dọn phòng: Đã dọn xong</>
+                                                                : <><Clock size={12} className="animate-spin" style={{animationDuration: '3s'}}/> Dọn phòng: Đang dọn...</>
+                                                            }
                                                         </div>
-                                                        
-                                                        <div className="flex items-center gap-1.5">
-                                                            {[1, 2, 3, 4, 5].map((star) => (
-                                                                <button
-                                                                    key={star}
+
+                                                        {/* TAG 2: Đánh giá */}
+                                                        <div className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-bold border ${
+                                                            subOrder.rating
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                : 'bg-blue-50 text-blue-600 border-blue-200'
+                                                        }`}>
+                                                            {subOrder.rating ? (
+                                                                <>
+                                                                    <Check size={12} /> Đánh giá: {subOrder.rating >= 5 ? 'Xuất sắc' : subOrder.rating >= 4 ? 'Tốt' : subOrder.rating >= 3 ? 'Khá' : 'Trung bình'} ({subOrder.rating}/5)
+                                                                </>
+                                                            ) : (
+                                                                <><Star size={12} /> Đánh giá: Chờ khách...</>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Ngôi sao để chấm điểm hộ khách (chỉ khi chưa đánh giá) */}
+                                                        {!subOrder.rating && (
+                                                            <div className="flex items-center gap-1 mt-1">
+                                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                                    <button
+                                                                        key={star}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
+                                                                                import('../actions').then(m => {
+                                                                                    m.submitCustomerRating(subOrder.id, star);
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                        className="p-0.5 text-gray-300 hover:text-amber-400 transition-all cursor-pointer"
+                                                                    >
+                                                                        <Star size={14} fill="none" strokeWidth={2.5} />
+                                                                    </button>
+                                                                ))}
+                                                                <button 
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
-                                                                            import('../actions').then(m => {
-                                                                                m.submitCustomerRating(subOrder.id, star).then(() => {
-                                                                                    // Refresh done via realtime
-                                                                                });
-                                                                            });
-                                                                        }
+                                                                        const ratingUrl = `${window.location.origin}/rating/${subOrder.accessToken || subOrder.id}`;
+                                                                        navigator.clipboard.writeText(ratingUrl);
+                                                                        alert(`Link đánh giá đã copy:\n${ratingUrl}`);
                                                                     }}
-                                                                    className="p-1 transition-all text-gray-200 hover:text-amber-300 cursor-pointer"
+                                                                    className="ml-auto text-[9px] text-indigo-500 hover:underline flex items-center gap-0.5"
                                                                 >
-                                                                    <Star size={18} fill="none" strokeWidth={3} />
+                                                                    <QrCode size={10} /> Link
                                                                 </button>
-                                                            ))}
-                                                            <span className="ml-auto text-[11px] font-black text-slate-400">—/5</span>
-                                                        </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
 
-                                                {/* ✅ RATING RESULT: Chỉ hiện ở cột "Hoàn tất" khi đã có đánh giá */}
+                                                {/* ✅ RATING RESULT: Chỉ hiện ở cột "Hoàn tất" */}
                                                 {subOrder.dispatchStatus === 'done' && subOrder.rating && (() => {
                                                     const ratingLabel = subOrder.rating >= 5 ? 'Xuất sắc' : subOrder.rating >= 4 ? 'Tốt' : subOrder.rating >= 3 ? 'Khá' : subOrder.rating >= 2 ? 'Trung bình' : 'Cần cải thiện';
                                                     const ratingColor = subOrder.rating >= 4 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : subOrder.rating >= 3 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
@@ -464,11 +486,6 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 <Star size={14} fill="currentColor" strokeWidth={0} />
                                                                 {ratingLabel} ({subOrder.rating}/5)
                                                             </span>
-                                                            {subOrder.feedbackNote && (
-                                                                <span className="text-[10px] italic opacity-80 truncate ml-2 max-w-[120px]">
-                                                                    &quot;{subOrder.feedbackNote}&quot;
-                                                                </span>
-                                                            )}
                                                         </div>
                                                     );
                                                 })()}

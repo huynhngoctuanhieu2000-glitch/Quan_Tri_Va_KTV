@@ -1171,14 +1171,29 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
+        // Kiểm tra trạng thái hiện tại để quyết định chuyển hay không
+        const { data: current } = await supabase
+            .from('Bookings')
+            .select('status')
+            .eq('id', bookingId)
+            .single();
+
+        const updatePayload: any = { 
+            rating, 
+            feedbackNote,
+            updatedAt: new Date().toISOString() 
+        };
+
+        // Nếu đã dọn xong (FEEDBACK) → cả 2 tag ✅ → DONE
+        // Nếu đang dọn (CLEANING) → chỉ lưu rating, giữ nguyên status
+        if (current?.status === 'FEEDBACK' || current?.status === 'COMPLETED') {
+            updatePayload.status = 'DONE';
+        }
+        // CLEANING → không đổi status, chờ dọn xong mới DONE
+
         const { error } = await supabase
             .from('Bookings')
-            .update({ 
-                rating, 
-                feedbackNote, 
-                status: 'DONE', // Đánh giá xong là HOÀN TẤT luôn
-                updatedAt: new Date().toISOString() 
-            })
+            .update(updatePayload)
             .eq('id', bookingId);
 
         if (error) throw error;
