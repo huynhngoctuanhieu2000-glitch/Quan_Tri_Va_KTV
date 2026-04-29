@@ -70,6 +70,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, message: 'No subscriptions found' });
         }
 
+        // 🔧 Lọc trùng lặp Endpoint (tránh 1 máy nhận chục thông báo)
+        const uniqueSubsMap = new Map();
+        subs.forEach(item => {
+            const endpoint = (item.subscription as any)?.endpoint;
+            if (endpoint && !uniqueSubsMap.has(endpoint)) {
+                uniqueSubsMap.set(endpoint, item);
+            }
+        });
+        const uniqueSubs = Array.from(uniqueSubsMap.values());
+
         // 2. Send push to each subscription
         const payload = JSON.stringify({
             title: title || 'Ngân Hà Spa',
@@ -77,7 +87,7 @@ export async function POST(request: Request) {
             url: url || '/'
         });
 
-        const pushPromises = subs.map(item => 
+        const pushPromises = uniqueSubs.map(item => 
             webpush.sendNotification(item.subscription, payload)
                 .catch(err => {
                     console.error('Push error for sub:', err.endpoint, err.statusCode);
@@ -88,7 +98,7 @@ export async function POST(request: Request) {
 
         await Promise.all(pushPromises);
 
-        return NextResponse.json({ success: true, count: subs.length });
+        return NextResponse.json({ success: true, count: uniqueSubs.length });
     } catch (error: any) {
         console.error('❌ [Push API] Error:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });

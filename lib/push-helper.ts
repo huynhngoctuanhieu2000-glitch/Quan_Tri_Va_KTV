@@ -68,13 +68,23 @@ export async function sendPushNotification(payload: PushPayload) {
             return { success: true, count: 0 };
         }
 
+        // 🔧 Lọc trùng lặp Endpoint (tránh 1 máy nhận chục thông báo)
+        const uniqueSubsMap = new Map();
+        subs.forEach(item => {
+            const endpoint = (item.subscription as any)?.endpoint;
+            if (endpoint && !uniqueSubsMap.has(endpoint)) {
+                uniqueSubsMap.set(endpoint, item);
+            }
+        });
+        const uniqueSubs = Array.from(uniqueSubsMap.values());
+
         const pushPayload = JSON.stringify({
             title: title || 'Ngân Hà Spa',
             body: message || 'Bạn có thông báo mới!',
             url: url || '/'
         });
 
-        const pushPromises = subs.map(item => 
+        const pushPromises = uniqueSubs.map(item => 
             webpush.sendNotification(item.subscription as any, pushPayload)
                 .catch(err => {
                     console.error('Push error for sub:', err.endpoint || 'unknown', err.statusCode);
@@ -84,9 +94,9 @@ export async function sendPushNotification(payload: PushPayload) {
         );
 
         await Promise.all(pushPromises);
-        console.log(`📡 [Push Helper] Sent ${subs.length} push notifications successfully.`);
+        console.log(`📡 [Push Helper] Sent ${uniqueSubs.length} push notifications successfully (Filtered from ${subs.length}).`);
 
-        return { success: true, count: subs.length };
+        return { success: true, count: uniqueSubs.length };
     } catch (error: any) {
         console.error('❌ [Push Helper] Error:', error);
         return { success: false, error: error.message };

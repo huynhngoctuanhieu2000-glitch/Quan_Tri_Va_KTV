@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 // 🔧 UI CONFIGURATION
 const ANIMATION_DURATION = 0.2;
@@ -1021,22 +1021,6 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
         </div>
     );
 };
-
-// ──────────────────────────────────────────────────────────────────────────────
-// TAB: LỊCH OFF & CA (from leave-management)
-// ──────────────────────────────────────────────────────────────────────────────
-
-const SHIFT_LABELS_HUB: Record<string, string> = {
-    SHIFT_1: 'Ca 1 (09:00 - 17:00)',
-    SHIFT_2: 'Ca 2 (11:00 - 19:00)',
-    SHIFT_3: 'Ca 3 (17:00 - 00:00)',
-    FREE: 'Ca tự do',
-    REQUEST: 'L�m kh�ch y�u c?u',
-};
-const SHIFT_COLORS_HUB: Record<string, { bg: string; text: string; border: string }> = {
-    SHIFT_1: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-    SHIFT_2: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-    SHIFT_3: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
     FREE: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
     REQUEST: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
 };
