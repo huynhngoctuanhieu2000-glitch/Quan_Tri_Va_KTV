@@ -125,6 +125,15 @@ const KTVAttendancePage = () => {
     };
 
     const handleSubmitForm = () => {
+        if (selectedShiftType === 'SUDDEN_OFF') {
+            if (!window.confirm("Bạn đã chắc chắn muốn xin nghỉ đột xuất hôm nay không?")) {
+                return;
+            }
+            setIsFormOpen(false);
+            handleAttendance('SUDDEN_OFF', null, null, null);
+            return;
+        }
+
         setIsFormOpen(false);
         handleAttendance(formType, photos.length > 0 ? photos : null, reason, formType === 'CHECK_IN' ? selectedShiftType : null);
     };
@@ -286,8 +295,8 @@ const KTVAttendancePage = () => {
                                     {activeShiftType ? (
                                         <select 
                                             value={selectedShiftType}
-                                            disabled
-                                            className="w-full border border-gray-200 rounded-xl p-3 text-sm bg-gray-50 text-gray-500 font-medium cursor-not-allowed"
+                                            onChange={(e) => setSelectedShiftType(e.target.value)}
+                                            className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white font-medium text-gray-700"
                                         >
                                             <option value={activeShiftType}>
                                                 {activeShiftType === 'SHIFT_1' ? 'Ca 1 (09:00 - 17:00)' :
@@ -296,6 +305,7 @@ const KTVAttendancePage = () => {
                                                  activeShiftType === 'FREE' ? 'Ca tự do (Linh hoạt)' :
                                                  activeShiftType === 'REQUEST' ? 'Làm khách yêu cầu' : activeShiftType}
                                             </option>
+                                            <option value="SUDDEN_OFF">Nghỉ đột xuất</option>
                                         </select>
                                     ) : (
                                         <>
@@ -312,75 +322,80 @@ const KTVAttendancePage = () => {
                                             >
                                                 <option value="FREE">Ca tự do (Linh hoạt)</option>
                                                 <option value="REQUEST">Làm khách yêu cầu</option>
+                                                <option value="SUDDEN_OFF">Nghỉ đột xuất</option>
                                             </select>
                                         </>
                                     )}
                                 </div>
                             )}
-                            
-                            {/* Camera input (Multiple Photos) */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-700 flex justify-between items-center">
-                                    <span>
-                                        {formType === 'CHECK_OUT' ? t.checkOutPhotoOptional : t.photoRequired}
-                                    </span>
-                                    {photos.length > 0 && photos.length < MAX_PHOTOS && (
-                                        <span className="text-xs text-emerald-600 font-medium">Tối đa {MAX_PHOTOS} ảnh</span>
-                                    )}
-                                </label>
-                                
-                                {photos.length > 0 && (
-                                    <div className="grid grid-cols-2 gap-3 mb-3">
-                                        {photos.map((photo, index) => (
-                                            <div key={index} className="relative w-full h-32 rounded-xl overflow-hidden bg-black/5 border border-gray-200">
-                                                <img src={photo} className="w-full h-full object-cover" />
-                                                <button 
-                                                    onClick={() => setPhotos(prev => prev.filter((_, i) => i !== index))}
-                                                    className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full shadow hover:bg-black/80 transition-colors"
-                                                >
-                                                    <XCircle size={16} />
-                                                </button>
+                            {/* Sections hidden if SUDDEN_OFF is selected */}
+                            {selectedShiftType !== 'SUDDEN_OFF' && (
+                                <>
+                                    {/* Camera input (Multiple Photos) */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700 flex justify-between items-center">
+                                            <span>
+                                                {formType === 'CHECK_OUT' ? t.checkOutPhotoOptional : t.photoRequired}
+                                            </span>
+                                            {photos.length > 0 && photos.length < MAX_PHOTOS && (
+                                                <span className="text-xs text-emerald-600 font-medium">Tối đa {MAX_PHOTOS} ảnh</span>
+                                            )}
+                                        </label>
+                                        
+                                        {photos.length > 0 && (
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                {photos.map((photo, index) => (
+                                                    <div key={index} className="relative w-full h-32 rounded-xl overflow-hidden bg-black/5 border border-gray-200">
+                                                        <img src={photo} className="w-full h-full object-cover" />
+                                                        <button 
+                                                            onClick={() => setPhotos(prev => prev.filter((_, i) => i !== index))}
+                                                            className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full shadow hover:bg-black/80 transition-colors"
+                                                        >
+                                                            <XCircle size={16} />
+                                                        </button>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        )}
+
+                                        {photos.length < MAX_PHOTOS && (
+                                            <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 focus:ring-2 focus:ring-emerald-500 transition-all rounded-xl cursor-pointer">
+                                                <Camera size={24} className="text-gray-400 mb-1" />
+                                                <span className="text-sm font-medium text-gray-500">
+                                                    {photos.length === 0 ? t.openCamera : t.addPhoto(photos.length + 1, MAX_PHOTOS)}
+                                                </span>
+                                                <input type="file" accept="image/*" multiple className="hidden" onChange={handleCapture} />
+                                            </label>
+                                        )}
                                     </div>
-                                )}
 
-                                {photos.length < MAX_PHOTOS && (
-                                    <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 focus:ring-2 focus:ring-emerald-500 transition-all rounded-xl cursor-pointer">
-                                        <Camera size={24} className="text-gray-400 mb-1" />
-                                        <span className="text-sm font-medium text-gray-500">
-                                            {photos.length === 0 ? t.openCamera : t.addPhoto(photos.length + 1, MAX_PHOTOS)}
-                                        </span>
-                                        <input type="file" accept="image/*" multiple className="hidden" onChange={handleCapture} />
-                                    </label>
-                                )}
-                            </div>
-
-                            {/* Reason input -> Logic: show if LATE_CHECKIN or if isLate===true on CHECK_IN */}
-                            {(formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate)) && (
-                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                    {formType === 'CHECK_IN' && isLate && (
-                                        <div className="text-xs font-medium text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-2">
-                                            {t.lateWarning}
+                                    {/* Reason input -> Logic: show if LATE_CHECKIN or if isLate===true on CHECK_IN */}
+                                    {(formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate)) && (
+                                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                            {formType === 'CHECK_IN' && isLate && (
+                                                <div className="text-xs font-medium text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-2">
+                                                    {t.lateWarning}
+                                                </div>
+                                            )}
+                                            <label className="text-sm font-semibold text-gray-700 block text-left flex gap-1 items-center">
+                                                {formType === 'LATE_CHECKIN' ? t.reasonRequiredGeneral : t.reasonRequired} 
+                                                <span className="text-rose-500">(*)</span>
+                                            </label>
+                                            <textarea 
+                                                value={reason} onChange={e => setReason(e.target.value)}
+                                                className="w-full border border-gray-200 rounded-xl min-h-[80px] max-h-32 p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-y" 
+                                                placeholder={t.reasonPlaceholder}
+                                            />
                                         </div>
                                     )}
-                                    <label className="text-sm font-semibold text-gray-700 block text-left flex gap-1 items-center">
-                                        {formType === 'LATE_CHECKIN' ? t.reasonRequiredGeneral : t.reasonRequired} 
-                                        <span className="text-rose-500">(*)</span>
-                                    </label>
-                                    <textarea 
-                                        value={reason} onChange={e => setReason(e.target.value)}
-                                        className="w-full border border-gray-200 rounded-xl min-h-[80px] max-h-32 p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-y" 
-                                        placeholder={t.reasonPlaceholder}
-                                    />
-                                </div>
+                                </>
                             )}
 
                             <div className="flex gap-3 pt-2">
                                 <button onClick={() => setIsFormOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
                                 <button 
                                    onClick={handleSubmitForm}
-                                   disabled={(formType !== 'CHECK_OUT' && photos.length === 0) || ((formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate)) && !reason.trim())}
+                                   disabled={selectedShiftType !== 'SUDDEN_OFF' && ((formType !== 'CHECK_OUT' && photos.length === 0) || ((formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate)) && !reason.trim()))}
                                    className="flex-1 py-3.5 bg-emerald-600 active:scale-95 transition-transform text-white rounded-xl font-bold disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2">
                                     <CheckCircle2 size={18} /> Gửi
                                 </button>

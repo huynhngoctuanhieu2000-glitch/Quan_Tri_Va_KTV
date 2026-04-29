@@ -188,7 +188,7 @@ export const useKTVAttendance = () => {
     }, [activeShiftType]);
 
     const handleAttendance = useCallback(async (
-        checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN',
+        checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'SUDDEN_OFF',
         photosBase64?: string[] | null,
         reason?: string | null,
         selectedShiftType?: string | null
@@ -243,7 +243,7 @@ export const useKTVAttendance = () => {
             const errorMessage = err.message || 'Lỗi không xác định';
             setErrorMsg(errorMessage);
             // Revert back or stay IDLE if not checked out successfully
-            if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
+            if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN' || checkType === 'SUDDEN_OFF') {
                 setCheckStatus('IDLE');
             } else {
                 setCheckStatus('CONFIRMED');

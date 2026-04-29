@@ -188,8 +188,8 @@ const AttendancePendingSection = () => {
                          typeLabel = 'TAN CA'; typeColor = 'bg-amber-100 text-amber-700 border-amber-200';
                     } else if (rec.checkType === 'LATE_CHECKIN') {
                          typeLabel = 'BỔ SUNG'; typeColor = 'bg-orange-100 text-orange-700 border-orange-200';
-                    } else if (rec.checkType === 'OFF_REQUEST') {
-                         typeLabel = 'XIN OFF'; typeColor = 'bg-rose-100 text-rose-700 border-rose-200';
+                    } else if (rec.checkType === 'OFF_REQUEST' || rec.checkType === 'SUDDEN_OFF') {
+                         typeLabel = rec.checkType === 'SUDDEN_OFF' ? 'NGHỈ ĐỘT XUẤT' : 'XIN OFF'; typeColor = 'bg-rose-100 text-rose-700 border-rose-200';
                     }
 
                     const loadState = loading[rec.id];

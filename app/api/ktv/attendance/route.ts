@@ -97,7 +97,7 @@ export async function POST(request: Request) {
             const allowedIps: string[] = configData.value;
             // Cho phép localhost (cho môi trường dev) hoặc IP phải nằm trong mảng cấu hình
             if (clientIp !== '::1' && clientIp !== '127.0.0.1' && clientIp !== 'unknown') {
-                if (!allowedIps.includes(clientIp)) {
+                if (checkType !== 'SUDDEN_OFF' && !allowedIps.includes(clientIp)) {
                     console.error(`❌ [Attendance] IP mismatch: clientIp=${clientIp}, allowedIps=${allowedIps}`);
                     return NextResponse.json({ 
                         success: false, 
@@ -311,6 +311,7 @@ export async function POST(request: Request) {
         if (checkType === 'CHECK_OUT') actionText = 'yêu cầu tan ca';
         else if (checkType === 'LATE_CHECKIN') actionText = 'điểm danh bổ sung';
         else if (checkType === 'OFF_REQUEST') actionText = 'gửi yêu cầu OFF';
+        else if (checkType === 'SUDDEN_OFF') actionText = 'xin nghỉ đột xuất';
 
         const autoSuffix = isAutoApprove ? ' [AUTO]' : '';
         const notifMessage = `📍 ${displayName} ${actionText}${mapsLink} [AID:${record.id}]${reason ? ` (Lý do: ${reason})` : ''}${autoSuffix}`;
