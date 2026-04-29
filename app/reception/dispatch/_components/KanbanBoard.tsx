@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
 
 type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'WAITING_RATING' | 'CLEANING' | 'DONE';
