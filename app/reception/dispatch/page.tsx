@@ -228,17 +228,7 @@ export default function DispatchBoardPage() {
           }
         }
 
-        // 3. CHỜ ĐÁNH GIÁ -> HOÀN TẤT (Nếu khách không đánh giá sau 5 phút)
-        if (order.rawStatus === 'FEEDBACK' || order.rawStatus === 'COMPLETED') {
-            if (order.updatedAt) {
-                const updatedAt = new Date(order.updatedAt).getTime();
-                const diffMins = (now - updatedAt) / 60000;
-                if (diffMins >= 5) { // Sau 5 phút chờ đánh giá mà không có động tĩnh
-                    console.log(`✅ [Auto-Done] Feedback timeout for ${order.billCode}. Moving to DONE.`);
-                    handleUpdateStatus(order.id, 'DONE', undefined, true);
-                }
-            }
-        }
+        // 3. CHỜ ĐÁNH GIÁ: KHÔNG tự động chuyển DONE — chờ khách đánh giá hoặc Lễ tân bấm thủ công
       });
     }, 15000);
     
@@ -300,6 +290,7 @@ export default function DispatchBoardPage() {
           else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
           else if (b.status === 'CLEANING') dStatus = 'cleaning';
           else if (b.status === 'FEEDBACK' || b.status === 'COMPLETED') dStatus = 'waiting_rating';
+          else if (b.status === 'DONE' && !b.rating) dStatus = 'waiting_rating'; // Chưa đánh giá → vẫn ở cột Chờ đánh giá
           else if (b.status === 'DONE') dStatus = 'done';
           else if (hasAssignedKtv) dStatus = 'dispatched'; // Fallback for transition state
           

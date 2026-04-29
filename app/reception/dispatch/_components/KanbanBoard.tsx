@@ -411,36 +411,29 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                     ))}
                                                 </div>
 
-                                                {/* 🌟 CUSTOMER RATING UI: Hiển thị khi đơn đang dọn/đánh giá HOẶC đã có rating */}
-                                                {(subOrder.dispatchStatus === 'cleaning' || subOrder.dispatchStatus === 'waiting_rating' || subOrder.rating) && (
-                                                    <div className={`mb-4 rounded-2xl p-3 border ${subOrder.rating ? 'bg-emerald-50/50 border-emerald-100/50' : 'bg-indigo-50/50 border-indigo-100/50'}`}>
+                                                {/* 🌟 RATING INPUT: Chỉ hiện ở cột "Chờ đánh giá" */}
+                                                {subOrder.dispatchStatus === 'waiting_rating' && (
+                                                    <div className="mb-4 bg-indigo-50/50 rounded-2xl p-3 border border-indigo-100/50">
                                                         <div className="flex items-center justify-between mb-2">
-                                                            <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${subOrder.rating ? 'text-emerald-500' : 'text-indigo-400'}`}>
-                                                                <Sparkles size={10} /> {subOrder.rating ? 'Kết Quả Đánh Giá' : 'Khách Đánh Giá'}
+                                                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                                                                <Sparkles size={10} /> Khách Đánh Giá
                                                             </span>
-                                                            {subOrder.rating ? (
-                                                                <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                                                    <Check size={10} /> Đã xong
-                                                                </span>
-                                                            ) : (
-                                                                <button 
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const ratingUrl = `${window.location.origin}/rating/${subOrder.accessToken || subOrder.id}`;
-                                                                        alert(`Gửi link này cho khách đánh giá:\n${ratingUrl}`);
-                                                                    }}
-                                                                    className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-1"
-                                                                >
-                                                                    <QrCode size={10} /> QR Code
-                                                                </button>
-                                                            )}
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const ratingUrl = `${window.location.origin}/rating/${subOrder.accessToken || subOrder.id}`;
+                                                                    alert(`Gửi link này cho khách đánh giá:\n${ratingUrl}`);
+                                                                }}
+                                                                className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-1"
+                                                            >
+                                                                <QrCode size={10} /> QR Code
+                                                            </button>
                                                         </div>
                                                         
                                                         <div className="flex items-center gap-1.5">
                                                             {[1, 2, 3, 4, 5].map((star) => (
                                                                 <button
                                                                     key={star}
-                                                                    disabled={!!subOrder.rating} // Khóa không cho đổi nếu đã đánh giá rồi
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
@@ -451,22 +444,34 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                             });
                                                                         }
                                                                     }}
-                                                                    className={`p-1 transition-all ${subOrder.rating && subOrder.rating >= star ? 'text-amber-400 scale-110' : 'text-gray-200 hover:text-amber-200'} ${subOrder.rating ? 'cursor-default' : 'cursor-pointer'}`}
+                                                                    className="p-1 transition-all text-gray-200 hover:text-amber-300 cursor-pointer"
                                                                 >
-                                                                    <Star size={18} fill={subOrder.rating && subOrder.rating >= star ? 'currentColor' : 'none'} strokeWidth={3} />
+                                                                    <Star size={18} fill="none" strokeWidth={3} />
                                                                 </button>
                                                             ))}
-                                                            <span className="ml-auto text-[11px] font-black text-slate-400">
-                                                                {subOrder.rating ? `${subOrder.rating}/5 sao` : '—/5'}
-                                                            </span>
+                                                            <span className="ml-auto text-[11px] font-black text-slate-400">—/5</span>
                                                         </div>
-                                                        {subOrder.feedbackNote && (
-                                                            <p className={`mt-2 text-[10px] italic font-medium line-clamp-2 ${subOrder.rating ? 'text-emerald-700' : 'text-indigo-600'}`}>
-                                                                &quot;{subOrder.feedbackNote}&quot;
-                                                            </p>
-                                                        )}
                                                     </div>
                                                 )}
+
+                                                {/* ✅ RATING RESULT: Chỉ hiện ở cột "Hoàn tất" khi đã có đánh giá */}
+                                                {subOrder.dispatchStatus === 'done' && subOrder.rating && (() => {
+                                                    const ratingLabel = subOrder.rating >= 5 ? 'Xuất sắc' : subOrder.rating >= 4 ? 'Tốt' : subOrder.rating >= 3 ? 'Khá' : subOrder.rating >= 2 ? 'Trung bình' : 'Cần cải thiện';
+                                                    const ratingColor = subOrder.rating >= 4 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : subOrder.rating >= 3 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
+                                                    return (
+                                                        <div className={`mb-3 rounded-xl px-3 py-2 border flex items-center justify-between ${ratingColor}`}>
+                                                            <span className="text-[11px] font-black flex items-center gap-1.5">
+                                                                <Star size={14} fill="currentColor" strokeWidth={0} />
+                                                                {ratingLabel} ({subOrder.rating}/5)
+                                                            </span>
+                                                            {subOrder.feedbackNote && (
+                                                                <span className="text-[10px] italic opacity-80 truncate ml-2 max-w-[120px]">
+                                                                    &quot;{subOrder.feedbackNote}&quot;
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 <div className="flex items-center gap-2">
                                                     {(() => {
