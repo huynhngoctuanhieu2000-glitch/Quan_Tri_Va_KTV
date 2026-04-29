@@ -411,12 +411,12 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                     ))}
                                                 </div>
 
-                                                {/* 🌟 CUSTOMER RATING UI: Hiển thị khi đơn đang dọn/đánh giá */}
-                                                {(subOrder.dispatchStatus === 'cleaning' || subOrder.dispatchStatus === 'waiting_rating') && (
-                                                    <div className="mb-4 bg-indigo-50/50 rounded-2xl p-3 border border-indigo-100/50">
+                                                {/* 🌟 CUSTOMER RATING UI: Hiển thị khi đơn đang dọn/đánh giá HOẶC đã có rating */}
+                                                {(subOrder.dispatchStatus === 'cleaning' || subOrder.dispatchStatus === 'waiting_rating' || subOrder.rating) && (
+                                                    <div className={`mb-4 rounded-2xl p-3 border ${subOrder.rating ? 'bg-emerald-50/50 border-emerald-100/50' : 'bg-indigo-50/50 border-indigo-100/50'}`}>
                                                         <div className="flex items-center justify-between mb-2">
-                                                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1">
-                                                                <Sparkles size={10} /> Khách Đánh Giá
+                                                            <span className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${subOrder.rating ? 'text-emerald-500' : 'text-indigo-400'}`}>
+                                                                <Sparkles size={10} /> {subOrder.rating ? 'Kết Quả Đánh Giá' : 'Khách Đánh Giá'}
                                                             </span>
                                                             {subOrder.rating ? (
                                                                 <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -440,17 +440,18 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             {[1, 2, 3, 4, 5].map((star) => (
                                                                 <button
                                                                     key={star}
+                                                                    disabled={!!subOrder.rating} // Khóa không cho đổi nếu đã đánh giá rồi
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
                                                                             import('../actions').then(m => {
                                                                                 m.submitCustomerRating(subOrder.id, star).then(() => {
-                                                                                    // Refresh page logic here (done via realtime usually)
+                                                                                    // Refresh done via realtime
                                                                                 });
                                                                             });
                                                                         }
                                                                     }}
-                                                                    className={`p-1 transition-all ${subOrder.rating && subOrder.rating >= star ? 'text-amber-400 scale-110' : 'text-gray-200 hover:text-amber-200'}`}
+                                                                    className={`p-1 transition-all ${subOrder.rating && subOrder.rating >= star ? 'text-amber-400 scale-110' : 'text-gray-200 hover:text-amber-200'} ${subOrder.rating ? 'cursor-default' : 'cursor-pointer'}`}
                                                                 >
                                                                     <Star size={18} fill={subOrder.rating && subOrder.rating >= star ? 'currentColor' : 'none'} strokeWidth={3} />
                                                                 </button>
@@ -460,7 +461,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             </span>
                                                         </div>
                                                         {subOrder.feedbackNote && (
-                                                            <p className="mt-2 text-[10px] text-indigo-600 italic font-medium line-clamp-1">
+                                                            <p className={`mt-2 text-[10px] italic font-medium line-clamp-2 ${subOrder.rating ? 'text-emerald-700' : 'text-indigo-600'}`}>
                                                                 &quot;{subOrder.feedbackNote}&quot;
                                                             </p>
                                                         )}

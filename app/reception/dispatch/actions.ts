@@ -1176,7 +1176,7 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
             .update({ 
                 rating, 
                 feedbackNote, 
-                status: 'FEEDBACK', // Cập nhật trạng thái sang FEEDBACK sau khi đánh giá
+                status: 'DONE', // Đánh giá xong là HOÀN TẤT luôn
                 updatedAt: new Date().toISOString() 
             })
             .eq('id', bookingId);

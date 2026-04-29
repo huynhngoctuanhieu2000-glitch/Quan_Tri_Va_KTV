@@ -517,11 +517,12 @@ export async function PATCH(request: Request) {
                 if (itemStatuses.some(s => s === 'IN_PROGRESS')) {
                     updatePayload.status = 'IN_PROGRESS';
                 } else if (itemStatuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s))) {
-                    updatePayload.status = 'COMPLETED';
+                    // 🔥 KTV kết thúc phục vụ -> Đơn chuyển sang giai đoạn DỌN PHÒNG
+                    updatePayload.status = 'CLEANING';
                 } else if (itemStatuses.every(s => ['PREPARING', 'READY', 'NEW', 'WAITING'].includes(s))) {
                     updatePayload.status = 'PREPARING';
                 } else {
-                    updatePayload.status = 'IN_PROGRESS'; // Fallback nếu có sự pha trộn (ví dụ 1 cái xong, 1 cái đang chuẩn bị)
+                    updatePayload.status = 'IN_PROGRESS';
                 }
             }
         } else if (status === 'READY') {

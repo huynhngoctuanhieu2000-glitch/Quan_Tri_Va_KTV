@@ -207,28 +207,40 @@ export default function DispatchBoardPage() {
       const now = new Date().getTime();
       
       orders.forEach(order => {
-        // 1. IN_PROGRESS -> COMPLETED (Hết giờ làm, chuyển sang chờ đánh giá)
+        // 1. ĐANG LÀM -> ĐANG DỌN (Hết giờ phục vụ)
         if (order.rawStatus === 'IN_PROGRESS') {
           const estEndTime = getEstimatedEndTime(order);
-          if (estEndTime > 0 && now >= estEndTime + 5000) { // Thêm 5s buffer
-            console.log(`⏰ [Auto-Finish] Order ${order.billCode} reached end time (${new Date(estEndTime).toLocaleTimeString()}). Moving to COMPLETED.`);
-            handleUpdateStatus(order.id, 'COMPLETED', undefined, true);
+          if (estEndTime > 0 && now >= estEndTime + 5000) {
+            console.log(`⏰ [Auto-Finish] Service time up for ${order.billCode}. Moving to CLEANING.`);
+            handleUpdateStatus(order.id, 'CLEANING', undefined, true);
           }
         }
         
-        // 2. COMPLETED/FEEDBACK/CLEANING -> DONE (Dọn dẹp xong, hoàn tất đơn)
-        if (order.rawStatus === 'COMPLETED' || order.rawStatus === 'FEEDBACK' || order.rawStatus === 'CLEANING') {
+        // 2. ĐANG DỌN -> CHỜ ĐÁNH GIÁ (Dọn xong, giải phóng KTV)
+        if (order.rawStatus === 'CLEANING') {
           if (order.updatedAt) {
             const updatedAt = new Date(order.updatedAt).getTime();
             const diffMins = (now - updatedAt) / 60000;
             if (diffMins >= roomTransitionTime) {
-              console.log(`🧹 [Auto-Cleanup] Order ${order.billCode} cleaning time finished. Moving to DONE.`);
-              handleUpdateStatus(order.id, 'DONE', undefined, true);
+              console.log(`🧹 [Auto-Cleanup] Cleaning finished for ${order.billCode}. Moving to FEEDBACK.`);
+              handleUpdateStatus(order.id, 'FEEDBACK', undefined, true);
             }
           }
         }
+
+        // 3. CHỜ ĐÁNH GIÁ -> HOÀN TẤT (Nếu khách không đánh giá sau 5 phút)
+        if (order.rawStatus === 'FEEDBACK' || order.rawStatus === 'COMPLETED') {
+            if (order.updatedAt) {
+                const updatedAt = new Date(order.updatedAt).getTime();
+                const diffMins = (now - updatedAt) / 60000;
+                if (diffMins >= 5) { // Sau 5 phút chờ đánh giá mà không có động tĩnh
+                    console.log(`✅ [Auto-Done] Feedback timeout for ${order.billCode}. Moving to DONE.`);
+                    handleUpdateStatus(order.id, 'DONE', undefined, true);
+                }
+            }
+        }
       });
-    }, 15000); // Quét nhanh hơn (15s/lần) để đảm bảo tính thời gian thực
+    }, 15000);
     
     return () => clearInterval(interval);
   }, [orders, roomTransitionTime, selectedDate]);
@@ -286,9 +298,8 @@ export default function DispatchBoardPage() {
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'PREPARING') dStatus = 'dispatched';
           else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          else if (b.status === 'COMPLETED') dStatus = 'waiting_rating';
-          else if (b.status === 'FEEDBACK') dStatus = 'cleaning';
-          else if (b.status === 'DONE' && hasAssignedKtv) dStatus = 'cleaning';
+          else if (b.status === 'CLEANING') dStatus = 'cleaning';
+          else if (b.status === 'FEEDBACK' || b.status === 'COMPLETED') dStatus = 'waiting_rating';
           else if (b.status === 'DONE') dStatus = 'done';
           else if (hasAssignedKtv) dStatus = 'dispatched'; // Fallback for transition state
           
