@@ -264,8 +264,8 @@ export default function DispatchBoardPage() {
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'PREPARING') dStatus = 'dispatched';
           else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          else if (b.status === 'FEEDBACK') dStatus = 'waiting_rating';
-          else if (b.status === 'COMPLETED') dStatus = 'cleaning';
+          else if (b.status === 'COMPLETED') dStatus = 'waiting_rating';
+          else if (b.status === 'FEEDBACK') dStatus = 'cleaning';
           else if (b.status === 'DONE' && hasAssignedKtv) dStatus = 'cleaning';
           else if (b.status === 'DONE') dStatus = 'done';
           else if (hasAssignedKtv) dStatus = 'dispatched'; // Fallback for transition state
@@ -285,6 +285,8 @@ export default function DispatchBoardPage() {
             rawStatus: b.status,
             hasAssignedKtv,
             accessToken: b.accessToken || null,
+            rating: b.rating || null,
+            feedbackNote: b.feedbackNote || null,
             timeStart: b.timeStart || null,
             timeEnd: b.timeEnd || null,
             services: (b.BookingItems || []).map((bi: any) => {
@@ -1053,8 +1055,10 @@ if (!hasPermission('dispatch_board')) {
     
     if (!skipConfirm) {
       let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
-      if (newStatus === 'COMPLETED') {
-        confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở kiểm tra đồ và đánh giá, nhân viên bắt đầu dọn phòng.`;
+      if (newStatus === 'COMPLETED' || newStatus === 'WAITING_RATING') {
+        confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở đánh giá, và đơn sẽ chuyển sang trạng thái CHỜ ĐÁNH GIÁ.`;
+      } else if (newStatus === 'CLEANING' || newStatus === 'FEEDBACK') {
+        confirmMsg = `Xác nhận BẮT ĐẦU DỌN PHÒNG? KTV sẽ được giải phóng để nhận khách mới.`;
       } else if (newStatus === 'DONE') {
         confirmMsg = `Xác nhận ĐÃ DỌN XONG PHÒNG VÀ HOÀN TẤT? Giường sẽ được nhả ra để đón khách mới.`;
       } else if (newStatus === 'IN_PROGRESS') {
@@ -1821,7 +1825,18 @@ if (!hasPermission('dispatch_board')) {
                   </button>
                 );
               }
-              if (order.dispatchStatus === 'cleaning' || order.dispatchStatus === 'waiting_rating') {
+              if (order.dispatchStatus === 'waiting_rating') {
+                return (
+                  <button
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'FEEDBACK')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
+                  >
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    Đã đánh giá xong → Bắt đầu dọn phòng
+                  </button>
+                );
+              }
+              if (order.dispatchStatus === 'cleaning') {
                 return (
                   <button
                     onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}

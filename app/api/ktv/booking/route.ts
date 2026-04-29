@@ -512,10 +512,12 @@ export async function PATCH(request: Request) {
                 const itemStatuses = (allItemsForStatus || []).map(i => i.status);
                 if (itemStatuses.some(s => s === 'IN_PROGRESS')) {
                     updatePayload.status = 'IN_PROGRESS';
-                } else if (itemStatuses.every(s => ['PREPARING', 'READY'].includes(s))) {
+                } else if (itemStatuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s))) {
+                    updatePayload.status = 'COMPLETED';
+                } else if (itemStatuses.every(s => ['PREPARING', 'READY', 'NEW', 'WAITING'].includes(s))) {
                     updatePayload.status = 'PREPARING';
                 } else {
-                    updatePayload.status = 'IN_PROGRESS'; // Fallback
+                    updatePayload.status = 'IN_PROGRESS'; // Fallback nếu có sự pha trộn (ví dụ 1 cái xong, 1 cái đang chuẩn bị)
                 }
             }
         } else if (status === 'READY') {

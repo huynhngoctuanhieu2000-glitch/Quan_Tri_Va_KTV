@@ -2,15 +2,16 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
 
-type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'COMPLETED' | 'DONE';
+type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'WAITING_RATING' | 'CLEANING' | 'DONE';
 
 const STATUS_CONFIG = [
     { id: 'PREPARING' as OrderStatus, dispatchModeId: ['dispatched'], label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as OrderStatus, nextLabel: '▶️ Bắt đầu làm' },
-    { id: 'IN_PROGRESS' as OrderStatus, dispatchModeId: ['in_progress'], label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'COMPLETED' as OrderStatus, nextLabel: '🧹 Dọn & Nhận xét' },
-    { id: 'COMPLETED' as OrderStatus, dispatchModeId: ['cleaning', 'waiting_rating'], label: 'Đang Dọn & Nhận Xét', shortLabel: 'Dọn & Nhận xét', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Đã dọn xong' },
+    { id: 'IN_PROGRESS' as OrderStatus, dispatchModeId: ['in_progress'], label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'WAITING_RATING' as OrderStatus, nextLabel: '⭐ Chờ Đánh Giá' },
+    { id: 'WAITING_RATING' as OrderStatus, dispatchModeId: ['waiting_rating'], label: 'Chờ Đánh Giá', shortLabel: 'Đánh giá', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: 'CLEANING' as OrderStatus, nextLabel: '🧹 Bắt đầu dọn' },
+    { id: 'CLEANING' as OrderStatus, dispatchModeId: ['cleaning'], label: 'Đang Dọn Phòng', shortLabel: 'Dọn phòng', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Đã dọn xong' },
     { id: 'DONE' as OrderStatus, dispatchModeId: ['done'], label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
 ];
 
@@ -160,7 +161,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                 const statuses = services.map(s => s.status || 'NEW');
                 let dispatchStatus = 'pending'; // Default to pending
                 if (statuses.includes('in_progress') || statuses.includes('IN_PROGRESS')) dispatchStatus = 'in_progress';
-                else if (statuses.includes('cleaning') || statuses.includes('waiting_rating') || statuses.includes('COMPLETED')) dispatchStatus = 'cleaning';
+                else if (statuses.includes('waiting_rating')) dispatchStatus = 'waiting_rating';
+                else if (statuses.includes('cleaning') || statuses.includes('COMPLETED')) dispatchStatus = 'cleaning';
                 else if (statuses.includes('done') || statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'done';
                 else if (statuses.includes('dispatched') || statuses.includes('PREPARING')) dispatchStatus = 'dispatched';
                 
@@ -408,6 +410,62 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                         </div>
                                                     ))}
                                                 </div>
+
+                                                {/* 🌟 CUSTOMER RATING UI: Hiển thị khi đơn đang dọn/đánh giá */}
+                                                {(subOrder.dispatchStatus === 'cleaning' || subOrder.dispatchStatus === 'waiting_rating') && (
+                                                    <div className="mb-4 bg-indigo-50/50 rounded-2xl p-3 border border-indigo-100/50">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                                                                <Sparkles size={10} /> Khách Đánh Giá
+                                                            </span>
+                                                            {order.rating ? (
+                                                                <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                                    <Check size={10} /> Đã xong
+                                                                </span>
+                                                            ) : (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const ratingUrl = `${window.location.origin}/rating/${order.accessToken || order.id}`;
+                                                                        alert(`Gửi link này cho khách đánh giá:\n${ratingUrl}`);
+                                                                    }}
+                                                                    className="text-[9px] font-black text-indigo-600 hover:underline flex items-center gap-1"
+                                                                >
+                                                                    <QrCode size={10} /> QR Code
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        <div className="flex items-center gap-1.5">
+                                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                                <button
+                                                                    key={star}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
+                                                                            import('../actions').then(m => {
+                                                                                m.submitCustomerRating(order.id, star).then(() => {
+                                                                                    // Refresh page logic here (done via realtime usually)
+                                                                                });
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                    className={`p-1 transition-all ${order.rating && order.rating >= star ? 'text-amber-400 scale-110' : 'text-gray-200 hover:text-amber-200'}`}
+                                                                >
+                                                                    <Star size={18} fill={order.rating && order.rating >= star ? 'currentColor' : 'none'} strokeWidth={3} />
+                                                                </button>
+                                                            ))}
+                                                            <span className="ml-auto text-[11px] font-black text-slate-400">
+                                                                {order.rating ? `${order.rating}/5 sao` : '—/5'}
+                                                            </span>
+                                                        </div>
+                                                        {order.feedbackNote && (
+                                                            <p className="mt-2 text-[10px] text-indigo-600 italic font-medium line-clamp-1">
+                                                                &quot;{order.feedbackNote}&quot;
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
 
                                                 <div className="flex items-center gap-2">
                                                     {(() => {

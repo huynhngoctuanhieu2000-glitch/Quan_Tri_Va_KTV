@@ -432,7 +432,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
         // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
         // 🔧 FIX: KHÔNG ghi đè items đang PREPARING (chưa bắt đầu) → chỉ update items đã IN_PROGRESS trở lên
-        if (['COMPLETED', 'DONE', 'CANCELLED'].includes(newStatus)) {
+        if (['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK'].includes(newStatus)) {
             const { error: itemError } = await supabase
                 .from('BookingItems')
                 .update({ status: newStatus })
@@ -500,7 +500,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
         // 2. Nếu trạng thái mới là COMPLETED, DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
         // 🔧 FIX: Chỉ release KTV nếu TẤT CẢ items đã xong, tránh release KTV đang chờ làm DV khác
-        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
+        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
             // Re-check: chỉ giải phóng nếu KHÔNG còn items đang PREPARING/IN_PROGRESS
             const { data: remainingItems } = await supabase
                 .from('BookingItems')
@@ -609,7 +609,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                 .in('status', ['waiting', 'working']);
         }
 
-        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
+        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
             // Lấy tất cả KTV đang làm các item này
             const { data: turnsToRelease } = await supabase
                 .from('TurnQueue')
@@ -643,7 +643,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             let bStatus = 'NEW';
             if (statuses.includes('IN_PROGRESS')) bStatus = 'IN_PROGRESS';
             else if (statuses.includes('PREPARING')) bStatus = 'PREPARING';
-            else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED'].includes(s))) bStatus = 'COMPLETED';
+            else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s))) bStatus = 'COMPLETED';
             else if (statuses.includes('WAITING') || statuses.includes('NEW')) bStatus = 'NEW';
             
             await supabase.from('Bookings').update({ status: bStatus }).eq('id', bookingId);
@@ -1165,3 +1165,27 @@ export async function editBookingService(bookingId: string, itemId: string, newS
         return { success: false, error: error.message };
     }
 }
+
+export async function submitCustomerRating(bookingId: string, rating: number, feedbackNote?: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        const { error } = await supabase
+            .from('Bookings')
+            .update({ 
+                rating, 
+                feedbackNote, 
+                status: 'FEEDBACK', // Cập nhật trạng thái sang FEEDBACK sau khi đánh giá
+                updatedAt: new Date().toISOString() 
+            })
+            .eq('id', bookingId);
+
+        if (error) throw error;
+        return { success: true };
+    } catch (error: any) {
+        console.error("❌ [Server] submitCustomerRating error:", error);
+        return { success: false, error: error.message };
+    }
+}
+

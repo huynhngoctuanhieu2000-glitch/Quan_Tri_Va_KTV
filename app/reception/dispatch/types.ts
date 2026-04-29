@@ -58,6 +58,8 @@ export interface PendingOrder {
   timeEnd?: string | null;
   customerLang?: string;
   accessToken?: string | null;
+  rating?: number | null;
+  feedbackNote?: string | null;
 }
 
 export type StaffData = {
