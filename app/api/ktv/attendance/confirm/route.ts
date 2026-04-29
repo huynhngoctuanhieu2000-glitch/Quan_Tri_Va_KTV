@@ -103,8 +103,8 @@ export async function PATCH(request: Request) {
             }
         }
 
-        // ─── If CONFIRMED CHECK_OUT: set status = off (hiển thị mờ cuối danh sách) ──────
-        if (action === 'CONFIRM' && attendance.checkType === 'CHECK_OUT') {
+        // ─── If CONFIRMED CHECK_OUT or SUDDEN_OFF: set status = off (hiển thị mờ cuối danh sách) ──────
+        if (action === 'CONFIRM' && (attendance.checkType === 'CHECK_OUT' || attendance.checkType === 'SUDDEN_OFF')) {
             const nowUtc = new Date();
             const today = new Date(nowUtc.getTime() + VN_OFFSET_MS).toISOString().split('T')[0];
 
@@ -113,13 +113,27 @@ export async function PATCH(request: Request) {
                 .update({ status: 'off' })
                 .eq('employee_id', staffCode)
                 .eq('date', today);
+                
+            await supabase
+                .from('Users')
+                .update({ isOnShift: false })
+                .eq('id', attendance.employeeId);
         }
 
         // ─── Notify KTV via StaffNotifications ──────────────────────────
         const isCheckIn = attendance.checkType === 'CHECK_IN' || attendance.checkType === 'LATE_CHECKIN';
-        const ktvMessage = action === 'CONFIRM'
-            ? (isCheckIn ? '✅ Admin đã xác nhận điểm danh của bạn!' : '✅ Admin đã xác nhận tan ca!')
-            : (isCheckIn ? '❌ Admin từ chối điểm danh. Vui lòng liên hệ quản lý.' : '❌ Admin từ chối tan ca.');
+        const isSuddenOff = attendance.checkType === 'SUDDEN_OFF';
+        
+        let ktvMessage = '';
+        if (action === 'CONFIRM') {
+            if (isCheckIn) ktvMessage = '✅ Admin đã xác nhận điểm danh của bạn!';
+            else if (isSuddenOff) ktvMessage = '✅ Admin đã xác nhận yêu cầu nghỉ đột xuất của bạn!';
+            else ktvMessage = '✅ Admin đã xác nhận tan ca!';
+        } else {
+            if (isCheckIn) ktvMessage = '❌ Admin từ chối điểm danh. Vui lòng liên hệ quản lý.';
+            else if (isSuddenOff) ktvMessage = '❌ Admin từ chối yêu cầu nghỉ đột xuất.';
+            else ktvMessage = '❌ Admin từ chối tan ca.';
+        }
 
         await supabase.from('StaffNotifications').insert({
             type: 'CHECK_IN',
