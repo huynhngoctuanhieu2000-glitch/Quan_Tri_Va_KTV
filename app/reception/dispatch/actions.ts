@@ -432,7 +432,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
         // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
         // 🔧 FIX: KHÔNG ghi đè items đang PREPARING (chưa bắt đầu) → chỉ update items đã IN_PROGRESS trở lên
-        if (['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK'].includes(newStatus)) {
+        if (['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
             const { error: itemError } = await supabase
                 .from('BookingItems')
                 .update({ status: newStatus })
@@ -498,9 +498,8 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             if (tError) console.error('❌ [Server] TurnQueue start error:', tError);
         }
 
-        // 2. Nếu trạng thái mới là COMPLETED, DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
-        // 🔧 FIX: Chỉ release KTV nếu TẤT CẢ items đã xong, tránh release KTV đang chờ làm DV khác
-        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
+        // 🔧 CHỈ release KTV khi DONE hoặc CANCELLED. CLEANING/FEEDBACK = KTV vẫn bận!
+        if (newStatus === 'DONE' || newStatus === 'CANCELLED') {
             // Re-check: chỉ giải phóng nếu KHÔNG còn items đang PREPARING/IN_PROGRESS
             const { data: remainingItems } = await supabase
                 .from('BookingItems')
