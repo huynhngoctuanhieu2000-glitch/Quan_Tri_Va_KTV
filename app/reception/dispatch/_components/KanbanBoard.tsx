@@ -192,28 +192,41 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
         const checkAutoFinish = () => {
             const now = new Date();
             
-            orders.forEach(order => {
-                if (order.dispatchStatus === 'in_progress') {
-                    // Skip nếu đơn này đã được auto-finish trước đó
-                    if (autoFinishedRef.current.has(order.id)) return;
+            // 🔧 FIX: Kiểm tra theo TỪNG subOrder, không phải toàn booking
+            // Và BỎ QUA booking còn items PREPARING (chưa ai bắt đầu)
+            subOrders.forEach(subOrder => {
+                if (subOrder.dispatchStatus !== 'in_progress') return;
+                
+                // Skip nếu subOrder này đã được auto-finish trước đó
+                if (autoFinishedRef.current.has(subOrder.id)) return;
 
-                    const estEndStr = getEstimatedEndTime(order);
-                    if (estEndStr && estEndStr !== '--:--') {
-                        const [h, m] = estEndStr.split(':').map(Number);
-                        const estEnd = new Date();
-                        estEnd.setHours(h, m, 0, 0);
-                        
-                        // Handle midnight crossing
-                        if (h > 20 && now.getHours() < 4) {
-                             estEnd.setDate(estEnd.getDate() - 1);
-                        }
-                        
-                        // Allow 5 seconds grace period
-                        if (now.getTime() >= estEnd.getTime() + 5000) {
-                             console.log(`🤖 [Kanban AutoFinish] Time is up for order ${order.id} (${estEndStr}). Auto-completing silently...`);
-                             autoFinishedRef.current.add(order.id);
-                             onUpdateStatus(order.id, 'COMPLETED', undefined, true); // skipConfirm = true
-                        }
+                // 🛡️ GUARD: Bỏ qua nếu booking GỐC còn items PREPARING/NEW
+                // → Có KTV khác chưa bắt đầu, KHÔNG auto-finish toàn booking
+                const originalOrder = subOrder.originalOrder;
+                const hasWaitingItems = originalOrder.services.some(s => 
+                    ['PREPARING', 'NEW', 'WAITING'].includes(s.status || '')
+                );
+                
+                // Chỉ tính estimated end time từ services CỦA subOrder này (không phải toàn booking)
+                const estEndStr = getEstimatedEndTime(originalOrder, subOrder.services);
+                if (estEndStr && estEndStr !== '--:--') {
+                    const [h, m] = estEndStr.split(':').map(Number);
+                    const estEnd = new Date();
+                    estEnd.setHours(h, m, 0, 0);
+                    
+                    // Handle midnight crossing
+                    if (h > 20 && now.getHours() < 4) {
+                         estEnd.setDate(estEnd.getDate() - 1);
+                    }
+                    
+                    // Allow 5 seconds grace period
+                    if (now.getTime() >= estEnd.getTime() + 5000) {
+                         console.log(`🤖 [Kanban AutoFinish] Time is up for subOrder ${subOrder.id} (${estEndStr}). Auto-completing...`);
+                         autoFinishedRef.current.add(subOrder.id);
+                         
+                         // 🔧 FIX: Truyền itemIds cụ thể → CHỈ update items của subOrder này
+                         const itemIds = subOrder.services.map(s => s.id);
+                         onUpdateStatus(subOrder.bookingId, 'COMPLETED', itemIds, true); // skipConfirm = true
                     }
                 }
             });
@@ -221,7 +234,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
 
         const interval = setInterval(checkAutoFinish, 30000);
         return () => clearInterval(interval);
-    }, [orders, onUpdateStatus]);
+    }, [subOrders, onUpdateStatus]);
 
     const getStatusConfig = (id: string) => STATUS_CONFIG.find(s => s.id === id) || STATUS_CONFIG[0];
 

@@ -431,15 +431,41 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         if (bError) throw bError;
 
         // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
+        // 🔧 FIX: KHÔNG ghi đè items đang PREPARING (chưa bắt đầu) → chỉ update items đã IN_PROGRESS trở lên
         if (['COMPLETED', 'DONE', 'CANCELLED'].includes(newStatus)) {
             const { error: itemError } = await supabase
                 .from('BookingItems')
                 .update({ status: newStatus })
                 .eq('bookingId', bookingId)
-                .neq('status', 'DONE')
-                .neq('status', 'CANCELLED');
+                .in('status', ['IN_PROGRESS', 'COMPLETED', 'CLEANING', 'FEEDBACK']);
                 
             if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+
+            // 🔧 SMART BOOKING STATUS: Re-query ALL items để tính status chính xác
+            const { data: allItemsAfterPartial } = await supabase
+                .from('BookingItems')
+                .select('id, status')
+                .eq('bookingId', bookingId);
+            
+            if (allItemsAfterPartial && allItemsAfterPartial.length > 0) {
+                const statuses = allItemsAfterPartial.map(i => i.status);
+                let smartStatus = newStatus; // Default to requested status
+                
+                // Nếu còn items PREPARING → booking phải giữ IN_PROGRESS (không nhảy COMPLETED)
+                if (statuses.includes('PREPARING') || statuses.includes('NEW') || statuses.includes('WAITING')) {
+                    smartStatus = statuses.includes('IN_PROGRESS') ? 'IN_PROGRESS' : 'PREPARING';
+                } else if (statuses.some(s => s === 'IN_PROGRESS')) {
+                    smartStatus = 'IN_PROGRESS';
+                } else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(s))) {
+                    smartStatus = newStatus; // All done → use requested status
+                }
+                
+                // Override booking status nếu khác
+                if (smartStatus !== newStatus) {
+                    console.log(`🧠 [Smart Status] Booking ${bookingId}: Requested ${newStatus} but computed ${smartStatus} (some items still waiting)`);
+                    await supabase.from('Bookings').update({ status: smartStatus, updatedAt: new Date().toISOString() }).eq('id', bookingId);
+                }
+            }
         } else if (newStatus === 'IN_PROGRESS') {
             const now = new Date().toISOString();
             // Cập nhật timeStart cho Bookings nếu chưa có
@@ -473,35 +499,48 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         }
 
         // 2. Nếu trạng thái mới là COMPLETED, DONE hoặc CANCELLED, giải phóng KTV trong TurnQueue
+        // 🔧 FIX: Chỉ release KTV nếu TẤT CẢ items đã xong, tránh release KTV đang chờ làm DV khác
         if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
-            // Lấy tất cả KTV đang làm đơn hàng này
-            const { data: turnsToRelease } = await supabase
-                .from('TurnQueue')
-                .select('id, turns_completed, status')
-                .eq('current_order_id', bookingId)
-                .eq('date', date);
+            // Re-check: chỉ giải phóng nếu KHÔNG còn items đang PREPARING/IN_PROGRESS
+            const { data: remainingItems } = await supabase
+                .from('BookingItems')
+                .select('status')
+                .eq('bookingId', bookingId)
+                .in('status', ['PREPARING', 'IN_PROGRESS', 'NEW', 'WAITING']);
+            
+            const allReallyDone = !remainingItems || remainingItems.length === 0;
+            
+            if (allReallyDone) {
+                // Lấy tất cả KTV đang làm đơn hàng này
+                const { data: turnsToRelease } = await supabase
+                    .from('TurnQueue')
+                    .select('id, turns_completed, status')
+                    .eq('current_order_id', bookingId)
+                    .eq('date', date);
 
-            if (turnsToRelease && turnsToRelease.length > 0) {
-                for (const turn of turnsToRelease) {
-                    // Tua đã được tính tự động từ lúc gán đơn (qua API /api/turns), nên ở đây không cộng thêm nữa.
-                    let newTurnsCompleted = turn.turns_completed || 0;
+                if (turnsToRelease && turnsToRelease.length > 0) {
+                    for (const turn of turnsToRelease) {
+                        let newTurnsCompleted = turn.turns_completed || 0;
 
-                    const { error: tError } = await supabase
-                        .from('TurnQueue')
-                        .update({
-                            status: 'waiting',
-                            current_order_id: null,
-                            booking_item_id: null,
-                            start_time: null,
-                            estimated_end_time: null,
-                            turns_completed: newTurnsCompleted
-                        })
-                        .eq('id', turn.id);
+                        const { error: tError } = await supabase
+                            .from('TurnQueue')
+                            .update({
+                                status: 'waiting',
+                                current_order_id: null,
+                                booking_item_id: null,
+                                start_time: null,
+                                estimated_end_time: null,
+                                turns_completed: newTurnsCompleted
+                            })
+                            .eq('id', turn.id);
 
-                    if (tError) {
-                        console.error('❌ [Server] TurnQueue cleanup error:', tError);
+                        if (tError) {
+                            console.error('❌ [Server] TurnQueue cleanup error:', tError);
+                        }
                     }
                 }
+            } else {
+                console.log(`🛡️ [Server] Booking ${bookingId}: Skipping TurnQueue release — ${remainingItems?.length} items still active`);
             }
         }
 

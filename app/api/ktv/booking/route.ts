@@ -499,7 +499,25 @@ export async function PATCH(request: Request) {
                 targetBookingItemId = null;
             }
 
-            updatePayload.status = action === 'NEXT_SEGMENT_PREPARE' ? 'PREPARING' : 'IN_PROGRESS';
+            // 🔧 SMART STATUS: Tính toán booking-level status dựa trên TẤT CẢ items, không gán cứng
+            if (action === 'NEXT_SEGMENT_PREPARE') {
+                updatePayload.status = 'PREPARING';
+            } else {
+                // Re-query ALL items để xác định booking status chính xác
+                const { data: allItemsForStatus } = await supabase
+                    .from('BookingItems')
+                    .select('id, status')
+                    .eq('bookingId', bookingId);
+                
+                const itemStatuses = (allItemsForStatus || []).map(i => i.status);
+                if (itemStatuses.some(s => s === 'IN_PROGRESS')) {
+                    updatePayload.status = 'IN_PROGRESS';
+                } else if (itemStatuses.every(s => ['PREPARING', 'READY'].includes(s))) {
+                    updatePayload.status = 'PREPARING';
+                } else {
+                    updatePayload.status = 'IN_PROGRESS'; // Fallback
+                }
+            }
         } else if (status === 'READY') {
             itemUpdatePayload.status = 'READY';
         } else if (status === 'CLEANING') {
