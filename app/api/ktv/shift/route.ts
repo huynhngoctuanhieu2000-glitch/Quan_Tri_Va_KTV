@@ -30,6 +30,26 @@ export async function GET(request: NextRequest) {
         const all = searchParams.get('all');
         const pending = searchParams.get('pending');
 
+        // ─── Lấy cấu hình ngày lễ để đè ca 2 ───
+        let isHolidayOverride = false;
+        try {
+            const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+            const vnDateStr = vnNow.toISOString().slice(5, 10); // Lấy MM-DD
+            
+            const { data: configData } = await supabase
+                .from('SystemConfigs')
+                .select('value')
+                .eq('key', 'holiday_shift2_dates')
+                .maybeSingle();
+            
+            const holidayDates = configData?.value || ['04-30', '09-02', '12-31']; // Fallback
+            if (Array.isArray(holidayDates) && holidayDates.includes(vnDateStr)) {
+                isHolidayOverride = true;
+            }
+        } catch (err) {
+            console.error('❌ [Shift GET] Lỗi kiểm tra ngày lễ:', err);
+        }
+
         if (pending === 'true') {
             // Fetch only pending shift change requests (for admin)
             const { data, error } = await supabase
@@ -59,7 +79,15 @@ export async function GET(request: NextRequest) {
                 return NextResponse.json({ success: false, error: error.message }, { status: 500 });
             }
 
-            return NextResponse.json({ success: true, data: data || [], shiftTypes: SHIFT_TYPES });
+            // Đè ca làm việc nếu là ngày lễ
+            const finalData = data ? data.map(shift => {
+                if (isHolidayOverride) {
+                    return { ...shift, shiftType: 'SHIFT_2' };
+                }
+                return shift;
+            }) : [];
+
+            return NextResponse.json({ success: true, data: finalData, shiftTypes: SHIFT_TYPES });
         }
 
         if (employeeId) {
@@ -92,10 +120,23 @@ export async function GET(request: NextRequest) {
                 .order('createdAt', { ascending: false })
                 .limit(10);
 
+            // Đè ca làm việc nếu là ngày lễ
+            let currentShift = activeShift || null;
+            if (isHolidayOverride) {
+                currentShift = currentShift ? { ...currentShift, shiftType: 'SHIFT_2' } : {
+                    id: 'holiday-override',
+                    employeeId,
+                    shiftType: 'SHIFT_2',
+                    status: 'ACTIVE',
+                    reason: 'Tự động áp dụng ngày Lễ',
+                    effectiveFrom: new Date().toISOString().split('T')[0]
+                };
+            }
+
             return NextResponse.json({
                 success: true,
                 data: {
-                    currentShift: activeShift || null,
+                    currentShift,
                     pendingRequest: pendingShift || null,
                     history: history || [],
                 },

@@ -276,12 +276,12 @@ const KTVSchedulePage = () => {
                                     })}
                                 </div>
                                 
-                                <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100 flex-wrap">
+                                {/* <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100 flex-wrap">
                                     <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-500 font-medium">Đã duyệt</span></div>
                                     <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-400" /><span className="text-[10px] text-gray-500 font-medium">Chờ duyệt</span></div>
                                     <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /><span className="text-[10px] text-gray-500 font-medium">Đang chọn</span></div>
                                     <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-400" /><span className="text-[10px] text-gray-500 font-medium">Từ chối</span></div>
-                                </div>
+                                </div> */}
                             </>
                         )}
                     </div>
@@ -356,7 +356,7 @@ const KTVSchedulePage = () => {
                                                         <div key={leave.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${cfg.border} ${cfg.bg}`}>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-bold text-sm text-gray-900 truncate">
-                                                                    {leave.employeeName} {leave.employeeId === user?.id ? '(Bạn)' : ''}
+                                                                    {leave.employeeId} {leave.employeeId === user?.id ? '(Bạn)' : ''}
                                                                 </p>
                                                             </div>
                                                             <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.text} ${cfg.bg}`}>
