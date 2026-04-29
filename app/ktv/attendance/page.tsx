@@ -191,56 +191,99 @@ const KTVAttendancePage = () => {
                     {/* PENDING */}
                     {!initialLoading && checkStatus === 'PENDING' && (
                         <>
-                            <div className="w-24 h-24 rounded-full bg-amber-50 flex items-center justify-center">
-                                <Clock size={40} className="text-amber-500 animate-pulse" />
-                            </div>
-                            <div className="text-center space-y-1">
-                                <p className="font-bold text-amber-700 text-lg">{t.pendingTitle}</p>
-                                <p className="text-sm text-gray-500">{t.pendingDesc}</p>
-                                {currentRecord?.checkedAt && (
-                                    <p className="text-xs text-gray-400 mt-1">
-                                        {t.sentAt(format(new Date(currentRecord.checkedAt), 'HH:mm:ss dd/MM/yyyy'))}
-                                    </p>
-                                )}
-                            </div>
+                            {currentRecord?.checkType === 'SUDDEN_OFF' ? (
+                                <>
+                                    <div className="w-24 h-24 rounded-full bg-amber-50 flex items-center justify-center">
+                                        <Clock size={40} className="text-amber-500 animate-pulse" />
+                                    </div>
+                                    <div className="text-center space-y-2">
+                                        <p className="font-bold text-amber-700 text-xl">Đang chờ duyệt</p>
+                                        <p className="text-sm text-gray-600 font-medium bg-amber-50/50 p-4 rounded-xl border border-amber-100 shadow-sm leading-relaxed">
+                                            Yêu cầu <span className="font-bold text-amber-800 uppercase">Nghỉ đột xuất</span> của bạn đang được quản lý xem xét.
+                                        </p>
+                                        {currentRecord?.checkedAt && (
+                                            <p className="text-xs text-gray-400 font-medium mt-1">
+                                                Gửi lúc: {format(new Date(currentRecord.checkedAt), 'HH:mm:ss dd/MM/yyyy')}
+                                            </p>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-24 h-24 rounded-full bg-amber-50 flex items-center justify-center">
+                                        <Clock size={40} className="text-amber-500 animate-pulse" />
+                                    </div>
+                                    <div className="text-center space-y-1">
+                                        <p className="font-bold text-amber-700 text-lg">{t.pendingTitle}</p>
+                                        <p className="text-sm text-gray-500">{t.pendingDesc}</p>
+                                        {currentRecord?.checkedAt && (
+                                            <p className="text-xs text-gray-400 mt-1">
+                                                {t.sentAt(format(new Date(currentRecord.checkedAt), 'HH:mm:ss dd/MM/yyyy'))}
+                                            </p>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </>
                     )}
 
                     {/* CONFIRMED */}
                     {!initialLoading && checkStatus === 'CONFIRMED' && (
                         <>
-                            <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center">
-                                <CheckCircle2 size={40} className="text-emerald-600" />
-                            </div>
-                            <div className="text-center space-y-1">
-                                <p className="font-bold text-emerald-700 text-lg">{t.confirmedTitle}</p>
-                                <p className="text-sm text-gray-500">{t.confirmedDesc}</p>
-                                {currentRecord?.checkedAt && (
-                                    <p className="text-xs text-gray-400">
-                                        {t.shiftStart(format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy'))}
-                                    </p>
-                                )}
-                            </div>
-                            {/* Checkout time restriction warning */}
-                            {isLoadingShift ? (
-                                <div className="w-full flex items-center justify-center gap-2 py-3 text-gray-400 text-sm">
-                                    <Loader2 size={16} className="animate-spin" />
-                                    Đang kiểm tra giờ ca...
-                                </div>
-                            ) : !canCheckOut && checkoutBlockedUntil ? (
-                                <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center space-y-2">
-                                    <p className="text-amber-700 text-sm font-semibold">
-                                        {t.cannotCheckOutYet(checkoutBlockedUntil)}
-                                    </p>
-                                </div>
-                            ) : null}
-                            <button
-                                onClick={() => openForm('CHECK_OUT')}
-                                disabled={!canCheckOut || isLoadingShift}
-                                className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-                            >
-                                <LogOut size={22} /> {t.checkOut}
-                            </button>
+                            {currentRecord?.checkType === 'SUDDEN_OFF' ? (
+                                <>
+                                    <div className="w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center">
+                                        <CheckCircle2 size={40} className="text-blue-600" />
+                                    </div>
+                                    <div className="text-center space-y-2">
+                                        <p className="font-bold text-blue-700 text-xl">Đã xin nghỉ</p>
+                                        <p className="text-sm text-gray-600 font-medium bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm leading-relaxed">
+                                            Yêu cầu <span className="font-bold text-blue-800 uppercase">Nghỉ đột xuất</span> của bạn đã được phê duyệt.<br/>
+                                            <span className="text-xs font-semibold text-gray-500 mt-2 block">Chúc bạn một ngày nghỉ ngơi vui vẻ!</span>
+                                        </p>
+                                        {currentRecord?.checkedAt && (
+                                            <p className="text-xs text-gray-400 font-medium">
+                                                Duyệt lúc: {format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy')}
+                                            </p>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-24 h-24 rounded-full bg-emerald-50 flex items-center justify-center">
+                                        <CheckCircle2 size={40} className="text-emerald-600" />
+                                    </div>
+                                    <div className="text-center space-y-1">
+                                        <p className="font-bold text-emerald-700 text-lg">{t.confirmedTitle}</p>
+                                        <p className="text-sm text-gray-500">{t.confirmedDesc}</p>
+                                        {currentRecord?.checkedAt && (
+                                            <p className="text-xs text-gray-400">
+                                                {t.shiftStart(format(new Date(currentRecord.checkedAt), 'HH:mm — dd/MM/yyyy'))}
+                                            </p>
+                                        )}
+                                    </div>
+                                    {/* Checkout time restriction warning */}
+                                    {isLoadingShift ? (
+                                        <div className="w-full flex items-center justify-center gap-2 py-3 text-gray-400 text-sm">
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Đang kiểm tra giờ ca...
+                                        </div>
+                                    ) : !canCheckOut && checkoutBlockedUntil ? (
+                                        <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center space-y-2">
+                                            <p className="text-amber-700 text-sm font-semibold">
+                                                {t.cannotCheckOutYet(checkoutBlockedUntil)}
+                                            </p>
+                                        </div>
+                                    ) : null}
+                                    <button
+                                        onClick={() => openForm('CHECK_OUT')}
+                                        disabled={!canCheckOut || isLoadingShift}
+                                        className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                                    >
+                                        <LogOut size={22} /> {t.checkOut}
+                                    </button>
+                                </>
+                            )}
                         </>
                     )}
 
