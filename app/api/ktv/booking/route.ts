@@ -434,6 +434,10 @@ export async function PATCH(request: Request) {
                         .eq('id', itemId);
                 }
 
+                if (action === 'START_TIMER' && maxTimeEndStr) {
+                    updatePayload.timeEnd = maxTimeEndStr;
+                }
+
                 // 4. Đồng bộ thời gian kết thúc (thực tế) sang TurnQueue để màn Lễ Tân Real-time
                 if (maxTimeEndStr && turnForSync && action === 'START_TIMER') {
                     const d = new Date(maxTimeEndStr);
