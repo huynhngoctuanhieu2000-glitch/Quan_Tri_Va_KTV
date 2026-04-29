@@ -371,22 +371,34 @@ export async function PATCH(request: Request) {
 
                 // 2. Cập nhật thời gian vào Global Segments
 
-                if (action === 'START_TIMER') {
-                    if (allGlobalSegs.length > 0) {
-                        allGlobalSegs[0].seg.actualStartTime = sharedTimeStart;
-                    }
-                } else if (action === 'NEXT_SEGMENT') {
-                    if (activeSegmentIndex > 0 && allGlobalSegs.length > activeSegmentIndex) {
-                        if (allGlobalSegs[activeSegmentIndex - 1]) allGlobalSegs[activeSegmentIndex - 1].seg.actualEndTime = sharedTimeStart;
-                        allGlobalSegs[activeSegmentIndex].seg.actualStartTime = sharedTimeStart;
+                if (action === 'START_TIMER' || action === 'NEXT_SEGMENT' || action === 'RESUME_TIMER') {
+                    const startIdx = action === 'START_TIMER' ? 0 : activeSegmentIndex;
+                    if (allGlobalSegs.length > startIdx && allGlobalSegs[startIdx]) {
+                        if (action === 'NEXT_SEGMENT' && startIdx > 0 && allGlobalSegs[startIdx - 1]) {
+                            allGlobalSegs[startIdx - 1].seg.actualEndTime = sharedTimeStart;
+                        }
+
+                        allGlobalSegs[startIdx].seg.actualStartTime = sharedTimeStart;
+
+                        // 🚀 Dịch chuyển thời gian thực tế vào startTime/endTime của chặng để Lễ Tân giám sát chính xác
+                        let currentStartMs = new Date(sharedTimeStart).getTime();
+                        for (let i = startIdx; i < allGlobalSegs.length; i++) {
+                            const seg = allGlobalSegs[i].seg;
+                            const durMs = Number(seg.duration || 0) * 60000;
+                            
+                            const stVn = new Date(currentStartMs + (7 * 60 * 60 * 1000));
+                            seg.startTime = `${String(stVn.getUTCHours()).padStart(2, '0')}:${String(stVn.getUTCMinutes()).padStart(2, '0')}`;
+                            
+                            const endMs = currentStartMs + durMs;
+                            const etVn = new Date(endMs + (7 * 60 * 60 * 1000));
+                            seg.endTime = `${String(etVn.getUTCHours()).padStart(2, '0')}:${String(etVn.getUTCMinutes()).padStart(2, '0')}`;
+                            
+                            currentStartMs = endMs;
+                        }
                     }
                 } else if (action === 'NEXT_SEGMENT_PREPARE') {
                     if (activeSegmentIndex > 0 && allGlobalSegs[activeSegmentIndex - 1]) {
                         allGlobalSegs[activeSegmentIndex - 1].seg.actualEndTime = sharedTimeStart;
-                    }
-                } else if (action === 'RESUME_TIMER') {
-                    if (allGlobalSegs.length > activeSegmentIndex) {
-                        allGlobalSegs[activeSegmentIndex].seg.actualStartTime = sharedTimeStart;
                     }
                 }
 

@@ -28,6 +28,7 @@ const KTVAttendancePage = () => {
         clearError,
         activeShiftType,
         isOffToday,
+        allowEarlyCheckout,
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
@@ -284,7 +285,7 @@ const KTVAttendancePage = () => {
                                             }
                                             openForm('CHECK_OUT');
                                         }}
-                                        disabled={isLoadingShift}
+                                        disabled={isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
                                         className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                                     >
                                         <LogOut size={22} /> {t.checkOut}

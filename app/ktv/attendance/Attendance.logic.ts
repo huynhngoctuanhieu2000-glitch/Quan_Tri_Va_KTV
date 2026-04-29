@@ -56,6 +56,7 @@ export const useKTVAttendance = () => {
     const [isLoadingShift, setIsLoadingShift] = useState(false);
     const [isLate, setIsLate] = useState(false);
     const [isOffToday, setIsOffToday] = useState(false);
+    const [allowEarlyCheckout, setAllowEarlyCheckout] = useState(true);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -68,8 +69,18 @@ export const useKTVAttendance = () => {
 
         const fetchStatus = async () => {
             try {
-                const res = await fetch(`/api/ktv/attendance/status?employeeId=${user.id}`);
+                const [res, resSettings] = await Promise.all([
+                    fetch(`/api/ktv/attendance/status?employeeId=${user.id}`),
+                    fetch('/api/ktv/settings')
+                ]);
                 
+                if (resSettings.ok) {
+                    const settingsData = await resSettings.json();
+                    if (settingsData.success && settingsData.data?.allow_early_checkout !== undefined) {
+                        setAllowEarlyCheckout(settingsData.data.allow_early_checkout);
+                    }
+                }
+
                 if (!res.ok) {
                     const text = await res.text();
                     console.error(`❌ [Attendance] Status API returned ${res.status}:`, text);
@@ -323,5 +334,6 @@ export const useKTVAttendance = () => {
         handleRetry,
         clearError,
         isOffToday,
+        allowEarlyCheckout
     };
 };

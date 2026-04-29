@@ -54,15 +54,43 @@ export const DispatchServiceBlock = ({
                     <span className="bg-indigo-600 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-100">
                         {svcIndex + 1}
                     </span>
-                    <div className="flex flex-col">
-                        <h3 className="font-black text-gray-900 text-base leading-tight">{svc.serviceName}</h3>
+                    <div className="flex flex-col w-full">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="font-black text-gray-900 text-base leading-tight">{svc.serviceName}</h3>
+                            <span className="inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
+                            
+                            {/* Quick View: Assigned KTV & Room */}
+                            <div className="flex flex-wrap items-center gap-2">
+                                {svc.staffList.map((row, i) => {
+                                    const ktvCode = row.ktvId;
+                                    const firstSeg = row.segments?.[0];
+                                    const roomName = firstSeg?.roomId ? rooms.find(r => r.id === firstSeg.roomId)?.name : null;
+                                    
+                                    if (!ktvCode && !roomName) return null;
+                                    
+                                    return (
+                                        <span key={row.id || i} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-black rounded-lg whitespace-nowrap shadow-sm">
+                                            <UserCheck size={14} className="text-indigo-500" />
+                                            {ktvCode || 'Chưa gán'}
+                                            {roomName && <span className="text-indigo-300 mx-0.5">•</span>}
+                                            {roomName && <span className="text-indigo-600 truncate max-w-[120px]">{roomName}</span>}
+                                        </span>
+                                    );
+                                })}
+                                {svc.staffList.every(r => !r.ktvId && !r.segments?.[0]?.roomId) && (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-100 text-gray-400 text-xs font-bold rounded-lg whitespace-nowrap">
+                                        Chưa phân công
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
                         {svc.serviceDescription && (
-                            <p className="text-[11px] text-gray-500 font-medium mt-1 line-clamp-2 max-w-[250px]">
+                            <p className="text-[11px] text-gray-500 font-medium mt-1.5 line-clamp-2 max-w-[350px]">
                                 {svc.serviceDescription}
                             </p>
                         )}
                     </div>
-                    <span className="hidden sm:inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
                 </div>
 
                 <div className="flex items-center gap-2 lg:gap-3">

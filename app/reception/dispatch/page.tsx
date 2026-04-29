@@ -829,7 +829,7 @@ if (!hasPermission('dispatch_board')) {
       const primaryStaff = primaryService?.staffList[0];
       const primarySeg = primaryStaff?.segments[0];
       
-      const itemUpdates = clonedOrder.services.map(svc => {
+      const itemUpdates = clonedOrder.services.map((svc, index) => {
           const allSegments = svc.staffList.flatMap(r => 
             r.segments.map(seg => ({ ...seg, ktvId: r.ktvId }))
           );
@@ -842,6 +842,7 @@ if (!hasPermission('dispatch_board')) {
               segments: allSegments,
               options: {
                   ...(svc.options || {}),
+                  order: index,
                   note: svc.customerNote?.split(' | ')[0] || '', 
                   therapist: svc.genderReq,
                   strength: svc.strength,
@@ -955,6 +956,7 @@ if (!hasPermission('dispatch_board')) {
       const primarySeg = primaryStaff?.segments[0];
       
       const itemUpdates = targetServices.map(svc => {
+          const originalIndex = clonedOrder.services.findIndex(s => s.id === svc.id);
           // Lưu toàn bộ lộ trình của tất cả KTV trong dịch vụ này
           const allSegments = svc.staffList.flatMap(r => 
             r.segments.map(seg => ({ ...seg, ktvId: r.ktvId }))
@@ -970,6 +972,7 @@ if (!hasPermission('dispatch_board')) {
               segments: allSegments,
               options: {
                   ...(svc.options || {}),
+                  order: originalIndex !== -1 ? originalIndex : 999,
                   note: svc.customerNote?.split(' | ')[0] || '', 
                   therapist: svc.genderReq,
                   strength: svc.strength,

@@ -29,6 +29,16 @@ interface DispatchSegmentRowProps {
     realSvcId?: string;
 }
 
+const TIME_SLOTS: string[] = [];
+for (let h = 8; h <= 23; h++) {
+    for (let m = 0; m < 60; m += 15) {
+        if (h === 23 && m > 30) break; 
+        TIME_SLOTS.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+    }
+}
+
+const DURATION_OPTIONS = [15, 30, 45, 60, 75, 90, 100, 120, 150, 180];
+
 const calcEndTime = (start: string, duration: number): string => {
     if (!start || duration == null) return '';
     const [h, m] = start.split(':').map(Number);
@@ -40,6 +50,19 @@ const calcEndTime = (start: string, duration: number): string => {
 export const DispatchSegmentRow = ({
     segment, segmentIndex, rooms, beds, busyBedIds = [], onUpdate, onRemove, canRemove, realSvcId
 }: DispatchSegmentRowProps) => {
+
+    const [isDurationOpen, setIsDurationOpen] = React.useState(false);
+    const durationRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (durationRef.current && !durationRef.current.contains(e.target as Node)) {
+                setIsDurationOpen(false);
+            }
+        };
+        if (isDurationOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isDurationOpen]);
 
     const handleChange = (patch: Partial<WorkSegment>) => {
         const merged = { ...segment, ...patch };
@@ -136,6 +159,60 @@ export const DispatchSegmentRow = ({
             </div>
 
             <div className="grid grid-cols-3 gap-2">
+                {/* Duration */}
+                <div className="space-y-1.5 relative" ref={durationRef}>
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Phút</label>
+                    <div className="relative">
+                        <input
+                            type="number"
+                            min={0.1} max={300} step={0.1}
+                            value={segment.duration}
+                            onChange={e => handleChange({ duration: parseFloat(e.target.value) || 0 })}
+                            onFocus={() => setIsDurationOpen(true)}
+                            className="w-full px-2 py-2.5 border-2 border-gray-50 rounded-xl text-[11px] font-black text-center focus:border-indigo-500 outline-none bg-gray-50/30 transition-all pr-6"
+                            placeholder="Phút"
+                        />
+                        <button 
+                            type="button"
+                            onClick={() => setIsDurationOpen(!isDurationOpen)}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-200 ${isDurationOpen ? 'rotate-180' : ''}`}><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                    </div>
+
+                    <AnimatePresence>
+                        {isDurationOpen && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 5 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden left-0"
+                            >
+                                <div className="max-h-40 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
+                                    {DURATION_OPTIONS.map(min => (
+                                        <div
+                                            key={min}
+                                            onClick={() => {
+                                                handleChange({ duration: min });
+                                                setIsDurationOpen(false);
+                                            }}
+                                            className={`px-3 py-2.5 text-center text-[11px] font-black rounded-lg cursor-pointer transition-colors ${
+                                                segment.duration === min 
+                                                ? 'bg-indigo-50 text-indigo-700' 
+                                                : 'hover:bg-gray-50 text-gray-700'
+                                            }`}
+                                        >
+                                            {min}
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+
                 {/* Start Time */}
                 <div className="space-y-1.5">
                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Bắt đầu</label>
@@ -144,18 +221,6 @@ export const DispatchSegmentRow = ({
                         value={segment.startTime}
                         onChange={e => handleChange({ startTime: e.target.value })}
                         className="w-full px-2 py-2.5 border-2 border-gray-50 rounded-xl text-[11px] font-black focus:border-indigo-500 outline-none text-center bg-gray-50/30 transition-all"
-                    />
-                </div>
-
-                {/* Duration */}
-                <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block px-1 text-center">Phút</label>
-                    <input
-                        type="number"
-                        min={0.1} max={300} step={0.1}
-                        value={segment.duration}
-                        onChange={e => handleChange({ duration: parseFloat(e.target.value) || 0.5 })}
-                        className="w-full px-2 py-2.5 border-2 border-gray-50 rounded-xl text-[11px] font-black text-center focus:border-indigo-500 outline-none bg-gray-50/30 transition-all"
                     />
                 </div>
 

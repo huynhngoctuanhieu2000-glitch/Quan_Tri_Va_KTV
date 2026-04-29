@@ -19,7 +19,8 @@ export async function GET() {
         const defaultSettings = {
             ktv_setup_duration_minutes: 10,
             auto_finish_on_timer_end: true,
-            push_notifications_enabled: true
+            push_notifications_enabled: true,
+            allow_early_checkout: true
         };
 
         if (error || !configs || configs.length === 0) {

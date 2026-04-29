@@ -86,6 +86,19 @@ export async function getDispatchData(date: string) {
                 BookingItems: (items || [])
                     .filter(i => i.bookingId === b.id)
                     .sort((a, b) => {
+                        const orderA = a.options?.order;
+                        const orderB = b.options?.order;
+                        
+                        // Ưu tiên sắp xếp theo order trong options nếu có
+                        if (typeof orderA === 'number' && typeof orderB === 'number') {
+                            if (orderA !== orderB) return orderA - orderB;
+                        } else if (typeof orderA === 'number') {
+                            return -1;
+                        } else if (typeof orderB === 'number') {
+                            return 1;
+                        }
+
+                        // Nếu không có, dùng logic cũ
                         const matchA = a.id.match(/-item(\d+)$/);
                         const matchB = b.id.match(/-item(\d+)$/);
                         
