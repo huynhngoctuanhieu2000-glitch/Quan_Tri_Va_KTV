@@ -25,7 +25,8 @@ export async function GET(request: Request) {
                 return NextResponse.json({ success: false, error: 'Technician code or bookingId is required' }, { status: 400 });
             }
             
-            const today = new Date().toISOString().split('T')[0];
+            const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
+            const today = new Date(vnMs).toISOString().split('T')[0];
             const { data: turn, error: tError } = await supabase
                 .from('TurnQueue')
                 .select('current_order_id, booking_item_id')
@@ -45,7 +46,8 @@ export async function GET(request: Request) {
         // 1.5 Lấy thông tin từ TurnQueue để có mốc thời gian điều phối (last_served_at)
         let turnInfo = null;
         if (technicianCode) {
-            const today = new Date().toISOString().split('T')[0];
+            const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
+            const today = new Date(vnMs).toISOString().split('T')[0];
             const { data: turn } = await supabase
                 .from('TurnQueue')
                 .select('last_served_at, start_time, booking_item_id, room_id, bed_id')
@@ -209,7 +211,8 @@ export async function PATCH(request: Request) {
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         // --- Logic mới: Cập nhật song song BookingItem ---
-        const today = new Date().toISOString().split('T')[0];
+        const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
+        const today = new Date(vnMs).toISOString().split('T')[0];
         const { data: turnForSync } = await supabase
             .from('TurnQueue')
             .select('id, booking_item_id, last_served_at, start_time, turns_completed')
@@ -529,63 +532,81 @@ export async function PATCH(request: Request) {
             itemUpdatePayload.status = 'READY';
         } else if (status === 'CLEANING') {
             itemUpdatePayload.status = 'CLEANING';
-        } else if (status === 'DONE' || status === 'COMPLETED') {
-            // ✅ NEW FLOW: KTV hoàn thành → chỉ update BookingItem.status = COMPLETED
-            // Booking-level status sẽ được update sau khi tất cả items được RATED bởi khách
+        } else if (status === 'DONE' || status === 'COMPLETED' || status === 'FEEDBACK') {
+            const isFeedback = status === 'FEEDBACK';
             itemUpdatePayload.timeEnd = new Date().toISOString();
-            // ⚠️ KHÔNG ghi booking.timeEnd ở đây — chờ kiểm tra tất cả items bên dưới
+            
+            const idsToCheck = allItemIdsForThisKTV.length > 0 ? allItemIdsForThisKTV : (targetBookingItemId ? [targetBookingItemId] : []);
+            
+            if (idsToCheck.length > 0) {
+                const { data: currentItems } = await supabase
+                    .from('BookingItems')
+                    .select('id, segments, status')
+                    .in('id', idsToCheck);
 
-            // 🔑 FIX RACE CONDITION: Update TẤT CẢ items của KTV này
-            if (allItemIdsForThisKTV.length > 0) {
-                await supabase
-                    .from('BookingItems')
-                    .update(itemUpdatePayload)
-                    .in('id', allItemIdsForThisKTV);
-                // Đánh dấu đã update batch → skip single update ở dưới
-                targetBookingItemId = null;
-            } else if (targetBookingItemId) {
-                await supabase
-                    .from('BookingItems')
-                    .update(itemUpdatePayload)
-                    .eq('id', targetBookingItemId);
-                targetBookingItemId = null;
+                for (const item of currentItems || []) {
+                    let segs: any[] = [];
+                    try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []); } 
+                    catch { segs = []; }
+
+                    let allDone = true;
+                    let allFeedback = true;
+
+                    // 1. Đánh dấu segment của KTV này là đã hoàn thành/feedback
+                    segs.forEach(seg => {
+                        if (technicianCode && seg.ktvId && seg.ktvId.toLowerCase().includes(technicianCode.toLowerCase())) {
+                            if (!isFeedback && !seg.actualEndTime) seg.actualEndTime = new Date().toISOString();
+                            if (isFeedback) seg.feedbackTime = new Date().toISOString();
+                        }
+                    });
+
+                    // 2. Kiểm tra xem TẤT CẢ segments đã hoàn thành chưa
+                    segs.forEach(seg => {
+                        if (!seg.actualEndTime) allDone = false;
+                        if (!seg.feedbackTime) allFeedback = false;
+                    });
+
+                    const payload: any = { segments: JSON.stringify(segs) };
+                    
+                    if (isFeedback) {
+                        if (allFeedback) payload.status = 'FEEDBACK';
+                    } else {
+                        // COMPLETED
+                        if (allDone && item.status !== 'FEEDBACK' && item.status !== 'DONE') {
+                            payload.status = 'COMPLETED';
+                            payload.timeEnd = itemUpdatePayload.timeEnd;
+                        }
+                    }
+
+                    await supabase.from('BookingItems').update(payload).eq('id', item.id);
+                }
+                
+                targetBookingItemId = null; // Đã update xong, bỏ qua block update bên dưới
             }
 
-            // Re-query SAU khi đã update để check trạng thái thực tế
+            // Kiểm tra lại toàn bộ items trong đơn để tính toán trạng thái Booking tổng
             const { data: allItemsAfterUpdate } = await supabase
                 .from('BookingItems')
                 .select('id, status')
                 .eq('bookingId', bookingId);
 
-            const allItemsCompleted = (allItemsAfterUpdate || []).length > 0 
-                && (allItemsAfterUpdate || []).every(i =>
-                    ['COMPLETED', 'DONE', 'CLEANING'].includes(i.status)
-                );
+            const allItemsCompleted = (allItemsAfterUpdate || []).length > 0 && (allItemsAfterUpdate || []).every(i => ['COMPLETED', 'DONE', 'CLEANING', 'FEEDBACK', 'CANCELLED'].includes(i.status));
+            const allItemsFeedback = (allItemsAfterUpdate || []).length > 0 && (allItemsAfterUpdate || []).every(i => ['FEEDBACK', 'DONE', 'CANCELLED'].includes(i.status));
 
-            if (allItemsCompleted) {
-                // 🔥 TẤT CẢ items đã xong → BÂY GIỜ mới ghi booking.timeEnd
-                updatePayload.timeEnd = new Date().toISOString();
-                console.log(`[KTV API] All items completed for booking ${bookingId}. Setting booking.timeEnd now.`);
-            } else {
-                // Còn items đang làm → KHÔNG ghi booking.timeEnd để Kanban không bị nhầm
-                console.log(`[KTV API] Some items still in progress for booking ${bookingId}. Skipping booking.timeEnd.`);
-            }
-        } else if (validBookingStatuses.includes(status)) {
-            // Nếu KTV dọn xong (FEEDBACK) mà khách đã đánh giá rồi → DONE luôn
-            if (status === 'FEEDBACK') {
-                const { data: currentBooking } = await supabase
-                    .from('Bookings')
-                    .select('rating')
-                    .eq('id', bookingId)
-                    .single();
-                if (currentBooking?.rating) {
-                    updatePayload.status = 'DONE';
-                    console.log(`[KTV API] Booking ${bookingId} already rated (${currentBooking.rating}). Setting DONE instead of FEEDBACK.`);
+            if (isFeedback) {
+                if (allItemsFeedback) {
+                    const { data: currentBooking } = await supabase.from('Bookings').select('rating').eq('id', bookingId).single();
+                    updatePayload.status = currentBooking?.rating ? 'DONE' : 'FEEDBACK';
+                    if (!currentBooking?.rating) updatePayload.timeEnd = new Date().toISOString();
                 } else {
-                    updatePayload.status = 'FEEDBACK';
+                    console.log(`[KTV API] KTV ${technicianCode} feedback, but others still working. Skipping global FEEDBACK.`);
                 }
             } else {
-                updatePayload.status = status;
+                if (allItemsCompleted) {
+                    updatePayload.timeEnd = new Date().toISOString();
+                } else {
+                    console.log(`[KTV API] KTV ${technicianCode} completed, but others still working. Skipping global COMPLETED.`);
+                }
             }
         }
 
