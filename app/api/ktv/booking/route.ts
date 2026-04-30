@@ -217,7 +217,7 @@ export async function PATCH(request: Request) {
         const today = new Date(vnMs).toISOString().split('T')[0];
         const { data: turnForSync } = await supabase
             .from('TurnQueue')
-            .select('id, booking_item_id, booking_item_ids, last_served_at, start_time, turns_completed, status')
+            .select('id, booking_item_id, booking_item_ids, last_served_at, start_time, turns_completed, status, room_id')
             .eq('employee_id', technicianCode)
             .eq('date', today)
             .eq('current_order_id', bookingId)
