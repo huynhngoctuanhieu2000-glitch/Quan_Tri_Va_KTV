@@ -425,7 +425,7 @@ export const DispatchStaffRow = ({
                     <button
                         onClick={() => setShowReminders(!showReminders)}
                         className={`p-2 rounded-xl border transition-all active:scale-95 flex items-center gap-1.5 whitespace-nowrap
-                            \${showReminders ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white border-gray-100 text-gray-400 hover:border-indigo-200 hover:text-indigo-600'}
+                            ${showReminders ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white border-gray-100 text-gray-400 hover:border-indigo-200 hover:text-indigo-600'}
                         `}
                         title="Chọn câu nhắc nhở nhanh"
                     >
