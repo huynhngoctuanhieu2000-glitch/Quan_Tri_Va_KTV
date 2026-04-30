@@ -192,7 +192,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
         id: string, 
         roomName?: string | null, 
         bedId?: string | null, 
-        technicianCodes?: string[], 
+        technicianCodes?: string[] | string | null, 
         status?: string,
         segments?: any[],
         options: any 
@@ -269,7 +269,7 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
         id: string, 
         roomName?: string | null, 
         bedId?: string | null, 
-        technicianCodes?: string[], 
+        technicianCodes?: string[] | string | null, 
         segments?: any[],
         options: any 
     }[];
@@ -355,6 +355,13 @@ export async function cancelBooking(bookingId: string, date: string) {
             .neq('status', 'CANCELLED');
             
         if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+
+        // 2. Lấy thông tin trạng thái KTV trước khi giải phóng để quyết định có xóa Ledger không
+        const { data: currentTurns } = await supabase
+            .from('TurnQueue')
+            .select('employee_id, status')
+            .eq('current_order_id', bookingId)
+            .eq('date', date);
 
         if (currentTurns && currentTurns.length > 0) {
             for (const turn of currentTurns) {
