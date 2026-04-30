@@ -3,7 +3,7 @@
 import React from 'react';
 import { Plus, AlertTriangle, UserCheck, Trash2, Pencil } from 'lucide-react';
 import { DispatchStaffRow } from './DispatchStaffRow';
-import { ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
+import { ReminderData, ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
 
 interface Bed {
     id: string;
@@ -14,6 +14,7 @@ interface Room {
     id: string;
     name: string;
     type: string;
+    default_reminders?: string[];
 }
 
 interface DispatchServiceBlockProps {
@@ -35,12 +36,13 @@ interface DispatchServiceBlockProps {
     isExpanded?: boolean;
     onToggleExpand?: () => void;
     onDispatchSvc?: (orderId: string, svcId: string) => void;
+    reminders?: ReminderData[];
 }
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], usedKtvIds = [], availableTurns,
     onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc, onEditSvc, selectedDate,
-    isExpanded = true, onToggleExpand, onDispatchSvc
+    isExpanded = true, onToggleExpand, onDispatchSvc, reminders = []
 }: DispatchServiceBlockProps) => {
 
     return (
@@ -202,6 +204,7 @@ export const DispatchServiceBlock = ({
                                         focus={svc.focus}
                                         avoid={svc.avoid}
                                         realSvcId={svc.serviceId}
+                                        reminders={reminders}
                                     />
                                 ))}
                             </div>

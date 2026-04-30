@@ -10,9 +10,9 @@ import {
     ClipboardList, Users, CheckCircle2, Timer, Clock,
     MapPin, RotateCcw, ArrowDown, ArrowUp, ChevronRight, ChevronLeft, ChevronDown,
     UserCheck, Star, Moon, CalendarOff, Briefcase, ArrowRightLeft,
-    UserPlus, AlertTriangle, Award, Camera,
-    Check, X, Loader2, History
-, Trash2, CalendarDays } from 'lucide-react';
+    UserPlus, AlertTriangle, Award, Camera, Plus,
+    Check, X, Loader2, History,
+    Trash2, CalendarDays, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -426,13 +426,32 @@ const AttendanceHistorySection = () => {
 
 const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     const [turns, setTurns] = useState<(TurnQueueData & { staff?: StaffData })[]>([]);
+    const [shifts, setShifts] = useState<Record<string, string>>({});
+    const [suddenOffs, setSuddenOffs] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (staffs.length > 0) {
             fetchTurns();
+            fetchExtras();
         }
     }, [staffs]);
+
+    const fetchExtras = async () => {
+        const today = new Date().toISOString().split('T')[0];
+        const [shiftRes, leaveRes] = await Promise.all([
+            supabase.from('KTVShiftRecords').select('employee_id, shift_type').eq('status', 'ACTIVE'),
+            supabase.from('KTVLeaveRequests').select('employee_id').eq('date', today).eq('is_sudden_off', true)
+        ]);
+        if (shiftRes.data) {
+            const shiftMap: Record<string, string> = {};
+            shiftRes.data.forEach((s: any) => shiftMap[s.employee_id] = s.shift_type);
+            setShifts(shiftMap);
+        }
+        if (leaveRes.data) {
+            setSuddenOffs(new Set(leaveRes.data.map((l: any) => l.employee_id)));
+        }
+    };
 
     // 🔄 REALTIME: Lắng nghe 3 bảng quan trọng liên quan đến điều phối
     useEffect(() => {
@@ -463,6 +482,12 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVAttendance' }, () => {
                 console.log('🔄 [Realtime] KTVAttendance changed → syncing turns...');
                 fetchTurnsFromDB();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVLeaveRequests' }, () => {
+                fetchExtras();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVShiftRecords' }, () => {
+                fetchExtras();
             })
             .subscribe();
 
@@ -567,8 +592,10 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
 
     // Sắp xếp: waiting/working lên trước, off xuống cuối, sau đó theo số tua, sau đó theo queue_position (mặc định = check_in_order)
     const sortedTurns = [...turns].sort((a, b) => {
-        if (a.status === 'off' && b.status !== 'off') return 1;
-        if (a.status !== 'off' && b.status === 'off') return -1;
+        const isAOff = a.status === 'off' || suddenOffs.has(a.employee_id);
+        const isBOff = b.status === 'off' || suddenOffs.has(b.employee_id);
+        if (isAOff && !isBOff) return 1;
+        if (!isAOff && isBOff) return -1;
         
         if (a.turns_completed !== b.turns_completed) {
             return a.turns_completed - b.turns_completed;
@@ -576,9 +603,9 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         return a.queue_position - b.queue_position;
     });
 
-    const readyCount = turns.filter(t => t.status === 'waiting').length;
-    const workingCount = turns.filter(t => t.status === 'working').length;
-    const offCount = turns.filter(t => t.status === 'off').length;
+    const readyCount = turns.filter(t => t.status === 'waiting' && !suddenOffs.has(t.employee_id)).length;
+    const workingCount = turns.filter(t => t.status === 'working' && !suddenOffs.has(t.employee_id)).length;
+    const offCount = turns.filter(t => t.status === 'off' || suddenOffs.has(t.employee_id)).length;
     const activeCount = turns.length - offCount;
 
     if (loading) return <div className="p-10 text-center text-gray-500">Đang tải hàng đợi...</div>;
@@ -623,10 +650,10 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                             layout
                             transition={{ duration: ANIMATION_DURATION }}
                             key={turn.employee_id}
-                            className={`flex items-center gap-3 px-4 py-3 transition-colors ${turn.status === 'off' ? 'opacity-40 bg-gray-50/80' : 'hover:bg-gray-50/50'}`}
+                            className={`flex items-center gap-3 px-4 py-3 transition-colors ${suddenOffs.has(turn.employee_id) || turn.status === 'off' ? 'opacity-40 bg-gray-50/80' : 'hover:bg-gray-50/50'}`}
                         >
                             {/* Position badge */}
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${suddenOffs.has(turn.employee_id) ? 'bg-red-100 text-red-500 border border-red-200' : turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
                                 turn.status === 'working' ? 'bg-rose-100 text-rose-600 border border-rose-200' :
                                     'bg-gray-100 text-gray-500 border border-gray-200'
                                 }`}>
@@ -635,8 +662,10 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
 
                             {/* Name */}
                             <div className="flex-1 min-w-0">
-                                <p className="font-bold text-sm text-gray-900 truncate">{turn.staff?.full_name || 'Không rõ'}</p>
-                                <div className="flex items-center gap-2 mt-0.5">
+                                <p className={`font-bold text-sm truncate ${suddenOffs.has(turn.employee_id) ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                    {turn.staff?.full_name || 'Không rõ'}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{turn.employee_id}</span>
                                     {turn.turns_completed > 0 && (
                                         <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold border border-indigo-100">
@@ -1045,6 +1074,8 @@ const LeaveOffTab = () => {
     const shiftLogic = useShiftManagement();
 
     const [subTab, setSubTab] = useState<'off' | 'shift'>('off');
+    const [showAdminRegister, setShowAdminRegister] = useState(false);
+    const [selectedKtvId, setSelectedKtvId] = useState('');
 
     // KTV Leave Logic (New Calendar)
     const {
@@ -1058,6 +1089,9 @@ const LeaveOffTab = () => {
         goToPrevMonth,
         goToNextMonth,
         goToToday,
+        adminStaffList,
+        adminRegisterLoading,
+        adminRegisterOff,
     } = leaveLogic;
 
     // Shift Logic
@@ -1067,6 +1101,7 @@ const LeaveOffTab = () => {
         isLoadingShifts,
         shiftActionLoading,
         handleShiftAction,
+        fetchShifts,
         staffList,
         isLoadingStaff,
         unassignedStaff,
@@ -1080,6 +1115,11 @@ const LeaveOffTab = () => {
         handleAssignShift,
         openAssignModal,
     } = shiftLogic;
+
+    // Sync shifts based on selected date (for holiday override rules)
+    useEffect(() => {
+        fetchShifts(selectedDate);
+    }, [selectedDate, fetchShifts]);
 
     // --- CALENDAR LOGIC ---
     const MONTH_NAMES = [
@@ -1248,11 +1288,55 @@ const LeaveOffTab = () => {
                                 {/* KHU VỰC NGƯỜI NGHỈ */}
                                 <div>
                                     <h4 className="text-[11px] font-black text-rose-500 mb-2 uppercase tracking-wider flex items-center justify-between">
-                                        Nhân sự OFF
-                                        <span className="bg-rose-100 text-rose-700 py-0.5 px-2 rounded-full text-[10px]">
-                                            {selectedLeaves.length}
+                                        <span className="flex items-center gap-1.5">
+                                            Nhân sự OFF
+                                            <span className="bg-rose-100 text-rose-700 py-0.5 px-2 rounded-full text-[10px]">
+                                                {selectedLeaves.length}
+                                            </span>
                                         </span>
+                                        <button
+                                            onClick={() => setShowAdminRegister(!showAdminRegister)}
+                                            className="flex items-center gap-1 bg-rose-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg hover:bg-rose-600 transition-colors shadow-sm"
+                                        >
+                                            <Plus size={12} /> ĐK OFF
+                                        </button>
                                     </h4>
+
+                                    {/* Admin Register OFF Popover */}
+                                    {showAdminRegister && selectedDate && (
+                                        <div className="mb-3 p-3 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in slide-in-from-top-2">
+                                            <p className="text-[11px] font-bold text-rose-700 mb-2">
+                                                Đăng ký OFF ngày {format(new Date(selectedDate), 'dd/MM/yyyy')} cho:
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={selectedKtvId}
+                                                    onChange={e => setSelectedKtvId(e.target.value)}
+                                                    className="flex-1 text-sm border border-rose-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-rose-300 font-medium"
+                                                >
+                                                    <option value="">-- Chọn KTV --</option>
+                                                    {adminStaffList
+                                                        .filter(s => !selectedLeaves.some(l => l.employeeId === s.id))
+                                                        .map(s => (
+                                                            <option key={s.id} value={s.id}>{s.id} — {s.full_name}</option>
+                                                        ))
+                                                    }
+                                                </select>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!selectedKtvId || !selectedDate) return;
+                                                        await adminRegisterOff(selectedKtvId, selectedDate);
+                                                        setSelectedKtvId('');
+                                                        setShowAdminRegister(false);
+                                                    }}
+                                                    disabled={!selectedKtvId || adminRegisterLoading}
+                                                    className="px-4 py-2 bg-rose-500 text-white rounded-xl text-sm font-bold hover:bg-rose-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                                                >
+                                                    {adminRegisterLoading ? <Loader2 size={14} className="animate-spin" /> : 'Xác nhận'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                     {selectedLeaves.length === 0 ? (
                                         <div className="text-center py-4 bg-gray-50/50 rounded-2xl border border-gray-100 border-dashed">
                                             <p className="text-xs text-gray-400 font-medium">Không có ai OFF.</p>
@@ -1290,14 +1374,32 @@ const LeaveOffTab = () => {
                                             {allShifts.filter(shift => !selectedLeaves.some(l => l.employeeId === shift.employeeId)).length}
                                         </span>
                                     </h4>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {allShifts
-                                            .filter(shift => !selectedLeaves.some(l => l.employeeId === shift.employeeId))
-                                            .map(shift => (
-                                                <div key={shift.id} className="flex items-center justify-center py-1.5 px-2 rounded-xl border border-emerald-100/50 bg-emerald-50/50">
-                                                    <p className="font-bold text-[12px] text-emerald-700 truncate">{shift.employeeId}</p>
+                                    <div className="space-y-3">
+                                        {['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'FREE', 'REQUEST'].map(shiftType => {
+                                            const activeShifts = allShifts.filter(shift => 
+                                                shift.shiftType === shiftType && !selectedLeaves.some(l => l.employeeId === shift.employeeId)
+                                            );
+                                            
+                                            if (activeShifts.length === 0) return null;
+                                            
+                                            const c = SHIFT_COLORS_HUB[shiftType] || { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100' };
+                                            
+                                            return (
+                                                <div key={shiftType} className="border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm">
+                                                    <div className={`px-3 py-1.5 text-[10px] font-bold border-b flex justify-between items-center ${c.bg} ${c.text} ${c.border}`}>
+                                                        <span>{SHIFT_LABELS_HUB[shiftType]}</span>
+                                                        <span className="px-1.5 py-0.5 bg-white/50 rounded-md">{activeShifts.length}</span>
+                                                    </div>
+                                                    <div className="p-2 grid grid-cols-3 gap-2 bg-gray-50/30">
+                                                        {activeShifts.map(shift => (
+                                                            <div key={shift.id} className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl border bg-white shadow-sm ${c.border}`}>
+                                                                <p className={`font-bold text-[12px] ${c.text} truncate`}>{shift.employeeId}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>

@@ -143,6 +143,50 @@ export const useLeaveManagement = () => {
         }
     };
 
+    // --- Admin Register OFF ---
+    const [adminRegisterLoading, setAdminRegisterLoading] = useState(false);
+    const [adminStaffList, setAdminStaffList] = useState<StaffOption[]>([]);
+
+    const fetchAdminStaffList = useCallback(async () => {
+        try {
+            const res = await fetch('/api/staff/list');
+            const result = await res.json();
+            if (result.success) setAdminStaffList(result.data || []);
+        } catch (err) {
+            console.error('❌ [LeaveManagement] Fetch staff error:', err);
+        }
+    }, []);
+
+    useEffect(() => { if (mounted) fetchAdminStaffList(); }, [mounted, fetchAdminStaffList]);
+
+    const adminRegisterOff = async (employeeId: string, date: string) => {
+        setAdminRegisterLoading(true);
+        try {
+            const staff = adminStaffList.find(s => s.id === employeeId);
+            const res = await fetch('/api/ktv/leave', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    employeeId,
+                    employeeName: staff?.full_name || employeeId,
+                    dates: [date],
+                    reason: 'Admin đăng ký giúp',
+                    registeredByAdmin: true,
+                }),
+            });
+            const result = await res.json();
+            if (result.success) {
+                fetchLeaveList();
+            } else {
+                alert(result.error || 'Lỗi đăng ký OFF');
+            }
+        } catch (err) {
+            console.error('❌ [LeaveManagement] Admin register OFF error:', err);
+        } finally {
+            setAdminRegisterLoading(false);
+        }
+    };
+
     return {
         mounted,
         canAccessPage,
@@ -159,6 +203,10 @@ export const useLeaveManagement = () => {
         goToPrevMonth,
         goToNextMonth,
         goToToday,
+        // Admin Register OFF
+        adminStaffList,
+        adminRegisterLoading,
+        adminRegisterOff,
     };
 };
 
@@ -183,11 +231,12 @@ export const useShiftManagement = () => {
     const [assignShiftType, setAssignShiftType] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
 
-    const fetchShifts = useCallback(async () => {
+    const fetchShifts = useCallback(async (date?: string | null) => {
         setIsLoadingShifts(true);
         try {
+            const dateParam = date ? `&date=${date}` : '';
             const [allRes, pendingRes] = await Promise.all([
-                fetch('/api/ktv/shift?all=true'),
+                fetch(`/api/ktv/shift?all=true${dateParam}`),
                 fetch('/api/ktv/shift?pending=true'),
             ]);
             const allResult = await allRes.json();

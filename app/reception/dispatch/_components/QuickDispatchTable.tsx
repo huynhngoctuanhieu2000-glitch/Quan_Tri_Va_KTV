@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Printer, X, ChevronDown, ChevronUp, Plus, Clock } from 'lucide-react';
+import { Printer, X, ChevronDown, ChevronUp, Plus, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ServiceBlock, StaffData, TurnQueueData, WorkSegment } from '../types';
+import { ReminderData, ServiceBlock, StaffData, TurnQueueData, WorkSegment } from '../types';
 
 // 🛠 UI CONFIGURATION
 const TAG_COLORS = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700', 'bg-cyan-100 text-cyan-700'];
 
-interface Room { id: string; name: string; type: string; }
+interface Room { id: string; name: string; type: string; default_reminders?: string[]; }
 interface Bed { id: string; roomId: string; }
 
 interface ServiceGroup {
@@ -34,6 +34,7 @@ interface QuickDispatchTableProps {
   onUpdateServices: (updatedServices: ServiceBlock[]) => void;
   onPrintGroup: (group: ServiceGroup) => void;
   customerReqs?: { genderReq?: string; strength?: string; focus?: string; avoid?: string; customerNote?: string; };
+  reminders?: ReminderData[];
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -59,7 +60,7 @@ const genId = () => Math.random().toString(36).substring(2, 9);
 
 export const QuickDispatchTable = ({
   services, orderId, rooms, beds, availableTurns, busyBedIds,
-  onUpdateServices, onPrintGroup, customerReqs
+  onUpdateServices, onPrintGroup, customerReqs, reminders = []
 }: QuickDispatchTableProps) => {
 
   const isInitializedRef = useRef(false);
@@ -314,6 +315,7 @@ export const QuickDispatchTable = ({
             onUpdate={(patch) => updateGroup(groupKey, patch)}
             onPrint={() => onPrintGroup({ serviceName: displayServiceName, items, ...state })}
             customerReqs={customerReqs}
+            reminders={reminders}
           />
         );
       })}
@@ -338,27 +340,31 @@ interface ServiceGroupCardProps {
   onUpdate: (patch: Record<string, unknown>) => void;
   onPrint: () => void;
   customerReqs?: { genderReq?: string; strength?: string; focus?: string; avoid?: string; customerNote?: string; };
+  reminders?: { id: string; content: string }[];
 }
 
 const MAX_KTV_PER_GROUP = 10;
 
 const ServiceGroupCard = ({
   serviceName, count, duration, state, targetSkill,
-  availableTurns, allSelectedKtvIds, rooms, beds, busyBedIds, onUpdate, onPrint, customerReqs
+  availableTurns, allSelectedKtvIds, rooms, beds, busyBedIds, onUpdate, onPrint, customerReqs, reminders = []
 }: ServiceGroupCardProps) => {
   const [isKtvDropdownOpen, setIsKtvDropdownOpen] = useState(false);
   const [ktvSearch, setKtvSearch] = useState('');
   const [showTicketForIdx, setShowTicketForIdx] = useState<number | null>(null);
   const [openDurationIdx, setOpenDurationIdx] = useState<number | null>(null);
+  const [showRemindersIdx, setShowRemindersIdx] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const reminderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) { setIsKtvDropdownOpen(false); setKtvSearch(''); }
+      if (reminderRef.current && !reminderRef.current.contains(e.target as Node)) { setShowRemindersIdx(null); }
     };
-    if (isKtvDropdownOpen) document.addEventListener('mousedown', handler);
+    if (isKtvDropdownOpen || showRemindersIdx !== null) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [isKtvDropdownOpen]);
+  }, [isKtvDropdownOpen, showRemindersIdx]);
 
   const removeKtv = (ktvId: string) => {
     const idx = state.selectedKtvIds.indexOf(ktvId);
@@ -400,19 +406,47 @@ const ServiceGroupCard = ({
   };
 
   const updateRoomForIdx = (idx: number, roomId: string) => {
-    const arr = [...(state.selectedRoomIds || [])]; while (arr.length <= idx) arr.push(''); arr[idx] = roomId;
-    // Auto-assign bed
-    const bedArr = [...(state.ktvBedIds || [])]; while (bedArr.length <= idx) bedArr.push('');
+    const nextRoomIds = [...(state.selectedRoomIds || [])];
+    while (nextRoomIds.length <= idx) nextRoomIds.push('');
+    nextRoomIds[idx] = roomId;
+
+    const nextBedIds = [...(state.ktvBedIds || [])];
+    while (nextBedIds.length <= idx) nextBedIds.push('');
+
+    const nextNotes = [...(state.ktvNotes || [])];
+    while (nextNotes.length <= idx) nextNotes.push('');
+
     if (roomId) {
-      const usedBeds = bedArr.filter((_, i) => i !== idx).filter(Boolean);
+      const usedBeds = nextBedIds.filter((_, i) => i !== idx).filter(Boolean);
       const roomBeds = beds.filter(b => b.roomId === roomId);
       const allExcluded = [...busyBedIds, ...usedBeds];
       const freeBed = roomBeds.find(b => !allExcluded.includes(b.id));
-      bedArr[idx] = freeBed?.id || '';
+      nextBedIds[idx] = freeBed?.id || '';
+
+      // 🧠 AUTO-REMINDERS
+      const roomData = (rooms as any[]).find(r => r.id === roomId);
+      if (roomData && roomData.default_reminders && Array.isArray(roomData.default_reminders)) {
+        const defaultReminders = reminders
+          .filter(rm => roomData.default_reminders.includes(rm.id))
+          .map(rm => rm.content);
+        
+        if (defaultReminders.length > 0) {
+          const currentNote = nextNotes[idx] || '';
+          const reminderStr = defaultReminders.join(' - ');
+          if (!currentNote.includes(reminderStr)) {
+            nextNotes[idx] = currentNote ? `${currentNote} - ${reminderStr}` : reminderStr;
+          }
+        }
+      }
     } else {
-      bedArr[idx] = '';
+      nextBedIds[idx] = '';
     }
-    onUpdate({ selectedRoomIds: arr, ktvBedIds: bedArr });
+
+    onUpdate({ 
+      selectedRoomIds: nextRoomIds, 
+      ktvBedIds: nextBedIds, 
+      ktvNotes: nextNotes 
+    });
   };
 
   const updateNoteForIdx = (idx: number, note: string) => {
@@ -608,9 +642,72 @@ const ServiceGroupCard = ({
                     </div>
                     <button onClick={() => setShowTicketForIdx(idx)} className="p-1.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-lg transition-all active:scale-90 shrink-0" title="In phiếu"><Printer size={12} /></button>
                   </div>
-                  {/* Row 2: Per-KTV Note | Dispatch button */}
+                  {/* Row 2: Per-KTV Note | Reminder Button | Dispatch button */}
                   <div className="flex items-center gap-2 ml-6">
-                    <input type="text" value={ktvNote} onChange={e => updateNoteForIdx(idx, e.target.value)} placeholder="Ghi chú riêng..." className="flex-1 px-2.5 py-1.5 border border-gray-100 rounded-xl text-[11px] font-medium focus:ring-2 focus:ring-indigo-500/10 outline-none bg-white placeholder:text-gray-300" />
+                    <div className="flex-1 relative">
+                        <input type="text" value={ktvNote} onChange={e => updateNoteForIdx(idx, e.target.value)} placeholder="Ghi chú riêng..." className="w-full px-2.5 py-1.5 border border-gray-100 rounded-xl text-[11px] font-medium focus:ring-2 focus:ring-indigo-500/10 outline-none bg-white placeholder:text-gray-300 pr-8" />
+                        {ktvNote && (
+                            <button onClick={() => updateNoteForIdx(idx, '')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-300 hover:text-gray-500"><X size={12} /></button>
+                        )}
+                    </div>
+                    
+                    <div className="relative" ref={idx === showRemindersIdx ? reminderRef : null}>
+                        <button 
+                            onClick={() => setShowRemindersIdx(showRemindersIdx === idx ? null : idx)}
+                            className={`p-1.5 rounded-lg border transition-all active:scale-95 flex items-center gap-1
+                                ${showRemindersIdx === idx ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-100 text-gray-400 hover:border-indigo-200 hover:text-indigo-600'}
+                            `}
+                            title="Chọn nhắc nhở nhanh"
+                        >
+                            <AlertCircle size={14} />
+                            <span className="text-[9px] font-black uppercase hidden sm:inline">Nhắc</span>
+                        </button>
+
+                        <AnimatePresence>
+                            {showRemindersIdx === idx && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    className="absolute bottom-full right-0 mb-2 w-60 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-[100]"
+                                >
+                                    <div className="p-3 border-b border-gray-50 bg-indigo-50/50 flex justify-between items-center">
+                                        <span className="text-[9px] font-black text-indigo-900 uppercase tracking-widest">Chọn nhắc nhở</span>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto p-1.5 grid grid-cols-1 gap-0.5 no-scrollbar">
+                                        {reminders.map((rm) => {
+                                            const isSelected = ktvNote?.includes(rm.content);
+                                            return (
+                                                <button
+                                                    key={rm.id}
+                                                    onClick={() => {
+                                                        const currentNote = ktvNote || '';
+                                                        if (isSelected) {
+                                                            const parts = currentNote.split(' - ').filter(p => p !== rm.content);
+                                                            updateNoteForIdx(idx, parts.join(' - '));
+                                                        } else {
+                                                            const newNote = currentNote ? `${currentNote} - ${rm.content}` : rm.content;
+                                                            updateNoteForIdx(idx, newNote);
+                                                        }
+                                                    }}
+                                                    className={`w-full text-left px-2.5 py-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-between
+                                                        ${isSelected ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-indigo-50 text-gray-700 hover:text-indigo-700'}
+                                                    `}
+                                                >
+                                                    <span className="flex-1 truncate pr-2">{rm.content}</span>
+                                                    {isSelected && <CheckCircle2 size={12} strokeWidth={3} />}
+                                                </button>
+                                            );
+                                        })}
+                                        {reminders.length === 0 && (
+                                            <div className="py-4 text-center text-gray-400 text-[9px] font-bold uppercase italic">Chưa có nhắc nhở</div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
                     <button onClick={() => onPrint()} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black rounded-xl transition-all active:scale-95 shrink-0 flex items-center gap-1"><ChevronDown size={10} className="rotate-[-90deg]" />DP</button>
                   </div>
                 </div>

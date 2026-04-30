@@ -29,12 +29,19 @@ export async function GET(request: NextRequest) {
         const employeeId = searchParams.get('employeeId');
         const all = searchParams.get('all');
         const pending = searchParams.get('pending');
+        const targetDate = searchParams.get('date');
 
         // ─── Lấy cấu hình ngày lễ để đè ca 2 ───
         let isHolidayOverride = false;
         try {
-            const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
-            const vnDateStr = vnNow.toISOString().slice(5, 10); // Lấy MM-DD
+            let vnDateStr = '';
+            if (targetDate) {
+                // targetDate format: YYYY-MM-DD
+                vnDateStr = targetDate.slice(5, 10); // MM-DD
+            } else {
+                const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                vnDateStr = vnNow.toISOString().slice(5, 10); // Lấy MM-DD
+            }
             
             const { data: configData } = await supabase
                 .from('SystemConfigs')
@@ -72,7 +79,7 @@ export async function GET(request: NextRequest) {
                 .from('KTVShifts')
                 .select('*')
                 .eq('status', 'ACTIVE')
-                .order('employeeName', { ascending: true });
+                .order('createdAt', { ascending: false }); // Newest first for dedup
 
             if (error) {
                 console.error('❌ [Shift GET] All query error:', error);
@@ -80,12 +87,31 @@ export async function GET(request: NextRequest) {
             }
 
             // Đè ca làm việc nếu là ngày lễ
-            const finalData = data ? data.map(shift => {
+            const holidayApplied = data ? data.map(shift => {
                 if (isHolidayOverride) {
                     return { ...shift, shiftType: 'SHIFT_2' };
                 }
                 return shift;
             }) : [];
+
+            // 🔧 DEDUP: Chỉ giữ bản ghi ACTIVE mới nhất cho mỗi employeeId
+            const dedupMap = new Map<string, typeof holidayApplied[0]>();
+            for (const shift of holidayApplied) {
+                if (!dedupMap.has(shift.employeeId)) {
+                    dedupMap.set(shift.employeeId, shift); // Already sorted newest first
+                }
+            }
+
+            // 🔧 Filter bỏ nhân viên đã nghỉ việc
+            const { data: activeStaff } = await supabase
+                .from('Staff')
+                .select('id')
+                .eq('status', 'ĐANG LÀM');
+            const activeStaffIds = new Set(activeStaff?.map(s => s.id) || []);
+
+            const finalData = Array.from(dedupMap.values())
+                .filter(s => activeStaffIds.has(s.employeeId))
+                .sort((a, b) => (a.employeeName || '').localeCompare(b.employeeName || ''));
 
             return NextResponse.json({ success: true, data: finalData, shiftTypes: SHIFT_TYPES });
         }

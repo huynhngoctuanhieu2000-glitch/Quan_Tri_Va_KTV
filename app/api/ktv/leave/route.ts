@@ -50,13 +50,21 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, date, dates, reason, confirmExtension, confirmSuddenOff } = body;
+        const { employeeId, employeeName, date, dates, reason, confirmExtension, confirmSuddenOff, registeredByAdmin } = body;
 
         const targetDates = dates || (date ? [date] : []);
 
-        if (!employeeId || targetDates.length === 0 || !reason) {
+        if (!employeeId || targetDates.length === 0) {
             return NextResponse.json(
-                { success: false, error: 'Missing required fields: employeeId, date/dates, reason' },
+                { success: false, error: 'Missing required fields: employeeId, date/dates' },
+                { status: 400 }
+            );
+        }
+
+        // Admin đăng ký giúp không cần reason bắt buộc
+        if (!registeredByAdmin && !reason) {
+            return NextResponse.json(
+                { success: false, error: 'Missing required field: reason' },
                 { status: 400 }
             );
         }
@@ -74,18 +82,6 @@ export async function POST(request: Request) {
 
         // Check deadlines and existing requests
         for (const d of targetDates) {
-            // Parse leave date as VN midnight
-            const [yyyy, mm, dd] = d.split('-').map(Number);
-            const leaveDateVnMidnight = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0)).getTime() - vnOffsetMs;
-            
-            // Deadline = 19:00 ICT the day before = leave date midnight VN - 5 hours in UTC
-            const deadlineMs = leaveDateVnMidnight - (5 * 60 * 60 * 1000);
-            
-            if (nowUtc.getTime() > deadlineMs) {
-                errors.push(`Ngày ${d} đã quá hạn đăng ký (trước 19h hôm trước).`);
-                continue;
-            }
-
             // Check if existing
             const { data: existing } = await supabase
                 .from('KTVLeaveRequests')
@@ -100,6 +96,18 @@ export async function POST(request: Request) {
                 continue;
             }
 
+            // Admin đăng ký giúp → bỏ qua deadline
+            if (!registeredByAdmin) {
+                const [yyyy, mm, dd] = d.split('-').map(Number);
+                const leaveDateVnMidnight = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0)).getTime() - vnOffsetMs;
+                const deadlineMs = leaveDateVnMidnight - (5 * 60 * 60 * 1000); // 19:00 ICT hôm trước
+                
+                if (nowUtc.getTime() > deadlineMs) {
+                    errors.push(`Ngày ${d} đã quá hạn đăng ký (trước 19h hôm trước).`);
+                    continue;
+                }
+            }
+
             validDates.push(d);
         }
 
@@ -111,86 +119,117 @@ export async function POST(request: Request) {
         }
 
         // --- Bắt đầu xử lý Extension (Gia hạn) ---
-        // Sắp xếp ngày tăng dần để tìm ngày sớm nhất
-        validDates.sort();
-        const firstTargetDate = validDates[0];
-        
-        // Tìm ngày liền trước ngày đăng ký sớm nhất
-        const firstTargetDateObj = new Date(firstTargetDate);
-        firstTargetDateObj.setDate(firstTargetDateObj.getDate() - 1);
-        const dayBeforeStr = firstTargetDateObj.toISOString().split('T')[0];
-
-        // Xem ngày liền trước KTV có đang OFF không
-        const { data: previousLeave } = await supabase
-            .from('KTVLeaveRequests')
-            .select('id')
-            .eq('employeeId', employeeId)
-            .eq('date', dayBeforeStr)
-            .neq('status', 'REJECTED')
-            .maybeSingle();
-
-        const isExtension = !!previousLeave;
+        // Admin đăng ký giúp → LUÔN bypass gia hạn
+        let isExtension = false;
         let isSuddenOff = false;
 
-        if (isExtension) {
-            // Lấy config số lần tối đa
-            const { data: config } = await supabase
-                .from('SystemConfigs')
-                .select('value')
-                .eq('key', 'max_leave_extensions_per_month')
-                .maybeSingle();
+        if (!registeredByAdmin) {
+            // Sắp xếp ngày tăng dần để tìm ngày sớm nhất
+            validDates.sort();
+            const firstTargetDate = validDates[0];
             
-            const maxExtensions = config && config.value ? Number(config.value) : 1;
-
-            // Đếm số lần gia hạn trong tháng này của KTV
-            // Lấy tất cả createdAt để đếm số "lần" (cùng 1 lần submit nhiều ngày sẽ chung 1 createdAt)
-            const currentMonthPrefix = firstTargetDate.substring(0, 7); // YYYY-MM
-            const { data: extRecords, error: countErr } = await supabase
+            // ── LOGIC GIA HẠN MỚI ──
+            // Tìm chuỗi nghỉ liên tiếp hiện tại mà ngày mới nối vào
+            // Bước 1: Tìm tất cả ngày OFF hiện tại (APPROVED/PENDING) của KTV
+            const { data: allLeaves } = await supabase
                 .from('KTVLeaveRequests')
-                .select('createdAt')
+                .select('date')
                 .eq('employeeId', employeeId)
-                .eq('is_extension', true)
-                .gte('date', `${currentMonthPrefix}-01`)
-                .lte('date', `${currentMonthPrefix}-31`)
-                .neq('status', 'REJECTED');
+                .neq('status', 'REJECTED')
+                .order('date', { ascending: true });
 
-            // Count số lần (số request gia hạn khác nhau)
-            const uniqueTimestamps = new Set((extRecords || []).map(r => r.createdAt));
-            const usedExtensions = uniqueTimestamps.size;
-            const remainingExtensions = maxExtensions - usedExtensions;
+            const existingDates = new Set((allLeaves || []).map(l => l.date));
+            
+            // Bước 2: Kiểm tra xem ngày mới có nối liền vào chuỗi nghỉ hiện tại không
+            // (ngày trước firstTargetDate đã có OFF)
+            const dayBefore = new Date(firstTargetDate);
+            dayBefore.setDate(dayBefore.getDate() - 1);
+            const dayBeforeStr = dayBefore.toISOString().split('T')[0];
 
-            if (confirmSuddenOff) {
-                // Đã confirm Nghỉ đột xuất -> Cho qua
-                isSuddenOff = true;
-            } else if (confirmExtension) {
-                // Đã confirm gia hạn -> Kiểm tra xem có ăn gian gởi thẳng API không
-                if (remainingExtensions <= 0) {
-                    return NextResponse.json({ 
-                        success: false, 
-                        requireConfirmation: true,
-                        type: 'SUDDEN_OFF_WARNING',
-                        message: `Bạn đã hết lượt gia hạn trong tháng (${usedExtensions}/${maxExtensions}). Nếu tiếp tục, ngày nghỉ này sẽ bị tính là Nghỉ Đột Xuất.`,
-                        remaining: 0
-                    });
+            if (existingDates.has(dayBeforeStr)) {
+                // Ngày mới nối liền chuỗi nghỉ → có thể là gia hạn
+                // Bước 3: Tìm ngày đầu tiên của chuỗi nghỉ liên tiếp
+                let chainStart = dayBeforeStr;
+                let cursor = new Date(dayBeforeStr);
+                while (true) {
+                    cursor.setDate(cursor.getDate() - 1);
+                    const cursorStr = cursor.toISOString().split('T')[0];
+                    if (existingDates.has(cursorStr)) {
+                        chainStart = cursorStr;
+                    } else {
+                        break;
+                    }
                 }
-            } else {
-                // Chưa confirm -> Báo về Frontend yêu cầu confirm
-                if (remainingExtensions > 0) {
-                    return NextResponse.json({ 
-                        success: false, 
-                        requireConfirmation: true,
-                        type: 'EXTENSION_WARNING',
-                        message: `Bạn đang đăng ký gia hạn ngày nghỉ. Số lượt gia hạn còn lại trong tháng là: ${remainingExtensions} lần.`,
-                        remaining: remainingExtensions
-                    });
+
+                // Bước 4: Tính "ngày làm cuối cùng" = ngày đầu chuỗi - 1
+                const chainStartDate = new Date(chainStart);
+                chainStartDate.setDate(chainStartDate.getDate() - 1);
+                // Deadline = 19:00 VN của ngày làm cuối cùng
+                const [cy, cm, cd] = [chainStartDate.getFullYear(), chainStartDate.getMonth(), chainStartDate.getDate()];
+                const deadlineExtMs = new Date(Date.UTC(cy, cm, cd, 12, 0, 0)).getTime(); // 19:00 VN = 12:00 UTC
+
+                // Bước 5: Kiểm tra thời điểm đăng ký
+                if (nowUtc.getTime() >= deadlineExtMs) {
+                    // Đăng ký SAU 19h ngày làm cuối → TÍNH gia hạn
+                    isExtension = true;
+                }
+                // Nếu TRƯỚC 19h ngày làm cuối → KHÔNG tính gia hạn (isExtension = false)
+            }
+
+            // Xử lý gia hạn: kiểm tra quota
+            if (isExtension) {
+                const { data: config } = await supabase
+                    .from('SystemConfigs')
+                    .select('value')
+                    .eq('key', 'max_leave_extensions_per_month')
+                    .maybeSingle();
+                
+                const maxExtensions = config && config.value ? Number(config.value) : 1;
+
+                const currentMonthPrefix = firstTargetDate.substring(0, 7);
+                const { data: extRecords } = await supabase
+                    .from('KTVLeaveRequests')
+                    .select('createdAt')
+                    .eq('employeeId', employeeId)
+                    .eq('is_extension', true)
+                    .gte('date', `${currentMonthPrefix}-01`)
+                    .lte('date', `${currentMonthPrefix}-31`)
+                    .neq('status', 'REJECTED');
+
+                const uniqueTimestamps = new Set((extRecords || []).map(r => r.createdAt));
+                const usedExtensions = uniqueTimestamps.size;
+                const remainingExtensions = maxExtensions - usedExtensions;
+
+                if (confirmSuddenOff) {
+                    isSuddenOff = true;
+                } else if (confirmExtension) {
+                    if (remainingExtensions <= 0) {
+                        return NextResponse.json({ 
+                            success: false, 
+                            requireConfirmation: true,
+                            type: 'SUDDEN_OFF_WARNING',
+                            message: `Bạn đã hết lượt gia hạn trong tháng (${usedExtensions}/${maxExtensions}). Nếu tiếp tục, ngày nghỉ này sẽ bị tính là Nghỉ Đột Xuất.`,
+                            remaining: 0
+                        });
+                    }
                 } else {
-                    return NextResponse.json({ 
-                        success: false, 
-                        requireConfirmation: true,
-                        type: 'SUDDEN_OFF_WARNING',
-                        message: `Bạn đã hết lượt gia hạn trong tháng (${usedExtensions}/${maxExtensions}). Nếu tiếp tục, ngày nghỉ này sẽ bị tính là Nghỉ Đột Xuất.`,
-                        remaining: 0
-                    });
+                    if (remainingExtensions > 0) {
+                        return NextResponse.json({ 
+                            success: false, 
+                            requireConfirmation: true,
+                            type: 'EXTENSION_WARNING',
+                            message: `Bạn đang đăng ký gia hạn ngày nghỉ. Số lượt gia hạn còn lại trong tháng là: ${remainingExtensions} lần.`,
+                            remaining: remainingExtensions
+                        });
+                    } else {
+                        return NextResponse.json({ 
+                            success: false, 
+                            requireConfirmation: true,
+                            type: 'SUDDEN_OFF_WARNING',
+                            message: `Bạn đã hết lượt gia hạn trong tháng (${usedExtensions}/${maxExtensions}). Nếu tiếp tục, ngày nghỉ này sẽ bị tính là Nghỉ Đột Xuất.`,
+                            remaining: 0
+                        });
+                    }
                 }
             }
         }
@@ -201,7 +240,7 @@ export async function POST(request: Request) {
             employeeId,
             employeeName: employeeName || employeeId,
             date: d,
-            reason,
+            reason: reason || (registeredByAdmin ? 'Admin đăng ký giúp' : ''),
             status: 'APPROVED',
             is_extension: isExtension,
             is_sudden_off: isSuddenOff
@@ -218,11 +257,15 @@ export async function POST(request: Request) {
         }
 
         // Send notification
-        let notifMessage = `📋 ${employeeName || employeeId} đăng ký OFF ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
-        if (isSuddenOff) {
+        let notifMessage = '';
+        if (registeredByAdmin) {
+            notifMessage = `📋 [ADMIN] Đã đăng ký OFF cho ${employeeName || employeeId} ngày ${validDates.join(', ')}`;
+        } else if (isSuddenOff) {
             notifMessage = `⚠️ [KỶ LUẬT] ${employeeName || employeeId} đăng ký NGHỈ ĐỘT XUẤT ${validDates.length} ngày (${validDates.join(', ')}) do hết lượt gia hạn! (Lý do: ${reason})`;
         } else if (isExtension) {
             notifMessage = `📋 ${employeeName || employeeId} GIA HẠN nghỉ thêm ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
+        } else {
+            notifMessage = `📋 ${employeeName || employeeId} đăng ký OFF ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
         }
 
         const { error: notifError } = await supabase

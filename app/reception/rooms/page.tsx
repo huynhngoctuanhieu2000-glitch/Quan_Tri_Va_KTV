@@ -13,6 +13,7 @@ import {
 // 🔧 UI CONFIGURATION
 const TABS = [
     { id: 'services' as const, label: 'Dịch Vụ', icon: <ListChecks size={16} /> },
+    { id: 'reminders' as const, label: 'Nhắc Nhở', icon: <Sparkles size={16} /> },
     { id: 'prep' as const, label: 'Mở Phòng', icon: <DoorOpen size={16} /> },
     { id: 'clean' as const, label: 'Dọn Phòng', icon: <Sparkles size={16} /> },
 ];
@@ -20,9 +21,9 @@ const TABS = [
 export default function RoomManagementPage() {
     const logic = useRoomConfig();
     const {
-        rooms, selectedRoom, selectedRoomId, setSelectedRoomId,
+        rooms, reminders, selectedRoom, selectedRoomId, setSelectedRoomId,
         isLoading, isSaving, activeTab, setActiveTab,
-        servicesByCategory, toggleService, toggleCategoryServices,
+        servicesByCategory, toggleService, toggleReminder, toggleCategoryServices,
         togglePrepStep, toggleCleanStep,
         selectAllPrepSteps, selectAllCleanSteps,
         clearAllPrepSteps, clearAllCleanSteps,
@@ -54,7 +55,7 @@ export default function RoomManagementPage() {
                         </div>
                         Quản Lý Phòng
                     </h1>
-                    <p className="text-sm text-gray-500 mt-1 ml-[52px]">Cấu hình dịch vụ và quy trình cho từng phòng</p>
+                    <p className="text-sm text-gray-500 mt-1 ml-[52px]">Cấu hình dịch vụ, nhắc nhở và quy trình cho từng phòng</p>
                 </div>
 
                 <div className="flex flex-col lg:flex-row gap-6">
@@ -70,6 +71,7 @@ export default function RoomManagementPage() {
                                     const prepCount = (room.prep_procedure || []).length;
                                     const cleanCount = (room.clean_procedure || []).length;
                                     const svcCount = (room.allowed_services || []).length;
+                                    const remCount = (room.default_reminders || []).length;
                                     return (
                                         <button
                                             key={room.id}
@@ -93,9 +95,12 @@ export default function RoomManagementPage() {
                                                     )}
                                                 </div>
                                                 {/* Config badges */}
-                                                <div className="flex items-center gap-1 mt-1.5">
+                                                <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                                                     <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${svcCount > 0 ? 'bg-blue-50 text-blue-500' : 'bg-gray-50 text-gray-300'}`}>
                                                         {svcCount} DV
+                                                    </span>
+                                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${remCount > 0 ? 'bg-purple-50 text-purple-500' : 'bg-gray-50 text-gray-300'}`}>
+                                                        {remCount} Nhắc
                                                     </span>
                                                     <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${prepCount > 0 ? 'bg-emerald-50 text-emerald-500' : 'bg-gray-50 text-gray-300'}`}>
                                                         {prepCount} mở
@@ -162,6 +167,15 @@ export default function RoomManagementPage() {
                                                 />
                                             </motion.div>
                                         )}
+                                        {activeTab === 'reminders' && (
+                                            <motion.div key="reminders" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                                                <TabReminders
+                                                    reminders={reminders}
+                                                    selectedReminders={selectedRoom.default_reminders || []}
+                                                    onToggle={toggleReminder}
+                                                />
+                                            </motion.div>
+                                        )}
                                         {activeTab === 'prep' && (
                                             <motion.div key="prep" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                                                 <TabProcedure
@@ -207,6 +221,54 @@ export default function RoomManagementPage() {
         </AppLayout>
     );
 }
+
+// ─── Tab: Reminders ────────────────────────────────────────────────────────────
+
+const TabReminders = ({ reminders, selectedReminders, onToggle }: {
+    reminders: any[],
+    selectedReminders: string[],
+    onToggle: (id: string) => void
+}) => {
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    Nhắc nhở mặc định cho phòng này ({selectedReminders.length} đã chọn)
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+                {reminders.map((rem: any) => {
+                    const isSelected = selectedReminders.includes(rem.id);
+                    return (
+                        <button
+                            key={rem.id}
+                            onClick={() => onToggle(rem.id)}
+                            className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left active:scale-[0.98] ${
+                                isSelected
+                                    ? 'border-purple-400 bg-purple-50 text-purple-700'
+                                    : 'border-gray-100 bg-white text-gray-600 hover:border-purple-200'
+                            }`}
+                        >
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                isSelected ? 'bg-purple-500 border-purple-500 text-white' : 'border-gray-200'
+                            }`}>
+                                {isSelected && <Check size={12} />}
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-sm font-bold">{rem.content}</p>
+                            </div>
+                        </button>
+                    );
+                })}
+
+                {reminders.length === 0 && (
+                    <p className="text-center text-gray-400 py-8">Chưa có câu nhắc nhở nào trong hệ thống</p>
+                )}
+            </div>
+        </div>
+    );
+};
 
 // ─── Tab: Services ─────────────────────────────────────────────────────────────
 

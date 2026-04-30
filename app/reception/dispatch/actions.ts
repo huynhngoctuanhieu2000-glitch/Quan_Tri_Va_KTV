@@ -150,9 +150,10 @@ export async function getDispatchData(date: string) {
             }
         });
 
-        // 6. Fetch Rooms and Beds
+        // 6. Fetch Rooms, Beds, and Reminders
         const { data: rooms } = await supabase.from('Rooms').select('*');
         const { data: beds } = await supabase.from('Beds').select('*');
+        const { data: reminders } = await supabase.from('Reminders').select('*').eq('is_active', true).order('order_index', { ascending: true });
         const { data: configs } = await supabase.from('SystemConfigs').select('*');
 
         const transitionConfig = configs?.find((c: any) => c.key === 'room_transition_time' || c.key === 'thoi_gian_doi_phong');
@@ -166,6 +167,7 @@ export async function getDispatchData(date: string) {
                 bookings,
                 rooms: rooms || [],
                 beds: beds || [],
+                reminders: reminders || [],
                 allServices: allServices || [],
                 roomTransitionTime
             },

@@ -35,6 +35,7 @@ export interface RoomData {
     prep_procedure: string[] | null;
     clean_procedure: string[] | null;
     allowed_services: string[] | null;
+    default_reminders: string[] | null;
 }
 
 export interface ServiceData {
@@ -46,13 +47,21 @@ export interface ServiceData {
     duration: number;
 }
 
+export interface ReminderData {
+    id: string;
+    content: string;
+    is_active: boolean;
+    order_index: number;
+}
+
 export const useRoomConfig = () => {
     const [rooms, setRooms] = useState<RoomData[]>([]);
     const [services, setServices] = useState<ServiceData[]>([]);
+    const [reminders, setReminders] = useState<ReminderData[]>([]);
     const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'services' | 'prep' | 'clean'>('services');
+    const [activeTab, setActiveTab] = useState<'services' | 'prep' | 'clean' | 'reminders'>('services');
 
     const selectedRoom = rooms.find(r => r.id === selectedRoomId) || null;
 
@@ -64,6 +73,7 @@ export const useRoomConfig = () => {
             if (json.success) {
                 setRooms(json.data.rooms || []);
                 setServices(json.data.services || []);
+                setReminders(json.data.reminders || []);
                 // Auto-select first room
                 if (!selectedRoomId && json.data.rooms?.length > 0) {
                     setSelectedRoomId(json.data.rooms[0].id);
@@ -80,7 +90,7 @@ export const useRoomConfig = () => {
         fetchData();
     }, []);
 
-    const updateRoom = async (roomId: string, updates: Partial<Pick<RoomData, 'prep_procedure' | 'clean_procedure' | 'allowed_services'>>) => {
+    const updateRoom = async (roomId: string, updates: Partial<Pick<RoomData, 'prep_procedure' | 'clean_procedure' | 'allowed_services' | 'default_reminders'>>) => {
         setIsSaving(true);
         try {
             const res = await fetch('/api/rooms', {
@@ -114,6 +124,16 @@ export const useRoomConfig = () => {
             ? current.filter(id => id !== serviceId)
             : [...current, serviceId];
         await updateRoom(selectedRoom.id, { allowed_services: updated });
+    };
+
+    // Toggle a reminder for the selected room
+    const toggleReminder = async (reminderId: string) => {
+        if (!selectedRoom) return;
+        const current = selectedRoom.default_reminders || [];
+        const updated = current.includes(reminderId)
+            ? current.filter(id => id !== reminderId)
+            : [...current, reminderId];
+        await updateRoom(selectedRoom.id, { default_reminders: updated });
     };
 
     // Toggle a prep step for the selected room
@@ -243,6 +263,7 @@ export const useRoomConfig = () => {
     return {
         rooms,
         services,
+        reminders,
         servicesByCategory,
         selectedRoom,
         selectedRoomId,
@@ -252,6 +273,7 @@ export const useRoomConfig = () => {
         activeTab,
         setActiveTab,
         toggleService,
+        toggleReminder,
         toggleCategoryServices,
         togglePrepStep,
         toggleCleanStep,

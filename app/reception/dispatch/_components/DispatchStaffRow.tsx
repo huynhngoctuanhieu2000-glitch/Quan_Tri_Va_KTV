@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Trash2, Star, AlertCircle, CheckCircle2, ChevronDown, Plus, Printer, X } from 'lucide-react';
+import { Trash2, AlertCircle, CheckCircle2, ChevronDown, Plus, Printer, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StaffData, TurnQueueData, WorkSegment } from '../types';
 import { DispatchSegmentRow } from './DispatchSegmentRow';
@@ -23,6 +23,7 @@ interface Room {
     id: string;
     name: string;
     type: string;
+    default_reminders?: string[];
 }
 
 interface DispatchStaffRowProps {
@@ -48,6 +49,7 @@ interface DispatchStaffRowProps {
     focus?: string;
     avoid?: string;
     realSvcId?: string;
+    reminders?: { id: string; content: string }[];
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -76,7 +78,7 @@ const calcEndTime = (start: string, duration: number): string => {
 
 export const DispatchStaffRow = ({
     row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove,
-    serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId
+    serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId, reminders = []
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -86,8 +88,10 @@ export const DispatchStaffRow = ({
     const [now, setNow] = React.useState(new Date());
     const [showTicketPreview, setShowTicketPreview] = React.useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+    const [showReminders, setShowReminders] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
     const dropdownRef = React.useRef<HTMLDivElement>(null);
+    const reminderRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -95,10 +99,13 @@ export const DispatchStaffRow = ({
                 setIsDropdownOpen(false);
                 setSearchQuery(''); // Reset search when closing without selection
             }
+            if (reminderRef.current && !reminderRef.current.contains(e.target as Node)) {
+                setShowReminders(false);
+            }
         };
-        if (isDropdownOpen) document.addEventListener('mousedown', handleClickOutside);
+        if (isDropdownOpen || showReminders) document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isDropdownOpen]);
+    }, [isDropdownOpen, showReminders]);
 
     React.useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 30000); // Update every 30s
@@ -152,6 +159,28 @@ export const DispatchStaffRow = ({
                     startTime: prev.endTime,
                     endTime: calcEndTime(prev.endTime, newSegments[i].duration)
                 };
+            }
+        }
+        
+        // 🧠 LOGIC NHẮC NHỞ TỰ ĐỘNG THEO PHÒNG
+        if (patch.roomId) {
+            const roomData = (rooms as any[]).find(r => r.id === patch.roomId);
+            if (roomData && roomData.default_reminders && Array.isArray(roomData.default_reminders)) {
+                const defaultReminders = reminders
+                    .filter(rm => roomData.default_reminders.includes(rm.id))
+                    .map(rm => rm.content);
+                
+                if (defaultReminders.length > 0) {
+                    const currentNote = row.noteForKtv || '';
+                    const reminderStr = defaultReminders.join(' - ');
+                    
+                    // Nếu chưa có nhắc nhở này thì mới append
+                    if (!currentNote.includes(reminderStr)) {
+                        const newNote = currentNote ? `${currentNote} - ${reminderStr}` : reminderStr;
+                        handleChange({ segments: newSegments, noteForKtv: newNote });
+                        return; // Đã gọi handleChange bên trong nên thoát
+                    }
+                }
             }
         }
         
@@ -372,15 +401,91 @@ export const DispatchStaffRow = ({
                 </div>
             </div>
 
-            {/* Note Input */}
-            <div className="relative pt-1 border-t border-gray-50 pt-3">
-                <input
-                    type="text"
-                    value={row.noteForKtv}
-                    onChange={e => handleChange({ noteForKtv: e.target.value })}
-                    placeholder="Ghi chú riêng cho nhân viên này..."
-                    className="w-full px-4 py-2 bg-indigo-50/30 border border-indigo-100 rounded-xl text-[11px] font-black text-indigo-700 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-300 transition-all"
-                />
+            {/* Note Input with Reminders Popover */}
+            <div className="relative pt-1 border-t border-gray-50 pt-3 flex items-center gap-2">
+                <div className="flex-1 relative">
+                    <input
+                        type="text"
+                        value={row.noteForKtv}
+                        onChange={e => handleChange({ noteForKtv: e.target.value })}
+                        placeholder="Ghi chú riêng cho nhân viên này..."
+                        className="w-full px-4 py-2 bg-indigo-50/30 border border-indigo-100 rounded-xl text-[11px] font-black text-indigo-700 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-300 transition-all pr-10"
+                    />
+                    {row.noteForKtv && (
+                        <button 
+                            onClick={() => handleChange({ noteForKtv: '' })}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-indigo-300 hover:text-indigo-500 transition-colors"
+                        >
+                            <X size={14} strokeWidth={3} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="relative" ref={reminderRef}>
+                    <button
+                        onClick={() => setShowReminders(!showReminders)}
+                        className={`p-2 rounded-xl border transition-all active:scale-95 flex items-center gap-1.5 whitespace-nowrap
+                            \${showReminders ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white border-gray-100 text-gray-400 hover:border-indigo-200 hover:text-indigo-600'}
+                        `}
+                        title="Chọn câu nhắc nhở nhanh"
+                    >
+                        <AlertCircle size={16} strokeWidth={2.5} />
+                        <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Nhắc nhở</span>
+                    </button>
+
+                    <AnimatePresence>
+                        {showReminders && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                className="absolute bottom-full right-0 mb-3 w-72 bg-white rounded-2xl shadow-[0_10px_40px_rgb(0,0,0,0.15)] border border-gray-100 overflow-hidden z-[60]"
+                            >
+                                <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-indigo-50/50">
+                                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Chọn nhắc nhở</span>
+                                    <span className="text-[10px] font-bold text-indigo-400">{reminders.length} câu</span>
+                                </div>
+                                <div className="max-h-60 overflow-y-auto p-2 grid grid-cols-1 gap-1 no-scrollbar">
+                                    {reminders.map((rm) => {
+                                        const isSelected = row.noteForKtv?.includes(rm.content);
+                                        return (
+                                            <button
+                                                key={rm.id}
+                                                onClick={() => {
+                                                    const currentNote = row.noteForKtv || '';
+                                                    if (isSelected) {
+                                                        // Xoá nhắc nhở (cần handle dấu gạch nối)
+                                                        const parts = currentNote.split(' - ').filter(p => p !== rm.content);
+                                                        handleChange({ noteForKtv: parts.join(' - ') });
+                                                    } else {
+                                                        // Thêm nhắc nhở
+                                                        const newNote = currentNote ? `\${currentNote} - \${rm.content}` : rm.content;
+                                                        handleChange({ noteForKtv: newNote });
+                                                    }
+                                                }}
+                                                className={`w-full text-left px-3 py-2.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-between group
+                                                    \${isSelected ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-indigo-50 text-gray-700 hover:text-indigo-700'}
+                                                `}
+                                            >
+                                                <span className="flex-1 pr-2">{rm.content}</span>
+                                                {isSelected ? (
+                                                    <CheckCircle2 size={14} strokeWidth={3} />
+                                                ) : (
+                                                    <Plus size={14} strokeWidth={3} className="text-gray-200 group-hover:text-indigo-400" />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                    {reminders.length === 0 && (
+                                        <div className="py-8 text-center text-gray-400 text-[10px] font-bold uppercase italic">
+                                            Chưa có câu nhắc nhở nào
+                                        </div>
+                                    )}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
         </div>
 

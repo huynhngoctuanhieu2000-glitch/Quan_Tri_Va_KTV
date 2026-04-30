@@ -102,6 +102,7 @@ export default function DispatchBoardPage() {
   const [svcSearchQuery, setSvcSearchQuery] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
+  const [reminders, setReminders] = useState<any[]>([]);
   const [roomTransitionTime, setRoomTransitionTime] = useState(5);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<any>(null);
@@ -274,14 +275,16 @@ export default function DispatchBoardPage() {
         setTurns(merged);
       }
 
-      // 3. Set Rooms & Beds
+      // 3. Set Rooms & Beds & Reminders
       const rData = res.data.rooms || [];
       const bdData = res.data.beds || [];
+      const rmData = res.data.reminders || [];
       setRooms(rData);
       setBeds(bdData);
+      setReminders(rmData);
       if (res.data.allServices) setAllServices(res.data.allServices);
       if (res.data.roomTransitionTime !== undefined) setRoomTransitionTime(res.data.roomTransitionTime);
-      console.log(`✅ [Dispatch] Loaded ${rData.length} rooms and ${bdData.length} beds, Transition: ${res.data.roomTransitionTime}m`);
+      console.log(`✅ [Dispatch] Loaded ${rData.length} rooms, ${bdData.length} beds, ${rmData.length} reminders. Transition: ${res.data.roomTransitionTime}m`);
 
         // 4. Set Bookings
       if (bData) {
@@ -1500,6 +1503,7 @@ if (!hasPermission('dispatch_board')) {
                       avoid: selectedOrder.services[0].avoid,
                       customerNote: selectedOrder.services[0].customerNote,
                     } : undefined}
+                    reminders={reminders}
                   />
                 ) : (
                   /* Detail Dispatch Mode */
@@ -1537,6 +1541,7 @@ if (!hasPermission('dispatch_board')) {
                             busyBedIds={allBusyBedIds}
                             usedKtvIds={[]}
                             availableTurns={turns}
+                            reminders={reminders}
                             onUpdateSvc={updateSvcField}
                             onUpdateStaff={updateStaffRow}
                             onAddStaff={addStaffRow}

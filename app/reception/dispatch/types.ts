@@ -99,3 +99,22 @@ export interface StaffNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+export interface RoomData {
+  id: string;
+  name: string;
+  type: string;
+  capacity?: number;
+  default_reminders?: string[];
+}
+
+export interface BedData {
+  id: string;
+  roomId: string;
+  name?: string;
+}
+
+export interface ReminderData {
+  id: string;
+  content: string;
+}
