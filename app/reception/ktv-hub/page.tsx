@@ -425,6 +425,14 @@ const AttendanceHistorySection = () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
+    // Luôn sử dụng múi giờ Việt Nam (UTC+7) làm mặc định
+    const getVietnamDateString = () => {
+        const d = new Date();
+        const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+        const vnTime = new Date(utc + (3600000 * 7));
+        return vnTime.toISOString().split('T')[0];
+    };
+    const [selectedDate, setSelectedDate] = useState<string>(getVietnamDateString());
     const [turns, setTurns] = useState<(TurnQueueData & { staff?: StaffData })[]>([]);
     const [shifts, setShifts] = useState<Record<string, string>>({});
     const [suddenOffs, setSuddenOffs] = useState<Set<string>>(new Set());
@@ -435,10 +443,10 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             fetchTurns();
             fetchExtras();
         }
-    }, [staffs]);
+    }, [staffs, selectedDate]);
 
     const fetchExtras = async () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = selectedDate;
         const [shiftRes, leaveRes] = await Promise.all([
             supabase.from('KTVShiftRecords').select('employee_id, shift_type').eq('status', 'ACTIVE'),
             supabase.from('KTVLeaveRequests').select('employee_id').eq('date', today).eq('is_sudden_off', true)
@@ -494,13 +502,13 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [staffs]);
+    }, [staffs, selectedDate]);
 
     // Fetch qua API (trigger sync logic đếm tua chính xác)
     const fetchTurns = async () => {
         setLoading(true);
         try {
-            const res = await fetch('/api/turns');
+            const res = await fetch(`/api/turns?date=${selectedDate}`);
             const json = await res.json();
             if (json.success && json.data) {
                 const merged = json.data.map((t: TurnQueueData) => ({
@@ -517,7 +525,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
 
     // Fetch trực tiếp từ DB (dùng khi TurnQueue thay đổi, không cần re-sync)
     const fetchTurnsFromDB = async () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = selectedDate;
         const { data } = await supabase
             .from('TurnQueue')
             .select('*')
@@ -631,7 +639,15 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             {/* Queue */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-bold text-gray-900 text-sm">Sổ hàng đợi tua</h3>
+                    <div className="flex items-center gap-3">
+                        <h3 className="font-bold text-gray-900 text-sm">Sổ hàng đợi tua</h3>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="text-xs font-medium border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 text-gray-700 bg-gray-50"
+                        />
+                    </div>
                     <button
                         onClick={resetTurns}
                         className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 font-semibold transition-colors"
