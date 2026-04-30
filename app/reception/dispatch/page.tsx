@@ -914,10 +914,11 @@ if (!hasPermission('dispatch_board')) {
       console.error(err);
     }
   };
-  const handleDispatch = async (skipValidation: boolean = false, specificSvcId?: string) => {
-    if (!selectedOrder) return;
+  const handleDispatch = async (skipValidation: boolean = false, specificSvcId?: string, overrideOrderId?: string) => {
+    const orderToDispatch = overrideOrderId ? orders.find(o => o.id === overrideOrderId) : selectedOrder;
+    if (!orderToDispatch) return;
     if (!skipValidation) {
-      const missing = getMissingInfo(selectedOrder);
+      const missing = getMissingInfo(orderToDispatch);
       if (missing.length > 0) {
         alert(`⚠️ Vui lòng điền đầy đủ thông tin:\n\n${missing.map(m => `• ${m}`).join('\n')}`);
         return;
@@ -925,7 +926,7 @@ if (!hasPermission('dispatch_board')) {
     }
 
     try {
-      const clonedOrder = JSON.parse(JSON.stringify(selectedOrder)) as PendingOrder;
+      const clonedOrder = JSON.parse(JSON.stringify(orderToDispatch)) as PendingOrder;
 
       const allStaffAssignments = [];
       const techCodesSet = new Set<string>();
@@ -947,7 +948,7 @@ if (!hasPermission('dispatch_board')) {
           let turnsCompleted = currentTurn.turns_completed;
           let queuePos = currentTurn.queue_position;
 
-          if (currentTurn.current_order_id !== selectedOrder.id) {
+          if (currentTurn.current_order_id !== clonedOrder.id) {
             const currentMax = Math.max(...turns.map(t => t.queue_position), 0);
             const addedCount = allStaffAssignments.length; 
             queuePos = currentMax + addedCount + 1;
@@ -1906,10 +1907,8 @@ if (!hasPermission('dispatch_board')) {
             <button
               onClick={() => {
                 if (!confirm('⚡ Xác nhận GỬI ĐƠN ngay? (Bỏ qua kiểm tra thiếu thông tin)')) return;
-                setSelectedOrderId(contextMenu.orderId);
+                handleDispatch(true, undefined, contextMenu.orderId);
                 setContextMenu(null);
-                // Dùng setTimeout để chờ selectedOrder cập nhật
-                setTimeout(() => handleDispatch(true), 100);
               }}
               className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
             >

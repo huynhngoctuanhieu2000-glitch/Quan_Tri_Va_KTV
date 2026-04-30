@@ -622,7 +622,7 @@ export async function PATCH(request: Request) {
                     let allFeedback = true;
 
                     // 1. Đánh dấu segment của KTV này (và đồng nghiệp làm cùng phòng/giờ) là đã hoàn thành
-                    segs.forEach(seg => {
+                    segs.forEach((seg: any) => {
                         // Xác định xem segment này có thuộc về KTV hiện tại hoặc làm cùng phòng/giờ không
                         const isMySeg = technicianCode && seg.ktvId && seg.ktvId.toLowerCase() === technicianCode.toLowerCase();
                         
@@ -631,7 +631,7 @@ export async function PATCH(request: Request) {
                         const isTeamSeg = seg.roomId === turnForSync?.room_id && 
                                         seg.startTime === turnForSync?.start_time;
 
-                        if (isMySeg || isTeamSeg) {
+                        if (isMySeg || isTeamSeg || action === 'EARLY_EXIT') {
                             if (!isFeedback && !seg.actualEndTime) seg.actualEndTime = new Date().toISOString();
                             if (isFeedback && !seg.feedbackTime) seg.feedbackTime = new Date().toISOString();
                             // Đảm bảo có actualStartTime nếu chưa có

@@ -428,13 +428,34 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
         // 🔧 FIX: KHÔNG ghi đè items đang PREPARING (chưa bắt đầu) → chỉ update items đã IN_PROGRESS trở lên
         if (['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
-            const { error: itemError } = await supabase
+            const { data: itemsToUpdate } = await supabase
                 .from('BookingItems')
-                .update({ status: newStatus })
+                .select('id, segments')
                 .eq('bookingId', bookingId)
                 .in('status', ['IN_PROGRESS', 'COMPLETED', 'CLEANING', 'FEEDBACK']);
-                
-            if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+            
+            if (itemsToUpdate && itemsToUpdate.length > 0) {
+                for (const item of itemsToUpdate) {
+                    let segs = [];
+                    try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+                    
+                    let segmentsModified = false;
+                    segs.forEach((s: any) => {
+                        if (!s.actualEndTime) {
+                            s.actualEndTime = new Date().toISOString();
+                            segmentsModified = true;
+                        }
+                    });
+
+                    const payload: any = { status: newStatus };
+                    if (segmentsModified) payload.segments = JSON.stringify(segs);
+                    if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
+                        payload.timeEnd = new Date().toISOString();
+                    }
+
+                    await supabase.from('BookingItems').update(payload).eq('id', item.id);
+                }
+            }
 
             // 🔧 SMART BOOKING STATUS: Re-query ALL items để tính status chính xác
             const { data: allItemsAfterPartial } = await supabase
