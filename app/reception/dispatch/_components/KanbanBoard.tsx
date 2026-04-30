@@ -141,10 +141,36 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                             ktvGroups.set(ktvSignature, []);
                         }
                         
+                        // Xác định trạng thái cục bộ cho nhóm KTV này dựa trên segments của họ
+                        let isAllCompleted = true;
+                        let isAnyStarted = false;
+                        let isAllFeedback = true;
+                        
+                        staffsAtTime.forEach(st => {
+                            if (!st.segments || st.segments.length === 0) {
+                                isAllCompleted = false;
+                                isAllFeedback = false;
+                            }
+                            st.segments?.forEach((seg: any) => {
+                                if (seg.actualStartTime) isAnyStarted = true;
+                                if (!seg.actualEndTime) isAllCompleted = false;
+                                if (!seg.feedbackTime) isAllFeedback = false;
+                            });
+                        });
+                        
+                        let derivedStatus = svc.status || 'NEW';
+                        if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
+                            if (isAllFeedback && isAllCompleted) derivedStatus = 'FEEDBACK';
+                            else if (isAllCompleted) derivedStatus = 'COMPLETED';
+                            else if (isAnyStarted) derivedStatus = 'IN_PROGRESS';
+                            else derivedStatus = 'PREPARING';
+                        }
+
                         // Tạo clone của svc chỉ chứa các staff của khung giờ này
                         const svcClone = {
                             ...svc,
-                            staffList: staffsAtTime
+                            staffList: staffsAtTime,
+                            status: derivedStatus
                         };
                         ktvGroups.get(ktvSignature)!.push(svcClone);
                     });

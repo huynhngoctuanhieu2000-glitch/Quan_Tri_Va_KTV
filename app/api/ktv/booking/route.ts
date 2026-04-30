@@ -342,12 +342,14 @@ export async function PATCH(request: Request) {
             // 🚀 CẬP NHẬT SEGMENTS (thời gian chặng)
             let allGlobalSegs: { item: any, localIdx: number, seg: any }[] = [];
             const activeSegmentIndex = body.activeSegmentIndex || 0;
+            let currentItems: any[] = [];
 
             if (allItemIdsForThisKTV.length > 0) {
-                const { data: currentItems } = await supabase
+                const { data } = await supabase
                     .from('BookingItems')
-                    .select('id, segments')
+                    .select('id, segments, timeStart, timeEnd')
                     .in('id', allItemIdsForThisKTV);
+                currentItems = data || [];
 
                 const itemSegmentsMap = new Map<string, any[]>();
 
@@ -414,20 +416,46 @@ export async function PATCH(request: Request) {
                 // 3. Đẩy lại các cập nhật vào DB
                 for (const [itemId, segs] of Array.from(itemSegmentsMap.entries())) {
                     const payload: any = { segments: JSON.stringify(segs) };
+                    const currentItem = currentItems?.find((i: any) => i.id === itemId);
                     
                     // 🔧 FIX CASE E: Chỉ set timeStart/timeEnd cho ACTIVE item
                     // Queued items (DV2, DV3...) giữ nguyên, chờ NEXT_SEGMENT
                     const isActiveItem = (itemId === activeItemId) || allItemIdsForThisKTV.length === 1;
                     if (shouldUpdateItemTimeStart && isActiveItem) {
-                        payload.timeStart = sharedTimeStart;
-                        let totalDur = 0;
-                        segs.forEach((seg: any) => { totalDur += Number(seg.duration || 0); });
-                        const endTimeMs = new Date(sharedTimeStart).getTime() + totalDur * 60000;
-                        payload.timeEnd = new Date(endTimeMs).toISOString();
-
-                        if (endTimeMs > maxTimeEndMs) {
-                            maxTimeEndMs = endTimeMs;
-                            maxTimeEndStr = payload.timeEnd;
+                        if (!currentItem?.timeStart) {
+                            payload.timeStart = sharedTimeStart;
+                        }
+                        
+                        let maxSegEndTimeMs = 0;
+                        segs.forEach((seg: any) => { 
+                            let segEndMs = 0;
+                            if (seg.actualEndTime) {
+                                segEndMs = new Date(seg.actualEndTime).getTime();
+                            } else {
+                                if (seg.actualStartTime) {
+                                    segEndMs = new Date(seg.actualStartTime).getTime() + Number(seg.duration || 0) * 60000;
+                                } else if (seg.startTime) {
+                                    const baseDate = new Date(sharedTimeStart);
+                                    const baseVnTime = new Date(baseDate.getTime() + 7 * 60 * 60 * 1000);
+                                    const [h, m] = seg.startTime.split(':').map(Number);
+                                    baseVnTime.setUTCHours(h, m, 0, 0);
+                                    const startToUseMs = baseVnTime.getTime() - 7 * 60 * 60 * 1000;
+                                    segEndMs = startToUseMs + Number(seg.duration || 0) * 60000;
+                                } else {
+                                    const startToUse = currentItem?.timeStart || sharedTimeStart;
+                                    segEndMs = new Date(startToUse).getTime() + Number(seg.duration || 0) * 60000;
+                                }
+                            }
+                            if (segEndMs > maxSegEndTimeMs) maxSegEndTimeMs = segEndMs;
+                        });
+                        
+                        // Cập nhật timeEnd dựa trên segment kết thúc muộn nhất
+                        if (maxSegEndTimeMs > 0) {
+                            payload.timeEnd = new Date(maxSegEndTimeMs).toISOString();
+                            if (maxSegEndTimeMs > maxTimeEndMs) {
+                                maxTimeEndMs = maxSegEndTimeMs;
+                                maxTimeEndStr = payload.timeEnd;
+                            }
                         }
                     }
 
@@ -487,18 +515,38 @@ export async function PATCH(request: Request) {
                         const nextActiveItemId = allGlobalSegs[activeSegmentIndex].item.id;
                         if (nextActiveItemId !== activeItemId) {
                             // Chuyển sang item mới → set timeStart/timeEnd/IN_PROGRESS
+                            const nextItemObj = currentItems?.find((i: any) => i.id === nextActiveItemId);
+                            const nextPayload: any = { status: 'IN_PROGRESS' };
+                            if (!nextItemObj?.timeStart) {
+                                nextPayload.timeStart = sharedTimeStart;
+                            }
+                            
                             const nextSegs = allGlobalSegs.filter((s: any) => s.item.id === nextActiveItemId);
-                            let nextTotalDur = 0;
-                            nextSegs.forEach((s: any) => { nextTotalDur += Number(s.seg.duration || 0); });
-                            const nextEndTimeMs = new Date(sharedTimeStart).getTime() + nextTotalDur * 60000;
+                            let maxNextEndMs = 0;
+                            nextSegs.forEach((s: any) => { 
+                                let startToUseMs = 0;
+                                if (s.seg.actualStartTime) {
+                                    startToUseMs = new Date(s.seg.actualStartTime).getTime();
+                                } else if (s.seg.startTime) {
+                                    const baseDate = new Date(sharedTimeStart);
+                                    const baseVnTime = new Date(baseDate.getTime() + 7 * 60 * 60 * 1000);
+                                    const [h, m] = s.seg.startTime.split(':').map(Number);
+                                    baseVnTime.setUTCHours(h, m, 0, 0);
+                                    startToUseMs = baseVnTime.getTime() - 7 * 60 * 60 * 1000;
+                                } else {
+                                    startToUseMs = new Date(nextItemObj?.timeStart || sharedTimeStart).getTime();
+                                }
+                                const segEndMs = startToUseMs + Number(s.seg.duration || 0) * 60000;
+                                if (segEndMs > maxNextEndMs) maxNextEndMs = segEndMs;
+                            });
+                            
+                            if (maxNextEndMs > 0) {
+                                nextPayload.timeEnd = new Date(maxNextEndMs).toISOString();
+                            }
                             
                             await supabase
                                 .from('BookingItems')
-                                .update({
-                                    status: 'IN_PROGRESS',
-                                    timeStart: sharedTimeStart,
-                                    timeEnd: new Date(nextEndTimeMs).toISOString(),
-                                })
+                                .update(nextPayload)
                                 .eq('id', nextActiveItemId);
                         }
                     }

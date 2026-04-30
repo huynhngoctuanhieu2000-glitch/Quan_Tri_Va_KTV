@@ -205,7 +205,6 @@ export async function processDispatch(bookingId: string, dispatchData: {
             const { error: tError } = await supabase
                 .from('TurnQueue')
                 .update({
-                    status: 'working',
                     current_order_id: bookingId,
                     booking_item_id: assignment.bookingItemId, 
                     room_id: assignment.roomId, // Lưu phòng gán cho KTV này
