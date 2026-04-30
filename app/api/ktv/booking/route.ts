@@ -19,28 +19,44 @@ export async function GET(request: Request) {
         let bookingId = bookingIdParam;
         let assignedItemId = null;
 
-        // Nếu không có bookingId cụ thể, tìm theo KTV trong TurnQueue
+        // Nếu không có bookingId cụ thể, ưu tiên tìm đơn ĐANG LÀM dở dang
         if (!bookingId) {
             if (!technicianCode) {
                 return NextResponse.json({ success: false, error: 'Technician code or bookingId is required' }, { status: 400 });
             }
-            
-            const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
-            const today = new Date(vnMs).toISOString().split('T')[0];
-            const { data: turn, error: tError } = await supabase
-                .from('TurnQueue')
-                .select('current_order_id, booking_item_id, booking_item_ids, status')
-                .eq('employee_id', technicianCode)
-                .eq('date', today)
-                .maybeSingle();
 
-            if (tError) throw tError;
-            
-            if (!turn || !turn.current_order_id) {
-                return NextResponse.json({ success: true, data: null });
+            // 1. Ưu tiên tìm đơn hàng mà KTV ĐANG LÀM hoặc CHƯA KẾT THÚC quy trình (IN_PROGRESS, COMPLETED, FEEDBACK, CLEANING)
+            const { data: activeItems } = await supabase
+                .from('BookingItems')
+                .select('bookingId, status, id')
+                .contains('technicianCodes', [technicianCode])
+                .in('status', ['IN_PROGRESS', 'COMPLETED', 'FEEDBACK', 'CLEANING'])
+                .order('timeStart', { ascending: false, nullsFirst: false });
+
+            if (activeItems && activeItems.length > 0) {
+                // Ưu tiên đơn IN_PROGRESS, sau đó mới tới các trạng thái hậu kỳ
+                const inProgressItem = activeItems.find(i => i.status === 'IN_PROGRESS') || activeItems[0];
+                bookingId = inProgressItem.bookingId;
+                assignedItemId = inProgressItem.id;
+            } else {
+                // 2. Nếu không có đơn nào đang làm, mới lấy đơn tiếp theo trong TurnQueue (thường là PREPARING / READY)
+                const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
+                const today = new Date(vnMs).toISOString().split('T')[0];
+                const { data: turn, error: tError } = await supabase
+                    .from('TurnQueue')
+                    .select('current_order_id, booking_item_id, booking_item_ids, status')
+                    .eq('employee_id', technicianCode)
+                    .eq('date', today)
+                    .maybeSingle();
+
+                if (tError) throw tError;
+                
+                if (!turn || !turn.current_order_id) {
+                    return NextResponse.json({ success: true, data: null });
+                }
+                bookingId = turn.current_order_id;
+                assignedItemId = turn.booking_item_id;
             }
-            bookingId = turn.current_order_id;
-            assignedItemId = turn.booking_item_id;
         }
 
         // 1.5 Lấy thông tin từ TurnQueue để có mốc thời gian điều phối (last_served_at)
