@@ -361,7 +361,7 @@ export default function DispatchBoardPage() {
                         ktvId: tCode,
                         ktvName: staff?.full_name || tCode,
                         segments: segments,
-                        noteForKtv: bi.options?.noteForKtv || ''
+                        noteForKtv: bi.options?.notesForKtvs?.[tCode] || bi.options?.noteForKtv || ''
                       };
                   });
               } else if (finalItemTurns.length > 0) {
@@ -387,7 +387,7 @@ export default function DispatchBoardPage() {
                         ktvId: t.employee_id,
                         ktvName: staff?.full_name || 'KTV',
                         segments: segments,
-                        noteForKtv: bi.options?.noteForKtv || ''
+                        noteForKtv: bi.options?.notesForKtvs?.[t.employee_id] || bi.options?.noteForKtv || ''
                       };
                   });
               } else {
@@ -1021,14 +1021,15 @@ if (!hasPermission('dispatch_board')) {
           };
       });
 
+      const isPartial = !!specificSvcId;
       const res = await processDispatch(clonedOrder.id, {
         status: clonedOrder.rawStatus === 'NEW' ? 'PREPARING' : (clonedOrder.rawStatus || 'PREPARING'),
-        technicianCode: combinedTechCodes,
-        bedId: primarySeg?.bedId || null,
-        roomName: primarySeg?.roomId || null,
+        technicianCode: isPartial ? undefined : combinedTechCodes,
+        bedId: isPartial ? undefined : (primarySeg?.bedId || null),
+        roomName: isPartial ? undefined : (primarySeg?.roomId || null),
         staffAssignments: mergedAssignments,
         date: selectedDate,
-        notes: primaryService?.adminNote || '',
+        notes: isPartial ? undefined : (primaryService?.adminNote || ''),
         itemUpdates: itemUpdates
       });
 
@@ -1080,7 +1081,7 @@ if (!hasPermission('dispatch_board')) {
     }
   };
 
-  async function handleUpdateStatus(orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean) {
+  async function handleUpdateStatus(orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean, targetKtvIds?: string[]) {
     // Determine context for confirmation
     const isPartial = itemIds && itemIds.length > 0;
     
@@ -1103,7 +1104,7 @@ if (!hasPermission('dispatch_board')) {
       let res;
       if (isPartial) {
           const { updateBookingItemStatus } = await import('./actions');
-          res = await updateBookingItemStatus(itemIds, newStatus, selectedDate, orderId);
+          res = await updateBookingItemStatus(itemIds, newStatus, selectedDate, orderId, targetKtvIds);
       } else {
           res = await updateBookingStatus(orderId, newStatus, selectedDate);
       }

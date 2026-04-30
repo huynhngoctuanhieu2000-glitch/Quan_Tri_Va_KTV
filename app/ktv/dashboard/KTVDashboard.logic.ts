@@ -107,6 +107,119 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const manualSegmentOverrideRef = useRef<boolean>(false);
     const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
 
+    // --- SMART SKIP LOGIC ---
+    const [isLastInRoom, setIsLastInRoom] = useState(true);
+    const [isRoomCleaned, setIsRoomCleaned] = useState(false);
+    const isAutoReleasingRef = useRef(false);
+
+    useEffect(() => {
+        if (!booking || !user?.id) return;
+
+        let myRoomId: string | null = null;
+        const allItemIds: string[] = booking.assignedItemIds?.length > 0 ? booking.assignedItemIds : (booking.assignedItemId ? [booking.assignedItemId] : []);
+        const allAssignedItems = allItemIds.length > 0 ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || [] : [booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId) || booking.BookingItems?.[0]].filter(Boolean);
+        
+        for (const ai of allAssignedItems) {
+            let segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (ai?.segments || []);
+            const mySeg = segs.find((seg: any) => seg.ktvId && seg.ktvId.toLowerCase() === user.id.toLowerCase());
+            if (mySeg?.roomId) {
+                myRoomId = mySeg.roomId;
+                break;
+            }
+        }
+
+        let _isLastInRoom = true;
+        let _isRoomCleaned = false;
+
+        if (myRoomId) {
+            let maxEndTime = 0;
+            let myMaxEndTime = 0;
+            let maxEndFeedbackTime: string | null = null;
+            
+            booking.BookingItems?.forEach((item: any) => {
+                let segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []);
+                segs.forEach((seg: any) => {
+                    if (seg.roomId === myRoomId) {
+                        const endStr = seg.actualEndTime || seg.endTime || seg.startTime;
+                        if (endStr) {
+                            const endTime = new Date(endStr).getTime();
+                            if (endTime > maxEndTime) {
+                                maxEndTime = endTime;
+                                maxEndFeedbackTime = seg.feedbackTime || null;
+                            } else if (endTime === maxEndTime) {
+                                if (seg.feedbackTime) maxEndFeedbackTime = seg.feedbackTime;
+                            }
+                            
+                            if (seg.ktvId && seg.ktvId.toLowerCase() === user.id.toLowerCase()) {
+                                if (endTime > myMaxEndTime) myMaxEndTime = endTime;
+                            }
+                        }
+                    }
+                });
+            });
+            
+            // Nếu có ai đó kết thúc sau mình hơn 1 phút -> Mình không phải người cuối cùng
+            if (myMaxEndTime > 0 && maxEndTime > 0 && myMaxEndTime < maxEndTime - 60000) {
+                _isLastInRoom = false; 
+            }
+
+            // Nếu người cuối cùng đã dọn xong -> Phòng đã sạch
+            if (maxEndFeedbackTime) {
+                _isRoomCleaned = true;
+            }
+        }
+
+        setIsLastInRoom(_isLastInRoom);
+        setIsRoomCleaned(_isRoomCleaned);
+
+    }, [booking, user?.id]);
+
+    const handleAutoRelease = useCallback(async () => {
+        if (!booking || !user?.id || isAutoReleasingRef.current) return;
+        isAutoReleasingRef.current = true;
+        setIsLoading(true);
+        try {
+            console.log("🚀 [SmartSkip] Auto-releasing KTV...");
+            await fetch('/api/ktv/booking', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    bookingId: booking.id, 
+                    status: 'FEEDBACK',
+                    action: 'RELEASE_KTV',
+                    techCode: user.id 
+                })
+            });
+            setScreen('REWARD');
+        } catch (e) {
+            console.error('Auto release failed', e);
+        } finally {
+            setIsLoading(false);
+            isAutoReleasingRef.current = false;
+        }
+    }, [booking?.id, user?.id, setScreen]);
+
+    // Auto-skip Review if already rated by teammate
+    useEffect(() => {
+        if (screenRef.current === 'REVIEW' && booking?.rating) {
+            console.log("🌟 [SmartSkip] Review already submitted by teammate, skipping...");
+            setHasSubmittedReview(true);
+            if (!isLastInRoom || isRoomCleaned) {
+                handleAutoRelease();
+            } else {
+                setScreen('HANDOVER');
+            }
+        }
+    }, [booking?.rating, screenRef.current, isLastInRoom, isRoomCleaned, handleAutoRelease]);
+
+    // Auto-skip Handover if teammate cleans the room
+    useEffect(() => {
+        if (screenRef.current === 'HANDOVER' && isRoomCleaned) {
+            console.log("🧹 [SmartSkip] Room already cleaned by teammate, skipping handover...");
+            handleAutoRelease();
+        }
+    }, [screenRef.current, isRoomCleaned, handleAutoRelease]);
+
     useEffect(() => { 
         screenRef.current = screen; 
     }, [screen]);
@@ -243,7 +356,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 } catch { segs = []; }
                 
                 const mySegs = segs.filter((seg: any) => 
-                    seg.ktvId && user?.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
+                    seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase()
                 );
                 allMySegs.push(...mySegs);
             }
@@ -308,6 +421,37 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
         // Status item-level ưu tiên tuyệt đối
         let currentStatus = assignedItem?.status || booking.status;
+        
+        // 🚀 KTV-Specific Local Status Override
+        // Cho phép mỗi KTV có trạng thái riêng (hoàn thành/feedback) bất chấp trạng thái tổng của dịch vụ
+        const allItemIds: string[] = booking.assignedItemIds?.length > 0
+            ? booking.assignedItemIds
+            : (booking.assignedItemId ? [booking.assignedItemId] : []);
+        const allAssignedItems = allItemIds.length > 0
+            ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+            : [assignedItem].filter(Boolean);
+        
+        let allMySegsForStatus: any[] = [];
+        for (const ai of allAssignedItems) {
+            let segs: any[] = [];
+            try {
+                segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
+            } catch { segs = []; }
+            const mySegs = segs.filter((seg: any) => seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase());
+            allMySegsForStatus.push(...mySegs);
+        }
+
+        if (allMySegsForStatus.length > 0) {
+            let allDone = true;
+            let allFeedback = true;
+            allMySegsForStatus.forEach(seg => {
+                if (!seg.actualEndTime) allDone = false;
+                if (!seg.feedbackTime) allFeedback = false;
+            });
+            // Chỉ override nếu đã xong, chưa xong thì lấy theo status chung
+            if (allFeedback) currentStatus = 'FEEDBACK';
+            else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'COMPLETED';
+        }
         
         // Co-working sync: CHỈ cho tiến (PREPARING/READY → IN_PROGRESS), KHÔNG cho lùi
         if (booking.status === 'IN_PROGRESS' 
@@ -492,17 +636,6 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             ? res.data.BookingItems?.find((i: any) => i.id === res.data.assignedItemId)
                             : res.data.BookingItems?.[0];
 
-                        // 🚀 Status item-level ưu tiên tuyệt đối + co-working forward-only sync
-                        let currentStatus = assignedItem?.status || res.data.status;
-                        if (res.data.status === 'IN_PROGRESS' 
-                            && (currentStatus === 'PREPARING' || currentStatus === 'READY') 
-                            && assignedItem?.timeStart) {
-                            currentStatus = 'IN_PROGRESS';
-                        }
-
-                        // Debug log 
-                        console.log(`[KTV] Assigned Item ID: ${assignedItem?.id}, Item Status: ${assignedItem?.status}, Booking Status: ${res.data.status}, Final Computed Status: ${currentStatus}`);
-
                         // Tính thời gian cho TẤT CẢ items được gán (multi-item support)
                         const allItemIds: string[] = res.data.assignedItemIds?.length > 0
                             ? res.data.assignedItemIds
@@ -522,10 +655,35 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             } catch { segs = []; }
                             
                             const mySegs = segs.filter((seg: any) => 
-                                seg.ktvId && user?.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
+                                seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase()
                             );
                             allMySegs.push(...mySegs);
                         }
+
+                        // 🚀 Status item-level ưu tiên tuyệt đối + co-working forward-only sync
+                        let currentStatus = assignedItem?.status || res.data.status;
+                        if (res.data.status === 'IN_PROGRESS' 
+                            && (currentStatus === 'PREPARING' || currentStatus === 'READY') 
+                            && assignedItem?.timeStart) {
+                            currentStatus = 'IN_PROGRESS';
+                        }
+                        
+                        // 🚀 KTV-Specific Local Status Override
+                        if (allMySegs.length > 0) {
+                            let allDone = true;
+                            let allFeedback = true;
+                            allMySegs.forEach(seg => {
+                                if (!seg.actualEndTime) allDone = false;
+                                if (!seg.feedbackTime) allFeedback = false;
+                            });
+                            if (allFeedback) currentStatus = 'FEEDBACK';
+                            else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'COMPLETED';
+                        }
+
+                        // Debug log 
+                        console.log(`[KTV] Assigned Item ID: ${assignedItem?.id}, Item Status: ${assignedItem?.status}, Booking Status: ${res.data.status}, Final Computed Status: ${currentStatus}`);
+
+
 
                         allMySegs.sort((a, b) => {
                             const timeA = a.startTime || '23:59';
@@ -763,7 +921,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 try {
                     segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
                 } catch { segs = []; }
-                const mySegs = segs.filter((seg: any) => seg.ktvId && user?.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase()));
+                const mySegs = segs.filter((seg: any) => seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase());
                 allMySegs.push(...mySegs);
             }
 
@@ -892,7 +1050,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 try {
                     segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
                 } catch { segs = []; }
-                const mySegs = segs.filter((seg: any) => seg.ktvId && user.id && seg.ktvId.toLowerCase().includes(user.id.toLowerCase()));
+                const mySegs = segs.filter((seg: any) => seg.ktvId && user.id && seg.ktvId.toLowerCase() === user.id.toLowerCase());
                 allMySegs.push(...mySegs);
             }
 
@@ -958,7 +1116,18 @@ export function useKTVDashboard(config?: DashboardConfig) {
         const res = await response.json();
         if (res.success) {
             setIsTimerRunning(false);
-            setScreen('REVIEW');
+            
+            // Smart Skip logic
+            if (booking?.rating) {
+                setHasSubmittedReview(true);
+                if (!isLastInRoom || isRoomCleaned) {
+                    handleAutoRelease();
+                } else {
+                    setScreen('HANDOVER');
+                }
+            } else {
+                setScreen('REVIEW');
+            }
         } else {
             console.error('❌ [KTV Logic] Finish error:', res.error);
             alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
@@ -1000,10 +1169,20 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
             
             setHasSubmittedReview(true);
-            setScreen('HANDOVER');
+            
+            // Smart Skip logic
+            if (!isLastInRoom || isRoomCleaned) {
+                handleAutoRelease();
+            } else {
+                setScreen('HANDOVER');
+            }
         } catch (err) {
             console.error('❌ [KTV Logic] Error submitting review:', err);
-            setScreen('HANDOVER');
+            if (!isLastInRoom || isRoomCleaned) {
+                handleAutoRelease();
+            } else {
+                setScreen('HANDOVER');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -1041,7 +1220,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             ? JSON.parse(item.segments) 
                             : (item.segments || []);
                         const mySegs = segs.filter((seg: any) => 
-                            seg.ktvId && seg.ktvId.toLowerCase().includes(user.id.toLowerCase())
+                            seg.ktvId && seg.ktvId.toLowerCase() === user.id.toLowerCase()
                         );
                         if (mySegs.length > 0) {
                             totalMins += mySegs.reduce((sum: number, seg: any) => {

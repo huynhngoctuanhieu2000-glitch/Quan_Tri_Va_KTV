@@ -29,7 +29,7 @@ export async function GET(request: Request) {
             const today = new Date(vnMs).toISOString().split('T')[0];
             const { data: turn, error: tError } = await supabase
                 .from('TurnQueue')
-                .select('current_order_id, booking_item_id')
+                .select('current_order_id, booking_item_id, booking_item_ids, status')
                 .eq('employee_id', technicianCode)
                 .eq('date', today)
                 .maybeSingle();
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
             const today = new Date(vnMs).toISOString().split('T')[0];
             const { data: turn } = await supabase
                 .from('TurnQueue')
-                .select('last_served_at, start_time, booking_item_id, room_id, bed_id')
+                .select('last_served_at, start_time, booking_item_id, booking_item_ids, room_id, bed_id, status')
                 .eq('employee_id', technicianCode)
                 .eq('date', today)
                 .eq('current_order_id', bookingId)
@@ -142,10 +142,12 @@ export async function GET(request: Request) {
             });
         }
 
-        // Parse multi-item IDs (1 KTV + 2 DV → booking_item_id = "id1,id2")
-        const assignedItemIds = assignedItemId 
-            ? String(assignedItemId).split(',').map(s => s.trim()).filter(Boolean)
-            : [];
+        // Parse multi-item IDs ưu tiên dùng mảng postgres (booking_item_ids), fallback về csv cũ
+        const assignedItemIds = (turnInfo?.booking_item_ids && turnInfo.booking_item_ids.length > 0) 
+            ? turnInfo.booking_item_ids 
+            : (assignedItemId 
+                ? String(assignedItemId).split(',').map(s => s.trim()).filter(Boolean)
+                : []);
         const primaryItemId = assignedItemIds[0] || assignedItemId;
 
         // 5. Fetch room-specific procedures (prep & clean checklists)
@@ -215,7 +217,7 @@ export async function PATCH(request: Request) {
         const today = new Date(vnMs).toISOString().split('T')[0];
         const { data: turnForSync } = await supabase
             .from('TurnQueue')
-            .select('id, booking_item_id, last_served_at, start_time, turns_completed')
+            .select('id, booking_item_id, booking_item_ids, last_served_at, start_time, turns_completed, status')
             .eq('employee_id', technicianCode)
             .eq('date', today)
             .eq('current_order_id', bookingId)
@@ -247,6 +249,7 @@ export async function PATCH(request: Request) {
         
         // 🔧 Xác định targetBookingItemId(s) — hỗ trợ 1 KTV nhiều DV
         let targetBookingItemId = turnForSync?.booking_item_id;
+        let targetBookingItemIds = turnForSync?.booking_item_ids || [];
         let allItemIdsForThisKTV: string[] = [];
 
         // Tìm TẤT CẢ items được gán cho KTV này trong đơn
@@ -266,7 +269,9 @@ export async function PATCH(request: Request) {
 
         // Fallback: nếu không tìm được qua technicianCodes → dùng TurnQueue hoặc item đầu tiên
         if (allItemIdsForThisKTV.length === 0) {
-            if (targetBookingItemId) {
+            if (targetBookingItemIds.length > 0) {
+                allItemIdsForThisKTV = targetBookingItemIds;
+            } else if (targetBookingItemId) {
                 allItemIdsForThisKTV = [targetBookingItemId];
             } else {
                 const { data: firstItem } = await supabase
@@ -478,7 +483,7 @@ export async function PATCH(request: Request) {
                     
                     await supabase
                         .from('TurnQueue')
-                        .update({ estimated_end_time: estEndTime })
+                        .update({ estimated_end_time: estEndTime, status: 'working' })
                         .eq('id', turnForSync.id);
                 }
             }
@@ -600,15 +605,25 @@ export async function PATCH(request: Request) {
                     let allDone = true;
                     let allFeedback = true;
 
-                    // 1. Đánh dấu segment của KTV này là đã hoàn thành/feedback
+                    // 1. Đánh dấu segment của KTV này (và đồng nghiệp làm cùng phòng/giờ) là đã hoàn thành
                     segs.forEach(seg => {
-                        if (technicianCode && seg.ktvId && seg.ktvId.toLowerCase().includes(technicianCode.toLowerCase())) {
+                        // Xác định xem segment này có thuộc về KTV hiện tại hoặc làm cùng phòng/giờ không
+                        const isMySeg = technicianCode && seg.ktvId && seg.ktvId.toLowerCase() === technicianCode.toLowerCase();
+                        
+                        // 🔥 TEAM SYNC: Nếu làm cùng phòng, cùng thời gian bắt đầu/kết thúc kế hoạch 
+                        // -> Cập nhật luôn cho đồng nghiệp để tránh kẹt đơn
+                        const isTeamSeg = seg.roomId === turnForSync?.room_id && 
+                                        seg.startTime === turnForSync?.start_time;
+
+                        if (isMySeg || isTeamSeg) {
                             if (!isFeedback && !seg.actualEndTime) seg.actualEndTime = new Date().toISOString();
-                            if (isFeedback) seg.feedbackTime = new Date().toISOString();
+                            if (isFeedback && !seg.feedbackTime) seg.feedbackTime = new Date().toISOString();
+                            // Đảm bảo có actualStartTime nếu chưa có
+                            if (!seg.actualStartTime) seg.actualStartTime = seg.startTime || new Date().toISOString();
                         }
                     });
 
-                    // 2. Kiểm tra xem TẤT CẢ segments đã hoàn thành chưa
+                    // 2. Kiểm tra xem TẤT CẢ segments đã thực sự hoàn thành chưa
                     segs.forEach(seg => {
                         if (!seg.actualEndTime) allDone = false;
                         if (!seg.feedbackTime) allFeedback = false;
@@ -647,13 +662,15 @@ export async function PATCH(request: Request) {
                     updatePayload.status = currentBooking?.rating ? 'DONE' : 'FEEDBACK';
                     if (!currentBooking?.rating) updatePayload.timeEnd = new Date().toISOString();
                 } else {
-                    console.log(`[KTV API] KTV ${technicianCode} feedback, but others still working. Skipping global FEEDBACK.`);
+                    console.log(`[KTV API] KTV ${technicianCode} feedback, but other items still working.`);
                 }
             } else {
                 if (allItemsCompleted) {
                     updatePayload.timeEnd = new Date().toISOString();
+                    updatePayload.status = 'CLEANING'; // 🔥 Tự động chuyển sang dọn phòng
+                    console.log(`[KTV API] All items completed for booking ${bookingId}. Moving to CLEANING.`);
                 } else {
-                    console.log(`[KTV API] KTV ${technicianCode} completed, but others still working. Skipping global COMPLETED.`);
+                    console.log(`[KTV API] KTV ${technicianCode} completed, but other items still working. Keep IN_PROGRESS.`);
                 }
             }
         }
@@ -674,15 +691,29 @@ export async function PATCH(request: Request) {
             if (itemErr) console.error('⚠️ [KTV API] BookingItem update error:', itemErr);
         }
 
-        const { data, error } = await supabase
-            .from('Bookings')
-            .update(updatePayload)
-            .eq('id', bookingId)
-            .select()
-            .maybeSingle();
+        let data: any = null;
+        if (Object.keys(updatePayload).length > 0) {
+            const result = await supabase
+                .from('Bookings')
+                .update(updatePayload)
+                .eq('id', bookingId)
+                .select()
+                .maybeSingle();
 
-        if (error) throw error;
-        if (!data) throw new Error('Không tìm thấy đơn hàng để cập nhật');
+            if (result.error) throw result.error;
+            if (!result.data) throw new Error('Không tìm thấy đơn hàng để cập nhật');
+            data = result.data;
+        } else {
+            const result = await supabase
+                .from('Bookings')
+                .select()
+                .eq('id', bookingId)
+                .maybeSingle();
+            
+            if (result.error) throw result.error;
+            if (!result.data) throw new Error('Không tìm thấy đơn hàng');
+            data = result.data;
+        }
 
         // 🔥 XỬ LÝ RELEASE_KTV (Giải phóng KTV độc lập với Booking status)
         if (action === 'RELEASE_KTV') {
@@ -698,6 +729,7 @@ export async function PATCH(request: Request) {
                     status: 'waiting',
                     current_order_id: null,
                     booking_item_id: null, // GIẢI PHÓNG ITEM
+                    booking_item_ids: '{}', // CLEAR ARRAY
                     room_id: null,
                     bed_id: null,
                     start_time: null,

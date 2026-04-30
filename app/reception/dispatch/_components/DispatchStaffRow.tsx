@@ -260,7 +260,9 @@ export const DispatchStaffRow = ({
                                                                 ? <span className="text-rose-500">🚫 Đã gán dịch vụ khác</span> 
                                                                 : (turn.status === 'working' 
                                                                     ? <span className="text-amber-500">⌛ Đang làm đến {turn.estimated_end_time || '--:--'}</span> 
-                                                                    : <span className="text-emerald-500">✅ Sẵn sàng</span>
+                                                                    : turn.status === 'assigned'
+                                                                        ? <span className="text-indigo-500">🔒 Đã xếp lịch</span>
+                                                                        : <span className="text-emerald-500">✅ Sẵn sàng</span>
                                                                 )
                                                             }
                                                             {!hasSkill && <span className="text-gray-400 font-medium">(Chưa có kỹ năng)</span>}

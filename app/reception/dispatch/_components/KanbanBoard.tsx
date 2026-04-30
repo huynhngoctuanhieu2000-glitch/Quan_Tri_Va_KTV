@@ -37,7 +37,7 @@ const formatToHourMinute = (isoString?: string | null) => {
 
 interface KanbanBoardProps {
     orders: PendingOrder[];
-    onUpdateStatus: (orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean) => void;
+    onUpdateStatus: (orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean, targetKtvIds?: string[]) => void;
     onOpenDetail: (orderId: string) => void;
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
@@ -254,7 +254,11 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                          
                          // 🔧 FIX: Truyền itemIds cụ thể → CHỈ update items của subOrder này
                          const itemIds = subOrder.services.map(s => s.id);
-                         onUpdateStatus(subOrder.bookingId, 'COMPLETED', itemIds, true); // skipConfirm = true
+                         let targetKtvIds: string[] | undefined = undefined;
+                         if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
+                             targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                         }
+                         onUpdateStatus(subOrder.bookingId, 'COMPLETED', itemIds, true, targetKtvIds); // skipConfirm = true
                     }
                 }
             });
@@ -281,8 +285,12 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                 if (draggedSubOrder) {
                                     const itemIds = draggedSubOrder.services.map(s => s.id);
                                     let newStatus = column.id;
+                                    let targetKtvIds: string[] | undefined = undefined;
+                                    if (draggedSubOrder.ktvSignature && draggedSubOrder.ktvSignature !== 'unassigned_unknown_time') {
+                                        targetKtvIds = draggedSubOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                                    }
                                     // if column is 'COMPLETED', use 'COMPLETED'
-                                    onUpdateStatus(draggedSubOrder.bookingId, newStatus, itemIds);
+                                    onUpdateStatus(draggedSubOrder.bookingId, newStatus, itemIds, false, targetKtvIds);
                                 }
                                 setDraggedSubOrderId(null);
                             }
@@ -545,7 +553,11 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                     onClick={e => { 
                                                                         e.stopPropagation(); 
                                                                         const itemIds = services.map((s: any) => s.id);
-                                                                        onUpdateStatus(order.id, currentCfg.next!, itemIds); 
+                                                                        let targetKtvIds: string[] | undefined = undefined;
+                                                                        if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
+                                                                            targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                                                                        }
+                                                                        onUpdateStatus(order.id, currentCfg.next!, itemIds, false, targetKtvIds); 
                                                                     }}
                                                                     className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${currentCfg.activeBg || 'bg-indigo-600'} text-white hover:opacity-90 active:scale-95`}
                                                                 >

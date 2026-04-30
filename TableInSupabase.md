@@ -118,18 +118,36 @@
 | `date` | date | Ngày làm việc (default: hôm nay) |
 | `queue_position` | integer | Vị trí trong hàng đợi — thấp hơn = ưu tiên hơn |
 | `check_in_order` | integer | Thứ tự điểm danh |
-| `status` | text | Trạng thái: `waiting` (chờ) → `working` (đang làm) → `off` (tan ca) |
+| `status` | text | Trạng thái: `waiting` (chờ) → `assigned` (đã điều phối) → `working` (đang làm) → `off` (tan ca) |
 | `turns_completed` | integer | Số tua đã hoàn thành trong ngày |
 | `current_order_id` | text | ID đơn hàng đang phục vụ |
 | `estimated_end_time` | time | Giờ kết thúc dự kiến đơn hiện tại |
 | `last_served_at` | timestamptz | Thời điểm phục vụ lần cuối |
 | `start_time` | time | Giờ bắt đầu ca |
-| `booking_item_id` | text | ID BookingItem đang phục vụ |
+| `booking_item_id` | text | ID BookingItem đang phục vụ (Cũ/Tương thích ngược) |
+| `booking_item_ids` | text[] | Mảng ID các BookingItems đang phục vụ (Hỗ trợ đa dịch vụ) |
 | `room_id` | text | Phòng đang phục vụ |
 | `bed_id` | text | Giường đang phục vụ |
 | `created_at` | timestamptz | Thời điểm tạo |
 
 **Constraint**: `UNIQUE(employee_id, date)` — mỗi KTV chỉ 1 record/ngày
+
+---
+
+### 4.5. TurnLedger ✅ CHỦ LỰC
+**Nhiệm vụ**: Sổ cái ghi nhận tua KTV. Tách biệt hoàn toàn việc tính tua khỏi `TurnQueue`.
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `date` | date | Ngày tính tua |
+| `booking_id` | text | Mã đơn hàng |
+| `employee_id` | text | Mã KTV nhận tua |
+| `counted_at` | timestamptz | Thời điểm ghi nhận tua |
+| `source` | text | Nguồn (VD: 'DISPATCH_CONFIRM') |
+| `created_at` | timestamptz | Thời điểm tạo |
+
+**Constraint**: `UNIQUE(date, booking_id, employee_id)` — Idempotency: Mỗi KTV trong 1 bill chỉ được tính đúng 1 tua.
 
 ---
 
@@ -210,6 +228,19 @@
 | `description` | text | Mô tả cấu hình |
 | `created_at` | timestamptz | Thời điểm tạo |
 | `updated_at` | timestamptz | Thời điểm cập nhật |
+
+---
+
+### 8.5. Reminders ✅ CHỦ LỰC
+**Nhiệm vụ**: Lưu trữ danh sách các câu nhắc nhở trên giao diện Spa (như nhắc khách tắt thiết bị, kiểm tra nước nóng...).
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `content` | text | Nội dung câu nhắc nhở |
+| `is_active` | boolean | Trạng thái hiển thị (ẩn/hiện) |
+| `order_index` | integer | Thứ tự sắp xếp khi hiển thị |
+| `created_at` | timestamptz | Thời điểm tạo |
 
 ---
 

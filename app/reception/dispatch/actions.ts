@@ -180,9 +180,9 @@ export async function getDispatchData(date: string) {
 
 export async function processDispatch(bookingId: string, dispatchData: {
     status: string;
-    technicianCode: string | null;
-    bedId: string | null;
-    roomName: string | null;
+    technicianCode?: string | null;
+    bedId?: string | null;
+    roomName?: string | null;
     staffAssignments: any[];
     date: string;
     notes?: string;
@@ -200,63 +200,27 @@ export async function processDispatch(bookingId: string, dispatchData: {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        // 1. Update TurnQueue for each assigned staff
-        for (const assignment of dispatchData.staffAssignments) {
-            const { error: tError } = await supabase
-                .from('TurnQueue')
-                .update({
-                    current_order_id: bookingId,
-                    booking_item_id: assignment.bookingItemId, 
-                    room_id: assignment.roomId, // Lưu phòng gán cho KTV này
-                    bed_id: assignment.bedId, // Lưu giường gán cho KTV này
-                    turns_completed: assignment.turnsCompleted,
-                    queue_position: assignment.queuePos,
-                    start_time: assignment.startTime,
-                    estimated_end_time: assignment.endTime,
-                    last_served_at: new Date().toISOString()
-                })
-                .eq('employee_id', assignment.ktvId)
-                .eq('date', dispatchData.date);
+        // GỌI RPC MỚI ĐỂ THỰC THI TOÀN BỘ TRANSACTION
+        const { data, error } = await supabase.rpc('dispatch_confirm_booking', {
+            p_booking_id: bookingId,
+            p_date: dispatchData.date,
+            p_status: dispatchData.status || 'PREPARING',
+            p_technician_code: dispatchData.technicianCode,
+            p_bed_id: dispatchData.bedId,
+            p_room_name: dispatchData.roomName,
+            p_notes: dispatchData.notes,
+            p_staff_assignments: dispatchData.staffAssignments || [],
+            p_item_updates: dispatchData.itemUpdates || []
+        });
 
-            if (tError) {
-                console.error('❌ [Server] TurnQueue update error:', tError);
-                throw tError;
-            }
+        if (error) {
+            console.error('❌ [Server] RPC dispatch_confirm_booking error:', error);
+            throw error;
         }
 
-        // 2. Update Booking (Dữ liệu tổng quát cho Bill)
-        const { error: bError } = await supabase
-            .from('Bookings')
-            .update({
-                status: dispatchData.status || 'PREPARING',
-                technicianCode: dispatchData.technicianCode,
-                bedId: dispatchData.bedId,
-                roomName: dispatchData.roomName,
-                notes: dispatchData.notes,
-                updatedAt: new Date().toISOString()
-            })
-            .eq('id', bookingId);
-
-        if (bError) {
-            console.error('❌ [Server] Booking update error:', bError);
-            throw bError;
-        }
-
-        // 3. Update BookingItems (Dữ liệu chi tiết từng dịch vụ)
-        if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
-            for (const item of dispatchData.itemUpdates) {
-                await supabase
-                    .from('BookingItems')
-                    .update({ 
-                        roomName: item.roomName,
-                        bedId: item.bedId,
-                        technicianCodes: item.technicianCodes || [],
-                        status: item.status || 'PREPARING',
-                        segments: item.segments || [],
-                        options: item.options 
-                    })
-                    .eq('id', item.id);
-            }
+        if (data && !data.success) {
+            console.error('❌ [Server] RPC failed internally:', data.error);
+            throw new Error(data.error || 'Lỗi khi lưu dữ liệu điều phối');
         }
 
         // 4. Send background push and realtime notification to KTVs
@@ -386,13 +350,38 @@ export async function cancelBooking(bookingId: string, date: string) {
             
         if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
 
-        // 2. Giải phóng KTV trong TurnQueue nếu đang gán cho đơn này
+        // 2. Lấy thông tin trạng thái KTV trước khi giải phóng để quyết định có xóa Ledger không
+        const { data: currentTurns } = await supabase
+            .from('TurnQueue')
+            .select('employee_id, status')
+            .eq('current_order_id', bookingId)
+            .eq('date', date);
+
+        if (currentTurns && currentTurns.length > 0) {
+            for (const turn of currentTurns) {
+                // Nếu đã bắt đầu làm (working) mà bị hủy -> Mất lượt tua (Xóa Ledger)
+                if (turn.status === 'working') {
+                    console.log(`⚠️ KTV ${turn.employee_id} mất tua do hủy đơn sau khi đã bắt đầu.`);
+                    await supabase
+                        .from('TurnLedger')
+                        .delete()
+                        .eq('date', date)
+                        .eq('booking_id', bookingId)
+                        .eq('employee_id', turn.employee_id);
+                } else {
+                    console.log(`✅ KTV ${turn.employee_id} được giữ tua do hủy đơn trước khi bắt đầu.`);
+                }
+            }
+        }
+
+        // 3. Giải phóng KTV trong TurnQueue
         const { error: tError } = await supabase
             .from('TurnQueue')
             .update({
                 status: 'waiting',
                 current_order_id: null,
                 booking_item_id: null,
+                booking_item_ids: '{}',
                 room_id: null,
                 bed_id: null,
                 start_time: null,
@@ -493,7 +482,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
                 .eq('current_order_id', bookingId)
                 .eq('date', date)
-                .in('status', ['waiting', 'working']);
+                .in('status', ['waiting', 'assigned', 'working']);
             if (tError) console.error('❌ [Server] TurnQueue start error:', tError);
         }
 
@@ -512,29 +501,36 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 // Lấy tất cả KTV đang làm đơn hàng này
                 const { data: turnsToRelease } = await supabase
                     .from('TurnQueue')
-                    .select('id, turns_completed, status')
+                    .select('id, employee_id, turns_completed, status')
                     .eq('current_order_id', bookingId)
                     .eq('date', date);
 
                 if (turnsToRelease && turnsToRelease.length > 0) {
                     for (const turn of turnsToRelease) {
-                        let newTurnsCompleted = turn.turns_completed || 0;
+                        // Nếu hủy đơn khi đã bắt đầu làm (working) -> Xóa bản ghi TurnLedger (mất tua)
+                        if (newStatus === 'CANCELLED' && turn.status === 'working') {
+                            console.log(`⚠️ KTV ${turn.id} mất tua do hủy đơn (status working).`);
+                            await supabase
+                                .from('TurnLedger')
+                                .delete()
+                                .eq('date', date)
+                                .eq('booking_id', bookingId)
+                                .eq('employee_id', turn.employee_id || ''); // Cần check employee_id
+                        }
 
-                        const { error: tError } = await supabase
+                        let newTurnsCompleted = turn.turns_completed || 0;
+                        await supabase
                             .from('TurnQueue')
                             .update({
                                 status: 'waiting',
                                 current_order_id: null,
                                 booking_item_id: null,
+                                booking_item_ids: '{}',
                                 start_time: null,
                                 estimated_end_time: null,
                                 turns_completed: newTurnsCompleted
                             })
                             .eq('id', turn.id);
-
-                        if (tError) {
-                            console.error('❌ [Server] TurnQueue cleanup error:', tError);
-                        }
                     }
                 }
             } else {
@@ -552,7 +548,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
     }
 }
 
-export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string) {
+export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string, targetKtvIds?: string[]) {
     try {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
@@ -598,23 +594,34 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             }
 
             // Cập nhật TurnQueue thành working
-            await supabase
+            let query = supabase
                 .from('TurnQueue')
                 .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
                 .eq('current_order_id', bookingId)
                 .in('booking_item_id', itemIds)
                 .eq('date', date)
                 .in('status', ['waiting', 'working']);
+                
+            if (targetKtvIds && targetKtvIds.length > 0) {
+                query = query.in('employee_id', targetKtvIds);
+            }
+            await query;
         }
 
         if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
             // Lấy tất cả KTV đang làm các item này
-            const { data: turnsToRelease } = await supabase
+            let queryToRelease = supabase
                 .from('TurnQueue')
                 .select('id, turns_completed, status')
                 .eq('current_order_id', bookingId)
                 .in('booking_item_id', itemIds)
                 .eq('date', date);
+                
+            if (targetKtvIds && targetKtvIds.length > 0) {
+                queryToRelease = queryToRelease.in('employee_id', targetKtvIds);
+            }
+
+            const { data: turnsToRelease } = await queryToRelease;
 
             if (turnsToRelease && turnsToRelease.length > 0) {
                 for (const turn of turnsToRelease) {
@@ -625,6 +632,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                             status: 'waiting',
                             current_order_id: null,
                             booking_item_id: null,
+                            booking_item_ids: '{}',
                             start_time: null,
                             estimated_end_time: null,
                             turns_completed: newTurnsCompleted
@@ -861,6 +869,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                         : [];
                     const mergedItemIds = [...new Set([...existingItemIds, ...newItemIds])];
                     updateData.booking_item_id = mergedItemIds.join(',');
+                    updateData.booking_item_ids = mergedItemIds;
 
                     await supabase
                         .from('TurnQueue')
@@ -1006,13 +1015,14 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
                 status: 'waiting',
                 current_order_id: null,
                 booking_item_id: null,
+                booking_item_ids: '{}',
                 room_id: null,
                 bed_id: null,
                 start_time: null,
                 estimated_end_time: null
             })
             .eq('current_order_id', bookingId)
-            .like('booking_item_id', `%${itemId}%`);
+            .contains('booking_item_ids', [itemId]);
             
         return { success: true, newTotalAmount };
     } catch (error: any) {
