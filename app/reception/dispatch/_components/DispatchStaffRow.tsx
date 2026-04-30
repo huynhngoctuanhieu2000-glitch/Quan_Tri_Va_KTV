@@ -459,12 +459,12 @@ export const DispatchStaffRow = ({
                                                         handleChange({ noteForKtv: parts.join(' - ') });
                                                     } else {
                                                         // Thêm nhắc nhở
-                                                        const newNote = currentNote ? `\${currentNote} - \${rm.content}` : rm.content;
+                                                        const newNote = currentNote ? `${currentNote} - ${rm.content}` : rm.content;
                                                         handleChange({ noteForKtv: newNote });
                                                     }
                                                 }}
                                                 className={`w-full text-left px-3 py-2.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-between group
-                                                    \${isSelected ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-indigo-50 text-gray-700 hover:text-indigo-700'}
+                                                    ${isSelected ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-indigo-50 text-gray-700 hover:text-indigo-700'}
                                                 `}
                                             >
                                                 <span className="flex-1 pr-2">{rm.content}</span>

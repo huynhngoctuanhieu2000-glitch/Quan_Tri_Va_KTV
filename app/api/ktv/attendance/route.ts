@@ -243,47 +243,39 @@ export async function POST(request: Request) {
                 }
 
                 if (staffCode) {
-                    // 🔹 Insert into TurnQueue (using staffCode)
-                    const { data: existingTurn } = await supabase
+                    // 🔹 UPSERT into TurnQueue (using staffCode)
+                    const { data: maxPosRow } = await supabase
                         .from('TurnQueue')
-                        .select('id')
-                        .eq('employee_id', staffCode)
+                        .select('queue_position')
                         .eq('date', today)
+                        .order('queue_position', { ascending: false })
+                        .limit(1)
                         .maybeSingle();
 
-                    if (!existingTurn) {
-                        const { data: maxPosRow } = await supabase
-                            .from('TurnQueue')
-                            .select('queue_position')
-                            .eq('date', today)
-                            .order('queue_position', { ascending: false })
-                            .limit(1)
-                            .maybeSingle();
+                    const { data: maxCheckInRow } = await supabase
+                        .from('TurnQueue')
+                        .select('check_in_order')
+                        .eq('date', today)
+                        .order('check_in_order', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
 
-                        const { data: maxCheckInRow } = await supabase
-                            .from('TurnQueue')
-                            .select('check_in_order')
-                            .eq('date', today)
-                            .order('check_in_order', { ascending: false })
-                            .limit(1)
-                            .maybeSingle();
+                    const nextPosition = (maxPosRow?.queue_position ?? 0) + 1;
+                    const nextCheckIn = (maxCheckInRow?.check_in_order ?? 0) + 1;
 
-                        const nextPosition = (maxPosRow?.queue_position ?? 0) + 1;
-                        const nextCheckIn = (maxCheckInRow?.check_in_order ?? 0) + 1;
+                    const { error: turnQueueError } = await supabase
+                        .from('TurnQueue')
+                        .upsert({
+                            employee_id: staffCode,
+                            date: today,
+                            queue_position: nextPosition,
+                            check_in_order: nextCheckIn,
+                            status: 'waiting',
+                            turns_completed: 0,
+                        }, { onConflict: 'employee_id,date' });
 
-                        const { error: turnQueueError } = await supabase
-                            .from('TurnQueue')
-                            .insert({
-                                employee_id: staffCode,
-                                date: today,
-                                queue_position: nextPosition,
-                                check_in_order: nextCheckIn,
-                                status: 'waiting',
-                                turns_completed: 0,
-                            });
-                        if (turnQueueError) {
-                             console.error('❌ [TurnQueue Insert Error]:', turnQueueError);
-                        }
+                    if (turnQueueError) {
+                         console.error('❌ [TurnQueue Upsert Error]:', turnQueueError);
                     }
                 } else {
                     console.error('❌ [TurnQueue Error]: staffCode is null for user ID:', employeeId);
@@ -296,9 +288,11 @@ export async function POST(request: Request) {
                     // 🔸 Set status = off trong TurnQueue (hiển thị mờ ở cuối danh sách)
                     await supabase
                         .from('TurnQueue')
-                        .update({ status: 'off' })
-                        .eq('employee_id', staffCode)
-                        .eq('date', today);
+                        .upsert({ 
+                            employee_id: staffCode, 
+                            date: today, 
+                            status: 'off' 
+                        }, { onConflict: 'employee_id,date' });
                 }
             }
         }

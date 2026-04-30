@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 
 // 🔧 CONFIG
 const COMPLETED_STATUSES = ['COMPLETED', 'DONE', 'FEEDBACK'];
+const KTV_RANKING_STATUSES = ['PREPARING', 'IN_PROGRESS', 'CLEANING', 'DONE', 'COMPLETED', 'FEEDBACK'];
 const OPERATING_HOURS_PER_DAY = 12; // Spa mở cửa 12h/ngày
 
 /**
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
             'vi': ['vi', 'vn'], 'ko': ['ko', 'kr'], 'zh': ['zh', 'cn'],
             'en': ['en'], 'jp': ['jp', 'ja'],
         };
-        let completedBookings = allBookings;
+        let completedBookings = allBookings || [];
         if (lang && lang !== 'all') {
             const aliases = Object.entries(LANG_ALIASES).find(([, v]) => v.includes(lang.toLowerCase()));
             const matchLangs = aliases ? aliases[1] : [lang.toLowerCase()];
@@ -76,24 +77,36 @@ export async function GET(request: Request) {
             });
         }
 
-        // ─── 2. Fetch BookingItems for these bookings ────────────────────
-        const bookingIds = completedBookings.map(b => b.id);
-        let items: any[] = [];
-        if (bookingIds.length > 0) {
-            // Supabase limit 100 items per IN clause, batch if needed
+        // ─── 2. Fetch all items for KTV Ranking (Real-time) ────────────
+        const { data: allRankedBookings } = await supabase
+            .from('Bookings')
+            .select('id, technicianCode, totalAmount, status')
+            .in('status', KTV_RANKING_STATUSES)
+            .gte('bookingDate', `${dateFrom} 00:00:00`)
+            .lte('bookingDate', `${dateTo} 23:59:59`);
+
+        const allRankedBookingIds = (allRankedBookings || []).map(b => b.id);
+        let allItems: any[] = [];
+        
+        if (allRankedBookingIds.length > 0) {
             const batchSize = 50;
-            for (let i = 0; i < bookingIds.length; i += batchSize) {
-                const batch = bookingIds.slice(i, i + batchSize);
+            for (let i = 0; i < allRankedBookingIds.length; i += batchSize) {
+                const batch = allRankedBookingIds.slice(i, i + batchSize);
                 const { data: batchItems } = await supabase
                     .from('BookingItems')
                     .select('id, bookingId, serviceId, price, tip, itemRating, technicianCodes, roomName, quantity, segments')
                     .in('bookingId', batch);
-                if (batchItems) items.push(...batchItems);
+                if (batchItems) allItems.push(...batchItems);
             }
         }
 
+        // Items for revenue (filtered by completed bookings)
+        const items = allItems.filter(item => 
+            completedBookings.some(cb => cb.id === item.bookingId)
+        );
+
         // ─── 3. Fetch Services for names ─────────────────────────────────
-        const serviceIds = [...new Set(items.map(i => i.serviceId).filter(Boolean))];
+        const serviceIds = [...new Set(allItems.map(i => i.serviceId).filter(Boolean))];
         const svcMap: Record<string, string> = {};
         if (serviceIds.length > 0) {
             const { data: svcs } = await supabase
@@ -352,9 +365,9 @@ export async function GET(request: Request) {
         const serviceBreakdown = Object.values(svcBreakdown)
             .sort((a, b) => b.revenue - a.revenue);
 
-        // ─── 10. Top KTV ─────────────────────────────────────────────────
+        // ─── 10. Top KTV (Real-time based on KTV_RANKING_STATUSES) ─────────
         const ktvMap: Record<string, { code: string; orders: number; revenue: number; commission: number; totalTip: number; ratingSum: number; ratingCount: number }> = {};
-        completedBookings.forEach(b => {
+        (allRankedBookings || []).forEach(b => {
             if (!b.technicianCode) return;
             const codes = b.technicianCode.split(',').map((c: string) => c.trim()).filter(Boolean);
             const share = codes.length > 0 ? (Number(b.totalAmount) || 0) / codes.length : 0;
@@ -364,8 +377,8 @@ export async function GET(request: Request) {
                 ktvMap[code].revenue += share;
             });
         });
-        // Calculate commission + tip + rating per KTV from their BookingItems
-        items.forEach(i => {
+        // Calculate commission + tip + rating per KTV from ALL relevant items
+        (allItems || []).forEach(i => {
             const techs = Array.isArray(i.technicianCodes) ? i.technicianCodes : [];
             if (techs.length === 0) return;
             

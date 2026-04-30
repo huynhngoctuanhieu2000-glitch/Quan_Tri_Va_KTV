@@ -23,23 +23,24 @@ export async function syncTurnsForDate(date: string) {
         });
 
         // 2. Cập nhật vào TurnQueue
-        // Lấy tất cả KTV đang có trong TurnQueue ngày hôm nay
-        const { data: queues, error: qError } = await supabase
-            .from('TurnQueue')
-            .select('id, employee_id, turns_completed')
-            .eq('date', date);
+        // Cập nhật lại số tua cho tất cả những người có trong Ledger của ngày này
+        const employeeIds = Object.keys(turnsCount);
+        if (employeeIds.length > 0) {
+            for (const empId of employeeIds) {
+                const actualCount = turnsCount[empId];
+                
+                const { error: upsertError } = await supabase
+                    .from('TurnQueue')
+                    .upsert({
+                        employee_id: empId,
+                        date: date,
+                        turns_completed: actualCount,
+                        // Nếu là chèn mới, mặc định là 'waiting' hoặc 'off' tùy context
+                        // Ở đây ta giữ nguyên status cũ nếu có, hoặc để 'waiting' nếu mới
+                    }, { onConflict: 'employee_id,date' });
 
-        if (qError) throw qError;
-
-        // Cập nhật lại số tua cho những người có sự thay đổi
-        if (queues && queues.length > 0) {
-            for (const q of queues) {
-                const actualCount = turnsCount[q.employee_id] || 0;
-                if (q.turns_completed !== actualCount) {
-                    await supabase
-                        .from('TurnQueue')
-                        .update({ turns_completed: actualCount })
-                        .eq('id', q.id);
+                if (upsertError) {
+                    console.error(`[Sync] Upsert failed for ${empId}:`, upsertError.message);
                 }
             }
         }

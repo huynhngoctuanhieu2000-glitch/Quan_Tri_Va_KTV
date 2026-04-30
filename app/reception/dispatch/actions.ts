@@ -298,12 +298,16 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
         // 2. Update BookingItems (Dữ liệu chi tiết từng dịch vụ, không đổi status)
         if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
             for (const item of dispatchData.itemUpdates) {
+                const technicianCodes = Array.isArray(item.technicianCodes) 
+                    ? item.technicianCodes 
+                    : (typeof item.technicianCodes === 'string' ? item.technicianCodes.split(',').map(c => c.trim()).filter(Boolean) : []);
+                
                 await supabase
                     .from('BookingItems')
                     .update({ 
                         roomName: item.roomName,
                         bedId: item.bedId,
-                        technicianCodes: item.technicianCodes || [],
+                        technicianCodes: technicianCodes,
                         segments: item.segments || [],
                         options: item.options 
                     })
@@ -352,18 +356,11 @@ export async function cancelBooking(bookingId: string, date: string) {
             
         if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
 
-        // 2. Lấy thông tin trạng thái KTV trước khi giải phóng để quyết định có xóa Ledger không
-        const { data: currentTurns } = await supabase
-            .from('TurnQueue')
-            .select('employee_id, status')
-            .eq('current_order_id', bookingId)
-            .eq('date', date);
-
         if (currentTurns && currentTurns.length > 0) {
             for (const turn of currentTurns) {
-                // Nếu đã bắt đầu làm (working) mà bị hủy -> Mất lượt tua (Xóa Ledger)
-                if (turn.status === 'working') {
-                    console.log(`⚠️ KTV ${turn.employee_id} mất tua do hủy đơn sau khi đã bắt đầu.`);
+                // ✅ Nếu CHƯA bắt đầu (assigned) mà bị hủy -> Xóa Ledger để giải phóng lượt tua cho KTV
+                if (turn.status === 'assigned' || turn.status === 'ready' || turn.status === 'waiting') {
+                    console.log(`✅ KTV ${turn.employee_id} được hoàn lượt tua do hủy đơn TRƯỚC KHI bắt đầu.`);
                     await supabase
                         .from('TurnLedger')
                         .delete()
@@ -371,7 +368,8 @@ export async function cancelBooking(bookingId: string, date: string) {
                         .eq('booking_id', bookingId)
                         .eq('employee_id', turn.employee_id);
                 } else {
-                    console.log(`✅ KTV ${turn.employee_id} được giữ tua do hủy đơn trước khi bắt đầu.`);
+                    // ⚠️ Nếu đã đang làm (working) mà bị hủy -> GIỮ Ledger để tính tua/tiền cho KTV
+                    console.log(`⚠️ KTV ${turn.employee_id} giữ nguyên lượt tua do hủy đơn KHI ĐANG LÀM.`);
                 }
             }
         }
@@ -806,6 +804,10 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
         const nextIndex = (currentItemCount || 0) + 1;
 
         const timestamp = Date.now();
+        const techIds = booking.technicianCode 
+            ? booking.technicianCode.split(',').map((id: string) => id.trim()).filter(Boolean)
+            : [];
+
         const itemsToInsert = detailedItems.map((item, index) => {
             return {
                 id: `${bookingId}-addon-${timestamp}-${index}`,
@@ -814,7 +816,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                 quantity: item.qty,
                 price: item.priceOriginal,
                 status: 'WAITING',
-                technicianCodes: [booking.technicianCode].filter(Boolean),
+                technicianCodes: techIds,
                 options: { isAddon: true, isPaid: false }
             };
         });
