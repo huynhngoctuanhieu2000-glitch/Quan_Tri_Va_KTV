@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, date, dates, reason } = body;
+        const { employeeId, employeeName, date, dates, reason, confirmExtension, confirmSuddenOff } = body;
 
         const targetDates = dates || (date ? [date] : []);
 
@@ -110,13 +110,101 @@ export async function POST(request: Request) {
             );
         }
 
+        // --- Bắt đầu xử lý Extension (Gia hạn) ---
+        // Sắp xếp ngày tăng dần để tìm ngày sớm nhất
+        validDates.sort();
+        const firstTargetDate = validDates[0];
+        
+        // Tìm ngày liền trước ngày đăng ký sớm nhất
+        const firstTargetDateObj = new Date(firstTargetDate);
+        firstTargetDateObj.setDate(firstTargetDateObj.getDate() - 1);
+        const dayBeforeStr = firstTargetDateObj.toISOString().split('T')[0];
+
+        // Xem ngày liền trước KTV có đang OFF không
+        const { data: previousLeave } = await supabase
+            .from('KTVLeaveRequests')
+            .select('id')
+            .eq('employeeId', employeeId)
+            .eq('date', dayBeforeStr)
+            .neq('status', 'REJECTED')
+            .maybeSingle();
+
+        const isExtension = !!previousLeave;
+        let isSuddenOff = false;
+
+        if (isExtension) {
+            // Lấy config số lần tối đa
+            const { data: config } = await supabase
+                .from('SystemConfigs')
+                .select('value')
+                .eq('key', 'max_leave_extensions_per_month')
+                .maybeSingle();
+            
+            const maxExtensions = config && config.value ? Number(config.value) : 1;
+
+            // Đếm số lần gia hạn trong tháng này của KTV
+            // Lấy tất cả createdAt để đếm số "lần" (cùng 1 lần submit nhiều ngày sẽ chung 1 createdAt)
+            const currentMonthPrefix = firstTargetDate.substring(0, 7); // YYYY-MM
+            const { data: extRecords, error: countErr } = await supabase
+                .from('KTVLeaveRequests')
+                .select('createdAt')
+                .eq('employeeId', employeeId)
+                .eq('is_extension', true)
+                .gte('date', `${currentMonthPrefix}-01`)
+                .lte('date', `${currentMonthPrefix}-31`)
+                .neq('status', 'REJECTED');
+
+            // Count số lần (số request gia hạn khác nhau)
+            const uniqueTimestamps = new Set((extRecords || []).map(r => r.createdAt));
+            const usedExtensions = uniqueTimestamps.size;
+            const remainingExtensions = maxExtensions - usedExtensions;
+
+            if (confirmSuddenOff) {
+                // Đã confirm Nghỉ đột xuất -> Cho qua
+                isSuddenOff = true;
+            } else if (confirmExtension) {
+                // Đã confirm gia hạn -> Kiểm tra xem có ăn gian gởi thẳng API không
+                if (remainingExtensions <= 0) {
+                    return NextResponse.json({ 
+                        success: false, 
+                        requireConfirmation: true,
+                        type: 'SUDDEN_OFF_WARNING',
+                        message: `Bạn đã hết lượt gia hạn trong tháng (${usedExtensions}/${maxExtensions}). Nếu tiếp tục, ngày nghỉ này sẽ bị tính là Nghỉ Đột Xuất.`,
+                        remaining: 0
+                    });
+                }
+            } else {
+                // Chưa confirm -> Báo về Frontend yêu cầu confirm
+                if (remainingExtensions > 0) {
+                    return NextResponse.json({ 
+                        success: false, 
+                        requireConfirmation: true,
+                        type: 'EXTENSION_WARNING',
+                        message: `Bạn đang đăng ký gia hạn ngày nghỉ. Số lượt gia hạn còn lại trong tháng là: ${remainingExtensions} lần.`,
+                        remaining: remainingExtensions
+                    });
+                } else {
+                    return NextResponse.json({ 
+                        success: false, 
+                        requireConfirmation: true,
+                        type: 'SUDDEN_OFF_WARNING',
+                        message: `Bạn đã hết lượt gia hạn trong tháng (${usedExtensions}/${maxExtensions}). Nếu tiếp tục, ngày nghỉ này sẽ bị tính là Nghỉ Đột Xuất.`,
+                        remaining: 0
+                    });
+                }
+            }
+        }
+        // --- Kết thúc xử lý Extension ---
+
         // Insert valid requests (Auto-approved)
         const insertPayloads = validDates.map(d => ({
             employeeId,
             employeeName: employeeName || employeeId,
             date: d,
             reason,
-            status: 'APPROVED'
+            status: 'APPROVED',
+            is_extension: isExtension,
+            is_sudden_off: isSuddenOff
         }));
 
         const { data: records, error: insertError } = await supabase
@@ -130,10 +218,16 @@ export async function POST(request: Request) {
         }
 
         // Send notification
-        const notifMessage = `📋 ${employeeName || employeeId} đăng ký OFF ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
+        let notifMessage = `📋 ${employeeName || employeeId} đăng ký OFF ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
+        if (isSuddenOff) {
+            notifMessage = `⚠️ [KỶ LUẬT] ${employeeName || employeeId} đăng ký NGHỈ ĐỘT XUẤT ${validDates.length} ngày (${validDates.join(', ')}) do hết lượt gia hạn! (Lý do: ${reason})`;
+        } else if (isExtension) {
+            notifMessage = `📋 ${employeeName || employeeId} GIA HẠN nghỉ thêm ${validDates.length} ngày (${validDates.join(', ')}) (Lý do: ${reason})`;
+        }
+
         const { error: notifError } = await supabase
             .from('StaffNotifications')
-            .insert({ type: 'CHECK_IN', message: notifMessage });
+            .insert({ type: isSuddenOff ? 'SOS' : 'CHECK_IN', message: notifMessage });
 
         if (notifError) console.error('❌ [Leave] StaffNotifications insert FAILED:', notifError);
 

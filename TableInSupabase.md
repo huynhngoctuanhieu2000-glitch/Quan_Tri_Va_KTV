@@ -223,7 +223,7 @@
 | Cột | Kiểu | Mô tả chức năng |
 |-----|------|-----------------|
 | `id` | uuid PK | ID tự sinh |
-| `key` | text UNIQUE | Tên cấu hình (VD: `turn_rate_per_60min`, `milestones`, `prep_time_default`) |
+| `key` | text UNIQUE | Tên cấu hình (VD: `turn_rate_per_60min`, `max_leave_extensions_per_month`) |
 | `value` | jsonb | Giá trị cấu hình (linh hoạt kiểu dữ liệu) |
 | `description` | text | Mô tả cấu hình |
 | `created_at` | timestamptz | Thời điểm tạo |

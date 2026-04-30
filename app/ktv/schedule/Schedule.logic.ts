@@ -58,6 +58,9 @@ export const useKTVSchedule = () => {
         const now = new Date();
         return { year: now.getFullYear(), month: now.getMonth() }; // 0-indexed
     });
+    
+    // Warning confirmation state
+    const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean, type: string, message: string, remaining: number } | null>(null);
 
     // ── Shift state ──
     const [currentShift, setCurrentShift] = useState<ShiftRecord | null>(null);
@@ -158,7 +161,7 @@ export const useKTVSchedule = () => {
     };
 
     // ── Submit OFF request ──
-    const handleSubmitOff = async () => {
+    const handleSubmitOff = async (isConfirming?: 'extension' | 'sudden_off') => {
         if (selectedDates.length === 0 || !user?.id) return;
 
         setIsSubmittingOff(true);
@@ -166,24 +169,39 @@ export const useKTVSchedule = () => {
         setOffSuccess(false);
 
         try {
+            const payload: any = {
+                employeeId: user.id,
+                employeeName: user.name || user.id,
+                dates: selectedDates,
+                reason: 'Xin nghỉ',
+            };
+            if (isConfirming === 'extension') payload.confirmExtension = true;
+            if (isConfirming === 'sudden_off') payload.confirmSuddenOff = true;
+
             const res = await fetch('/api/ktv/leave', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    employeeId: user.id,
-                    employeeName: user.name || user.id,
-                    dates: selectedDates,
-                    reason: 'Xin nghỉ',
-                }),
+                body: JSON.stringify(payload),
             });
 
             const result = await res.json();
 
-            if (!result.success) {
-                setOffError(result.error || 'Lỗi gửi yêu cầu');
+            if (result.requireConfirmation) {
+                setConfirmDialog({
+                    isOpen: true,
+                    type: result.type,
+                    message: result.message,
+                    remaining: result.remaining
+                });
                 return;
             }
 
+            if (!result.success) {
+                setOffError(result.error || result.message || 'Lỗi gửi yêu cầu');
+                return;
+            }
+
+            setConfirmDialog(null);
             setOffSuccess(true);
             setSelectedDates([]);
             fetchLeaveList();
@@ -259,6 +277,8 @@ export const useKTVSchedule = () => {
         setOffSuccess,
         setOffError,
         handleSubmitOff,
+        confirmDialog,
+        setConfirmDialog,
 
         // Calendar
         calendarMonth,

@@ -489,29 +489,21 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
             setIsTimerRunning(true);
         }
-        else if (currentStatus === 'CLEANING') {
-            if (currentScreen !== 'HANDOVER' && currentScreen !== 'REWARD') {
-                setHasSubmittedReview(true);
-                setScreen('HANDOVER');
-                setIsTimerRunning(false);
+        else if (['COMPLETED', 'FEEDBACK', 'CLEANING', 'DONE'].includes(currentStatus)) {
+            // 🔑 KTV bắt buộc phải đi đúng trình tự: REVIEW -> HANDOVER -> REWARD
+            // KHÔNG ép setHasSubmittedReview(true) tự động để tránh lỗi nhảy cóc (skip).
+            if (!hasSubmittedReview) {
+                if (currentScreen !== 'REVIEW') {
+                    setScreen('REVIEW');
+                    setIsTimerRunning(false);
+                }
+            } else {
+                // Nếu đã Review xong, chuyển sang HANDOVER (nếu chưa ở đó hoặc chưa tới REWARD)
+                if (currentScreen !== 'HANDOVER' && currentScreen !== 'REWARD') {
+                    setScreen('HANDOVER');
+                    setIsTimerRunning(false);
+                }
             }
-        }
-        else if (currentStatus === 'COMPLETED' || currentStatus === 'FEEDBACK') {
-            if ((currentScreen === 'DASHBOARD' || currentScreen === 'TIMER') && !hasSubmittedReview) {
-                setScreen('REVIEW');
-                setIsTimerRunning(false);
-            }
-        }
-        else if (currentStatus === 'DONE') {
-            // 🔑 Mỗi KTV phải TỰ đi qua REVIEW → HANDOVER → REWARD
-            // KHÔNG auto-release khi co-worker bấm dọn xong
-            if ((currentScreen === 'DASHBOARD' || currentScreen === 'TIMER') && !hasSubmittedReview) {
-                // KTV chưa review → chuyển REVIEW trước
-                setScreen('REVIEW');
-                setIsTimerRunning(false);
-            }
-            // Nếu KTV đang ở HANDOVER → handleFinishHandover sẽ tính commission và chuyển REWARD
-            // → KHÔNG tự động chuyển ở đây
         }
     }, [booking, settings.ktv_setup_duration_minutes, hasSubmittedReview, user?.id]);
 

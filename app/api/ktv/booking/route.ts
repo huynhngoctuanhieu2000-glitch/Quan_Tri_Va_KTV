@@ -722,7 +722,6 @@ export async function PATCH(request: Request) {
                 let maxPos = 0;
                 allActiveTurns?.forEach(t => { if (t.queue_position > maxPos) maxPos = t.queue_position; });
 
-                const newTurns = (turnForSync.turns_completed || 0) + 1;
                 const newPos = maxPos + 1;
                 
                 await supabase.from('TurnQueue').update({
@@ -734,7 +733,6 @@ export async function PATCH(request: Request) {
                     bed_id: null,
                     start_time: null,
                     estimated_end_time: null,
-                    turns_completed: newTurns,
                     queue_position: newPos
                 }).eq('id', turnForSync.id);
             }

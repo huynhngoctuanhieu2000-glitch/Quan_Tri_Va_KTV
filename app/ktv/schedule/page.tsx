@@ -52,7 +52,7 @@ const KTVSchedulePage = () => {
         activeTab, setActiveTab,
         currentShift, shiftHistory, isLoadingShift, newShiftType, isSubmittingShift, shiftError, shiftSuccess, setNewShiftType, setShiftError, handleSubmitShift,
         selectedDates, toggleDate, isSubmittingOff, leaveList, isLoadingLeaves,
-        offError, offSuccess, setOffError, handleSubmitOff,
+        offError, offSuccess, setOffError, handleSubmitOff, confirmDialog, setConfirmDialog,
         calendarMonth, goToPrevMonth, goToNextMonth, goToToday, WEEKDAY_LABELS,
     } = logic;
 
@@ -316,7 +316,7 @@ const KTVSchedulePage = () => {
                         )}
 
                         <button
-                            onClick={handleSubmitOff}
+                            onClick={() => handleSubmitOff()}
                             disabled={isSubmittingOff}
                             className="w-full py-3.5 bg-rose-600 text-white font-bold rounded-2xl hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-md shadow-rose-200"
                         >
@@ -326,6 +326,41 @@ const KTVSchedulePage = () => {
                                 <><Send size={18} /> Gửi yêu cầu nghỉ</>
                             )}
                         </button>
+                    </div>
+                )}
+
+                {/* ── CONFIRMATION DIALOG ── */}
+                {confirmDialog && confirmDialog.isOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+                            <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4 ${confirmDialog.type === 'SUDDEN_OFF_WARNING' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                <AlertCircle size={24} />
+                            </div>
+                            <h3 className="text-lg font-bold text-center text-gray-900 mb-2">
+                                {confirmDialog.type === 'SUDDEN_OFF_WARNING' ? 'Cảnh Báo Hết Lượt' : 'Xác Nhận Gia Hạn'}
+                            </h3>
+                            <p className="text-sm text-gray-600 text-center mb-6 leading-relaxed">
+                                {confirmDialog.message}
+                            </p>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => setConfirmDialog(null)}
+                                    className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-colors"
+                                >
+                                    Hủy bỏ
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        const type = confirmDialog.type === 'SUDDEN_OFF_WARNING' ? 'sudden_off' : 'extension';
+                                        handleSubmitOff(type);
+                                    }}
+                                    disabled={isSubmittingOff}
+                                    className={`flex-1 py-3 text-white font-bold rounded-2xl transition-all shadow-md ${confirmDialog.type === 'SUDDEN_OFF_WARNING' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'} disabled:opacity-50 flex justify-center items-center`}
+                                >
+                                    {isSubmittingOff ? <Loader2 size={18} className="animate-spin" /> : 'Tiếp tục'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 
