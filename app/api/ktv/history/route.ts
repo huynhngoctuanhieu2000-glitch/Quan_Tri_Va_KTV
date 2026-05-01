@@ -78,7 +78,7 @@ export async function GET(request: Request) {
             .ilike('technicianCode', `%${techCode}%`)
             .gte('createdAt', fromFilter)
             .lte('createdAt', toFilter)
-            .in('status', ['COMPLETED', 'DONE'])
+            .in('status', ['PREPARING', 'IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'COMPLETED', 'DONE'])
             .order('createdAt', { ascending: false })
             .limit(100);
 

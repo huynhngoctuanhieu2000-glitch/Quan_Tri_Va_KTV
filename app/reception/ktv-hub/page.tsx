@@ -449,7 +449,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         const today = selectedDate;
         const [shiftRes, leaveRes] = await Promise.all([
             supabase.from('KTVShiftRecords').select('employee_id, shift_type').eq('status', 'ACTIVE'),
-            supabase.from('KTVLeaveRequests').select('employee_id').eq('date', today).eq('is_sudden_off', true)
+            supabase.from('KTVLeaveRequests').select('employeeId').eq('date', today).eq('is_sudden_off', true)
         ]);
         if (shiftRes.data) {
             const shiftMap: Record<string, string> = {};
@@ -457,7 +457,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             setShifts(shiftMap);
         }
         if (leaveRes.data) {
-            setSuddenOffs(new Set(leaveRes.data.map((l: any) => l.employee_id)));
+            setSuddenOffs(new Set(leaveRes.data.map((l: any) => l.employeeId || l.employee_id)));
         }
     };
 

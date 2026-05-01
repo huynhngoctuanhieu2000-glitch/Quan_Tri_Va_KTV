@@ -124,22 +124,13 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                 }
                 
                 if (svc.staffList && svc.staffList.length > 0) {
-                    const timeGroups = new Map<string, typeof svc.staffList>();
-                    svc.staffList.forEach(staff => {
-                        const startTime = staff.segments?.[0]?.startTime || 'unknown_time';
-                        if (!timeGroups.has(startTime)) {
-                            timeGroups.set(startTime, []);
-                        }
-                        timeGroups.get(startTime)!.push(staff);
-                    });
+                    const staffsAtTime = svc.staffList;
+                    const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).sort().join(',') || 'unassigned';
+                    const ktvSignature = ktvSignatureBase;
                     
-                    timeGroups.forEach((staffsAtTime, startTime) => {
-                        const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).join(',') || 'unassigned';
-                        const ktvSignature = `${ktvSignatureBase}_${startTime}`;
-                        
-                        if (!ktvGroups.has(ktvSignature)) {
-                            ktvGroups.set(ktvSignature, []);
-                        }
+                    if (!ktvGroups.has(ktvSignature)) {
+                        ktvGroups.set(ktvSignature, []);
+                    }
                         
                         // Xác định trạng thái cục bộ cho nhóm KTV này dựa trên segments của họ
                         let isAllCompleted = true;
@@ -173,7 +164,6 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                             status: derivedStatus
                         };
                         ktvGroups.get(ktvSignature)!.push(svcClone);
-                    });
                 } else {
                     const ktvSignature = 'unassigned_unknown_time';
                     if (!ktvGroups.has(ktvSignature)) {

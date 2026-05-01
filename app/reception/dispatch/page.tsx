@@ -296,9 +296,8 @@ export default function DispatchBoardPage() {
           let dStatus: DispatchStatus = 'pending';
           if (b.status === 'PREPARING') dStatus = 'dispatched';
           else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          else if (b.status === 'CLEANING') dStatus = 'cleaning';
-          else if (b.status === 'FEEDBACK' || b.status === 'COMPLETED') dStatus = 'waiting_rating';
-          else if (b.status === 'DONE' && !b.rating) dStatus = 'waiting_rating'; // Chưa đánh giá → vẫn ở cột Chờ đánh giá
+          else if (b.status === 'CLEANING' || b.status === 'COMPLETED') dStatus = 'cleaning';
+          else if (b.status === 'FEEDBACK') dStatus = 'waiting_rating';
           else if (b.status === 'DONE') dStatus = 'done';
           else if (hasAssignedKtv) dStatus = 'dispatched'; // Fallback for transition state
           
@@ -494,23 +493,7 @@ if (!hasPermission('dispatch_board')) {
     { id: 'done', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700' },
   ];
 
-  const displayedOrders = orders.filter(o => {
-    // 🚀 ĐỘC LẬP TRẠNG THÁI: Một đơn có thể xuất hiện ở nhiều tab nếu cần
-    if (leftPanelTab === 'cleaning') {
-      // Hiện trong tab Dọn dẹp nếu status là COMPLETED HOẶC vẫn còn KTV đang gán (chưa release)
-      return o.rawStatus === 'COMPLETED' || o.hasAssignedKtv;
-    }
-    if (leftPanelTab === 'waiting_rating') {
-      // Chỉ hiện trong tab Chờ đánh giá nếu status của Khách là FEEDBACK
-      return o.rawStatus === 'FEEDBACK';
-    }
-    if (leftPanelTab === 'done') {
-      // Chỉ hiện trong tab Hoàn tất nếu Khách đã DONE VÀ KTV đã được giải phóng (hết dọn phòng)
-      return o.rawStatus === 'DONE' && !o.hasAssignedKtv;
-    }
-    // Các trạng thái khác (pending, dispatched, in_progress) dùng logic so khớp trực tiếp
-    return o.dispatchStatus === leftPanelTab;
-  });
+  const displayedOrders = orders.filter(o => o.dispatchStatus === leftPanelTab);
 
   const updateOrder = (orderId: string, patchFn: (o: PendingOrder) => PendingOrder) => {
     setOrders(prev => prev.map(o => o.id === orderId ? patchFn(o) : o));
