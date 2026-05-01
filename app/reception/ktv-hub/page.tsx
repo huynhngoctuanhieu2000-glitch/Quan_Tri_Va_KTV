@@ -54,7 +54,7 @@ type TurnQueueData = {
     date: string;
     queue_position: number;
     check_in_order: number;
-    status: 'waiting' | 'working' | 'done_turn' | 'off';
+    status: 'waiting' | 'working' | 'assigned' | 'done_turn' | 'off';
     turns_completed: number;
     current_order_id?: string | null;
     estimated_end_time?: string | null;
@@ -671,6 +671,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                             {/* Position badge */}
                             <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${suddenOffs.has(turn.employee_id) ? 'bg-red-100 text-red-500 border border-red-200' : turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
                                 turn.status === 'working' ? 'bg-rose-100 text-rose-600 border border-rose-200' :
+                                turn.status === 'assigned' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
                                     'bg-gray-100 text-gray-500 border border-gray-200'
                                 }`}>
                                 {turn.check_in_order}
@@ -694,13 +695,15 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                             {/* Status badge */}
                             <div className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 shrink-0 ${turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700' :
                                 turn.status === 'working' ? 'bg-rose-100 text-rose-700' :
+                                turn.status === 'assigned' ? 'bg-indigo-100 text-indigo-700' :
                                     'bg-gray-100 text-gray-500'
                                 }`}>
                                 {turn.status === 'waiting' ? <CheckCircle2 size={10} /> :
                                     turn.status === 'working' ? <Timer size={10} className="animate-spin" /> :
+                                    turn.status === 'assigned' ? <Clock size={10} /> :
                                         <Moon size={10} />}
                                 <span className="hidden sm:inline">
-                                    {turn.status === 'waiting' ? 'Sẵn sàng' : turn.status === 'working' ? 'Đang làm' : 'Tan ca'}
+                                    {turn.status === 'waiting' ? 'Sẵn sàng' : turn.status === 'working' ? 'Đang làm' : turn.status === 'assigned' ? 'Đã xếp lịch' : 'Tan ca'}
                                 </span>
                             </div>
 
