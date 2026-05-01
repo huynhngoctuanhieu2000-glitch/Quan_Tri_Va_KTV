@@ -493,7 +493,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                             e.stopPropagation();
                                                                             if (confirm(`Xác nhận đánh giá ${star} sao hộ khách?`)) {
                                                                                 import('../actions').then(m => {
-                                                                                    m.submitCustomerRating(subOrder.id, star);
+                                                                                    m.submitCustomerRating(subOrder.bookingId, star);
                                                                                 });
                                                                             }
                                                                         }}

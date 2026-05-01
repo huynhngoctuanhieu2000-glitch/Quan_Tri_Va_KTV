@@ -25,12 +25,14 @@ export async function GET(request: Request) {
                 return NextResponse.json({ success: false, error: 'Technician code or bookingId is required' }, { status: 400 });
             }
 
-            // 1. Ưu tiên tìm đơn hàng mà KTV ĐANG LÀM hoặc CHƯA KẾT THÚC quy trình (IN_PROGRESS, COMPLETED, FEEDBACK, CLEANING)
+            // 1. Ưu tiên tìm đơn hàng KTV đang làm thực sự.
+            // Các màn hậu kỳ (REVIEW/HANDOVER/REWARD) sẽ tự fetch theo bookingId đã lưu,
+            // nên không được kéo lại các item COMPLETED/FEEDBACK/CLEANING như đơn active.
             const { data: activeItems } = await supabase
                 .from('BookingItems')
                 .select('bookingId, status, id')
                 .contains('technicianCodes', [technicianCode])
-                .in('status', ['IN_PROGRESS', 'COMPLETED', 'FEEDBACK', 'CLEANING'])
+                .in('status', ['IN_PROGRESS'])
                 .order('timeStart', { ascending: false, nullsFirst: false });
 
             if (activeItems && activeItems.length > 0) {
@@ -244,24 +246,6 @@ export async function PATCH(request: Request) {
         const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'COMPLETED', 'CLEANING', 'FEEDBACK', 'DONE', 'CANCELLED'];
 
         const itemUpdatePayload: any = { status }; // BookingItems không có column updatedAt
-        
-        // 📝 XỬ LÝ APPEND_NOTES (Ghi đè hoặc nối thêm ghi chú từ KTV)
-        if (action === 'APPEND_NOTES' && body.notes) {
-            const { data: currentB } = await supabase.from('Bookings').select('timeStart, notes, billCode').eq('id', bookingId).single();
-            const oldNotes = currentB?.notes || '';
-            // Nối thêm nếu chưa có nội dung tương tự (tránh lặp lại khi refresh)
-            if (!oldNotes.includes(body.notes)) {
-                updatePayload.notes = oldNotes ? `${oldNotes} | ${body.notes}` : body.notes;
-                
-                // Báo về cho quầy Lễ Tân / Admin
-                await supabase.from('StaffNotifications').insert({
-                    type: 'SYSTEM',
-                    message: `📢 KTV ${technicianCode || 'N/A'} vừa đánh giá khách hàng đơn ${currentB?.billCode || bookingId}: ${body.notes}`
-                });
-            } else {
-                updatePayload.notes = oldNotes;
-            }
-        }
         
         // 🔧 Xác định targetBookingItemId(s) — hỗ trợ 1 KTV nhiều DV
         let targetBookingItemId = turnForSync?.booking_item_id;

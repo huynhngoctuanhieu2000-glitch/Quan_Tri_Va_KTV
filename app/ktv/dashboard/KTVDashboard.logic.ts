@@ -444,10 +444,18 @@ export function useKTVDashboard(config?: DashboardConfig) {
         if (allMySegsForStatus.length > 0) {
             let allDone = true;
             let allFeedback = true;
+            let allReview = true;
             allMySegsForStatus.forEach(seg => {
                 if (!seg.actualEndTime) allDone = false;
                 if (!seg.feedbackTime) allFeedback = false;
+                if (!seg.reviewTime) allReview = false;
             });
+            
+            // Khôi phục trạng thái review bền vững từ backend
+            if (allReview && !hasSubmittedReview) {
+                setHasSubmittedReview(true);
+            }
+
             // Chỉ override nếu đã xong, chưa xong thì lấy theo status chung
             if (allFeedback) currentStatus = 'FEEDBACK';
             else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'COMPLETED';
@@ -1144,22 +1152,30 @@ export function useKTVDashboard(config?: DashboardConfig) {
         setIsLoading(true);
         try {
             const personality = customerProfile.personality || [];
+            let noteContent = '';
             if (personality.length > 0) {
-                const noteContent = `[Đánh giá KTV: ${personality.join(', ')}]`;
-                
-                // Gửi ghi chú đánh giá về quầy
-                await fetch('/api/ktv/booking', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        bookingId: booking.id, 
-                        notes: noteContent,
-                        action: 'APPEND_NOTES',
-                        techCode: user.id
-                    })
-                });
+                noteContent = `[Đánh giá KTV: ${personality.join(', ')}]`;
             }
             
+            // Gọi API chuyên trách (chỉ cập nhật review, không can thiệp trạng thái tổng)
+            const response = await fetch('/api/ktv/review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    bookingId: booking.id, 
+                    notes: noteContent,
+                    techCode: user.id
+                })
+            });
+            
+            const res = await response.json();
+            if (!res.success) {
+                console.error('❌ [KTV Logic] Lỗi khi gửi đánh giá:', res.error);
+                alert('Không thể lưu đánh giá: ' + (res.error || 'Vui lòng thử lại'));
+                return; // 🚫 Chặn không cho đi tiếp
+            }
+            
+            // Chỉ khi backend ghi nhận thành công, mới kích hoạt trạng thái đi tiếp
             setHasSubmittedReview(true);
             
             // Smart Skip logic
@@ -1169,12 +1185,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 setScreen('HANDOVER');
             }
         } catch (err) {
-            console.error('❌ [KTV Logic] Error submitting review:', err);
-            if (!isLastInRoom || isRoomCleaned) {
-                handleAutoRelease();
-            } else {
-                setScreen('HANDOVER');
-            }
+            console.error('❌ [KTV Logic] Network error submitting review:', err);
+            alert('Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!');
         } finally {
             setIsLoading(false);
         }

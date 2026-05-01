@@ -1,13 +1,36 @@
 'use server';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { createClient } from '@/lib/supabase/server';
+
+const DOMAIN_SUFFIX = '@nganhaspa.internal';
 
 export async function authenticateUser(username: string, password?: string) {
     try {
-        const supabase = getSupabaseAdmin();
-        if (!supabase) throw new Error("Supabase admin client not initialized");
+        const supabaseAdmin = getSupabaseAdmin();
+        if (!supabaseAdmin) throw new Error("Supabase admin client not initialized");
 
-        const query = supabase
+        // 1. JWT Cookie Login (The New Way)
+        if (password) {
+            const supabaseAuth = await createClient();
+            const email = `${username}${DOMAIN_SUFFIX}`.toLowerCase();
+            
+            const { data: authData, error: authErr } = await supabaseAuth.auth.signInWithPassword({
+                email,
+                password
+            });
+
+            if (authErr) {
+                console.warn(`[Login] Supabase Auth failed for ${email}: ${authErr.message}. Falling back to legacy login...`);
+                // Bỏ qua lỗi này để chạy tiếp fallback xuống DB public.Users (Compatibility Phase)
+            } else {
+                console.log(`[Login] Successfully issued JWT cookie for ${email}`);
+            }
+        }
+
+        // 2. Legacy Lookup (The Old Way - Adapter Pattern)
+        // Chúng ta vẫn PHẢI lấy dữ liệu từ public.Users vì frontend dựa vào shape này
+        const query = supabaseAdmin
             .from('Users')
             .select('*')
             .eq('username', username);
@@ -19,7 +42,7 @@ export async function authenticateUser(username: string, password?: string) {
         const { data: user, error } = await query.single();
 
         if (error || !user) {
-            console.error("Login failed or user not found", error);
+            console.error("Login failed or user not found in public.Users", error);
             return { success: false, error: 'Sai tài khoản hoặc mật khẩu' };
         }
 

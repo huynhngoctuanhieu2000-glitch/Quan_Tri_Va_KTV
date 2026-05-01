@@ -1,10 +1,12 @@
 'use server';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireRole } from '@/lib/auth-server';
 import { sendPushNotification } from '@/lib/push-helper';
 
 export async function getDispatchData(date: string) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -199,6 +201,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
     }[];
 }) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -275,6 +278,7 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
     }[];
 }) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -332,6 +336,7 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
 
 export async function cancelBooking(bookingId: string, date: string) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -411,6 +416,7 @@ export async function cancelBooking(bookingId: string, date: string) {
 
 export async function updateBookingStatus(bookingId: string, newStatus: string, date: string) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -578,6 +584,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
 export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string, targetKtvIds?: string[]) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -626,7 +633,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                 .from('TurnQueue')
                 .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
                 .eq('current_order_id', bookingId)
-                .in('booking_item_id', itemIds)
+                .overlaps('booking_item_ids', itemIds)
                 .eq('date', date)
                 .in('status', ['waiting', 'working']);
                 
@@ -640,9 +647,9 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             // Lấy tất cả KTV đang làm các item này
             let queryToRelease = supabase
                 .from('TurnQueue')
-                .select('id, turns_completed, status')
+                .select('id, turns_completed, status, booking_item_ids')
                 .eq('current_order_id', bookingId)
-                .in('booking_item_id', itemIds)
+                .overlaps('booking_item_ids', itemIds)
                 .eq('date', date);
                 
             if (targetKtvIds && targetKtvIds.length > 0) {
@@ -653,19 +660,34 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
 
             if (turnsToRelease && turnsToRelease.length > 0) {
                 for (const turn of turnsToRelease) {
-                    let newTurnsCompleted = turn.turns_completed || 0;
-                    await supabase
-                        .from('TurnQueue')
-                        .update({
-                            status: 'waiting',
-                            current_order_id: null,
-                            booking_item_id: null,
-                            booking_item_ids: '{}',
-                            start_time: null,
-                            estimated_end_time: null,
-                            turns_completed: newTurnsCompleted
-                        })
-                        .eq('id', turn.id);
+                    const currentItemIds = turn.booking_item_ids || [];
+                    const remainingItemIds = currentItemIds.filter((id: string) => !itemIds.includes(id));
+
+                    if (remainingItemIds.length > 0) {
+                        // KTV vẫn còn item khác đang làm trong bill này
+                        await supabase
+                            .from('TurnQueue')
+                            .update({
+                                booking_item_id: remainingItemIds.join(','),
+                                booking_item_ids: remainingItemIds
+                            })
+                            .eq('id', turn.id);
+                    } else {
+                        // KTV đã xong tất cả item của họ
+                        let newTurnsCompleted = turn.turns_completed || 0;
+                        await supabase
+                            .from('TurnQueue')
+                            .update({
+                                status: 'waiting',
+                                current_order_id: null,
+                                booking_item_id: null,
+                                booking_item_ids: [], // Set về mảng rỗng thay vì mảng chuỗi '{}'
+                                start_time: null,
+                                estimated_end_time: null,
+                                turns_completed: newTurnsCompleted
+                            })
+                            .eq('id', turn.id);
+                    }
                 }
             }
         }
@@ -702,6 +724,7 @@ export async function createQuickBooking(data: {
     customerLang?: string; // Language code: vi, en, kr, jp, cn
 }) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -781,6 +804,7 @@ export async function createQuickBooking(data: {
 
 export async function addAddonServices(bookingId: string, items: { serviceId: string; qty: number }[], adminId: string = 'ADMIN') {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -945,6 +969,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
 
 export async function confirmAddonPayment(bookingId: string) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -992,6 +1017,7 @@ export async function confirmAddonPayment(bookingId: string) {
 
 export async function removeBookingItem(bookingId: string, itemId: string) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -1041,20 +1067,43 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
         if (updError) throw updError;
 
         // Xóa KTV khỏi TurnQueue nếu có (Tránh lỗi kẹt tua)
-        await supabase
+        // Thay vì xóa bung toàn bộ, ta chỉ gỡ item bị xóa ra khỏi mảng
+        const { data: turnsAffected } = await supabase
             .from('TurnQueue')
-            .update({
-                status: 'waiting',
-                current_order_id: null,
-                booking_item_id: null,
-                booking_item_ids: '{}',
-                room_id: null,
-                bed_id: null,
-                start_time: null,
-                estimated_end_time: null
-            })
+            .select('id, booking_item_ids')
             .eq('current_order_id', bookingId)
             .contains('booking_item_ids', [itemId]);
+
+        if (turnsAffected && turnsAffected.length > 0) {
+            for (const turn of turnsAffected) {
+                const currentItemIds = turn.booking_item_ids || [];
+                const remainingItemIds = currentItemIds.filter((id: string) => id !== itemId);
+
+                if (remainingItemIds.length > 0) {
+                    await supabase
+                        .from('TurnQueue')
+                        .update({
+                            booking_item_id: remainingItemIds.join(','),
+                            booking_item_ids: remainingItemIds
+                        })
+                        .eq('id', turn.id);
+                } else {
+                    await supabase
+                        .from('TurnQueue')
+                        .update({
+                            status: 'waiting',
+                            current_order_id: null,
+                            booking_item_id: null,
+                            booking_item_ids: [],
+                            room_id: null,
+                            bed_id: null,
+                            start_time: null,
+                            estimated_end_time: null
+                        })
+                        .eq('id', turn.id);
+                }
+            }
+        }
             
         return { success: true, newTotalAmount };
     } catch (error: any) {
@@ -1065,6 +1114,7 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
 
 export async function editBookingService(bookingId: string, itemId: string, newServiceId: string) {
     try {
+        await requireRole(['ADMIN', 'RECEPTIONIST']);
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 

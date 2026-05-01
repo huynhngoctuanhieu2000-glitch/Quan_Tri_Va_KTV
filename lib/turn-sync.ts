@@ -22,25 +22,44 @@ export async function syncTurnsForDate(date: string) {
             }
         });
 
-        // 2. Cập nhật vào TurnQueue
-        // Cập nhật lại số tua cho tất cả những người có trong Ledger của ngày này
-        const employeeIds = Object.keys(turnsCount);
-        if (employeeIds.length > 0) {
-            for (const empId of employeeIds) {
-                const actualCount = turnsCount[empId];
-                
-                const { error: upsertError } = await supabase
-                    .from('TurnQueue')
-                    .upsert({
-                        employee_id: empId,
-                        date: date,
-                        turns_completed: actualCount,
-                        // Nếu là chèn mới, mặc định là 'waiting' hoặc 'off' tùy context
-                        // Ở đây ta giữ nguyên status cũ nếu có, hoặc để 'waiting' nếu mới
-                    }, { onConflict: 'employee_id,date' });
+        // 2. Lấy tất cả KTV đang có mặt trong TurnQueue ngày hôm nay
+        const { data: queues, error: queueError } = await supabase
+            .from('TurnQueue')
+            .select('id, employee_id, turns_completed')
+            .eq('date', date);
 
-                if (upsertError) {
-                    console.error(`[Sync] Upsert failed for ${empId}:`, upsertError.message);
+        if (queueError) throw queueError;
+
+        // 3. Gom chung tập hợp nhân viên cần đồng bộ (từ Ledger HOẶC đang có TurnQueue)
+        const allEmployeeIds = new Set([
+            ...Object.keys(turnsCount),
+            ...(queues || []).map(q => q.employee_id).filter(Boolean)
+        ]);
+
+        if (allEmployeeIds.size > 0) {
+            for (const empId of Array.from(allEmployeeIds)) {
+                const actualCount = turnsCount[empId] || 0;
+                
+                // Nếu nhân viên đã có queue, chỉ update nếu sai
+                const existingQueue = (queues || []).find(q => q.employee_id === empId);
+                
+                if (existingQueue) {
+                    if (existingQueue.turns_completed !== actualCount) {
+                        await supabase
+                            .from('TurnQueue')
+                            .update({ turns_completed: actualCount })
+                            .eq('id', existingQueue.id);
+                    }
+                } else {
+                    // Nếu nhân viên có trong Ledger nhưng chưa có Queue (ít gặp), thì tạo mới
+                    await supabase
+                        .from('TurnQueue')
+                        .insert({
+                            employee_id: empId,
+                            date: date,
+                            turns_completed: actualCount,
+                            status: 'waiting'
+                        });
                 }
             }
         }

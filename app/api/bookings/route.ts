@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireApiUser } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,11 @@ export async function GET(request: Request) {
         const supabase = getSupabaseAdmin();
         if (!supabase) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
+        }
+
+        const user = await requireApiUser();
+        if (!user) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
         const startOfDay = `${date} 00:00:00`;
@@ -41,7 +47,6 @@ export async function GET(request: Request) {
                 .limit(1000);
 
             if (svError) console.error('❌ [API Bookings] Svc fetch error:', svError.message);
-            console.log(`📡 [API Bookings] Fetched ${svcs?.length || 0} services`);
 
             const svcMap = new Map();
             if (svcs) {
@@ -50,8 +55,6 @@ export async function GET(request: Request) {
                     if (s.code) svcMap.set(String(s.code).trim().toLowerCase(), s);
                 });
             }
-            console.log(`📡 [API Bookings] svcMap keys:`, Array.from(svcMap.keys()).slice(0, 10));
-            console.log(`📡 [API Bookings] has nhs0002:`, svcMap.has('nhs0002'));
 
             const bookingsWithItems = bookings.map(b => ({
                 ...b,
@@ -75,19 +78,7 @@ export async function GET(request: Request) {
 
             return NextResponse.json({ 
                 success: true, 
-                data: bookingsWithItems,
-                _debug: {
-                    svcCount: svcs?.length,
-                    svError: svError?.message || null,
-                    hasNHS0002: svcMap.has('nhs0002'),
-                    nhs0002_data: svcMap.get('nhs0002'),
-                    sampleKeys: Array.from(svcMap.keys()).slice(0, 5),
-                    envStatus: {
-                        hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-                        hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-                        keyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) : 'none'
-                    }
-                }
+                data: bookingsWithItems
             });
         }
 
