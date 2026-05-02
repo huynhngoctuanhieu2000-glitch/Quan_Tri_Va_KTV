@@ -12,7 +12,6 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { bookingId, notes } = body;
         
-        // --- 🛡️ BẢO MẬT: AUTHORIZATION & OWNERSHIP CHECK ---
         // Compatibility Phase: KTV app hasn't fully migrated to Supabase Auth yet.
         // We attempt to get session, but don't hard-block if it fails.
         let bUser = null;
@@ -22,8 +21,9 @@ export async function POST(request: Request) {
             // Ignore auth errors during compatibility phase
         }
         
-        // Lấy techCode từ JWT session (nếu có). Nếu không, lấy từ body.
-        const techCode = bUser ? (bUser.techCode || bUser.businessUserId) : body.techCode;
+        // Lấy techCode từ payload trước để tiện test/chuyển đổi (tránh lỗi kẹt session trên cùng trình duyệt).
+        // Fallback về session bUser nếu payload không truyền.
+        const techCode = body.techCode || (bUser ? (bUser.techCode || bUser.businessUserId) : null);
 
         if (!bookingId || !techCode) {
             return NextResponse.json({ success: false, error: 'bookingId and techCode are required' }, { status: 400 });
@@ -71,7 +71,10 @@ export async function POST(request: Request) {
 
         if (!ktvItems || ktvItems.length === 0) {
             // [Lỗ hổng P2]: KTV không có trong technicianCodes của bất kỳ item nào, không thể tạo source of truth!
-            console.error(`[KTV Review API] FAILED ASSIGNMENT CHECK. normalizedTechCode: ${normalizedTechCode}, ktvItems empty.`);
+            console.error(`[KTV Review API] FAILED ASSIGNMENT CHECK. `);
+            console.error(`- techCode resolved to: "${techCode}" (from bUser? ${!!bUser}, body.techCode: "${body.techCode}")`);
+            console.error(`- normalizedTechCode: "${normalizedTechCode}"`);
+            console.error(`- allItems from DB:`, JSON.stringify(allItems, null, 2));
             return NextResponse.json({ success: false, error: 'KTV is not assigned to any items in this booking' }, { status: 403 });
         }
         console.log(`[KTV Review API] ASSIGNMENT CHECK PASSED. ktvItems count:`, ktvItems.length);

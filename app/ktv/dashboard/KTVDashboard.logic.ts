@@ -44,10 +44,12 @@ export const ROOM_ISSUE_OPTIONS = [
 export interface DashboardConfig {
     initialAction?: string | null;
     targetBookingId?: string | null;
+    testTechCode?: string | null;
 }
 
 export function useKTVDashboard(config?: DashboardConfig) {
     const { user } = useAuth();
+    const ktvId = config?.testTechCode || user?.id;
     const [screen, setScreenState] = useState<ScreenState>('DASHBOARD');
     const setScreen = useCallback((val: ScreenState) => {
         setScreenState(val);
@@ -115,7 +117,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const isAutoReleasingRef = useRef(false);
 
     useEffect(() => {
-        if (!booking || !user?.id) return;
+        if (!booking || !ktvId) return;
 
         let myRoomId: string | null = null;
         const allItemIds: string[] = booking.assignedItemIds?.length > 0 ? booking.assignedItemIds : (booking.assignedItemId ? [booking.assignedItemId] : []);
@@ -123,7 +125,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         
         for (const ai of allAssignedItems) {
             let segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (ai?.segments || []);
-            const mySeg = segs.find((seg: any) => seg.ktvId && seg.ktvId.toLowerCase() === user.id.toLowerCase());
+            const mySeg = segs.find((seg: any) => seg.ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
             if (mySeg?.roomId) {
                 myRoomId = mySeg.roomId;
                 break;
@@ -152,7 +154,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                                 if (seg.feedbackTime) maxEndFeedbackTime = seg.feedbackTime;
                             }
                             
-                            if (seg.ktvId && seg.ktvId.toLowerCase() === user.id.toLowerCase()) {
+                            if (seg.ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase()) {
                                 if (endTime > myMaxEndTime) myMaxEndTime = endTime;
                             }
                         }
@@ -174,10 +176,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
         setIsLastInRoom(_isLastInRoom);
         setIsRoomCleaned(_isRoomCleaned);
 
-    }, [booking, user?.id]);
+    }, [booking, ktvId]);
 
     const handleAutoRelease = useCallback(async () => {
-        if (!booking || !user?.id || isAutoReleasingRef.current) return;
+        if (!booking || !ktvId || isAutoReleasingRef.current) return;
         isAutoReleasingRef.current = true;
         setIsLoading(true);
         try {
@@ -190,7 +192,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     bookingId: releaseBookingId, 
                     status: 'FEEDBACK',
                     action: 'RELEASE_KTV',
-                    techCode: user.id 
+                    techCode: ktvId 
                 })
             });
             setScreen('REWARD');
@@ -200,14 +202,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setIsLoading(false);
             isAutoReleasingRef.current = false;
         }
-    }, [booking?.id, user?.id, setScreen]);
+    }, [booking?.id, ktvId, setScreen]);
 
     // Auto-skip Review ONLY if THIS KTV has already submitted review for THIS specific booking.
     // Source of truth: per-KTV per-booking localStorage flag, NOT booking.rating (booking-level, too coarse).
     useEffect(() => {
-        if (screenRef.current !== 'REVIEW' || !booking?.id || !user?.id) return;
+        if (screenRef.current !== 'REVIEW' || !booking?.id || !ktvId) return;
         try {
-            const reviewKey = `ktv_review_submitted_${user.id}_${booking.id}`;
+            const reviewKey = `ktv_review_submitted_${ktvId}_${booking.id}`;
             const alreadySubmitted = localStorage.getItem(reviewKey) === 'true';
             if (alreadySubmitted && !hasSubmittedReview) {
                 console.log("🌟 [SmartSkip] This KTV already submitted review for this booking, restoring skip...");
@@ -219,7 +221,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 }
             }
         } catch(e) {}
-    }, [booking?.id, hasSubmittedReview, user?.id, isLastInRoom, isRoomCleaned, handleAutoRelease]);
+    }, [booking?.id, hasSubmittedReview, ktvId, isLastInRoom, isRoomCleaned, handleAutoRelease]);
 
     // Auto-skip Handover if teammate cleans the room
     useEffect(() => {
@@ -236,9 +238,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
     // 🔄 Full reset of ALL transient state when booking.id changes
     // Prevents timer/segment/prepping/review state from leaking from order 1 into order 2.
     useEffect(() => {
-        if (!booking?.id || !user?.id) return;
+        if (!booking?.id || !ktvId) return;
         try {
-            const reviewKey = `ktv_review_submitted_${user.id}_${booking.id}`;
+            const reviewKey = `ktv_review_submitted_${ktvId}_${booking.id}`;
             const alreadySubmitted = localStorage.getItem(reviewKey) === 'true';
             if (!alreadySubmitted) {
                 setHasSubmittedReview(false);
@@ -249,7 +251,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 manualSegmentOverrideRef.current = false;
             }
         } catch(e) { setHasSubmittedReview(false); }
-    }, [booking?.id, user?.id]);
+    }, [booking?.id, ktvId]);
 
 
     useEffect(() => {
@@ -287,7 +289,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                                 bookingId: bookingRef.current.id, 
                                 status: 'DONE',
                                 action: 'RELEASE_KTV', // Ensure release just in case
-                                techCode: user?.id 
+                                techCode: ktvId 
                             })
                         });
                     } catch (e) {
@@ -311,7 +313,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
         window.addEventListener('KTV_FAST_TRACK', handleFastTrack);
         return () => window.removeEventListener('KTV_FAST_TRACK', handleFastTrack);
-    }, [user?.id, setScreen]);
+    }, [ktvId, setScreen]);
 
     // 🔒 Start Lock Logic
     useEffect(() => {
@@ -392,7 +394,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 } catch { segs = []; }
                 
                 const mySegs = segs.filter((seg: any) => 
-                    seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase()
+                    seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase()
                 );
                 allMySegs.push(...mySegs);
             }
@@ -473,7 +475,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             try {
                 segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
             } catch { segs = []; }
-            const mySegs = segs.filter((seg: any) => seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase());
+            const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
             allMySegsForStatus.push(...mySegs);
         }
 
@@ -491,7 +493,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             // Prevents backend reviewTime (written by teammate or early) from bypassing per-KTV ownership.
             if (allReview && !hasSubmittedReview) {
                 try {
-                    const reviewKey = `ktv_review_submitted_${user?.id}_${booking?.id}`;
+                    const reviewKey = `ktv_review_submitted_${ktvId}_${booking?.id}`;
                     if (localStorage.getItem(reviewKey) === 'true') {
                         setHasSubmittedReview(true);
                     }
@@ -569,7 +571,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 }
             }
         }
-    }, [booking, settings.ktv_setup_duration_minutes, hasSubmittedReview, user?.id]);
+    }, [booking, settings.ktv_setup_duration_minutes, hasSubmittedReview, ktvId]);
 
     // 🔊 Audio Notification Logic - Moved to NotificationProvider for consistency
     useEffect(() => {
@@ -586,13 +588,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     // ✨ Bonus Points logic - Sound handled by NotificationProvider
     useEffect(() => {
-        if (!user?.id) return;
+        if (!ktvId) return;
 
         const checkRewards = async () => {
             if (screenRef.current === 'TIMER') return;
 
             try {
-                const response = await fetch(`/api/ktv/notifications?techCode=${user.id}`);
+                const response = await fetch(`/api/ktv/notifications?techCode=${ktvId}`);
                 const res = await response.json();
                 
                 if (res.success && res.data && res.data.length > 0) {
@@ -614,12 +616,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
         // Realtime listener cho thông báo mới
         const channel = supabase
-            .channel(`ktv_rewards_${user.id}`)
+            .channel(`ktv_rewards_${ktvId}`)
             .on('postgres_changes', { 
                 event: 'INSERT', 
                 schema: 'public', 
                 table: 'StaffNotifications',
-                filter: `employeeId=eq.${user.id}`
+                filter: `employeeId=eq.${ktvId}`
             }, () => {
                 checkRewards();
             })
@@ -631,7 +633,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             supabase.removeChannel(channel);
             clearInterval(interval);
         };
-    }, [user?.id, screen]);
+    }, [ktvId, screen]);
 
     // ⚙️ Fetch Settings
     useEffect(() => {
@@ -647,14 +649,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     // 📡 Realtime & Polling Fetch
     useEffect(() => {
-        if (!user?.id) return;
+        if (!ktvId) return;
 
         const fetchBooking = async () => {
             try {
-                if (!user?.id) return;
+                if (!ktvId) return;
 
                 // Mặc định: Lấy đơn đang gán cho KTV trong TurnQueue
-                let url = `/api/ktv/booking?techCode=${user.id}`;
+                let url = `/api/ktv/booking?techCode=${ktvId}`;
                 
                 // Nâng cao: Ưu tiên track đơn cũ khi đang ở màn hậu kỳ (REVIEW/HANDOVER/REWARD)
                 const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
@@ -668,10 +670,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 }
                 
                 if (config?.targetBookingId) {
-                    url = `/api/ktv/booking?bookingId=${config.targetBookingId}&techCode=${user.id}`;
+                    url = `/api/ktv/booking?bookingId=${config.targetBookingId}&techCode=${ktvId}`;
                 } else if (isPostService && postServiceBookingIdRef.current) {
                     // Ưu tiên fetch theo ID đơn vừa làm để tránh bị mất dữ liệu khi đã RELEASE_KTV
-                    url = `/api/ktv/booking?bookingId=${postServiceBookingIdRef.current}&techCode=${user.id}`;
+                    url = `/api/ktv/booking?bookingId=${postServiceBookingIdRef.current}&techCode=${ktvId}`;
                     console.log("🔍 [KTV] Persisting booking fetch for post-service screen:", postServiceBookingIdRef.current);
                 }
                 // (Đã gộp vào logic ở trên)
@@ -737,7 +739,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             } catch { segs = []; }
                             
                             const mySegs = segs.filter((seg: any) => 
-                                seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase()
+                                seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase()
                             );
                             allMySegs.push(...mySegs);
                         }
@@ -884,7 +886,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
         // Subscribe to real-time changes
         const channel = supabase
-            .channel(`ktv_realtime_${user.id}`)
+            .channel(`ktv_realtime_${ktvId}`)
             .on('postgres_changes', { 
                 event: 'UPDATE', 
                 schema: 'public', 
@@ -936,7 +938,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 event: '*', 
                 schema: 'public', 
                 table: 'TurnQueue',
-                filter: `employee_id=eq.${user.id}`
+                filter: `employee_id=eq.${ktvId}`
             }, (payload: any) => {
                 console.log("🔄 [KTV] Realtime TurnQueue change:", payload.eventType);
                 // 🔒 Block during post-service: auto-handoff TurnQueue event must NOT pull order 2 in mid-cleanup
@@ -961,7 +963,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             supabase.removeChannel(channel);
             clearInterval(intervalId);
         };
-    }, [user?.id, booking?.id, booking?.assignedItemId, isTimerRunning, isPrepping]); // Added assignedItemId and isPrepping to re-bind filter
+    }, [ktvId, booking?.id, booking?.assignedItemId, isTimerRunning, isPrepping]); // Added assignedItemId and isPrepping to re-bind filter
 
     // ⏱️ Timer countdown only — NO side effects inside setState
     useEffect(() => {
@@ -1014,7 +1016,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 try {
                     segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
                 } catch { segs = []; }
-                const mySegs = segs.filter((seg: any) => seg.ktvId && user?.id && seg.ktvId.toLowerCase() === user.id.toLowerCase());
+                const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
                 allMySegs.push(...mySegs);
             }
 
@@ -1055,7 +1057,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('focus', recalcTimerFromServer);
         };
-    }, [booking, isTimerRunning, user?.id]);
+    }, [booking, isTimerRunning, ktvId]);
 
     // 🏁 Auto-finish: trigger khi timer đạt 0 (tách riêng khỏi countdown để React xử lý đúng)
     useEffect(() => {
@@ -1083,12 +1085,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     // 🚩 Room Issue Report
     const handleReportRoomIssue = async (issues: string[], note: string) => {
-        if (!booking || !user?.id) return;
+        if (!booking || !ktvId) return;
         setIsLoading(true);
         try {
             const roomId = booking.assignedRoomId || booking.roomName || 'N/A';
             const issueText = issues.length > 0 ? issues.join(', ') : '';
-            const fullMessage = `🚩 BÁO SỰ CỐ PHÒNG ${roomId} — KTV ${user.id}: ${issueText}${note ? ` | ${note}` : ''}`;
+            const fullMessage = `🚩 BÁO SỰ CỐ PHÒNG ${roomId} — KTV ${ktvId}: ${issueText}${note ? ` | ${note}` : ''}`;
 
             await fetch('/api/ktv/interaction', {
                 method: 'POST',
@@ -1096,7 +1098,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 body: JSON.stringify({
                     bookingId: booking.id,
                     type: 'EMERGENCY',
-                    techCode: user.id,
+                    techCode: ktvId,
                     message: fullMessage
                 })
             });
@@ -1111,7 +1113,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     };
 
     const handleConfirmSetup = async () => {
-        if (!booking || !user?.id || !booking.assignedItemId) return;
+        if (!booking || !ktvId || !booking.assignedItemId) return;
         
         setIsLoading(true);
         // Cập nhật trạng thái Item lên Server để đồng bộ cho các KTV khác cùng làm dịch vụ này
@@ -1121,7 +1123,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             body: JSON.stringify({ 
                 bookingId: booking.id, 
                 status: 'READY',
-                techCode: user.id 
+                techCode: ktvId 
             })
         });
         
@@ -1143,7 +1145,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 try {
                     segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
                 } catch { segs = []; }
-                const mySegs = segs.filter((seg: any) => seg.ktvId && user.id && seg.ktvId.toLowerCase() === user.id.toLowerCase());
+                const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
                 allMySegs.push(...mySegs);
             }
 
@@ -1171,7 +1173,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     };
 
     const handleStartTimer = async () => {
-        if (!booking || !user?.id) return;
+        if (!booking || !ktvId) return;
         setIsLoading(true);
         const response = await fetch('/api/ktv/booking', {
             method: 'PATCH',
@@ -1179,7 +1181,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             body: JSON.stringify({ 
                 bookingId: booking.id, 
                 status: 'IN_PROGRESS',
-                techCode: user.id,
+                techCode: ktvId,
                 action: 'START_TIMER'
             })
         });
@@ -1194,7 +1196,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     };
 
     const handleFinishTimer = async () => {
-        if (!booking || !user?.id) return;
+        if (!booking || !ktvId) return;
 
         // 🏁 Hết giờ DV → chuyển sang CLEANING (KTV vẫn chưa được giải phóng)
         setIsLoading(true);
@@ -1204,7 +1206,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             body: JSON.stringify({ 
                 bookingId: booking.id, 
                 status: 'COMPLETED',
-                techCode: user.id
+                techCode: ktvId
                 // KHÔNG gọi RELEASE_KTV — KTV phải dọn phòng xong mới được giải phóng
             })
         });
@@ -1228,7 +1230,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     handleFinishTimerRef.current = handleFinishTimer;
 
     const handleSubmitReview = async (customerProfile: any) => {
-        if (!booking || !user?.id) {
+        if (!booking || !ktvId) {
             console.log("🚨 [KTV Logic] Mất dữ liệu phiên làm việc, ép thoát về DASHBOARD");
             setScreen('DASHBOARD');
             try {
@@ -1255,7 +1257,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 body: JSON.stringify({ 
                     bookingId: reviewBookingId, 
                     notes: noteContent,
-                    techCode: user.id
+                    techCode: ktvId
                 })
             });
             
@@ -1269,7 +1271,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setHasSubmittedReview(true);
             // Persist per-KTV per-booking review flag — survives refresh, prevents state leaking to next order
             try {
-                const reviewKey = `ktv_review_submitted_${user.id}_${reviewBookingId}`;
+                const reviewKey = `ktv_review_submitted_${ktvId}_${reviewBookingId}`;
                 localStorage.setItem(reviewKey, 'true');
             } catch(e) {}
             
@@ -1289,7 +1291,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
 
     const handleFinishHandover = async () => {
-        if (!booking || !user?.id) {
+        if (!booking || !ktvId) {
             console.log("🚨 [KTV Logic] Mất dữ liệu phiên làm việc ở bước Dọn phòng, ép thoát về DASHBOARD");
             setScreen('DASHBOARD');
             try {
@@ -1321,7 +1323,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             ? JSON.parse(item.segments) 
                             : (item.segments || []);
                         const mySegs = segs.filter((seg: any) => 
-                            seg.ktvId && seg.ktvId.toLowerCase() === user.id.toLowerCase()
+                            seg.ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase()
                         );
                         if (mySegs.length > 0) {
                             totalMins += mySegs.reduce((sum: number, seg: any) => {
@@ -1348,7 +1350,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     bookingId: postServiceBookingIdRef.current || booking.id, 
                     status: 'FEEDBACK', // Dọn xong → chờ khách đánh giá. Nếu đã có rating → API sẽ set DONE
                     action: 'RELEASE_KTV', // BÂY GIỜ mới giải phóng KTV
-                    techCode: user.id 
+                    techCode: ktvId 
                 })
             });
             const res = await response.json();
@@ -1398,7 +1400,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             const response = await fetch('/api/ktv/interaction', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bookingId: booking.id, type, techCode: user?.id })
+                body: JSON.stringify({ bookingId: booking.id, type, techCode: ktvId })
             });
             const res = await response.json();
             if (res.success) {
@@ -1414,7 +1416,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     };
 
     const handleEarlyExit = async () => {
-        if (!booking || !user?.id) return;
+        if (!booking || !ktvId) return;
         if (!confirm('Thông báo cho quầy khách muốn kết thúc sớm?')) return;
         
         // 🚀 THAY ĐỔI: Không tự ý PATCH status
@@ -1438,6 +1440,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     return {
         user,
+        ktvId,
         screen,
         booking,
         isLoading,

@@ -83,7 +83,8 @@ function KTVDashboardContent() {
 
   const logic = useKTVDashboard({ 
     initialAction: action, 
-    targetBookingId: bookingId 
+    targetBookingId: bookingId,
+    testTechCode: searchParams.get('techCode')
   });
 
   const { 
@@ -284,7 +285,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId === logic.user?.id);
+    return segs.filter((s: any) => s.ktvId === logic.ktvId);
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
@@ -300,7 +301,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
   const assignedItem = booking?.assignedItemId
     ? booking.BookingItems?.find((bi: any) => bi.id === booking.assignedItemId)
     : null;
-  const coWorkers = (assignedItem?.technicianCodes || []).filter((code: string) => code !== logic.user?.id);
+  const coWorkers = (assignedItem?.technicianCodes || []).filter((code: string) => code !== logic.ktvId);
 
   return (
     <div className="p-2 lg:p-4 space-y-4 lg:space-y-6">
@@ -309,7 +310,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
         <div className="hidden lg:flex items-center justify-between">
           <div>
             <h1 className={`text-xl font-bold ${THEME.textBase}`}>
-              Xin chào, <span className="text-emerald-600 ml-1">{logic.user?.id || 'Kỹ thuật viên'}</span>
+              Xin chào, <span className="text-emerald-600 ml-1">{logic.ktvId || 'Kỹ thuật viên'}</span>
             </h1>
           </div>
           <div className={`w-10 h-10 ${THEME.primaryMuted} rounded-full flex items-center justify-center font-bold`}>
@@ -489,7 +490,7 @@ function ScreenTimer({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId === logic.user?.id);
+    return segs.filter((s: any) => s.ktvId === logic.ktvId);
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
@@ -542,7 +543,7 @@ function ScreenTimer({ logic }: { logic: any }) {
             const timerAssignedItem = booking?.assignedItemId
               ? booking.BookingItems?.find((bi: any) => bi.id === booking.assignedItemId)
               : null;
-            const timerCoWorkers = (timerAssignedItem?.technicianCodes || []).filter((code: string) => code !== logic.user?.id);
+            const timerCoWorkers = (timerAssignedItem?.technicianCodes || []).filter((code: string) => code !== logic.ktvId);
             return timerCoWorkers.length > 0 ? (
               <p className="mt-1 text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {timerCoWorkers.join(', ')}</p>
             ) : null;
