@@ -19,15 +19,13 @@ export async function GET(request: Request) {
         let bookingId = bookingIdParam;
         let assignedItemId = null;
 
-        // Nếu không có bookingId cụ thể, ưu tiên tìm đơn ĐANG LÀM dở dang
+        // 1. Xác định bookingId nếu chưa được truyền vào
         if (!bookingId) {
             if (!technicianCode) {
                 return NextResponse.json({ success: false, error: 'Technician code or bookingId is required' }, { status: 400 });
             }
 
-            // 1. Ưu tiên tìm đơn hàng KTV đang làm thực sự.
-            // Các màn hậu kỳ (REVIEW/HANDOVER/REWARD) sẽ tự fetch theo bookingId đã lưu,
-            // nên không được kéo lại các item COMPLETED/FEEDBACK/CLEANING như đơn active.
+            // 1.a Lấy tất cả item active của KTV
             const { data: activeItems } = await supabase
                 .from('BookingItems')
                 .select('bookingId, status, id')
@@ -36,12 +34,9 @@ export async function GET(request: Request) {
                 .order('timeStart', { ascending: false, nullsFirst: false });
 
             if (activeItems && activeItems.length > 0) {
-                // Ưu tiên đơn IN_PROGRESS, sau đó mới tới các trạng thái hậu kỳ
-                const inProgressItem = activeItems.find(i => i.status === 'IN_PROGRESS') || activeItems[0];
-                bookingId = inProgressItem.bookingId;
-                assignedItemId = inProgressItem.id;
+                bookingId = activeItems[0].bookingId;
             } else {
-                // 2. Nếu không có đơn nào đang làm, mới lấy đơn tiếp theo trong TurnQueue (thường là PREPARING / READY)
+                // 1.b Nếu không có item IN_PROGRESS, lấy từ TurnQueue (đơn mới gán)
                 const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
                 const today = new Date(vnMs).toISOString().split('T')[0];
                 const { data: turn, error: tError } = await supabase
@@ -52,16 +47,26 @@ export async function GET(request: Request) {
                     .maybeSingle();
 
                 if (tError) throw tError;
-                
                 if (!turn || !turn.current_order_id) {
                     return NextResponse.json({ success: true, data: null });
                 }
                 bookingId = turn.current_order_id;
-                assignedItemId = turn.booking_item_id;
             }
         }
 
-        // 1.5 Lấy thông tin từ TurnQueue để có mốc thời gian điều phối (last_served_at)
+        // 2. Lấy đơn hàng tương ứng
+        const { data: booking, error: bError } = await supabase
+            .from('Bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .maybeSingle();
+
+        if (bError) throw bError;
+        if (!booking) {
+            return NextResponse.json({ success: true, data: null });
+        }
+
+        // 3. Lấy thông tin TurnQueue của booking này
         let turnInfo = null;
         if (technicianCode) {
             const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
@@ -74,20 +79,6 @@ export async function GET(request: Request) {
                 .eq('current_order_id', bookingId)
                 .maybeSingle();
             turnInfo = turn;
-            if (turn?.booking_item_id) assignedItemId = turn.booking_item_id;
-        }
-
-        // 2. Lấy đơn hàng tương ứng
-        const { data: booking, error: bError } = await supabase
-            .from('Bookings')
-            .select('*')
-            .eq('id', bookingId)
-            .maybeSingle();
-
-        if (bError) throw bError;
-        if (!booking) {
-            // Trường hợp hy hữu: TurnQueue có ID nhưng Booking không tồn tại
-            return NextResponse.json({ success: true, data: null });
         }
 
         // 3. Lấy BookingItems
@@ -143,7 +134,7 @@ export async function GET(request: Request) {
 
                 const item = {
                     ...i,
-                    service_name: getI18nStr(svc?.nameVN || svc?.nameEN || svc?.name, `Dịch vụ ${rawSId}`),
+                    service_name: opts.displayName || getI18nStr(svc?.nameVN || svc?.nameEN || svc?.name, `Dịch vụ ${rawSId}`),
                     service_description: svc?.service_description || getI18nStr(svc?.description, ''),
                     procedure: svc?.procedure || null,
                     focusConfig: svc?.focusConfig || null,
@@ -160,13 +151,75 @@ export async function GET(request: Request) {
             });
         }
 
-        // Parse multi-item IDs ưu tiên dùng mảng postgres (booking_item_ids), fallback về csv cũ
+        // 5. Xác định item và segment đang active thực sự
         const assignedItemIds = (turnInfo?.booking_item_ids && turnInfo.booking_item_ids.length > 0) 
             ? turnInfo.booking_item_ids 
-            : (assignedItemId 
-                ? String(assignedItemId).split(',').map(s => s.trim()).filter(Boolean)
-                : []);
-        const primaryItemId = assignedItemIds[0] || assignedItemId;
+            : (turnInfo?.booking_item_id ? [turnInfo.booking_item_id] : []);
+            
+        let activeItemId = null;
+        let activeSegmentIndex = 0;
+        let statusSource = 'none';
+
+        // Lọc ra các item có gán cho KTV này
+        const ktvItems = itemsWithService.filter((i: any) => 
+            i.technicianCodes && 
+            Array.isArray(i.technicianCodes) && 
+            technicianCode && 
+            i.technicianCodes.some((c: string) => c.trim().toUpperCase() === technicianCode.trim().toUpperCase())
+        );
+
+        if (ktvItems.length > 0) {
+            // Ưu tiên 1: Item có segment của KTV này đang chạy (có actualStartTime nhưng chưa actualEndTime)
+            for (const item of ktvItems) {
+                let segs: any[] = [];
+                try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []); } catch { segs = []; }
+                const mySegs = segs.filter((s: any) => s.ktvId && s.ktvId.trim().toUpperCase() === technicianCode?.trim().toUpperCase());
+                
+                const runningIdx = mySegs.findIndex((s: any) => s.actualStartTime && !s.actualEndTime);
+                if (runningIdx !== -1) {
+                    activeItemId = item.id;
+                    activeSegmentIndex = runningIdx;
+                    statusSource = 'segment_runtime';
+                    break;
+                }
+            }
+
+            // Ưu tiên 2: Item có status IN_PROGRESS
+            if (!activeItemId) {
+                const inProgressItem = ktvItems.find((i: any) => i.status === 'IN_PROGRESS');
+                if (inProgressItem) {
+                    activeItemId = inProgressItem.id;
+                    statusSource = 'item_status';
+                    // Tìm segment index tương đối (segment đầu tiên chưa chạy xong)
+                    let segs: any[] = [];
+                    try { segs = typeof inProgressItem.segments === 'string' ? JSON.parse(inProgressItem.segments) : (Array.isArray(inProgressItem.segments) ? inProgressItem.segments : []); } catch { segs = []; }
+                    const mySegs = segs.filter((s: any) => s.ktvId && s.ktvId.trim().toUpperCase() === technicianCode?.trim().toUpperCase());
+                    const nextIdx = mySegs.findIndex((s: any) => !s.actualEndTime);
+                    activeSegmentIndex = nextIdx !== -1 ? nextIdx : 0;
+                }
+            }
+            
+            // Ưu tiên 3: TurnQueue.booking_item_id
+            if (!activeItemId && turnInfo?.booking_item_id) {
+                const turnItem = ktvItems.find((i: any) => i.id === turnInfo.booking_item_id);
+                if (turnItem) {
+                    activeItemId = turnItem.id;
+                    statusSource = 'turnqueue_legacy';
+                }
+            }
+            
+            // Ưu tiên 4: Item đầu tiên trong mảng phân công
+            if (!activeItemId && assignedItemIds.length > 0) {
+                activeItemId = assignedItemIds[0];
+                statusSource = 'turnqueue_array';
+            }
+            
+            // Ưu tiên 5: Item đầu tiên tìm thấy
+            if (!activeItemId) {
+                activeItemId = ktvItems[0].id;
+                statusSource = 'first_found';
+            }
+        }
 
         // 5. Fetch room-specific procedures (prep & clean checklists)
         let roomProcedures: { prep_procedure: string[] | null, clean_procedure: string[] | null } = { prep_procedure: null, clean_procedure: null };
@@ -185,17 +238,35 @@ export async function GET(request: Request) {
             }
         }
 
+        // Tính toán dispatchStartTime chuẩn theo segment
+        let finalDispatchStartTime = turnInfo?.start_time;
+        if (activeItemId) {
+            const activeItem = ktvItems.find((i: any) => i.id === activeItemId);
+            if (activeItem) {
+                let segs: any[] = [];
+                try { segs = typeof activeItem.segments === 'string' ? JSON.parse(activeItem.segments) : (Array.isArray(activeItem.segments) ? activeItem.segments : []); } catch { segs = []; }
+                const mySegs = segs.filter((s: any) => s.ktvId && technicianCode && s.ktvId.trim().toUpperCase() === technicianCode.trim().toUpperCase());
+                if (mySegs[activeSegmentIndex] && mySegs[activeSegmentIndex].startTime) {
+                    finalDispatchStartTime = mySegs[activeSegmentIndex].startTime;
+                } else if (mySegs.length > 0 && mySegs[0].startTime) {
+                    finalDispatchStartTime = mySegs[0].startTime;
+                }
+            }
+        }
+
         return NextResponse.json({
             success: true,
             data: {
                 ...booking,
                 dispatcherNote: booking.notes || '',
                 BookingItems: itemsWithService,
-                assignedItemId: primaryItemId,
+                assignedItemId: activeItemId,
                 assignedItemIds: assignedItemIds,
+                activeSegmentIndex: activeSegmentIndex,
+                statusSource: statusSource,
                 // Thông tin ràng buộc thời gian & Vị trí làm việc cụ thể
                 last_served_at: turnInfo?.last_served_at,
-                dispatchStartTime: turnInfo?.start_time,
+                dispatchStartTime: finalDispatchStartTime,
                 assignedRoomId: turnInfo?.room_id,
                 assignedBedId: turnInfo?.bed_id,
                 // Room-specific procedures

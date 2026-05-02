@@ -477,6 +477,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
         console.log("📟 [ScreenEngine] Final Check:", { currentStatus, itemStatus: assignedItem?.status, bookingStatus: booking.status, currentScreen, statusLevel });
 
+        // 🚀 Forward-only Guard: Không lùi UI về PREPARING/READY do lỗi polling
+        if (statusLevel <= 1 && ['TIMER', 'REVIEW', 'HANDOVER', 'REWARD'].includes(currentScreen)) {
+            if (currentScreen !== 'TIMER' || !isPreppingRef.current) {
+                console.log(`🚫 [ScreenEngine] Chặn kéo ngược từ ${currentScreen} về ${currentStatus}`);
+                return;
+            }
+        }
+
         // 🚫 CANCELLED: luôn xử lý (booking-level)
         if (booking.status === 'CANCELLED') {
             setBooking(null);

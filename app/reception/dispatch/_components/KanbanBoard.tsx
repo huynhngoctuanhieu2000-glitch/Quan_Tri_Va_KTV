@@ -390,7 +390,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                     {services.map((s: any) => (
                                                         <div key={s.id} className="flex flex-col gap-1.5">
                                                             <div className="flex items-center justify-between text-[11px]">
-                                                                <span className="text-gray-700 font-black truncate pr-2">{s.serviceName}</span>
+                                                                <span className="text-gray-700 font-black truncate pr-2">{s.options?.displayName || s.serviceName}</span>
                                                                 <span className="text-[9px] font-black text-indigo-600 bg-white px-1.5 py-0.5 rounded-lg shadow-sm border border-indigo-50 shrink-0">P.{s.selectedRoomId || '—'}</span>
                                                             </div>
                                                             

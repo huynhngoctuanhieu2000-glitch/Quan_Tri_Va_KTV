@@ -41,6 +41,7 @@ interface DispatchStaffRowProps {
     onRemove: (orderId: string, svcId: string, rowId: string) => void;
     canRemove: boolean;
     // Print ticket props
+    displayName?: string;
     serviceDescription?: string;
     strength?: string;
     adminNote?: string;
@@ -78,7 +79,7 @@ const calcEndTime = (start: string, duration: number): string => {
 
 export const DispatchStaffRow = ({
     row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove,
-    serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId, reminders = []
+    displayName, serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId, reminders = []
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -529,7 +530,7 @@ export const DispatchStaffRow = ({
                                 {/* Service Name */}
                                 <div>
                                     <div className="text-2xl font-black text-red-600 uppercase leading-tight">
-                                        {serviceName} ({svcDuration}&apos;)
+                                        {displayName || serviceName} ({svcDuration}&apos;)
                                     </div>
                                     {serviceDescription && (
                                         <p className="text-sm text-gray-500 font-semibold mt-1">{serviceDescription}</p>

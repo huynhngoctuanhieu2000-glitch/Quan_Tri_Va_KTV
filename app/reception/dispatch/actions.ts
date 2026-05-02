@@ -231,24 +231,44 @@ export async function processDispatch(bookingId: string, dispatchData: {
         // 4. Send background push and realtime notification to KTVs
         if (dispatchData.staffAssignments && dispatchData.staffAssignments.length > 0) {
             const staffIds = dispatchData.staffAssignments.map(a => a.ktvId).filter(Boolean);
+            // Lọc unique staffIds
+            const uniqueStaffIds = Array.from(new Set(staffIds));
             
-            // 4a. Insert StaffNotifications for realtime UI updates
-            for (const staffId of staffIds) {
+            for (const staffId of uniqueStaffIds) {
+                let svcName = 'dịch vụ mới';
+                let svcTime = '';
+                
+                // Tìm item mà KTV này được phân công để lấy displayName và startTime
+                const ktvItem = dispatchData.itemUpdates?.find((i: any) => 
+                    i.technicianCodes && (Array.isArray(i.technicianCodes) ? i.technicianCodes.includes(staffId) : i.technicianCodes === staffId)
+                );
+                
+                if (ktvItem) {
+                    svcName = ktvItem.options?.displayName || 'dịch vụ mới';
+                    const ktvSeg = ktvItem.segments?.find((s: any) => s.ktvId === staffId);
+                    if (ktvSeg && ktvSeg.startTime) {
+                        svcTime = ` lúc ${ktvSeg.startTime}`;
+                    } else if (ktvItem.segments && ktvItem.segments.length > 0 && ktvItem.segments[0].startTime) {
+                        svcTime = ` lúc ${ktvItem.segments[0].startTime}`;
+                    }
+                }
+
+                const message = `Bạn được phân công: ${svcName}${svcTime}. Vui lòng kiểm tra ứng dụng.`;
+
+                // 4a. Insert StaffNotifications for realtime UI updates
                 await supabase.from('StaffNotifications').insert({
                     bookingId: bookingId,
-                    employeeId: staffId,
+                    employeeId: String(staffId),
                     type: 'NEW_ORDER',
-                    message: `Bạn được phân công cho đơn hàng ${bookingId}. Vui lòng kiểm tra ứng dụng.`,
+                    message: message,
                     isRead: false
                 });
-            }
 
-            // 4b. Send Push Notification for OS level alerts
-            if (staffIds.length > 0) {
+                // 4b. Send Push Notification for OS level alerts
                 await sendPushNotification({
                     title: 'Bạn có ca làm mới! 💆',
-                    message: `Bạn được phân công cho đơn hàng ${bookingId}. Vui lòng kiểm tra ứng dụng.`,
-                    targetStaffIds: staffIds,
+                    message: message,
+                    targetStaffIds: [String(staffId)],
                     url: '/ktv/dashboard'
                 }).catch(err => console.error('Push error:', err));
             }
@@ -1168,11 +1188,35 @@ export async function editBookingService(bookingId: string, itemId: string, newS
         const newServiceName = typeof newService.nameVN === 'object' ? newService.nameVN.vn || newService.nameVN.en : newService.nameVN || 'Dịch vụ mới';
 
         // 5. Cập nhật BookingItem
+        let newOptions = oldItem.options || {};
+        if (!newOptions.displayName || newOptions.displayName === oldServiceName) {
+            newOptions.displayName = newServiceName; // Sync sang tên dịch vụ mới
+        }
+
+        // Cập nhật endTime của các segments theo duration mới (tùy chọn)
+        let newSegments = oldItem.segments || [];
+        try { newSegments = typeof oldItem.segments === 'string' ? JSON.parse(oldItem.segments) : (Array.isArray(oldItem.segments) ? oldItem.segments : []); } catch { newSegments = []; }
+        
+        if (durationDiff !== 0 && newSegments.length > 0) {
+            newSegments = newSegments.map((seg: any) => {
+                if (seg.startTime) {
+                    const [h, m] = seg.startTime.split(':').map(Number);
+                    const d = new Date();
+                    d.setHours(h, m, 0);
+                    d.setMinutes(d.getMinutes() + newDuration); // set end time based on the entire duration
+                    seg.endTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                }
+                return seg;
+            });
+        }
+
         const { error: updItemError } = await supabase
             .from('BookingItems')
             .update({
                 serviceId: newServiceId,
-                price: newPrice
+                price: newPrice,
+                options: newOptions,
+                segments: newSegments
             })
             .eq('id', itemId);
         if (updItemError) throw updItemError;
@@ -1248,6 +1292,7 @@ export async function editBookingService(bookingId: string, itemId: string, newS
             newPrice, 
             newDuration, 
             newServiceName,
+            newDisplayName: newOptions.displayName,
             priceDiff
         };
     } catch (error: any) {

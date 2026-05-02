@@ -63,15 +63,19 @@ export async function POST(request: Request) {
         }
 
         // 2. Ghi nhận KTV này đã hoàn tất khâu Review vào segments của BookingItems (Source of truth)
-        const { data: ktvItems, error: itemsErr } = await supabase
+        const { data: allItems, error: itemsErr } = await supabase
             .from('BookingItems')
-            .select('id, segments')
-            .eq('bookingId', bookingId)
-            .contains('technicianCodes', [techCode]);
+            .select('id, segments, "technicianCodes"')
+            .eq('bookingId', bookingId);
 
         if (itemsErr) {
             return NextResponse.json({ success: false, error: 'Error fetching booking items' }, { status: 500 });
         }
+
+        const ktvItems = (allItems || []).filter(item => 
+            Array.isArray(item.technicianCodes) && 
+            item.technicianCodes.some(c => c.trim().toUpperCase() === techCode.trim().toUpperCase())
+        );
 
         if (!ktvItems || ktvItems.length === 0) {
             // [Lỗ hổng P2]: KTV không có trong technicianCodes của bất kỳ item nào, không thể tạo source of truth!

@@ -727,6 +727,10 @@ if (!hasPermission('dispatch_board')) {
                         serviceId: newServiceId,
                         serviceName: res.newServiceName,
                         duration: res.newDuration,
+                        options: {
+                            ...(s.options || {}),
+                            displayName: res.newDisplayName
+                        },
                         // Update the end time of segments if we can
                         staffList: s.staffList.map(st => ({
                             ...st,

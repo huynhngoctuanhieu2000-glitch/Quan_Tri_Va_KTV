@@ -58,7 +58,7 @@ export const DispatchServiceBlock = ({
                     </span>
                     <div className="flex flex-col w-full">
                         <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="font-black text-gray-900 text-base leading-tight">{svc.serviceName}</h3>
+                            <h3 className="font-black text-gray-900 text-base leading-tight">{svc.options?.displayName || svc.serviceName}</h3>
                             <span className="inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
                             
                             {/* Quick View: Assigned KTV & Room */}
@@ -187,6 +187,7 @@ export const DispatchServiceBlock = ({
                                         svcId={svc.id}
                                         orderId={orderId}
                                         serviceName={svc.serviceName}
+                                        displayName={svc.options?.displayName}
                                         svcDuration={svc.duration}
                                         availableTurns={availableTurns}
                                         rooms={rooms}
