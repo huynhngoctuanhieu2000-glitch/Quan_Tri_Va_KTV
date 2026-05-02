@@ -17,10 +17,10 @@ export async function GET() {
 
         // Fallback nếu bảng chưa tồn tại hoặc không có dữ liệu
         const defaultSettings = {
-            ktv_setup_duration_minutes: 10,
             auto_finish_on_timer_end: true,
             push_notifications_enabled: true,
-            allow_early_checkout: true
+            allow_early_checkout: true,
+            spa_day_cutoff_hours: 6
         };
 
         if (error || !configs || configs.length === 0) {

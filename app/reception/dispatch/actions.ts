@@ -393,7 +393,7 @@ export async function cancelBooking(bookingId: string, date: string) {
                 status: 'waiting',
                 current_order_id: null,
                 booking_item_id: null,
-                booking_item_ids: '{}',
+                booking_item_ids: [],
                 room_id: null,
                 bed_id: null,
                 start_time: null,
@@ -559,7 +559,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                                 status: 'waiting',
                                 current_order_id: null,
                                 booking_item_id: null,
-                                booking_item_ids: '{}',
+                                booking_item_ids: [],
                                 start_time: null,
                                 estimated_end_time: null,
                                 turns_completed: newTurnsCompleted
@@ -918,10 +918,10 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                         updateData.estimated_end_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
                     }
 
-                    // 6b. Nối addon item IDs vào booking_item_id (format: "id1,id2,id3")
+                    // 6b. Nối addon item IDs vào booking_item_ids
                     // Để KTV Dashboard tính tiền tua theo TỔNG duration tất cả items (chung 1 tua)
-                    const existingItemIds = turn.booking_item_id 
-                        ? String(turn.booking_item_id).split(',').map((s: string) => s.trim()).filter(Boolean)
+                    const existingItemIds = Array.isArray(turn.booking_item_ids) 
+                        ? turn.booking_item_ids 
                         : [];
                     const mergedItemIds = [...new Set([...existingItemIds, ...newItemIds])];
                     updateData.booking_item_id = mergedItemIds.join(',');
@@ -1197,7 +1197,7 @@ export async function editBookingService(bookingId: string, itemId: string, newS
                     .select('*')
                     .eq('current_order_id', bookingId)
                     .eq('employee_id', ktvId)
-                    .like('booking_item_id', `%${itemId}%`)
+                    .contains('booking_item_ids', [itemId])
                     .maybeSingle();
 
                 if (turn && turn.estimated_end_time && durationDiff !== 0) {

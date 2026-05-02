@@ -495,7 +495,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 <button 
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        const ratingUrl = `${window.location.origin}/rating/${subOrder.accessToken || subOrder.id}`;
+                                                                        const ratingUrl = `${window.location.origin}/rating/${subOrder.bookingId}`;
                                                                         navigator.clipboard.writeText(ratingUrl);
                                                                         alert(`Link đánh giá đã copy:\n${ratingUrl}`);
                                                                     }}

@@ -57,6 +57,7 @@ export const useKTVAttendance = () => {
     const [isLate, setIsLate] = useState(false);
     const [isOffToday, setIsOffToday] = useState(false);
     const [allowEarlyCheckout, setAllowEarlyCheckout] = useState(true);
+    const [dayCutoffHours, setDayCutoffHours] = useState(6);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -76,8 +77,13 @@ export const useKTVAttendance = () => {
                 
                 if (resSettings.ok) {
                     const settingsData = await resSettings.json();
-                    if (settingsData.success && settingsData.data?.allow_early_checkout !== undefined) {
-                        setAllowEarlyCheckout(settingsData.data.allow_early_checkout);
+                    if (settingsData.success) {
+                        if (settingsData.data?.allow_early_checkout !== undefined) {
+                            setAllowEarlyCheckout(settingsData.data.allow_early_checkout);
+                        }
+                        if (settingsData.data?.spa_day_cutoff_hours !== undefined) {
+                            setDayCutoffHours(Number(settingsData.data.spa_day_cutoff_hours));
+                        }
                     }
                 }
 
@@ -187,16 +193,25 @@ export const useKTVAttendance = () => {
         const vnNow = new Date(Date.now() + VN_OFFSET_MS);
         const [startHour, startMin] = startTimeStr.split(':').map(Number);
         
-        // Tạo Date object đại diện cho giờ bắt đầu ca trong ngày hôm nay
-        const vnStartStr = `${vnNow.toISOString().slice(0, 10)}T${startTimeStr}:00+07:00`;
-        const startMs = new Date(vnStartStr).getTime();
+        // Business Date logic
+        const businessNow = new Date(vnNow.getTime() - dayCutoffHours * 60 * 60 * 1000);
+        const businessDateStr = businessNow.toISOString().slice(0, 10);
+        
+        let startMs: number;
+        if (startHour < dayCutoffHours) {
+            // Ca bắt đầu vào rạng sáng hôm sau
+            const nextDay = new Date(businessNow.getTime() + 24 * 60 * 60 * 1000);
+            startMs = new Date(`${nextDay.toISOString().slice(0, 10)}T${startTimeStr}:00+07:00`).getTime();
+        } else {
+            startMs = new Date(`${businessDateStr}T${startTimeStr}:00+07:00`).getTime();
+        }
         
         const nowMs = Date.now();
         const late = nowMs > startMs; // nếu giờ hiện tại lớn hơn giờ start ca
         
         setIsLate(late);
         return late;
-    }, [activeShiftType]);
+    }, [activeShiftType, dayCutoffHours]);
 
     const handleAttendance = useCallback(async (
         checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'SUDDEN_OFF',
@@ -294,15 +309,17 @@ export const useKTVAttendance = () => {
         const vnNow = new Date(Date.now() + VN_OFFSET_MS);
         const [endHour, endMin] = endTimeStr.split(':').map(Number);
 
+        // Business Date logic
+        const businessNow = new Date(vnNow.getTime() - dayCutoffHours * 60 * 60 * 1000);
+        const businessDateStr = businessNow.toISOString().slice(0, 10);
+
         let endMs: number;
-        if (activeShiftType === 'SHIFT_3' && endHour === 0 && endMin === 0) {
-            // 00:00 = midnight = start of next day → 24h from today 00:00 VN
-            const todayMidnight = new Date(vnNow);
-            todayMidnight.setUTCHours(todayMidnight.getUTCHours() - (VN_OFFSET_MS / 3600000)); // back to UTC
-            const vnMidnight = new Date(`${vnNow.toISOString().slice(0, 10)}T00:00:00+07:00`);
-            endMs = vnMidnight.getTime() + 24 * 60 * 60 * 1000; // next midnight VN
+        // Nếu giờ tan ca nhỏ hơn giờ cut-off (VD: 00:00, 02:00) -> thuộc rạng sáng ngày tiếp theo của Business Date
+        if (endHour < dayCutoffHours || (endHour === dayCutoffHours && endMin === 0)) {
+            const nextDay = new Date(businessNow.getTime() + 24 * 60 * 60 * 1000);
+            endMs = new Date(`${nextDay.toISOString().slice(0, 10)}T${endTimeStr}:00+07:00`).getTime();
         } else {
-            const vnEndStr = `${vnNow.toISOString().slice(0, 10)}T${endTimeStr}:00+07:00`;
+            const vnEndStr = `${businessDateStr}T${endTimeStr}:00+07:00`;
             endMs = new Date(vnEndStr).getTime();
         }
 

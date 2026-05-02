@@ -82,7 +82,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const handoverChecklist = cleanChecklist;
 
     const [settings, setSettings] = useState<any>({
-        ktv_setup_duration_minutes: 10,
+        ktv_setup_duration_minutes: null,
         auto_finish_on_timer_end: true,
         ktv_commission_per_60min: 100000
     });
@@ -300,9 +300,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 allowed = d;
             } else if (booking.last_served_at) {
                 // Quầy không nhập -> Dùng mốc điều phối + thời gian chuẩn bị
-                const dispatchTime = new Date(booking.last_served_at).getTime();
-                const setupMs = (settings.ktv_setup_duration_minutes || 10) * 60 * 1000;
-                allowed = new Date(dispatchTime + setupMs);
+                if (settings.ktv_setup_duration_minutes != null && !isNaN(Number(settings.ktv_setup_duration_minutes))) {
+                    const dispatchTime = new Date(booking.last_served_at).getTime();
+                    const setupMs = Number(settings.ktv_setup_duration_minutes) * 60 * 1000;
+                    allowed = new Date(dispatchTime + setupMs);
+                } else {
+                    allowed = null; // Cho phép bắt đầu ngay nếu chưa có config
+                }
             }
 
             setAllowedStartTime(allowed);
@@ -481,7 +485,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         }
 
         if (currentStatus === 'READY' && currentScreen === 'DASHBOARD') {
-            const setupMs = (settings.ktv_setup_duration_minutes || 10) * 60;
+            const parsed = Number(settings.ktv_setup_duration_minutes);
+            const setupMs = (!isNaN(parsed) ? parsed : 0) * 60;
             setPrepTimeRemaining(setupMs);
             setIsPrepping(true);
             setScreen('TIMER');
@@ -1066,7 +1071,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 : (assignedItem?.duration || 60);
             
             setTimeRemaining(firstSegDuration * 60);
-            setPrepTimeRemaining(settings.ktv_setup_duration_minutes * 60);
+            const parsed = Number(settings.ktv_setup_duration_minutes);
+            const setupMs = !isNaN(parsed) ? parsed : 0;
+            setPrepTimeRemaining(setupMs * 60);
             setIsPrepping(true);
             setScreen('TIMER');
         } else {

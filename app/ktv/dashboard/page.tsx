@@ -502,12 +502,15 @@ function ScreenTimer({ logic }: { logic: any }) {
   // 🕒 CHỈ HIỂN THỊ THỜI GIAN CỦA CHẶNG HIỆN TẠI thay vì tổng
   const displayDuration = currentSeg ? (Number(currentSeg.duration) || 60) : (item.duration || 60);
 
+  const parsedSetup = Number(logic.settings?.ktv_setup_duration_minutes);
+  const setupMins = !isNaN(parsedSetup) ? parsedSetup : 0;
+  
   const totalDuration = isPrepping 
-    ? (logic.settings?.ktv_setup_duration_minutes || 10) * 60 
+    ? setupMins * 60 
     : displayDuration * 60;
   
   // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
-  const progress = (currentSecs / totalDuration) * 100;
+  const progress = totalDuration > 0 ? (currentSecs / totalDuration) * 100 : 0;
 
 
   return (

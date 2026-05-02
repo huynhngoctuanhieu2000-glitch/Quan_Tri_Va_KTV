@@ -15,18 +15,34 @@ export async function GET() {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        // Get today in VN timezone
+        // ─── Fetch Cut-off Time Config ───
+        const { data: configData } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_day_cutoff_hours')
+            .maybeSingle();
+            
+        const cutoffHours = (configData?.value != null) ? Number(configData.value) : 6;
+
+        // ─── Calculate Business Day date range (UTC+7) ───
         const nowVnMs = Date.now() + VN_OFFSET_MS;
-        const today = new Date(nowVnMs).toISOString().split('T')[0];
-        const startOfDay = `${today}T00:00:00+07:00`;
-        const endOfDay = `${today}T23:59:59+07:00`;
+        
+        // Subtract cutoff hours to determine the "Business Date"
+        const businessNow = new Date(nowVnMs - cutoffHours * 60 * 60 * 1000);
+        const businessDateStr = businessNow.toISOString().split('T')[0];
+        
+        // Business Day starts at cutoff hours of the business date
+        const startOfBusinessDayUtc = new Date(`${businessDateStr}T${String(cutoffHours).padStart(2, '0')}:00:00+07:00`).toISOString();
+        
+        // Business Day ends 24 hours later (minus 1 ms)
+        const endOfBusinessDayUtc = new Date(new Date(`${businessDateStr}T${String(cutoffHours).padStart(2, '0')}:00:00+07:00`).getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
 
         const { data, error } = await supabase
             .from('KTVAttendance')
             .select('id, employeeId, employeeName, checkType, status, checkedAt, confirmedAt, confirmedBy, latitude, longitude, photoUrl')
             .in('status', ['CONFIRMED', 'REJECTED'])
-            .gte('checkedAt', startOfDay)
-            .lte('checkedAt', endOfDay)
+            .gte('checkedAt', startOfBusinessDayUtc)
+            .lte('checkedAt', endOfBusinessDayUtc)
             .order('confirmedAt', { ascending: false });
 
         if (error) {

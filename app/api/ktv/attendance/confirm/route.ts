@@ -63,11 +63,22 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ success: false, error: updateError.message }, { status: 500 });
         }
 
+        // ─── Lấy cấu hình Day Cut-off để tính ngày Business Day ────────────
+        const { data: configData } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_day_cutoff_hours')
+            .maybeSingle();
+        const cutoffHours = (configData?.value != null) ? Number(configData.value) : 6;
+
+        // Tính ngày làm việc (Business Date) dựa trên thời điểm KTV bấm điểm danh (checkedAt)
+        const checkTimeVn = new Date(new Date(attendance.checkedAt).getTime() + VN_OFFSET_MS);
+        const businessDateObj = new Date(checkTimeVn.getTime() - cutoffHours * 60 * 60 * 1000);
+        const businessDateStr = businessDateObj.toISOString().split('T')[0];
+
         // ─── If CONFIRMED CHECK_IN: upsert TurnQueue ────────────────────
         if (action === 'CONFIRM' && (attendance.checkType === 'CHECK_IN' || attendance.checkType === 'LATE_CHECKIN')) {
-            const nowUtc = new Date();
-            const nowVnMs = nowUtc.getTime() + VN_OFFSET_MS;
-            const today = new Date(nowVnMs).toISOString().split('T')[0];
+            const today = businessDateStr;
 
             const { data: existingTurn } = await supabase
                 .from('TurnQueue')
@@ -105,8 +116,7 @@ export async function PATCH(request: Request) {
 
         // ─── If CONFIRMED CHECK_OUT or SUDDEN_OFF: set status = off (hiển thị mờ cuối danh sách) ──────
         if (action === 'CONFIRM' && (attendance.checkType === 'CHECK_OUT' || attendance.checkType === 'SUDDEN_OFF')) {
-            const nowUtc = new Date();
-            const today = new Date(nowUtc.getTime() + VN_OFFSET_MS).toISOString().split('T')[0];
+            const today = businessDateStr;
 
             await supabase
                 .from('TurnQueue')

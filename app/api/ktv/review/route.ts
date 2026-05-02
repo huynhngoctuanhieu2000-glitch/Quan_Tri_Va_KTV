@@ -14,9 +14,11 @@ export async function POST(request: Request) {
         
         // --- 🛡️ BẢO MẬT: AUTHORIZATION & OWNERSHIP CHECK ---
         const bUser = await requireBusinessUser();
-        // Lấy techCode từ JWT session (Tuyệt đối tin tưởng). 
-        // Nếu bUser null (Compatibility Phase), mới tạm thời lấy từ body.
-        const techCode = bUser?.techCode || body.techCode;
+        if (!bUser) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+        
+        const techCode = bUser.techCode;
 
         if (!bookingId || !techCode) {
             return NextResponse.json({ success: false, error: 'bookingId and techCode are required' }, { status: 400 });

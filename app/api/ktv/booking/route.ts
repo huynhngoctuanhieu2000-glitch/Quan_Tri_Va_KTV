@@ -314,8 +314,12 @@ export async function PATCH(request: Request) {
                         .eq('key', 'ktv_setup_duration_minutes')
                         .maybeSingle();
                     
-                    const setupMin = Number(config?.value || 10);
-                    allowed = new Date(new Date(turnForSync.last_served_at).getTime() + (setupMin * 60 * 1000));
+                    if (config && config.value !== null && config.value !== '') {
+                        const setupMin = Number(config.value);
+                        if (!isNaN(setupMin)) {
+                            allowed = new Date(new Date(turnForSync.last_served_at).getTime() + (setupMin * 60 * 1000));
+                        }
+                    }
                 }
 
                 if (allowed && new Date().getTime() < (allowed.getTime() - 5000)) {

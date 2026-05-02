@@ -5,9 +5,6 @@ export async function requireApiUser() {
     const { data: { user }, error } = await supabase.auth.getUser();
 
     if (error || !user) {
-        // [COMPATIBILITY PHASE]: Nếu chưa có JWT Auth, tạm thời giả lập một user để không phá vỡ logic cũ.
-        // Khi phase chuyển giao kết thúc, sẽ throw lỗi 401.
-        console.warn('⚠️ [requireApiUser] No JWT session found. Allowed fallback for compatibility.');
         return null;
     }
 
@@ -17,7 +14,6 @@ export async function requireApiUser() {
 export async function requireBusinessUser() {
     const user = await requireApiUser();
     if (!user) {
-        // [COMPATIBILITY PHASE]: Trả về null để route cũ (vẫn đọc từ body) không bị crash
         return null;
     }
 
@@ -38,12 +34,12 @@ export async function requireBusinessUser() {
 export async function requireRole(requiredRoles: string[]) {
     const bUser = await requireBusinessUser();
     
-    // [COMPATIBILITY PHASE]: Bỏ qua check nếu chưa có user map
-    if (!bUser) return true;
+    if (!bUser) {
+        throw new Error('Unauthorized');
+    }
 
     if (!bUser.role || !requiredRoles.includes(bUser.role)) {
-        console.warn(`⚠️ [COMPATIBILITY PHASE] User has role ${bUser.role}, but requires [${requiredRoles.join(', ')}]. Bypassing check.`);
-        return true;
+        throw new Error('Forbidden');
     }
 
     return true;

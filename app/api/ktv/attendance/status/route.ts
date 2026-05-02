@@ -22,20 +22,38 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        // ─── Calculate today's date range in VN timezone (UTC+7) ───
+        // ─── Fetch Cut-off Time Config ───
+        const { data: configData } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_day_cutoff_hours')
+            .single();
+            
+        // Default to 6:00 AM if not set
+        const cutoffHours = (configData?.value != null) ? Number(configData.value) : 6;
+
+        // ─── Calculate Business Day date range (UTC+7) ───
         const nowUtc = new Date();
         const vnNow = new Date(nowUtc.getTime() + VN_OFFSET_MS);
-        const vnDateStr = vnNow.toISOString().slice(0, 10); // YYYY-MM-DD in VN time
-        const startOfDayUtc = new Date(`${vnDateStr}T00:00:00+07:00`).toISOString();
-        const endOfDayUtc = new Date(`${vnDateStr}T23:59:59+07:00`).toISOString();
+        
+        // Subtract cutoff hours to determine the "Business Date"
+        // E.g., if cutoff is 6, 03:00 AM May 2 becomes 21:00 PM May 1 -> Business Date is May 1
+        const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
+        const businessDateStr = businessNow.toISOString().slice(0, 10);
+        
+        // Business Day starts at cutoff hours of the business date
+        const startOfBusinessDayUtc = new Date(`${businessDateStr}T${String(cutoffHours).padStart(2, '0')}:00:00+07:00`).toISOString();
+        
+        // Business Day ends 24 hours later (minus 1 ms for safety, but we can just add 24 hours)
+        const endOfBusinessDayUtc = new Date(new Date(`${businessDateStr}T${String(cutoffHours).padStart(2, '0')}:00:00+07:00`).getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
 
         // ─── Query today's attendance records, most recent first ───
         const { data: records, error } = await supabase
             .from('KTVAttendance')
             .select('*')
             .eq('employeeId', employeeId)
-            .gte('checkedAt', startOfDayUtc)
-            .lte('checkedAt', endOfDayUtc)
+            .gte('checkedAt', startOfBusinessDayUtc)
+            .lte('checkedAt', endOfBusinessDayUtc)
             .order('checkedAt', { ascending: false });
 
         if (error) {
