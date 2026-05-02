@@ -555,43 +555,57 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             const allReallyDone = !remainingItems || remainingItems.length === 0;
             
             if (allReallyDone) {
-                // Lấy tất cả KTV đang làm đơn hàng này
+                // Lấy tất cả KTV đang làm đơn hàng này từ TurnQueue (cách cũ)
                 const { data: turnsToRelease } = await supabase
                     .from('TurnQueue')
                     .select('id, employee_id, turns_completed, status')
                     .eq('current_order_id', bookingId)
                     .eq('date', date);
 
-                if (turnsToRelease && turnsToRelease.length > 0) {
-                    for (const turn of turnsToRelease) {
+                // 🔥 BỔ SUNG: Lấy thêm danh sách từ KtvAssignments (ACTIVE state) để vét cạn các KTV bị kẹt
+                const { data: activeAssignments } = await supabase
+                    .from('KtvAssignments')
+                    .select('employee_id')
+                    .eq('booking_id', bookingId)
+                    .eq('status', 'ACTIVE');
+
+                const ktvsToRelease = new Set<string>();
+                (turnsToRelease || []).forEach(t => { if (t.employee_id) ktvsToRelease.add(t.employee_id); });
+                (activeAssignments || []).forEach(a => { if (a.employee_id) ktvsToRelease.add(a.employee_id); });
+
+                if (ktvsToRelease.size > 0) {
+                    for (const employeeId of Array.from(ktvsToRelease)) {
+                        const turn = (turnsToRelease || []).find(t => t.employee_id === employeeId);
+
                         // Nếu hủy đơn khi đã bắt đầu làm (working) -> Xóa bản ghi TurnLedger (mất tua)
-                        if (newStatus === 'CANCELLED' && turn.status === 'working') {
+                        if (newStatus === 'CANCELLED' && turn && turn.status === 'working') {
                             console.log(`⚠️ KTV ${turn.id} mất tua do hủy đơn (status working).`);
                             await supabase
                                 .from('TurnLedger')
                                 .delete()
                                 .eq('date', date)
                                 .eq('booking_id', bookingId)
-                                .eq('employee_id', turn.employee_id || ''); // Cần check employee_id
+                                .eq('employee_id', employeeId);
                         }
 
                         // 1. Cập nhật KtvAssignments thành COMPLETED hoặc CANCELLED
+                        const assignStatus = newStatus === 'CANCELLED' ? 'CANCELLED' : 'COMPLETED';
                         await supabase
                             .from('KtvAssignments')
-                            .update({ status: newStatus, updated_at: new Date().toISOString() })
-                            .eq('employee_id', turn.employee_id)
-                            .eq('business_date', date)
+                            .update({ status: assignStatus, updated_at: new Date().toISOString() })
+                            .eq('employee_id', employeeId)
                             .eq('booking_id', bookingId)
-                            .eq('status', 'ACTIVE');
+                            .eq('business_date', date)
+                            .eq('status', 'ACTIVE'); // Khóa chặt theo đơn hàng và ngày làm việc
 
                         // 2. Gọi Auto-Handoff Engine
                         const { data: promoteData, error: promoteErr } = await supabase.rpc('promote_next_assignment', {
-                            p_employee_id: turn.employee_id,
+                            p_employee_id: employeeId,
                             p_business_date: date
                         });
 
-                        if (promoteErr) console.error(`[Handoff] Error promoting KTV ${turn.employee_id}:`, promoteErr);
-                        else console.log(`[Handoff] KTV ${turn.employee_id} auto-handoff result:`, promoteData);
+                        if (promoteErr) console.error(`[Handoff] Error promoting KTV ${employeeId}:`, promoteErr);
+                        else console.log(`[Handoff] KTV ${employeeId} auto-handoff result:`, promoteData);
                     }
                 }
             } else {

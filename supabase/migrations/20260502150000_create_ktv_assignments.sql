@@ -132,6 +132,28 @@ BEGIN
     -- 1. Validate & insert TurnLedger (idempotent)
     FOR v_assignment IN SELECT jsonb_array_elements(p_staff_assignments)
     LOOP
+        -- 0. Self-Healing Guard: Dọn dẹp assignments ảo (kẹt) trước khi cấp mới
+        UPDATE "KtvAssignments" ka
+        SET "status" = 'COMPLETED', "updated_at" = now()
+        FROM "Bookings" b
+        WHERE ka."booking_id" = b."id"
+          AND ka."employee_id" = v_assignment->>'ktvId'
+          AND ka."business_date" = p_date
+          AND ka."status" = 'ACTIVE'
+          AND b."status" IN ('DONE', 'COMPLETED', 'CANCELLED');
+
+        IF EXISTS (
+            SELECT 1 FROM "TurnQueue"
+            WHERE "employee_id" = v_assignment->>'ktvId'
+              AND "date" = p_date
+              AND "status" = 'waiting'
+        ) THEN
+            UPDATE "KtvAssignments"
+            SET "status" = 'COMPLETED', "updated_at" = now()
+            WHERE "employee_id" = v_assignment->>'ktvId'
+              AND "business_date" = p_date
+              AND "status" = 'ACTIVE';
+        END IF;
         BEGIN
             INSERT INTO "TurnLedger" ("date", "booking_id", "employee_id", "source")
             VALUES (p_date, p_booking_id, v_assignment->>'ktvId', 'DISPATCH_CONFIRM')

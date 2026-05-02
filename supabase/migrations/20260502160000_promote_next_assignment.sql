@@ -12,6 +12,31 @@ DECLARE
     v_next_assignment RECORD;
     v_turn_id UUID;
 BEGIN
+    -- 0. Self-Healing / Reconciliation Guard
+    -- Clean up stale ACTIVE assignments if the booking is already DONE/COMPLETED/CANCELLED
+    UPDATE "KtvAssignments" ka
+    SET "status" = 'COMPLETED', "updated_at" = now()
+    FROM "Bookings" b
+    WHERE ka."booking_id" = b."id"
+      AND ka."employee_id" = p_employee_id
+      AND ka."business_date" = p_business_date
+      AND ka."status" = 'ACTIVE'
+      AND b."status" IN ('DONE', 'COMPLETED', 'CANCELLED');
+
+    -- Clean up ACTIVE assignments if the KTV's TurnQueue says they are 'waiting'
+    -- (meaning the legacy system already released them)
+    IF EXISTS (
+        SELECT 1 FROM "TurnQueue"
+        WHERE "employee_id" = p_employee_id
+          AND "date" = p_business_date
+          AND "status" = 'waiting'
+    ) THEN
+        UPDATE "KtvAssignments"
+        SET "status" = 'COMPLETED', "updated_at" = now()
+        WHERE "employee_id" = p_employee_id
+          AND "business_date" = p_business_date
+          AND "status" = 'ACTIVE';
+    END IF;
     -- 1. Check if there is already an ACTIVE assignment
     IF EXISTS (
         SELECT 1 FROM "KtvAssignments"
@@ -80,6 +105,26 @@ BEGIN
         "start_time" = NULL,
         "estimated_end_time" = NULL
     WHERE "employee_id" = p_employee_id AND "date" = p_business_date;
+
+    IF NOT FOUND THEN
+        -- Fallback: Insert if TurnQueue row for this KTV/date doesn't exist
+        DECLARE
+            v_max_pos INTEGER;
+        BEGIN
+            SELECT COALESCE(MAX("queue_position"), 0) INTO v_max_pos
+            FROM "TurnQueue"
+            WHERE "date" = p_business_date;
+
+            INSERT INTO "TurnQueue" (
+                "employee_id", "date", "status", "current_order_id",
+                "booking_item_id", "booking_item_ids", "room_id", "bed_id", "queue_position"
+            ) VALUES (
+                p_employee_id, p_business_date, 'assigned', v_next_assignment.booking_id,
+                v_next_assignment.booking_item_id, ARRAY[v_next_assignment.booking_item_id]::text[],
+                v_next_assignment.room_id, v_next_assignment.bed_id, v_max_pos + 1
+            );
+        END;
+    END IF;
 
     RETURN jsonb_build_object('success', true, 'promoted_booking_id', v_next_assignment.booking_id);
 EXCEPTION WHEN OTHERS THEN
