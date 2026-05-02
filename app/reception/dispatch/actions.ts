@@ -760,7 +760,7 @@ export async function createQuickBooking(data: {
     customerName: string;
     customerPhone?: string;
     customerEmail?: string;
-    serviceId: string;
+    serviceIds: string[];
     bookingDate: string; // "YYYY-MM-DD"
     customerLang?: string; // Language code: vi, en, kr, jp, cn
 }) {
@@ -775,13 +775,15 @@ export async function createQuickBooking(data: {
         const billCode = `S${dateStr}-${randomStr}`;
 
         // 2. Lấy thông tin dịch vụ để lấy giá tiền & thời gian
-        const { data: svc, error: sError } = await supabase
+        const { data: svcs, error: sError } = await supabase
             .from('Services')
-            .select('priceVND, duration')
-            .eq('id', data.serviceId)
-            .single();
+            .select('id, priceVND, duration')
+            .in('id', data.serviceIds);
         
-        if (sError) throw new Error(`Không tìm thấy dịch vụ: ${sError.message}`);
+        if (sError) throw new Error(`Lỗi khi lấy dịch vụ: ${sError.message}`);
+        if (!svcs || svcs.length === 0) throw new Error(`Không tìm thấy dịch vụ nào`);
+
+        const totalAmount = svcs.reduce((acc, svc) => acc + (svc.priceVND || 0), 0);
 
         // 3. Tạo Booking
         const bookingId = crypto.randomUUID();
@@ -796,7 +798,7 @@ export async function createQuickBooking(data: {
                 status: 'NEW',
                 customerLang: data.customerLang || 'vi',
                 bookingDate: `${data.bookingDate} ${new Date().toLocaleTimeString('en-GB')}`,
-                totalAmount: svc.priceVND || 0,
+                totalAmount: totalAmount,
                 paymentMethod: 'Tiền mặt', // Mặc định
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
@@ -806,15 +808,21 @@ export async function createQuickBooking(data: {
 
         if (bError) throw bError;
 
-        const { error: iError } = await supabase
-            .from('BookingItems')
-            .insert({
+        // Insert multiple items
+        const itemsToInsert = data.serviceIds.map(sid => {
+            const svc = svcs.find(s => s.id === sid);
+            return {
                 id: crypto.randomUUID(),
                 bookingId: booking.id,
-                serviceId: data.serviceId,
+                serviceId: sid,
                 quantity: 1,
-                price: svc.priceVND || 0,
-            });
+                price: svc?.priceVND || 0,
+            };
+        });
+
+        const { error: iError } = await supabase
+            .from('BookingItems')
+            .insert(itemsToInsert);
 
         if (iError) throw iError;
 

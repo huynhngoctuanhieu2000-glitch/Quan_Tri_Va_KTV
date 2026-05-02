@@ -524,7 +524,7 @@ if (!hasPermission('dispatch_board')) {
           const last = ktvEndTimes[r.ktvId];
           const firstSeg = r.segments[0];
           const isSameRoom = last.roomId === firstSeg.roomId;
-          const gap = isSameRoom ? 0 : roomTransitionTime;
+          const gap = 0; // Manager approved dropping room transition time between services
           
           const start = calcEndTime(last.time, gap);
           firstSeg.startTime = start;
@@ -533,7 +533,7 @@ if (!hasPermission('dispatch_board')) {
           for(let i = 1; i < r.segments.length; i++) {
              const p = r.segments[i-1];
              const c = r.segments[i];
-             const g = p.roomId === c.roomId ? 0 : roomTransitionTime;
+             const g = 0; // Manager approved dropping room transition time between segments
              c.startTime = calcEndTime(p.endTime, g);
              c.endTime = calcEndTime(c.startTime, c.duration);
           }
@@ -1124,7 +1124,7 @@ if (!hasPermission('dispatch_board')) {
     }
   };
 
-  const handleCreateQuickBooking = async (data: { customerName: string; customerPhone: string; customerEmail: string; serviceId: string; customerLang: string }) => {
+  const handleCreateQuickBooking = async (data: { customerName: string; customerPhone: string; customerEmail: string; serviceIds: string[]; customerLang: string }) => {
     try {
       const res = await createQuickBooking({
         ...data,

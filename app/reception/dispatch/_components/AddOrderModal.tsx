@@ -21,7 +21,7 @@ interface AddOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   services: ServiceOption[];
-  onConfirm: (data: { customerName: string; customerPhone: string; customerEmail: string; serviceId: string; customerLang: string }) => Promise<void>;
+  onConfirm: (data: { customerName: string; customerPhone: string; customerEmail: string; serviceIds: string[]; customerLang: string }) => Promise<void>;
   selectedDate: string;
 }
 
@@ -41,7 +41,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
   const [customerName, setCustomerName] = useState('');
   const [contactType, setContactType] = useState<'phone' | 'email'>('phone');
   const [contactValue, setContactValue] = useState('');
-  const [serviceId, setServiceId] = useState('');
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [customerLang, setCustomerLang] = useState('vi');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,7 +67,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName || !serviceId) {
+    if (!customerName || serviceIds.length === 0) {
       alert('Vui lòng nhập tên khách và chọn dịch vụ!');
       return;
     }
@@ -78,14 +78,14 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
         customerName,
         customerPhone: contactType === 'phone' ? contactValue : '',
         customerEmail: contactType === 'email' ? contactValue : '',
-        serviceId,
+        serviceIds,
         customerLang
       });
       // Reset form
       setCustomerName('');
       setContactType('phone');
       setContactValue('');
-      setServiceId('');
+      setServiceIds([]);
       setCustomerLang('vi');
       setSearchTerm('');
       onClose();
@@ -96,7 +96,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
     }
   };
 
-  const selectedService = services.find(s => s.id === serviceId);
+  const selectedServices = services.filter(s => serviceIds.includes(s.id));
 
   return (
     <AnimatePresence>
@@ -229,7 +229,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                 <div className="p-4 bg-white border-b border-gray-100 space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-2">
-                       <Tag size={12} className="text-rose-500" /> Chọn Dịch Vụ {serviceId && <span className="text-emerald-500 lowercase">(đã chọn: {selectedService?.nameVN})</span>}
+                       <Tag size={12} className="text-rose-500" /> Chọn Dịch Vụ {serviceIds.length > 0 && <span className="text-emerald-500 lowercase">(đã chọn: {selectedServices.map(s => s.nameVN).join(', ')})</span>}
                     </label>
                   </div>
                   
@@ -272,26 +272,30 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                         <button
                           key={svc.id}
                           type="button"
-                          onClick={() => setServiceId(svc.id)}
+                          onClick={() => {
+                            setServiceIds(prev => 
+                              prev.includes(svc.id) ? prev.filter(id => id !== svc.id) : [...prev, svc.id]
+                            );
+                          }}
                           className={`flex items-center gap-3 p-3 rounded-[20px] text-left transition-all border-2 group relative overflow-hidden ${
-                            serviceId === svc.id 
+                            serviceIds.includes(svc.id) 
                               ? 'bg-rose-50 border-rose-500' 
                               : 'bg-white border-transparent hover:border-gray-100'
                           }`}
                         >
                           {/* Image Placeholder or Image */}
-                          <div className={`w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center overflow-hidden border ${serviceId === svc.id ? 'border-rose-200' : 'border-gray-100'}`}>
+                          <div className={`w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center overflow-hidden border ${serviceIds.includes(svc.id) ? 'border-rose-200' : 'border-gray-100'}`}>
                             {(svc.image_url || svc.imageUrl) ? (
                               <img src={svc.image_url || svc.imageUrl} alt={svc.nameVN} className="w-full h-full object-cover" />
                             ) : (
-                              <div className={`w-full h-full flex items-center justify-center ${serviceId === svc.id ? 'bg-rose-100 text-rose-500' : 'bg-gray-50 text-gray-300'}`}>
+                              <div className={`w-full h-full flex items-center justify-center ${serviceIds.includes(svc.id) ? 'bg-rose-100 text-rose-500' : 'bg-gray-50 text-gray-300'}`}>
                                 <ImageIcon size={20} />
                               </div>
                             )}
                           </div>
                           
                           <div className="flex-1 min-w-0">
-                            <h4 className={`text-sm font-black truncate ${serviceId === svc.id ? 'text-rose-700' : 'text-gray-900 group-hover:text-rose-500 transition-colors'}`}>
+                            <h4 className={`text-sm font-black truncate ${serviceIds.includes(svc.id) ? 'text-rose-700' : 'text-gray-900 group-hover:text-rose-500 transition-colors'}`}>
                               {svc.nameVN || svc.nameEN || svc.name}
                             </h4>
                             <div className="flex items-center gap-3 mt-1 text-[11px] font-black uppercase tracking-tight">
@@ -302,14 +306,14 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                             </div>
                             {svc.category && (
                               <div className="mt-1.5">
-                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${serviceId === svc.id ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-400'}`}>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${serviceIds.includes(svc.id) ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-400'}`}>
                                   {svc.category}
                                 </span>
                               </div>
                             )}
                           </div>
 
-                          {serviceId === svc.id && (
+                          {serviceIds.includes(svc.id) && (
                             <div className="absolute top-1 right-1">
                               <Plus size={14} className="text-rose-500 rotate-45" />
                             </div>
@@ -328,7 +332,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
               {/* Submit Button */}
               <div className="shrink-0">
                 <button
-                  disabled={loading || !serviceId || !customerName}
+                  disabled={loading || serviceIds.length === 0 || !customerName}
                   type="submit"
                   className="w-full bg-gray-900 hover:bg-black text-white py-4.5 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-gray-200 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-30 disabled:grayscale"
                 >
