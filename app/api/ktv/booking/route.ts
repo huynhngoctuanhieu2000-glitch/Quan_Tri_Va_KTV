@@ -302,7 +302,8 @@ export async function GET(request: Request) {
                 // Room-specific procedures
                 roomPrepProcedure: roomProcedures.prep_procedure,
                 roomCleanProcedure: roomProcedures.clean_procedure
-            }
+            },
+            serverTime: new Date().toISOString()
         });
     } catch (error: any) {
         console.error('API Error (GET /api/ktv/booking):', error);

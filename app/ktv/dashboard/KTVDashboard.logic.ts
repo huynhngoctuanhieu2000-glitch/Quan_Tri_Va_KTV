@@ -110,6 +110,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const isTimerRunningRef = useRef<boolean>(false);
     const manualSegmentOverrideRef = useRef<boolean>(false);
     const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
+    const timeOffsetRef = useRef<number>(0);
 
     // --- SMART SKIP LOGIC ---
     const [isLastInRoom, setIsLastInRoom] = useState(true);
@@ -819,6 +820,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         const isRatingChanged = oldRating !== newRating;
                         
                         if (isNew || isStatusChanged || isRatingChanged || JSON.stringify(prev?.BookingItems) !== JSON.stringify(res.data.BookingItems)) {
+                            if (res.serverTime) {
+                                const clientNow = new Date().getTime();
+                                const serverNow = new Date(res.serverTime).getTime();
+                                timeOffsetRef.current = serverNow - clientNow;
+                            }
                             // Lưu trạng thái tính toán vào object để so sánh lần sau
                             res.data.currentStatus = currentStatus;
                             
@@ -843,7 +849,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                                             activeSegStartTime = activeSegStartTime.replace(' ', 'T') + 'Z';
                                         }
                                         const start = new Date(activeSegStartTime).getTime();
-                                        const now = new Date().getTime();
+                                        const now = new Date().getTime() + timeOffsetRef.current;
                                         const elapsed = Math.floor((now - start) / 1000);
                                         
                                         // Đếm lùi một vòng duy nhất
@@ -1039,7 +1045,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
 
             const start = new Date(activeSegStartTime).getTime();
-            const now = new Date().getTime();
+            const now = new Date().getTime() + timeOffsetRef.current;
             const elapsed = Math.floor((now - start) / 1000);
 
             const newRemaining = Math.max(0, totalSecs - elapsed);
