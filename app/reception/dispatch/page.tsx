@@ -1745,21 +1745,21 @@ if (!hasPermission('dispatch_board')) {
                 <div className="space-y-3">
                   <h4 className="font-black text-gray-900 uppercase tracking-widest text-xs">Chi tiết dịch vụ ({selectedOrder.services.length})</h4>
                   {selectedOrder.services.map((svc, sIdx) => (
-                    <div key={svc.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+                    <div key={svc.id || sIdx} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
                       <p className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b border-gray-100">{sIdx + 1}. {svc.serviceName}</p>
                       <div className="space-y-3">
-                        {svc.staffList.map((st) => (
-                          <div key={st.id} className="pl-2 border-l-2 border-indigo-200 flex flex-col gap-1.5">
+                        {svc.staffList.map((st, stIdx) => (
+                          <div key={st.ktvId ? `${svc.id}-${st.ktvId}` : `${svc.id}-st-${stIdx}`} className="pl-2 border-l-2 border-indigo-200 flex flex-col gap-1.5">
                             <div className="flex items-center gap-2">
                               <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-bold">KTV</span>
                               <span className="text-sm font-black text-gray-800">{st.ktvName || 'Chưa gán'} {st.ktvId ? `[${st.ktvId}]` : ''}</span>
                             </div>
                             <div className="text-xs text-gray-600 flex flex-col gap-1">
-                              {st.segments.map((seg) => {
+                              {st.segments.map((seg, segIdx) => {
                                 const roomName = rooms.find(r => r.id === seg.roomId)?.name || seg.roomId || 'Chưa xếp phòng';
                                 const bedName = beds.find(b => b.id === seg.bedId)?.name || seg.bedId || 'Chưa xếp giường';
                                 return (
-                                  <div key={seg.id} className="flex items-center gap-2 bg-gray-50 rounded-lg p-1.5">
+                                  <div key={`${svc.id}-${stIdx}-seg-${segIdx}`} className="flex items-center gap-2 bg-gray-50 rounded-lg p-1.5">
                                     <span className="font-semibold text-gray-500">{seg.startTime} - {seg.endTime}</span>
                                     <span className="text-gray-300">|</span>
                                     <span className="font-semibold text-indigo-600">{roomName}</span>

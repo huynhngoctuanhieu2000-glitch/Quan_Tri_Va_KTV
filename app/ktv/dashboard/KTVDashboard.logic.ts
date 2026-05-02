@@ -202,18 +202,24 @@ export function useKTVDashboard(config?: DashboardConfig) {
         }
     }, [booking?.id, user?.id, setScreen]);
 
-    // Auto-skip Review if already rated by teammate
+    // Auto-skip Review ONLY if THIS KTV has already submitted review for THIS specific booking.
+    // Source of truth: per-KTV per-booking localStorage flag, NOT booking.rating (booking-level, too coarse).
     useEffect(() => {
-        if (screenRef.current === 'REVIEW' && booking?.rating) {
-            console.log("🌟 [SmartSkip] Review already submitted by teammate, skipping...");
-            setHasSubmittedReview(true);
-            if (!isLastInRoom || isRoomCleaned) {
-                handleAutoRelease();
-            } else {
-                setScreen('HANDOVER');
+        if (screenRef.current !== 'REVIEW' || !booking?.id || !user?.id) return;
+        try {
+            const reviewKey = `ktv_review_submitted_${user.id}_${booking.id}`;
+            const alreadySubmitted = localStorage.getItem(reviewKey) === 'true';
+            if (alreadySubmitted && !hasSubmittedReview) {
+                console.log("🌟 [SmartSkip] This KTV already submitted review for this booking, restoring skip...");
+                setHasSubmittedReview(true);
+                if (!isLastInRoom || isRoomCleaned) {
+                    handleAutoRelease();
+                } else {
+                    setScreen('HANDOVER');
+                }
             }
-        }
-    }, [booking?.rating, screenRef.current, isLastInRoom, isRoomCleaned, handleAutoRelease]);
+        } catch(e) {}
+    }, [booking?.id, hasSubmittedReview, user?.id, isLastInRoom, isRoomCleaned, handleAutoRelease]);
 
     // Auto-skip Handover if teammate cleans the room
     useEffect(() => {
@@ -226,6 +232,25 @@ export function useKTVDashboard(config?: DashboardConfig) {
     useEffect(() => { 
         screenRef.current = screen; 
     }, [screen]);
+
+    // 🔄 Full reset of ALL transient state when booking.id changes
+    // Prevents timer/segment/prepping/review state from leaking from order 1 into order 2.
+    useEffect(() => {
+        if (!booking?.id || !user?.id) return;
+        try {
+            const reviewKey = `ktv_review_submitted_${user.id}_${booking.id}`;
+            const alreadySubmitted = localStorage.getItem(reviewKey) === 'true';
+            if (!alreadySubmitted) {
+                setHasSubmittedReview(false);
+                setIsTimerRunning(false);
+                setIsPrepping(false);
+                setPrepTimeRemaining(0);
+                setActiveSegmentIndex(0);
+                manualSegmentOverrideRef.current = false;
+            }
+        } catch(e) { setHasSubmittedReview(false); }
+    }, [booking?.id, user?.id]);
+
 
     useEffect(() => {
         try {
@@ -462,9 +487,16 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 if (!seg.reviewTime) allReview = false;
             });
             
-            // Khôi phục trạng thái review bền vững từ backend
+            // 🔒 Restore hasSubmittedReview from backend ONLY if the per-KTV per-booking localStorage flag confirms it.
+            // Prevents backend reviewTime (written by teammate or early) from bypassing per-KTV ownership.
             if (allReview && !hasSubmittedReview) {
-                setHasSubmittedReview(true);
+                try {
+                    const reviewKey = `ktv_review_submitted_${user?.id}_${booking?.id}`;
+                    if (localStorage.getItem(reviewKey) === 'true') {
+                        setHasSubmittedReview(true);
+                    }
+                    // If flag absent: backend has reviewTime but this KTV never submitted → stay on REVIEW screen
+                } catch(e) {}
             }
 
             // Chỉ override nếu đã xong, chưa xong thì lấy theo status chung
@@ -907,12 +939,23 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 filter: `employee_id=eq.${user.id}`
             }, (payload: any) => {
                 console.log("🔄 [KTV] Realtime TurnQueue change:", payload.eventType);
+                // 🔒 Block during post-service: auto-handoff TurnQueue event must NOT pull order 2 in mid-cleanup
+                if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current)) {
+                    console.log("🚫 [KTV] TurnQueue realtime blocked — in post-service flow:", screenRef.current);
+                    return;
+                }
                 fetchBooking();
             })
             .subscribe();
 
-        // Polling fallback (mỗi 5 giây) để đảm bảo đồng bộ cực nhanh nếu Realtime có độ trễ
-        const intervalId = setInterval(fetchBooking, 5000);
+        // Polling fallback — skip during post-service to prevent order 2 from drifting into order 1 cleanup
+        const intervalId = setInterval(() => {
+            if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current)) {
+                console.log('🕒 [KTV] Polling skipped — in post-service flow:', screenRef.current);
+                return;
+            }
+            fetchBooking();
+        }, 5000);
 
         return () => {
             supabase.removeChannel(channel);
@@ -1171,17 +1214,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
             postServiceBookingIdRef.current = booking.id;
             try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, booking.id); } catch (e) {}
             
-            // Smart Skip logic
-            if (booking?.rating) {
-                setHasSubmittedReview(true);
-                if (!isLastInRoom || isRoomCleaned) {
-                    handleAutoRelease();
-                } else {
-                    setScreen('HANDOVER');
-                }
-            } else {
-                setScreen('REVIEW');
-            }
+            // Always go to REVIEW — KTV must submit their own review.
+            // Never auto-skip based on booking.rating (belongs to booking level, may be from teammate).
+            setScreen('REVIEW');
         } else {
             console.error('❌ [KTV Logic] Finish error:', res.error);
             alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
@@ -1231,8 +1266,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 return; // 🚫 Chặn không cho đi tiếp
             }
             
-            // Chỉ khi backend ghi nhận thành công, mới kích hoạt trạng thái đi tiếp
             setHasSubmittedReview(true);
+            // Persist per-KTV per-booking review flag — survives refresh, prevents state leaking to next order
+            try {
+                const reviewKey = `ktv_review_submitted_${user.id}_${reviewBookingId}`;
+                localStorage.setItem(reviewKey, 'true');
+            } catch(e) {}
             
             // Smart Skip logic
             if (!isLastInRoom || isRoomCleaned) {
