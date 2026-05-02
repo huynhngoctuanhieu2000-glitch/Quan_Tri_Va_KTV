@@ -89,7 +89,13 @@ export default function DispatchBoardPage() {
 
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const vnTime = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+    if (vnTime.getUTCHours() < 6) {
+        vnTime.setUTCDate(vnTime.getUTCDate() - 1);
+    }
+    return vnTime.toISOString().split('T')[0];
+  });
   const [allServices, setAllServices] = useState<any[]>([]);
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
   const { notifications, soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();

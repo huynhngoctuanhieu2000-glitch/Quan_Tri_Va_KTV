@@ -291,7 +291,7 @@ export async function GET(request: Request) {
                 dispatcherNote: booking.notes || '',
                 BookingItems: itemsWithService,
                 assignedItemId: activeItemId,
-                assignedItemIds: assignedItemIds,
+                assignedItemIds: ktvItems.map((i: any) => i.id),
                 activeSegmentIndex: activeSegmentIndex,
                 statusSource: statusSource,
                 // Thông tin ràng buộc thời gian & Vị trí làm việc cụ thể
