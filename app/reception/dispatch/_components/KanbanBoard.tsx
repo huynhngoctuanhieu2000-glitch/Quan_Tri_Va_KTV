@@ -81,8 +81,8 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
             }
         }
         
-        // Fallback: dùng item.timeEnd nếu không có segment
-        if (maxTime === 0 && svc.timeEnd) {
+        // Fallback: dùng item.timeEnd nếu có và lớn hơn maxTime hiện tại
+        if (svc.timeEnd) {
             let tEnd = svc.timeEnd;
             if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
                 tEnd = tEnd.replace(' ', 'T') + 'Z';

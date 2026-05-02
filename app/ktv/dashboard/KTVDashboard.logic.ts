@@ -1020,6 +1020,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 allMySegs.push(...mySegs);
             }
 
+            allMySegs.sort((a, b) => {
+                const timeA = a.startTime || '23:59';
+                const timeB = b.startTime || '23:59';
+                return timeA.localeCompare(timeB);
+            });
+
             // Gộp tổng thời gian
             const totalSegDuration = allMySegs.length > 0
                 ? allMySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0)
