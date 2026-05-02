@@ -196,15 +196,62 @@ export default function DispatchBoardPage() {
 
   const getEstimatedEndTime = (order: PendingOrder) => {
     let maxTime = 0;
-    if (order.timeEnd) maxTime = Math.max(maxTime, new Date(order.timeEnd).getTime());
+
+    const parseHHMM = (timeStr: string) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d.getTime();
+    };
+
     if (order.services && order.services.length > 0) {
-      const sTimes = order.services.map(s => {
-        if (s.timeEnd) return new Date(s.timeEnd).getTime();
-        if (s.timeStart) return new Date(s.timeStart).getTime() + (s.duration || 0) * 60000;
-        return 0;
-      }).filter(t => t > 0);
-      if (sTimes.length > 0) maxTime = Math.max(maxTime, ...sTimes);
+      for (const svc of order.services) {
+        if (svc.staffList) {
+            for (const staff of svc.staffList) {
+                if (!staff.segments) continue;
+                for (const seg of staff.segments) {
+                    if (seg.endTime && seg.endTime !== '--:--') {
+                        const t = parseHHMM(seg.endTime);
+                        if (t > maxTime) maxTime = t;
+                    }
+                }
+            }
+        }
+        
+        if (svc.timeEnd) {
+            let tEnd = svc.timeEnd;
+            if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
+                tEnd = tEnd.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(tEnd);
+            if (!isNaN(d.getTime())) {
+                if (d.getTime() > maxTime) maxTime = d.getTime();
+            }
+        } else if (svc.timeStart && svc.duration) {
+            let tStart = svc.timeStart;
+            if (!tStart.endsWith('Z') && !tStart.includes('+')) {
+                tStart = tStart.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(tStart);
+            if (!isNaN(d.getTime())) {
+                const end = d.getTime() + svc.duration * 60000;
+                if (end > maxTime) maxTime = end;
+            }
+        }
+      }
     }
+    
+    if (maxTime === 0 && order.timeEnd) {
+        let tEnd = order.timeEnd;
+        if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
+            tEnd = tEnd.replace(' ', 'T') + 'Z';
+        }
+        const d = new Date(tEnd);
+        if (!isNaN(d.getTime())) {
+            maxTime = d.getTime();
+        }
+    }
+    
     return maxTime;
   };
 
