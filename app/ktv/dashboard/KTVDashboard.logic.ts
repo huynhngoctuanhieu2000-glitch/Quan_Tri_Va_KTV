@@ -99,6 +99,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     const lastAcknowledgedIdRef = useRef<string | null>(null);
     const prevBookingIdRef = useRef<string | null>(null);
+    const postServiceBookingIdRef = useRef<string | null>(null);
+    const POST_SERVICE_BOOKING_KEY = 'ktv_post_service_booking_id';
     const isFirstLoadRef = useRef<boolean>(true);
     const screenRef = useRef<ScreenState>(screen);
     const bookingRef = useRef<any>(null);
@@ -180,11 +182,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
         setIsLoading(true);
         try {
             console.log("🚀 [SmartSkip] Auto-releasing KTV...");
+            const releaseBookingId = postServiceBookingIdRef.current || booking.id;
             await fetch('/api/ktv/booking', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    bookingId: booking.id, 
+                    bookingId: releaseBookingId, 
                     status: 'FEEDBACK',
                     action: 'RELEASE_KTV',
                     techCode: user.id 
@@ -227,13 +230,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
     useEffect(() => {
         try {
             const savedScreen = localStorage.getItem('ktv_active_screen') as ScreenState;
-            const savedBookingId = localStorage.getItem('ktv_active_booking_id');
+            const savedBookingId = localStorage.getItem(POST_SERVICE_BOOKING_KEY) || localStorage.getItem('ktv_active_booking_id');
             if (savedScreen && ['REVIEW', 'HANDOVER', 'REWARD'].includes(savedScreen) && savedBookingId) {
                 setScreenState(savedScreen);
                 prevBookingIdRef.current = savedBookingId;
+                postServiceBookingIdRef.current = savedBookingId;
             } else {
                 localStorage.removeItem('ktv_active_screen');
                 localStorage.removeItem('ktv_active_booking_id');
+                localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
             }
         } catch (e) {}
     }, []);
@@ -270,9 +275,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 setHasSubmittedReview(false);
                 setBooking(null);
                 setScreen('DASHBOARD');
+                postServiceBookingIdRef.current = null;
                 try {
                     localStorage.removeItem('ktv_active_screen');
                     localStorage.removeItem('ktv_active_booking_id');
+                    localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
                 } catch(e) {}
             }
         };
@@ -511,6 +518,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setIsTimerRunning(true);
         }
         else if (['COMPLETED', 'FEEDBACK', 'CLEANING', 'DONE'].includes(currentStatus)) {
+            if (!postServiceBookingIdRef.current && booking?.id) {
+                postServiceBookingIdRef.current = booking.id;
+                try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, booking.id); } catch (e) {}
+            }
             // 🔑 KTV bắt buộc phải đi đúng trình tự: REVIEW -> HANDOVER -> REWARD
             // KHÔNG ép setHasSubmittedReview(true) tự động để tránh lỗi nhảy cóc (skip).
             if (!hasSubmittedReview) {
@@ -533,6 +544,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
         if (!isLoading && isFirstLoadRef.current) {
             prevBookingIdRef.current = booking?.id || null;
             isFirstLoadRef.current = false;
+            return;
+        }
+        if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current) && postServiceBookingIdRef.current) {
             return;
         }
         prevBookingIdRef.current = booking?.id || null;
@@ -612,13 +626,21 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 
                 // Nâng cao: Ưu tiên track đơn cũ khi đang ở màn hậu kỳ (REVIEW/HANDOVER/REWARD)
                 const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
+                if (isPostService && !postServiceBookingIdRef.current) {
+                    try {
+                        const savedPostServiceBookingId = localStorage.getItem(POST_SERVICE_BOOKING_KEY);
+                        if (savedPostServiceBookingId) {
+                            postServiceBookingIdRef.current = savedPostServiceBookingId;
+                        }
+                    } catch (e) {}
+                }
                 
                 if (config?.targetBookingId) {
                     url = `/api/ktv/booking?bookingId=${config.targetBookingId}&techCode=${user.id}`;
-                } else if (isPostService && prevBookingIdRef.current) {
+                } else if (isPostService && postServiceBookingIdRef.current) {
                     // Ưu tiên fetch theo ID đơn vừa làm để tránh bị mất dữ liệu khi đã RELEASE_KTV
-                    url = `/api/ktv/booking?bookingId=${prevBookingIdRef.current}&techCode=${user.id}`;
-                    console.log("🔍 [KTV] Persisting booking fetch for post-service screen:", prevBookingIdRef.current);
+                    url = `/api/ktv/booking?bookingId=${postServiceBookingIdRef.current}&techCode=${user.id}`;
+                    console.log("🔍 [KTV] Persisting booking fetch for post-service screen:", postServiceBookingIdRef.current);
                 }
                 // (Đã gộp vào logic ở trên)
 
@@ -626,6 +648,21 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const res = await response.json();
                 
                 if (res.success && res.data) {
+                    const currentIsPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
+                    const currentLockedBookingId = postServiceBookingIdRef.current || bookingRef.current?.id || prevBookingIdRef.current;
+                    if (currentIsPostService && currentLockedBookingId && res.data.id !== currentLockedBookingId) {
+                        console.log("🚫 [KTV] Ignoring booking drift during post-service flow:", {
+                            lockedBookingId: currentLockedBookingId,
+                            incomingBookingId: res.data.id
+                        });
+                        return;
+                    }
+
+                    if (currentIsPostService && !postServiceBookingIdRef.current && currentLockedBookingId) {
+                        postServiceBookingIdRef.current = currentLockedBookingId;
+                        try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, currentLockedBookingId); } catch (e) {}
+                    }
+
                     console.log("📡 [KTV] Fetch Success - ID:", res.data.id, "Status:", res.data.status, "Rating:", res.data.rating);
                     // IGNORE if this is the booking we just finished and acknowledged
                     if (res.data.id === lastAcknowledgedIdRef.current) {
@@ -1131,6 +1168,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         const res = await response.json();
         if (res.success) {
             setIsTimerRunning(false);
+            postServiceBookingIdRef.current = booking.id;
+            try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, booking.id); } catch (e) {}
             
             // Smart Skip logic
             if (booking?.rating) {
@@ -1160,6 +1199,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             try {
                 localStorage.removeItem('ktv_active_screen');
                 localStorage.removeItem('ktv_active_booking_id');
+                localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
             } catch(e) {}
             return;
         }
@@ -1171,13 +1211,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
             if (personality.length > 0) {
                 noteContent = `[Đánh giá KTV: ${personality.join(', ')}]`;
             }
+            const reviewBookingId = postServiceBookingIdRef.current || booking.id;
             
             // Gọi API chuyên trách (chỉ cập nhật review, không can thiệp trạng thái tổng)
             const response = await fetch('/api/ktv/review', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    bookingId: booking.id, 
+                    bookingId: reviewBookingId, 
                     notes: noteContent,
                     techCode: user.id
                 })
@@ -1215,7 +1256,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
             try {
                 localStorage.removeItem('ktv_active_screen');
                 localStorage.removeItem('ktv_active_booking_id');
+                localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
             } catch(e) {}
+            postServiceBookingIdRef.current = null;
             return;
         }
         setIsLoading(true);
@@ -1263,7 +1306,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    bookingId: booking.id, 
+                    bookingId: postServiceBookingIdRef.current || booking.id, 
                     status: 'FEEDBACK', // Dọn xong → chờ khách đánh giá. Nếu đã có rating → API sẽ set DONE
                     action: 'RELEASE_KTV', // BÂY GIỜ mới giải phóng KTV
                     techCode: user.id 
@@ -1346,9 +1389,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
         lastAcknowledgedIdRef.current = prevBookingIdRef.current;
         setBooking(null);
         setScreen('DASHBOARD');
+        postServiceBookingIdRef.current = null;
         try {
             localStorage.removeItem('ktv_active_screen');
             localStorage.removeItem('ktv_active_booking_id');
+            localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
         } catch(e) {}
     };
 

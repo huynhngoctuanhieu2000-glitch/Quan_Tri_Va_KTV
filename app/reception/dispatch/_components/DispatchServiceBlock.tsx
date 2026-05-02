@@ -164,6 +164,18 @@ export const DispatchServiceBlock = ({
                         </div>
                     )}
 
+                    {/* Tên in phiếu (Tùy chỉnh) */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Tên In Phiếu (Tùy chỉnh)</label>
+                        <input
+                            type="text"
+                            value={svc.options?.displayName || ''}
+                            onChange={e => onUpdateSvc(orderId, svc.id, { options: { ...(svc.options || {}), displayName: e.target.value } })}
+                            placeholder={svc.serviceName}
+                            className="w-full px-4 py-2 border border-gray-100 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none bg-white transition-all shadow-sm text-gray-800 placeholder:text-gray-300"
+                        />
+                    </div>
+
                     {/* Staff Selection Area */}
                     {svc.duration > 0 && (
                         <div className="space-y-4">

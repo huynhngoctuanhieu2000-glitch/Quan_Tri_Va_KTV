@@ -631,12 +631,6 @@ if (!hasPermission('dispatch_board')) {
   const addServiceBlock = async (svcId: string, svcName: string, duration: number) => {
     if (!selectedOrderId) return;
 
-    if (selectedOrder?.dispatchStatus !== 'pending') {
-      // 🚀 MUA THÊM DỊCH VỤ (ADD-ON) TRỰC TIẾP
-      handleDirectAddon(svcId, svcName, duration);
-      return;
-    }
-
     try {
         const { addAddonServices } = await import('./actions');
         // Thêm dịch vụ vào DB ngay lập tức để lấy ID chuẩn, nhưng KHÔNG fetchData để tránh mất dữ liệu đang sửa dở
@@ -865,6 +859,7 @@ if (!hasPermission('dispatch_board')) {
               segments: allSegments,
               options: {
                   ...(svc.options || {}),
+                  displayName: svc.options?.displayName || svc.serviceName,
                   order: index,
                   note: svc.customerNote?.split(' | ')[0] || '', 
                   therapist: svc.genderReq,
@@ -958,20 +953,9 @@ if (!hasPermission('dispatch_board')) {
         }
       }
 
-      // ✅ Gộp assignments cùng KTV (1 KTV + 2 DV) → lưu tất cả item IDs
-      const mergedAssignments: typeof allStaffAssignments = [];
-      const ktvMap = new Map<string, typeof allStaffAssignments[0]>();
-      for (const a of allStaffAssignments) {
-        const existing = ktvMap.get(a.ktvId);
-        if (existing) {
-          // Gộp: nối bookingItemId, lấy endTime muộn nhất
-          existing.bookingItemId = `${existing.bookingItemId},${a.bookingItemId}`;
-          if (a.endTime > (existing.endTime || '')) existing.endTime = a.endTime;
-        } else {
-          ktvMap.set(a.ktvId, { ...a });
-        }
-      }
-      mergedAssignments.push(...ktvMap.values());
+      // ✅ KHÔNG GỘP assignments cùng KTV nữa. Giữ nguyên 1 item = 1 row để tuân thủ kiến trúc chuẩn!
+      const mergedAssignments = allStaffAssignments;
+
 
       const combinedTechCodes = Array.from(techCodesSet).join(', ');
       
@@ -996,6 +980,7 @@ if (!hasPermission('dispatch_board')) {
               segments: allSegments,
               options: {
                   ...(svc.options || {}),
+                  displayName: svc.options?.displayName || svc.serviceName,
                   order: originalIndex !== -1 ? originalIndex : 999,
                   note: svc.customerNote?.split(' | ')[0] || '', 
                   therapist: svc.genderReq,

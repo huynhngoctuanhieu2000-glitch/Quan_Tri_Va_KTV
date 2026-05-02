@@ -3,6 +3,17 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+function getBusinessDate() {
+    const nowUtc = new Date();
+    const vnOffsetMs = 7 * 60 * 60 * 1000;
+    const vnTime = new Date(nowUtc.getTime() + vnOffsetMs);
+    
+    if (vnTime.getUTCHours() < 6) {
+        vnTime.setUTCDate(vnTime.getUTCDate() - 1);
+    }
+    return vnTime.toISOString().split('T')[0];
+}
+
 /**
  * API Lấy đơn hàng đang thực hiện của KTV
  * GET /api/ktv/booking?techCode=NH001
@@ -28,17 +39,36 @@ export async function GET(request: Request) {
             // 1.a Lấy tất cả item active của KTV
             const { data: activeItems } = await supabase
                 .from('BookingItems')
-                .select('bookingId, status, id')
+                .select('bookingId, status, id, segments')
                 .contains('technicianCodes', [technicianCode])
                 .in('status', ['IN_PROGRESS'])
                 .order('timeStart', { ascending: false, nullsFirst: false });
 
+            let validActiveItem = null;
             if (activeItems && activeItems.length > 0) {
-                bookingId = activeItems[0].bookingId;
+                for (const item of activeItems) {
+                    let segs: any[] = [];
+                    try {
+                        segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
+                    } catch { segs = []; }
+                    
+                    const mySegs = segs.filter((s: any) => s.ktvId && s.ktvId.toLowerCase() === technicianCode.toLowerCase());
+                    // Nếu chưa có segment nào của KTV này có actualEndTime (tức là đang chạy timer), thì tính là active.
+                    // Hoặc nếu mảng segments bị lỗi/trống, vẫn coi là active để fallback.
+                    const isStillWorking = mySegs.length === 0 || mySegs.some((s: any) => !s.actualEndTime);
+                    
+                    if (isStillWorking) {
+                        validActiveItem = item;
+                        break;
+                    }
+                }
+            }
+
+            if (validActiveItem) {
+                bookingId = validActiveItem.bookingId;
             } else {
                 // 1.b Nếu không có item IN_PROGRESS, lấy từ TurnQueue (đơn mới gán)
-                const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
-                const today = new Date(vnMs).toISOString().split('T')[0];
+                const today = getBusinessDate();
                 const { data: turn, error: tError } = await supabase
                     .from('TurnQueue')
                     .select('current_order_id, booking_item_id, booking_item_ids, status')
@@ -302,8 +332,7 @@ export async function PATCH(request: Request) {
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         // --- Logic mới: Cập nhật song song BookingItem ---
-        const vnMs = new Date().getTime() + (7 * 60 * 60 * 1000);
-        const today = new Date(vnMs).toISOString().split('T')[0];
+        const today = getBusinessDate();
         const { data: turnForSync } = await supabase
             .from('TurnQueue')
             .select('id, booking_item_id, booking_item_ids, last_served_at, start_time, turns_completed, status, room_id')
@@ -790,26 +819,26 @@ export async function PATCH(request: Request) {
             data = result.data;
         }
 
-        // 🔥 XỬ LÝ RELEASE_KTV (Giải phóng KTV độc lập với Booking status)
+        // 🔥 XỬ LÝ RELEASE_KTV (Giải phóng KTV & Handoff đơn kế tiếp)
         if (action === 'RELEASE_KTV') {
             if (technicianCode && turnForSync) {
-                const { data: allActiveTurns } = await supabase.from('TurnQueue').select('queue_position').eq('date', today);
-                let maxPos = 0;
-                allActiveTurns?.forEach(t => { if (t.queue_position > maxPos) maxPos = t.queue_position; });
+                // 1. Mark current assignment as COMPLETED
+                await supabase
+                    .from('KtvAssignments')
+                    .update({ status: 'COMPLETED', updated_at: new Date().toISOString() })
+                    .eq('employee_id', technicianCode)
+                    .eq('business_date', today)
+                    .eq('booking_id', bookingId)
+                    .eq('status', 'ACTIVE');
 
-                const newPos = maxPos + 1;
+                // 2. Gọi Auto-Handoff Engine (Phase 2 Cutover)
+                const { data: promoteData, error: promoteErr } = await supabase.rpc('promote_next_assignment', {
+                    p_employee_id: technicianCode,
+                    p_business_date: today
+                });
                 
-                await supabase.from('TurnQueue').update({
-                    status: 'waiting',
-                    current_order_id: null,
-                    booking_item_id: null, // GIẢI PHÓNG ITEM
-                    booking_item_ids: '{}', // CLEAR ARRAY
-                    room_id: null,
-                    bed_id: null,
-                    start_time: null,
-                    estimated_end_time: null,
-                    queue_position: newPos
-                }).eq('id', turnForSync.id);
+                console.log(`[Handoff] KTV ${technicianCode} auto-handoff result:`, promoteData);
+                if (promoteErr) console.error(`[Handoff] Error promoting KTV ${technicianCode}:`, promoteErr);
             }
         }
 

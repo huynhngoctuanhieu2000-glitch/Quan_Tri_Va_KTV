@@ -13,12 +13,17 @@ export async function POST(request: Request) {
         const { bookingId, notes } = body;
         
         // --- 🛡️ BẢO MẬT: AUTHORIZATION & OWNERSHIP CHECK ---
-        const bUser = await requireBusinessUser();
-        if (!bUser) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        // Compatibility Phase: KTV app hasn't fully migrated to Supabase Auth yet.
+        // We attempt to get session, but don't hard-block if it fails.
+        let bUser = null;
+        try {
+            bUser = await requireBusinessUser();
+        } catch (e) {
+            // Ignore auth errors during compatibility phase
         }
         
-        const techCode = bUser.techCode;
+        // Lấy techCode từ JWT session (nếu có). Nếu không, lấy từ body.
+        const techCode = bUser ? (bUser.techCode || bUser.businessUserId) : body.techCode;
 
         if (!bookingId || !techCode) {
             return NextResponse.json({ success: false, error: 'bookingId and techCode are required' }, { status: 400 });
@@ -27,7 +32,51 @@ export async function POST(request: Request) {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        // 1. Cập nhật ghi chú vào bảng Bookings nếu có
+
+
+        // 2. Ghi nhận KTV này đã hoàn tất khâu Review vào segments của BookingItems (Source of truth)
+        const { data: allItems, error: itemsErr } = await supabase
+            .from('BookingItems')
+            .select('id, segments, "technicianCodes"')
+            .eq('bookingId', bookingId);
+
+        if (itemsErr) {
+            console.error('[KTV Review API] Error fetching booking items:', itemsErr);
+            return NextResponse.json({ success: false, error: 'Error fetching booking items' }, { status: 500 });
+        }
+        
+        console.log(`[KTV Review API] Check assignment for techCode: ${techCode}, bookingId: ${bookingId}`);
+        console.log(`[KTV Review API] allItems fetched:`, JSON.stringify(allItems));
+
+        const normalizedTechCode = techCode.trim().toUpperCase();
+        const ktvItems = (allItems || []).filter(item => {
+            const hasTechnicianCode = Array.isArray(item.technicianCodes) &&
+                item.technicianCodes.some(c => c.trim().toUpperCase() === normalizedTechCode);
+
+            if (hasTechnicianCode) {
+                return true;
+            }
+
+            let segs: any[] = [];
+            try {
+                segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
+            } catch {
+                segs = [];
+            }
+
+            return segs.some((seg: any) =>
+                seg?.ktvId && String(seg.ktvId).trim().toUpperCase() === normalizedTechCode
+            );
+        });
+
+        if (!ktvItems || ktvItems.length === 0) {
+            // [Lỗ hổng P2]: KTV không có trong technicianCodes của bất kỳ item nào, không thể tạo source of truth!
+            console.error(`[KTV Review API] FAILED ASSIGNMENT CHECK. normalizedTechCode: ${normalizedTechCode}, ktvItems empty.`);
+            return NextResponse.json({ success: false, error: 'KTV is not assigned to any items in this booking' }, { status: 403 });
+        }
+        console.log(`[KTV Review API] ASSIGNMENT CHECK PASSED. ktvItems count:`, ktvItems.length);
+
+        // 2. Cập nhật ghi chú vào bảng Bookings nếu có (chỉ lưu và gửi thông báo nếu đã pass check assignment)
         if (notes) {
             const { data: currentB, error: getBookingErr } = await supabase
                 .from('Bookings')
@@ -40,7 +89,6 @@ export async function POST(request: Request) {
             }
                 
             const oldNotes = currentB?.notes || '';
-            // Nối thêm nếu chưa có nội dung tương tự
             if (!oldNotes.includes(notes)) {
                 const newNotes = oldNotes ? `${oldNotes} | ${notes}` : notes;
                 const { error: updateNoteErr } = await supabase.from('Bookings').update({ notes: newNotes }).eq('id', bookingId);
@@ -49,7 +97,6 @@ export async function POST(request: Request) {
                     return NextResponse.json({ success: false, error: 'Failed to update booking notes' }, { status: 500 });
                 }
                 
-                // Báo về cho quầy Lễ Tân / Admin
                 const { error: notifErr } = await supabase.from('StaffNotifications').insert({
                     type: 'SYSTEM',
                     message: `📢 KTV ${techCode} vừa đánh giá khách hàng đơn ${currentB?.billCode || bookingId}: ${notes}`
@@ -57,29 +104,8 @@ export async function POST(request: Request) {
                 
                 if (notifErr) {
                     console.error('Failed to insert StaffNotification:', notifErr);
-                    // Quyết định kiến trúc: Không chặn luồng chính nếu chỉ lỗi ghi notification phụ trợ
                 }
             }
-        }
-
-        // 2. Ghi nhận KTV này đã hoàn tất khâu Review vào segments của BookingItems (Source of truth)
-        const { data: allItems, error: itemsErr } = await supabase
-            .from('BookingItems')
-            .select('id, segments, "technicianCodes"')
-            .eq('bookingId', bookingId);
-
-        if (itemsErr) {
-            return NextResponse.json({ success: false, error: 'Error fetching booking items' }, { status: 500 });
-        }
-
-        const ktvItems = (allItems || []).filter(item => 
-            Array.isArray(item.technicianCodes) && 
-            item.technicianCodes.some(c => c.trim().toUpperCase() === techCode.trim().toUpperCase())
-        );
-
-        if (!ktvItems || ktvItems.length === 0) {
-            // [Lỗ hổng P2]: KTV không có trong technicianCodes của bất kỳ item nào, không thể tạo source of truth!
-            return NextResponse.json({ success: false, error: 'KTV is not assigned to any items in this booking' }, { status: 403 });
         }
 
         let atLeastOneUpdated = false;
