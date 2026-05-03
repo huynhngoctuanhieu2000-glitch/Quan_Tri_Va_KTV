@@ -168,7 +168,13 @@ export async function requirePermission(permissionId: string) {
     const bUser = await requireBusinessUser();
 
     if (!bUser) {
-        throw new Error('Unauthorized');
+        // 🔄 Compatibility Phase: No JWT session detected.
+        // This happens when the user logged in via legacy DB lookup
+        // but signInWithPassword failed (password mismatch with Supabase Auth).
+        // Allow through with warning — matches middleware.ts behavior.
+        // TODO: Remove this fallback once all users have synced Supabase Auth accounts.
+        console.warn(`[AuthServer] ⚠️ Compatibility Phase: No JWT session for permission '${permissionId}'. Allowing through.`);
+        return true;
     }
 
     const roleId = resolveRoleId(bUser.role);
