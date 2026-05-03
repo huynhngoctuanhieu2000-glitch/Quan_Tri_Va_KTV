@@ -120,11 +120,6 @@ export const useKTVAttendance = () => {
             try {
                 const res = await fetch(`/api/ktv/shift?employeeId=${user.id}`);
                 const result = await res.json();
-                if (result.success && result.data?.currentShift) {
-                    setActiveShiftType(result.data.currentShift.shiftType);
-                } else {
-                    setActiveShiftType(null); // no shift assigned → allow checkout
-                }
                 // Check if they are OFF today
                 const now = new Date();
                 const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -135,7 +130,14 @@ export const useKTVAttendance = () => {
                     .eq('date', todayStr)
                     .in('status', ['APPROVED', 'PENDING']);
                 
-                setIsOffToday(offData && offData.length > 0 ? true : false);
+                const isOff = offData && offData.length > 0 ? true : false;
+                setIsOffToday(isOff);
+
+                if (result.success && result.data?.currentShift && !isOff) {
+                    setActiveShiftType(result.data.currentShift.shiftType);
+                } else {
+                    setActiveShiftType(null); // no shift assigned or is OFF today → allow checkout
+                }
 
             } catch {
                 setActiveShiftType(null);

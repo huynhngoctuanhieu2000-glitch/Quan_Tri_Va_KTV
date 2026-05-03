@@ -373,7 +373,7 @@ const KTVAttendancePage = () => {
                                             >
                                                 <option value="FREE">Ca tự do (Linh hoạt)</option>
                                                 <option value="REQUEST">Làm khách yêu cầu</option>
-                                                <option value="SUDDEN_OFF">Nghỉ đột xuất</option>
+                                                {!isOffToday && <option value="SUDDEN_OFF">Nghỉ đột xuất</option>}
                                             </select>
                                         </>
                                     )}
