@@ -120,17 +120,8 @@ export const useKTVAttendance = () => {
             try {
                 const res = await fetch(`/api/ktv/shift?employeeId=${user.id}`);
                 const result = await res.json();
-                // Check if they are OFF today
-                const now = new Date();
-                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                const { data: offData } = await supabase
-                    .from('LeaveRequests')
-                    .select('id')
-                    .eq('employeeId', user.id)
-                    .eq('date', todayStr)
-                    .in('status', ['APPROVED', 'PENDING']);
-                
-                const isOff = offData && offData.length > 0 ? true : false;
+                // Check if they are OFF today (from the server API to bypass RLS)
+                const isOff = result.success && result.data?.isOffToday ? true : false;
                 setIsOffToday(isOff);
 
                 if (result.success && result.data?.currentShift && !isOff) {

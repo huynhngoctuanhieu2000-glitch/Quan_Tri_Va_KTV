@@ -159,12 +159,35 @@ export async function GET(request: NextRequest) {
                 };
             }
 
+            // ─── Lấy cấu hình Cut-off Time ───
+            const { data: configCutoff } = await supabase
+                .from('SystemConfigs')
+                .select('value')
+                .eq('key', 'spa_day_cutoff_hours')
+                .maybeSingle();
+            const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
+
+            const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+            const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
+            const businessDateStr = businessNow.toISOString().slice(0, 10);
+
+            // Fetch OFF status for today
+            const { data: offData } = await supabase
+                .from('KTVLeaveRequests')
+                .select('id')
+                .eq('employeeId', employeeId)
+                .eq('date', businessDateStr)
+                .in('status', ['APPROVED', 'PENDING']);
+
+            const isOffToday = offData && offData.length > 0 ? true : false;
+
             return NextResponse.json({
                 success: true,
                 data: {
                     currentShift,
                     pendingRequest: pendingShift || null,
                     history: history || [],
+                    isOffToday
                 },
                 shiftTypes: SHIFT_TYPES,
             });
