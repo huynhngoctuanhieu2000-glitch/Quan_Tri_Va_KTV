@@ -284,6 +284,28 @@ export async function GET(request: Request) {
             }
         }
 
+        // 6. Fetch next QUEUED assignment (continuous receiving)
+        let nextBookingId = null;
+        if (technicianCode) {
+            const today = getBusinessDate();
+            const { data: nextAssign } = await supabase
+                .from('KtvAssignments')
+                .select('booking_id')
+                .eq('employee_id', technicianCode)
+                .eq('business_date', today)
+                .in('status', ['QUEUED', 'READY'])
+                .order('priority', { ascending: true })
+                .order('planned_start_time', { ascending: true, nullsFirst: false })
+                .order('sequence_no', { ascending: true })
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+            
+            if (nextAssign) {
+                nextBookingId = nextAssign.booking_id;
+            }
+        }
+
         return NextResponse.json({
             success: true,
             data: {
@@ -301,7 +323,8 @@ export async function GET(request: Request) {
                 assignedBedId: turnInfo?.bed_id,
                 // Room-specific procedures
                 roomPrepProcedure: roomProcedures.prep_procedure,
-                roomCleanProcedure: roomProcedures.clean_procedure
+                roomCleanProcedure: roomProcedures.clean_procedure,
+                nextBookingId: nextBookingId
             },
             serverTime: new Date().toISOString()
         });

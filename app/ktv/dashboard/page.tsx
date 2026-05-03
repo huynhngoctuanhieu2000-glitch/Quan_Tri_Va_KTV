@@ -628,9 +628,20 @@ function ScreenTimer({ logic }: { logic: any }) {
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
-            <Clock size={16} className="text-emerald-600 animate-pulse" />
-            <span className="text-sm font-bold text-emerald-700">Hệ thống tự động hoàn tất khi hết giờ</span>
+          <div className="flex flex-col items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 border border-emerald-200 rounded-2xl w-full">
+              <Clock size={16} className="text-emerald-600 animate-pulse" />
+              <span className="text-sm font-bold text-emerald-700">Hệ thống tự động hoàn tất khi hết giờ</span>
+            </div>
+            
+            {logic.booking?.nextBookingId && (
+              <div className="flex items-center justify-center gap-2 py-2 w-full mt-2 bg-amber-50 rounded-xl border border-amber-200 shadow-sm">
+                <BellRing size={14} className="text-amber-600 animate-bounce" />
+                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-widest">
+                  Tiếp theo: {logic.booking.nextBookingId}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -788,6 +799,13 @@ function ScreenReview({ logic }: { logic: any }) {
         </p>
       </div>
 
+      {logic.booking?.nextBookingId && (
+        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm">
+          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Sắp tới</p>
+          <p className="text-sm font-bold text-amber-700">Đơn mới đang chờ: {logic.booking.nextBookingId}</p>
+        </div>
+      )}
+
       {/* Personality Categories */}
       <div className="space-y-3">
         {PERSONALITY_CATEGORIES.map((cat) => {
@@ -878,6 +896,34 @@ function ScreenHandover({ logic }: { logic: any }) {
       >
         {logic.isLoading ? 'Đang xử lý...' : 'Xong & Sẵn sàng đón khách'}
       </button>
+
+      {/* Liên tục nhận đơn - Bỏ qua dọn phòng nếu có đơn mới */}
+      {logic.booking?.nextBookingId && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className="mt-6 p-4 rounded-2xl bg-amber-50 border-2 border-amber-200 shadow-lg"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-amber-700">
+              <BellRing size={20} className="animate-bounce" />
+              <p className="font-black text-sm uppercase tracking-tight">Đơn mới đang chờ: {logic.booking.nextBookingId}</p>
+            </div>
+            <p className="text-[11px] text-amber-600 font-bold mb-1">
+              Bạn có thể nhờ đồng nghiệp dọn phòng và chuyển ngay sang đơn mới.
+            </p>
+            <button
+              onClick={() => {
+                if (window.confirm('Bỏ qua dọn phòng và chuyển ngay sang đơn mới?')) {
+                  window.dispatchEvent(new Event('KTV_FAST_TRACK'));
+                }
+              }}
+              className="w-full py-3 bg-amber-500 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-md hover:bg-amber-600 active:scale-95 transition-all"
+            >
+              Chuyển ngay
+            </button>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
