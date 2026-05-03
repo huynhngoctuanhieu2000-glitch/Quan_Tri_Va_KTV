@@ -1,11 +1,75 @@
 import { createClient } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { MODULES } from './constants';
 
 type BusinessUserRecord = {
     id: string;
     username?: string | null;
     role?: string | null;
+    permissions?: string[] | null;
 };
+
+const PERMISSION_RENAMES: Record<string, string> = {
+    ktv_leave: 'ktv_schedule'
+};
+
+function resolveRoleId(role?: string | null) {
+    const rawRole = typeof role === 'string' ? role.toUpperCase() : '';
+
+    if (rawRole === 'ADMIN') return 'admin';
+    if (rawRole === 'DEV') return 'dev';
+    if (rawRole === 'MANAGER') return 'branch_manager';
+    if (rawRole === 'RECEPTIONIST' || rawRole === 'LEAD_RECEPTIONIST') return 'reception';
+    if (rawRole === 'TECHNICIAN' || rawRole === 'KTV') return 'ktv';
+
+    return 'ktv';
+}
+
+function normalizePermissions(permissions: unknown): string[] {
+    if (!Array.isArray(permissions)) {
+        return [];
+    }
+
+    return permissions
+        .filter((permission): permission is string => typeof permission === 'string' && permission.trim().length > 0)
+        .map(permission => PERMISSION_RENAMES[permission] || permission);
+}
+
+function getFallbackPermissions(roleId: string) {
+    if (roleId === 'admin' || roleId === 'dev') {
+        return MODULES.map(module => module.id);
+    }
+
+    if (roleId === 'reception') {
+        return [
+            'dashboard',
+            'dispatch_board',
+            'order_management',
+            'customer_management',
+            'ktv_hub',
+            'room_management',
+            'leave_management',
+            'turn_tracking',
+            'service_handbook',
+            'staff_notifications',
+            'settings'
+        ];
+    }
+
+    if (roleId === 'ktv') {
+        return [
+            'ktv_dashboard',
+            'ktv_attendance',
+            'ktv_schedule',
+            'ktv_performance',
+            'ktv_history',
+            'service_handbook',
+            'settings'
+        ];
+    }
+
+    return [];
+}
 
 async function resolveBusinessUserFromDb(user: any): Promise<BusinessUserRecord | null> {
     const supabase = getSupabaseAdmin();
@@ -34,7 +98,7 @@ async function resolveBusinessUserFromDb(user: any): Promise<BusinessUserRecord 
     const findInField = async (field: 'id' | 'username') => {
         const { data, error } = await supabase
             .from('Users')
-            .select('id, username, role')
+            .select('id, username, role, permissions')
             .in(field, candidateValues)
             .limit(1);
 
@@ -69,6 +133,7 @@ export async function requireBusinessUser() {
     const businessUserId = dbUser?.id || user.user_metadata?.business_user_id;
     const finalTechCode = dbUser?.id || user.user_metadata?.techCode || businessUserId;
     const finalRole = dbUser?.role || user.user_metadata?.role;
+    const finalPermissions = normalizePermissions(dbUser?.permissions ?? user.user_metadata?.permissions);
 
     if (!businessUserId) {
         throw new Error('User does not have a mapped business user');
@@ -77,13 +142,14 @@ export async function requireBusinessUser() {
     return {
         techCode: finalTechCode,
         businessUserId,
-        role: finalRole
+        role: finalRole,
+        permissions: finalPermissions
     };
 }
 
 export async function requireRole(requiredRoles: string[]) {
     const bUser = await requireBusinessUser();
-    
+
     if (!bUser) {
         throw new Error('Unauthorized');
     }
@@ -92,6 +158,25 @@ export async function requireRole(requiredRoles: string[]) {
     const normalizedRequiredRoles = requiredRoles.map(role => role.toUpperCase());
 
     if (!normalizedRole || !normalizedRequiredRoles.includes(normalizedRole)) {
+        throw new Error('Forbidden');
+    }
+
+    return true;
+}
+
+export async function requirePermission(permissionId: string) {
+    const bUser = await requireBusinessUser();
+
+    if (!bUser) {
+        throw new Error('Unauthorized');
+    }
+
+    const roleId = resolveRoleId(bUser.role);
+    const permissions = bUser.permissions.length > 0
+        ? bUser.permissions
+        : getFallbackPermissions(roleId);
+
+    if (!permissions.includes(permissionId)) {
         throw new Error('Forbidden');
     }
 

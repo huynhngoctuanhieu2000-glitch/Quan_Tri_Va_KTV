@@ -1,15 +1,14 @@
 'use server';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { requireRole } from '@/lib/auth-server';
+import { requirePermission } from '@/lib/auth-server';
 import { sendPushNotification } from '@/lib/push-helper';
 
-// 🔒 Centralized dispatch role policy — keep this in sync with client-side guards
-const DISPATCH_ROLES = ['ADMIN', 'RECEPTIONIST', 'DEV'] as const;
+
 
 export async function getDispatchData(date: string) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -204,7 +203,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
     }[];
 }) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -301,7 +300,7 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
     }[];
 }) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -359,7 +358,7 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
 
 export async function cancelBooking(bookingId: string, date: string) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -439,7 +438,7 @@ export async function cancelBooking(bookingId: string, date: string) {
 
 export async function updateBookingStatus(bookingId: string, newStatus: string, date: string) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -625,7 +624,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
 export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string, targetKtvIds?: string[]) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -765,7 +764,7 @@ export async function createQuickBooking(data: {
     customerLang?: string; // Language code: vi, en, kr, jp, cn
 }) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -853,7 +852,7 @@ export async function createQuickBooking(data: {
 
 export async function addAddonServices(bookingId: string, items: { serviceId: string; qty: number }[], adminId: string = 'ADMIN') {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -1018,7 +1017,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
 
 export async function confirmAddonPayment(bookingId: string) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -1066,7 +1065,7 @@ export async function confirmAddonPayment(bookingId: string) {
 
 export async function removeBookingItem(bookingId: string, itemId: string) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
@@ -1163,7 +1162,7 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
 
 export async function editBookingService(bookingId: string, itemId: string, newServiceId: string) {
     try {
-        await requireRole([...DISPATCH_ROLES]);
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
