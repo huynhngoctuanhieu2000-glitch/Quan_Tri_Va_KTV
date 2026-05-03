@@ -3,6 +3,8 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { revalidatePath } from 'next/cache';
 
+const DOMAIN_SUFFIX = '@nganhaspa.internal';
+
 export async function getStaffList() {
     try {
         const supabase = getSupabaseAdmin();
@@ -77,6 +79,18 @@ export async function createStaffMember(formData: any) {
         if (userError) {
             console.error('Error creating user record:', userError);
             throw new Error(`Lỗi tạo tài khoản đăng nhập: ${userError.message}`);
+        }
+
+        // 🔄 Sync to Supabase Auth
+        const { createAuthUser } = await import('@/lib/auth-sync');
+        const authResult = await createAuthUser(supabase, formData.id, password, {
+            business_user_id: formData.id,
+            techCode: formData.id,
+            role: 'TECHNICIAN',
+            fullName: formData.full_name
+        });
+        if (!authResult.success) {
+            console.warn(`[Employees] ⚠️ Staff created in DB but Auth sync failed for ${formData.id}: ${authResult.error}`);
         }
 
         // 2. Insert into Staff Table
@@ -154,18 +168,40 @@ export async function updateStaffMember(id: string, updates: any) {
         if (staffError) throw new Error(`Lỗi cập nhật Staff: ${staffError.message}`);
 
         // 2. If login info provided, update Users table
-        if (updates.password || updates.username) {
+        if (updates.password || updates.username || updates.name) {
+            // Get current username BEFORE updating (needed for Auth lookup)
+            const { data: currentUser } = await supabase.from('Users').select('username').eq('id', id).single();
+            const oldUsername = currentUser?.username || id;
+
             const userPayload: any = {};
             if (updates.password) userPayload.password = updates.password;
             if (updates.username) userPayload.username = updates.username;
             if (updates.name) userPayload.fullName = updates.name;
 
-            const { error: userError } = await supabase
-                .from('Users')
-                .update(userPayload)
-                .eq('id', id);
-            
-            if (userError) console.warn("Could not update Users login info", userError);
+            if (Object.keys(userPayload).length > 0) {
+                const { error: userError } = await supabase
+                    .from('Users')
+                    .update(userPayload)
+                    .eq('id', id);
+
+                if (userError) console.warn("Could not update Users login info", userError);
+            }
+
+            // 🔄 Sync to Supabase Auth (atomic update)
+            const { updateAuthUser } = await import('@/lib/auth-sync');
+            const authUpdates: any = {};
+            if (updates.password) authUpdates.password = updates.password;
+            if (updates.username && updates.username !== oldUsername) {
+                authUpdates.newUsername = updates.username;
+            }
+            if (updates.name) authUpdates.metadata = { fullName: updates.name };
+
+            if (Object.keys(authUpdates).length > 0) {
+                const result = await updateAuthUser(supabase, oldUsername, authUpdates);
+                if (!result.success) {
+                    console.warn(`[Employees] ⚠️ Staff updated in DB but Auth sync failed for ${oldUsername}: ${result.error}`);
+                }
+            }
         }
 
         revalidatePath('/admin/employees');
@@ -181,6 +217,9 @@ export async function deleteStaffMember(id: string) {
     try {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error("Supabase admin client not initialized");
+
+        // 0. Get username before deleting (for Auth cleanup)
+        const { data: userRecord } = await supabase.from('Users').select('username').eq('id', id).single();
 
         // 1. Delete from Staff Table
         const { error: staffError } = await supabase
@@ -204,6 +243,15 @@ export async function deleteStaffMember(id: string) {
             // Non-fatal error
         }
 
+        // 3. 🔄 Delete from Supabase Auth
+        if (userRecord?.username) {
+            const { deleteAuthUser } = await import('@/lib/auth-sync');
+            const result = await deleteAuthUser(supabase, userRecord.username);
+            if (!result.success) {
+                console.warn(`[Employees] ⚠️ Staff deleted from DB but Auth cleanup failed for ${userRecord.username}: ${result.error}`);
+            }
+        }
+
         revalidatePath('/admin/employees');
         return { success: true };
     } catch (error: any) {
@@ -224,6 +272,16 @@ export async function updateEmployeeRole(employeeId: string, newRole: string) {
 
         if (error) throw error;
 
+        // 🔄 Sync role to Supabase Auth metadata
+        const { data: userRecord } = await supabase.from('Users').select('username').eq('id', employeeId).single();
+        if (userRecord?.username) {
+            const { updateAuthUser } = await import('@/lib/auth-sync');
+            const result = await updateAuthUser(supabase, userRecord.username, { metadata: { role: newRole } });
+            if (!result.success) {
+                console.warn(`[Employees] ⚠️ Role updated in DB but Auth sync failed for ${userRecord.username}: ${result.error}`);
+            }
+        }
+
         revalidatePath('/admin/employees');
         return { success: true };
     } catch (error: any) {
@@ -231,4 +289,3 @@ export async function updateEmployeeRole(employeeId: string, newRole: string) {
         return { success: false, error: error.message };
     }
 }
-

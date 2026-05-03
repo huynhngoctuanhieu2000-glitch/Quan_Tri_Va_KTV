@@ -495,9 +495,11 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 const statuses = allItemsAfterPartial.map(i => i.status);
                 let smartStatus = newStatus; // Default to requested status
                 
-                // Nếu còn items PREPARING → booking phải giữ IN_PROGRESS (không nhảy COMPLETED)
+                // Nếu còn items chờ nhưng đã có item từng bắt đầu/xong
+                // → booking vẫn đang ở giữa flow, không được lùi về PREPARING.
                 if (statuses.includes('PREPARING') || statuses.includes('NEW') || statuses.includes('WAITING')) {
-                    smartStatus = statuses.includes('IN_PROGRESS') ? 'IN_PROGRESS' : 'PREPARING';
+                    const hasProgressedItems = statuses.some(s => ['IN_PROGRESS', 'COMPLETED', 'DONE', 'CLEANING', 'FEEDBACK'].includes(s));
+                    smartStatus = hasProgressedItems ? 'IN_PROGRESS' : 'PREPARING';
                 } else if (statuses.some(s => s === 'IN_PROGRESS')) {
                     smartStatus = 'IN_PROGRESS';
                 } else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(s))) {
@@ -737,9 +739,13 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         if (allItems && allItems.length > 0) {
             const statuses = allItems.map(i => i.status);
             let bStatus = 'NEW';
+            const hasWaitingItems = statuses.some(s => ['PREPARING', 'WAITING', 'NEW'].includes(s));
+            const hasProgressedItems = statuses.some(s => ['IN_PROGRESS', 'COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s));
+
             if (statuses.includes('IN_PROGRESS')) bStatus = 'IN_PROGRESS';
-            else if (statuses.includes('PREPARING')) bStatus = 'PREPARING';
+            else if (hasWaitingItems && hasProgressedItems) bStatus = 'IN_PROGRESS';
             else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s))) bStatus = 'COMPLETED';
+            else if (statuses.includes('PREPARING')) bStatus = 'PREPARING';
             else if (statuses.includes('WAITING') || statuses.includes('NEW')) bStatus = 'NEW';
             
             await supabase.from('Bookings').update({ status: bStatus }).eq('id', bookingId);
@@ -1366,4 +1372,3 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
         return { success: false, error: error.message };
     }
 }
-
