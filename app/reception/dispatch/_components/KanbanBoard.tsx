@@ -62,13 +62,24 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     const parseHHMM = (timeStr: string) => {
         const [h, m] = timeStr.split(':').map(Number);
         const d = new Date();
+        const currentHour = d.getHours();
+        
+        // Handle midnight crossing
+        if (h < 12 && currentHour >= 18) {
+             d.setDate(d.getDate() + 1);
+        } else if (h >= 18 && currentHour < 12) {
+             d.setDate(d.getDate() - 1);
+        }
+        
         d.setHours(h, m, 0, 0);
         return d;
     };
 
     // 🔥 FIX: Luôn quét TẤT CẢ segments để lấy max endTime chính xác
-    // Không tin mù quáng booking.timeEnd vì nó có thể bị ghi đè sai khi chỉ 1 DV xong
+    // Không tin mù quáng booking.timeEnd vì nó có thể bị ghi đè sai
     for (const svc of servicesToCheck) {
+        let hasValidSegmentTime = false;
+        
         // Ưu tiên segment endTime (thời gian phân bổ chính xác nhất)
         if (svc.staffList) {
             for (const staff of svc.staffList) {
@@ -77,13 +88,14 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
                     if (seg.endTime && seg.endTime !== '--:--') {
                         const d = parseHHMM(seg.endTime);
                         if (d.getTime() > maxTime) maxTime = d.getTime();
+                        hasValidSegmentTime = true;
                     }
                 }
             }
         }
         
-        // Fallback: dùng item.timeEnd nếu có và lớn hơn maxTime hiện tại
-        if (svc.timeEnd) {
+        // Fallback: CHỈ dùng item.timeEnd nếu KHÔNG CÓ segment time nào hợp lệ
+        if (!hasValidSegmentTime && svc.timeEnd) {
             let tEnd = svc.timeEnd;
             if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
                 tEnd = tEnd.replace(' ', 'T') + 'Z';
@@ -238,7 +250,9 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                         estEnd.setHours(h, m, 0, 0);
                         
                         // Handle midnight crossing
-                        if (h > 20 && now.getHours() < 4) {
+                        if (h < 12 && now.getHours() >= 18) {
+                             estEnd.setDate(estEnd.getDate() + 1);
+                        } else if (h >= 18 && now.getHours() < 12) {
                              estEnd.setDate(estEnd.getDate() - 1);
                         }
                         

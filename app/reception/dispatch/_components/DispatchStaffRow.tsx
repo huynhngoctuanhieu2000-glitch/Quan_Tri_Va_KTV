@@ -51,6 +51,10 @@ interface DispatchStaffRowProps {
     avoid?: string;
     realSvcId?: string;
     reminders?: { id: string; content: string }[];
+    // New props for ticket details
+    billCode?: string;
+    genderReq?: string;
+    customerName?: string;
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -79,7 +83,8 @@ const calcEndTime = (start: string, duration: number): string => {
 
 export const DispatchStaffRow = ({
     row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove,
-    displayName, serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId, reminders = []
+    displayName, serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId, reminders = [],
+    billCode, genderReq, customerName
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -516,11 +521,16 @@ export const DispatchStaffRow = ({
                             </button>
 
                             {/* Ticket Header */}
-                            <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center rounded-t-3xl">
-                                <div className="text-4xl font-black italic tracking-tight">{row.ktvId}</div>
-                                <div className="text-right">
+                            <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center rounded-t-3xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl" />
+                                <div className="relative z-10">
+                                    <div className="text-4xl font-black italic tracking-tight">{row.ktvId}</div>
+                                    <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mt-1">Mã KTV</div>
+                                </div>
+                                <div className="relative z-10 text-right">
                                     <div className="text-[11px] font-bold tracking-wider opacity-70">Phiếu Tua KTV</div>
                                     <div className="text-base font-black mt-0.5">{dateFormatted}</div>
+                                    <div className="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded mt-1 inline-block uppercase tracking-tighter">#{billCode || 'N/A'}</div>
                                 </div>
                             </div>
 
@@ -528,11 +538,18 @@ export const DispatchStaffRow = ({
                             <div className="px-5 py-5 space-y-4">
                                 {/* Service Name */}
                                 <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="px-2 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[10px] font-black uppercase tracking-widest">Dịch vụ</span>
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Khách: <span className="text-gray-900">{customerName || 'Vãng lai'}</span></span>
+                                    </div>
                                     <div className="text-2xl font-black text-red-600 uppercase leading-tight">
                                         {displayName || serviceName} ({svcDuration}&apos;)
                                     </div>
                                     {serviceDescription && (
-                                        <p className="text-sm text-gray-500 font-semibold mt-1">{serviceDescription}</p>
+                                        <div className="mt-2 bg-slate-50 border border-slate-100 rounded-xl p-2.5">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Chi tiết dịch vụ:</p>
+                                            <p className="text-xs text-gray-600 font-bold leading-relaxed">{serviceDescription}</p>
+                                        </div>
                                     )}
                                 </div>
 
@@ -569,6 +586,11 @@ export const DispatchStaffRow = ({
                                             <AlertCircle size={14} className="text-amber-500" /> Yêu Cầu Khách Hàng
                                         </p>
                                         <div className="flex flex-wrap gap-2">
+                                            {genderReq && genderReq !== 'Ngẫu nhiên' && (
+                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-100 shadow-sm">
+                                                    🧑 GT: {genderReq}
+                                                </span>
+                                            )}
                                             {strength && (
                                                 <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
                                                     💪 Lực: {strength}

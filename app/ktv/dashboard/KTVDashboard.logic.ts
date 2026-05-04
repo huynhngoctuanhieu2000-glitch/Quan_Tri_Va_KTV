@@ -114,6 +114,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const manualSegmentOverrideRef = useRef<boolean>(false);
     const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
     const timeOffsetRef = useRef<number>(0);
+    const fetchBookingRef = useRef<(() => Promise<void>) | null>(null);
 
     // --- SMART SKIP LOGIC ---
     const [isLastInRoom, setIsLastInRoom] = useState(true);
@@ -965,6 +966,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
             .subscribe();
 
         // Polling fallback — skip during post-service to prevent order 2 from drifting into order 1 cleanup
+        fetchBookingRef.current = fetchBooking;
+        
         const intervalId = setInterval(() => {
             if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current)) {
                 console.log('🕒 [KTV] Polling skipped — in post-service flow:', screenRef.current);
@@ -1446,16 +1449,31 @@ export function useKTVDashboard(config?: DashboardConfig) {
         alert('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.');
     };
 
-    const goToDashboard = () => {
+    const goToDashboard = (nextId?: string | null) => {
+        console.log("🏠 [KTV Logic] Returning to Dashboard. Next ID:", nextId);
         lastAcknowledgedIdRef.current = prevBookingIdRef.current;
         setBooking(null);
         setScreen('DASHBOARD');
         postServiceBookingIdRef.current = null;
+        
+        // Nếu có đơn tiếp theo, cưỡng bức fetch đơn đó bằng cách set targetBookingId
+        if (nextId) {
+            setConfig(prev => ({ ...prev, targetBookingId: nextId }));
+        } else if (config?.targetBookingId) {
+            // Ngược lại nếu không có đơn mới, xóa target cũ để fetch tự do từ TurnQueue
+            setConfig(prev => ({ ...prev, targetBookingId: undefined }));
+        }
+
         try {
             localStorage.removeItem('ktv_active_screen');
             localStorage.removeItem('ktv_active_booking_id');
             localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
         } catch(e) {}
+
+        // 🚀 Trigger fetch immediately instead of waiting for 5s interval
+        setTimeout(() => {
+            fetchBookingRef.current?.();
+        }, 100);
     };
 
     return {

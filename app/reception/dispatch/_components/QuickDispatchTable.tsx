@@ -35,6 +35,8 @@ interface QuickDispatchTableProps {
   onPrintGroup: (group: ServiceGroup) => void;
   customerReqs?: { genderReq?: string; strength?: string; focus?: string; avoid?: string; customerNote?: string; };
   reminders?: ReminderData[];
+  billCode?: string;
+  customerName?: string;
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -317,6 +319,7 @@ export const QuickDispatchTable = ({
           <ServiceGroupCard
             key={groupKey}
             serviceName={displayServiceName}
+            serviceDescription={items[0]?.serviceDescription || ''}
             count={count}
             duration={duration}
             state={state}
@@ -343,6 +346,7 @@ export const QuickDispatchTable = ({
 
 interface ServiceGroupCardProps {
   serviceName: string;
+  serviceDescription?: string;
   count: number;
   duration: number;
   state: { displayName: string; selectedKtvIds: string[]; selectedRoomIds?: string[]; ktvStartTimes?: string[]; ktvEndTimes?: string[]; ktvDurations?: number[]; ktvNotes?: string[]; ktvBedIds?: string[]; note: string; duration: number; };
@@ -362,7 +366,7 @@ interface ServiceGroupCardProps {
 const MAX_KTV_PER_GROUP = 10;
 
 const ServiceGroupCard = ({
-  serviceName, count, duration, state, targetSkill,
+  serviceName, serviceDescription, count, duration, state, targetSkill,
   availableTurns, allSelectedKtvIds, rooms, beds, busyBedIds, onUpdate, onPrint, customerReqs, reminders = [], getLatestEndTime
 }: ServiceGroupCardProps) => {
   const [isKtvDropdownOpen, setIsKtvDropdownOpen] = useState(false);
@@ -783,6 +787,9 @@ const ServiceGroupCard = ({
                   <div className="text-2xl font-black text-red-600 uppercase leading-tight">
                       {tName} ({ticketDur}&apos;)
                   </div>
+                  {serviceDescription && (
+                      <p className="text-sm text-gray-500 font-semibold mt-1">{serviceDescription}</p>
+                  )}
               </div>
 
               {/* Segments (Always 1 for Quick Dispatch) */}

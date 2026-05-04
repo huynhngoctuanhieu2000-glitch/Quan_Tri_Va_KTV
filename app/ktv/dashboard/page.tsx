@@ -963,7 +963,7 @@ function ScreenReward({ logic }: { logic: any }) {
       </div>
 
       <button
-        onClick={goToDashboard}
+        onClick={() => goToDashboard(logic.booking?.nextBookingId)}
         className={`w-full max-w-[280px] py-4 rounded-[20px] font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2
           ${logic.booking?.nextBookingId 
             ? 'bg-amber-600 text-white shadow-amber-200' 
