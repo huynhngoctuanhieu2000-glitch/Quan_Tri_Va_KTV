@@ -800,9 +800,14 @@ function ScreenReview({ logic }: { logic: any }) {
       </div>
 
       {logic.booking?.nextBookingId && (
-        <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm">
-          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Sắp tới</p>
-          <p className="text-sm font-bold text-amber-700">Đơn mới đang chờ: {logic.booking.nextBookingId}</p>
+        <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-2xl flex items-center gap-3 shadow-md shadow-amber-100/50">
+          <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center shrink-0">
+            <BellRing className="text-amber-700 animate-bounce" size={20} />
+          </div>
+          <div className="flex-1">
+             <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Sắp tới</p>
+             <p className="text-xs font-bold text-amber-800">Đơn mới đang chờ: <span className="font-black underline">{logic.booking.nextBookingId}</span></p>
+          </div>
         </div>
       )}
 
@@ -901,15 +906,20 @@ function ScreenHandover({ logic }: { logic: any }) {
       {logic.booking?.nextBookingId && (
         <motion.div 
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className="mt-6 p-4 rounded-2xl bg-amber-50 border-2 border-amber-200 shadow-lg"
+          className="mt-6 p-5 rounded-[28px] bg-amber-50 border-2 border-amber-200 shadow-xl shadow-amber-100/50"
         >
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-amber-700">
-              <BellRing size={20} className="animate-bounce" />
-              <p className="font-black text-sm uppercase tracking-tight">Đơn mới đang chờ: {logic.booking.nextBookingId}</p>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 text-amber-700">
+              <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center">
+                <BellRing size={20} className="animate-bounce" />
+              </div>
+              <div>
+                <p className="font-black text-sm uppercase tracking-tight">Đơn mới đang chờ!</p>
+                <p className="text-[10px] font-bold opacity-70">Mã đơn: {logic.booking.nextBookingId}</p>
+              </div>
             </div>
-            <p className="text-[11px] text-amber-600 font-bold mb-1">
-              Bạn có thể nhờ đồng nghiệp dọn phòng và chuyển ngay sang đơn mới.
+            <p className="text-[11px] text-amber-800/80 font-bold leading-relaxed">
+              Bạn có thể nhờ đồng nghiệp dọn phòng và <span className="text-amber-700 underline">chuyển ngay</span> sang đơn mới.
             </p>
             <button
               onClick={() => {
@@ -917,9 +927,10 @@ function ScreenHandover({ logic }: { logic: any }) {
                   window.dispatchEvent(new Event('KTV_FAST_TRACK'));
                 }
               }}
-              className="w-full py-3 bg-amber-500 text-white font-black rounded-xl text-xs uppercase tracking-widest shadow-md hover:bg-amber-600 active:scale-95 transition-all"
+              className="w-full py-4 bg-amber-600 text-white font-black rounded-2xl text-xs uppercase tracking-widest shadow-lg shadow-amber-200 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
-              Chuyển ngay
+              <Play size={14} fill="white" />
+              Nhận đơn & Chuyển ngay
             </button>
           </div>
         </motion.div>
@@ -953,9 +964,19 @@ function ScreenReward({ logic }: { logic: any }) {
 
       <button
         onClick={goToDashboard}
-        className="w-full max-w-[280px] py-4 bg-slate-900 text-white rounded-[20px] font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+        className={`w-full max-w-[280px] py-4 rounded-[20px] font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2
+          ${logic.booking?.nextBookingId 
+            ? 'bg-amber-600 text-white shadow-amber-200' 
+            : 'bg-slate-900 text-white'}`}
       >
-        Tiếp tục làm việc
+        {logic.booking?.nextBookingId ? (
+          <>
+            <BellRing size={16} className="animate-bounce" />
+            Nhận đơn tiếp theo
+          </>
+        ) : (
+          'Tiếp tục làm việc'
+        )}
       </button>
     </div>
   );

@@ -674,6 +674,11 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                         s.actualEndTime = new Date().toISOString();
                         segmentsModified = true;
                     }
+                    // 🔥 FIX: Nếu chuyển sang FEEDBACK hoặc DONE, phải có feedbackTime thì Kanban mới chịu nhảy cột
+                    if (['FEEDBACK', 'DONE'].includes(newStatus) && !s.feedbackTime) {
+                        s.feedbackTime = new Date().toISOString();
+                        segmentsModified = true;
+                    }
                 });
             }
             
