@@ -467,11 +467,12 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
             const { data: itemsToUpdate } = await supabase
                 .from('BookingItems')
-                .select('id, segments')
+                .select('id, segments, status')
                 .eq('bookingId', bookingId)
                 .in('status', ['IN_PROGRESS', 'CLEANING', 'FEEDBACK']);
             
             if (itemsToUpdate && itemsToUpdate.length > 0) {
+                const { canTransition: canTransitionItem } = await import('@/lib/dispatch-status');
                 for (const item of itemsToUpdate) {
                     let segs = [];
                     try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
@@ -484,9 +485,19 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                         }
                     });
 
+                    // Skip items already at higher status
+                    const itemStatus = (item as any).status;
+                    if (itemStatus && !canTransitionItem(itemStatus, newStatus)) {
+                        // Still update segments if modified
+                        if (segmentsModified) {
+                            await supabase.from('BookingItems').update({ segments: JSON.stringify(segs) }).eq('id', item.id);
+                        }
+                        continue;
+                    }
+
                     const payload: any = { status: newStatus };
                     if (segmentsModified) payload.segments = JSON.stringify(segs);
-                    if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
+                    if (newStatus === 'CLEANING' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
                         payload.timeEnd = new Date().toISOString();
                     }
 
@@ -635,21 +646,32 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         // Lấy trạng thái hiện tại của items để check rule
-        const { data: itemsCurrent } = await supabase.from('BookingItems').select('status').in('id', itemIds);
-        if (itemsCurrent && itemsCurrent.length > 0) {
-            const { canTransition } = await import('@/lib/dispatch-status');
-            for (const item of itemsCurrent) {
-                if (item.status && !canTransition(item.status, newStatus)) {
-                    return { success: false, error: `Lỗi: Không thể chuyển một trong các item từ ${item.status} sang ${newStatus}` };
-                }
-            }
+        const { data: itemsCurrent } = await supabase.from('BookingItems').select('id, status').in('id', itemIds);
+        const { canTransition } = await import('@/lib/dispatch-status');
+        
+        // Filter: chỉ update items CÓ THỂ chuyển trạng thái, skip items đã ở bước cao hơn
+        const updatableIds = (itemsCurrent || [])
+            .filter(item => !item.status || canTransition(item.status, newStatus))
+            .map(item => item.id);
+        
+        const skippedItems = (itemsCurrent || [])
+            .filter(item => item.status && !canTransition(item.status, newStatus));
+        
+        if (skippedItems.length > 0) {
+            console.log(`[updateBookingItemStatus] Skipping ${skippedItems.length} items already at higher status:`, 
+                skippedItems.map(i => `${i.id}:${i.status}`).join(', '));
+        }
+        
+        if (updatableIds.length === 0) {
+            // Tất cả items đã ở bước cao hơn → không cần update, trả success
+            return { success: true };
         }
 
-        // Cập nhật trạng thái các BookingItems
+        // Cập nhật trạng thái các BookingItems (chỉ những items hợp lệ)
         const { error: itemError } = await supabase
             .from('BookingItems')
             .update({ status: newStatus })
-            .in('id', itemIds);
+            .in('id', updatableIds);
             
         if (itemError) throw itemError;
 

@@ -285,6 +285,7 @@ export async function GET(request: Request) {
         }
 
         // 6. Fetch next QUEUED assignment (continuous receiving)
+        // ⚠️ Exclude current booking to prevent multi-service same-order from showing as "next"
         let nextBookingId = null;
         if (technicianCode) {
             const today = getBusinessDate();
@@ -294,6 +295,7 @@ export async function GET(request: Request) {
                 .eq('employee_id', technicianCode)
                 .eq('business_date', today)
                 .in('status', ['QUEUED', 'READY'])
+                .neq('booking_id', booking.id)
                 .order('priority', { ascending: true })
                 .order('planned_start_time', { ascending: true, nullsFirst: false })
                 .order('sequence_no', { ascending: true })
