@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 // Đã chuyển sang dùng REST API /api/ktv/... thay vì server actions trực tiếp
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { useNotifications } from '@/components/NotificationProvider';
 
 export type ScreenState = 'DASHBOARD' | 'TIMER' | 'REVIEW' | 'REWARD' | 'HANDOVER';
 
@@ -49,12 +50,14 @@ export interface DashboardConfig {
 
 export function useKTVDashboard(config?: DashboardConfig) {
     const { user } = useAuth();
+    const { setKtvScreen } = useNotifications();
     const ktvId = config?.testTechCode || user?.id;
     const [screen, setScreenState] = useState<ScreenState>('DASHBOARD');
     const setScreen = useCallback((val: ScreenState) => {
         setScreenState(val);
+        setKtvScreen(val);
         try { localStorage.setItem('ktv_active_screen', val); } catch(e) {}
-    }, []);
+    }, [setKtvScreen]);
 
     const [booking, setBooking] = useState<any>(null);
     const [showProcedure, setShowProcedure] = useState(false);
@@ -222,7 +225,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 }
             }
         } catch(e) {}
-    }, [booking?.id, hasSubmittedReview, ktvId, isLastInRoom, isRoomCleaned, handleAutoRelease]);
+    }, [booking?.id, hasSubmittedReview, ktvId, isLastInRoom, isRoomCleaned, handleAutoRelease]);
 
     // Auto-skip Handover if teammate cleans the room
     useEffect(() => {
@@ -277,11 +280,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
     // 🚀 Fast-Track Handover Skip
     useEffect(() => {
         const handleFastTrack = async () => {
-            if (screenRef.current === 'HANDOVER') {
+            if (screenRef.current === 'HANDOVER' || screenRef.current === 'REWARD') {
                 console.log("🚀 [KTV] Fast-tracking to new order...");
                 
-                // 1. Auto-complete the current order in DB
-                if (bookingRef.current) {
+                // 1. Auto-complete the current order in DB (only if from HANDOVER)
+                if (screenRef.current === 'HANDOVER' && bookingRef.current) {
                     try {
                         await fetch('/api/ktv/booking', {
                             method: 'PATCH',

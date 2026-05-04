@@ -203,8 +203,8 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
                 )}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {(Object.entries(editedEmployee.skills) as [keyof Employee['skills'], SkillLevel][]).map(([key, level]) => {
-                  const info = levelInfo[String(level)];
+                {(Object.entries(editedEmployee.skills || {}) as [keyof Employee['skills'], SkillLevel][]).map(([key, level]) => {
+                  const info = levelInfo[String(!!level)];
                   return (
                     <button
                       key={key}

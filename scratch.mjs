@@ -1,6 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-sb.from('KTVLeaveRequests').select('*').eq('employeeId', 'NH016').then(r => console.log(JSON.stringify(r.data, null, 2)));
+const fs = require('fs');
+let c = fs.readFileSync('app/ktv/dashboard/KTVDashboard.logic.ts', 'utf8');
+c = c.replace(/import \{ supabase \} from '@\/lib\/supabase';/, "import { supabase } from '@/lib/supabase';\r\nimport { useNotifications } from '@/components/NotificationProvider';");
+c = c.replace(/export function useKTVDashboard\(config\?: DashboardConfig\) \{\s+const \{ user \} = useAuth\(\);\s+const ktvId = config\?\.testTechCode \|\| user\?\.id;\s+const \[screen, setScreenState\] = useState<ScreenState>\('DASHBOARD'\);\s+const setScreen = useCallback\(\(val: ScreenState\) => \{\s+setScreenState\(val\);\s+try \{ localStorage\.setItem\('ktv_active_screen', val\); \} catch\(e\) \{\}\s+\}, \[\]\);/, "export function useKTVDashboard(config?: DashboardConfig) {\r\n    const { user } = useAuth();\r\n    const { setKtvScreen } = useNotifications();\r\n    const ktvId = config?.testTechCode || user?.id;\r\n    const [screen, setScreenState] = useState<ScreenState>('DASHBOARD');\r\n    const setScreen = useCallback((val: ScreenState) => {\r\n        setScreenState(val);\r\n        setKtvScreen(val);\r\n        try { localStorage.setItem('ktv_active_screen', val); } catch(e) {}\r\n    }, [setKtvScreen]);");
+fs.writeFileSync('app/ktv/dashboard/KTVDashboard.logic.ts', c);

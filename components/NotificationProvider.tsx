@@ -377,17 +377,37 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 // GIAO DIỆN TIN NHẮN CHO KTV (Trên đầu)
                 <div className="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
                     <AnimatePresence>
+                        {sortedToasts.filter(n => !n.isRead).length >= 2 && (
+                            <motion.div
+                                key="ktv-clear-all"
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                className="pointer-events-auto flex justify-end"
+                            >
+                                <button
+                                    onClick={clearAllToasts}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 backdrop-blur-sm text-white text-[11px] font-bold shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
+                                >
+                                    <X size={12} strokeWidth={3} />
+                                    Đóng tất cả ({sortedToasts.filter(n => !n.isRead).length})
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    <AnimatePresence>
                         {sortedToasts.filter(n => !n.isRead).map((n) => (
                                 <KtvMessageToast 
                                     key={n.id} 
                                     notification={n} 
                                     currentScreen={ktvScreen}
+                                    onClose={() => markAsRead(n.id)}
                                     onRedirect={() => {
                                         const t = (n.type || '').toUpperCase();
                                         if (t === 'KTV_NEW_ORDER') {
                                             if (ktvScreen === 'REVIEW') {
                                                 alert('Vui lòng đánh giá tính cách khách hàng trước khi chuyển ca!');
-                                            } else if (ktvScreen === 'HANDOVER') {
+                                            } else if (ktvScreen === 'HANDOVER' || ktvScreen === 'REWARD') {
                                                 window.dispatchEvent(new Event('KTV_FAST_TRACK'));
                                             } else {
                                                 router.push('/ktv/dashboard');
@@ -449,7 +469,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     );
 };
 
-const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notification: Notification, currentScreen: string, onRedirect: () => void }) => {
+const KtvMessageToast = ({ notification, currentScreen, onClose, onRedirect }: { notification: Notification, currentScreen: string, onClose: () => void, onRedirect: () => void }) => {
     const isLocked = currentScreen === 'REVIEW';
     const type = notification.type?.toUpperCase();
     const isComplaint = type === 'COMPLAINT';
@@ -496,13 +516,28 @@ const KtvMessageToast = ({ notification, currentScreen, onRedirect }: { notifica
             <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
                 {iconElement}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0" onClick={() => !isLocked && onRedirect()}>
                 <p className={`text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5 ${isComplaint ? 'text-rose-100' : titleColor}`}>
                     {title}
                 </p>
                 <p className="text-xs font-bold leading-tight truncate">{notification.message}</p>
             </div>
-            {!isLocked && <ArrowRight size={16} className="opacity-40" />}
+            <div className="flex items-center gap-2 shrink-0">
+                {!isLocked && (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onRedirect(); }}
+                        className="p-1.5 opacity-40 hover:opacity-100 transition-opacity"
+                    >
+                        <ArrowRight size={16} />
+                    </button>
+                )}
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onClose(); }}
+                    className={`p-1.5 rounded-full transition-colors ${isComplaint ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-500'}`}
+                >
+                    <X size={16} />
+                </button>
+            </div>
         </motion.div>
     );
 };
