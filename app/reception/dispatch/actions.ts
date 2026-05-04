@@ -646,7 +646,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         // Lấy trạng thái hiện tại của items để check rule
-        const { data: itemsCurrent } = await supabase.from('BookingItems').select('id, status').in('id', itemIds);
+        const { data: itemsCurrent } = await supabase.from('BookingItems').select('id, status, segments').in('id', itemIds);
         const { canTransition } = await import('@/lib/dispatch-status');
         
         // Filter: chỉ update items CÓ THỂ chuyển trạng thái, skip items đã ở bước cao hơn
@@ -662,18 +662,33 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                 skippedItems.map(i => `${i.id}:${i.status}`).join(', '));
         }
         
-        if (updatableIds.length === 0) {
-            // Tất cả items đã ở bước cao hơn → không cần update, trả success
-            return { success: true };
+        if (updatableIds.length > 0) {
+            for (const item of itemsCurrent || []) {
+                if (!updatableIds.includes(item.id)) continue;
+                
+                let segs = [];
+                try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+                
+                let segmentsModified = false;
+                if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK', 'COMPLETED'].includes(newStatus)) {
+                    segs.forEach((s: any) => {
+                        if (!s.actualEndTime) {
+                            s.actualEndTime = new Date().toISOString();
+                            segmentsModified = true;
+                        }
+                    });
+                }
+                
+                const payload: any = { status: newStatus };
+                if (segmentsModified) payload.segments = JSON.stringify(segs);
+                if (['CLEANING', 'DONE', 'CANCELLED', 'COMPLETED'].includes(newStatus)) {
+                    payload.timeEnd = new Date().toISOString();
+                }
+                
+                const { error: itemError } = await supabase.from('BookingItems').update(payload).eq('id', item.id);
+                if (itemError) throw itemError;
+            }
         }
-
-        // Cập nhật trạng thái các BookingItems (chỉ những items hợp lệ)
-        const { error: itemError } = await supabase
-            .from('BookingItems')
-            .update({ status: newStatus })
-            .in('id', updatableIds);
-            
-        if (itemError) throw itemError;
 
         if (newStatus === 'IN_PROGRESS') {
             const now = new Date().toISOString();
@@ -722,7 +737,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             await query;
         }
 
-        if (newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
+        if (newStatus === 'CLEANING' || newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
             // Lấy tất cả KTV đang làm các item này
             let queryToRelease = supabase
                 .from('TurnQueue')
