@@ -662,29 +662,37 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                 skippedItems.map(i => `${i.id}:${i.status}`).join(', '));
         }
         
-        if (updatableIds.length > 0) {
-            for (const item of itemsCurrent || []) {
-                if (!updatableIds.includes(item.id)) continue;
-                
-                let segs = [];
-                try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
-                
-                let segmentsModified = false;
-                if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK', 'COMPLETED'].includes(newStatus)) {
-                    segs.forEach((s: any) => {
-                        if (!s.actualEndTime) {
-                            s.actualEndTime = new Date().toISOString();
-                            segmentsModified = true;
-                        }
-                    });
-                }
-                
-                const payload: any = { status: newStatus };
-                if (segmentsModified) payload.segments = JSON.stringify(segs);
+        for (const item of itemsCurrent || []) {
+            let segs = [];
+            try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+            
+            let segmentsModified = false;
+            // Luôn đảm bảo có actualEndTime nếu đang chuyển sang trạng thái kết thúc
+            if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK', 'COMPLETED'].includes(newStatus)) {
+                segs.forEach((s: any) => {
+                    if (!s.actualEndTime) {
+                        s.actualEndTime = new Date().toISOString();
+                        segmentsModified = true;
+                    }
+                });
+            }
+            
+            // Chỉ update status nếu được phép chuyển đổi
+            const isUpdatable = updatableIds.includes(item.id);
+            const payload: any = {};
+            
+            if (isUpdatable) {
+                payload.status = newStatus;
                 if (['CLEANING', 'DONE', 'CANCELLED', 'COMPLETED'].includes(newStatus)) {
                     payload.timeEnd = new Date().toISOString();
                 }
-                
+            }
+            
+            if (segmentsModified) {
+                payload.segments = JSON.stringify(segs);
+            }
+            
+            if (Object.keys(payload).length > 0) {
                 const { error: itemError } = await supabase.from('BookingItems').update(payload).eq('id', item.id);
                 if (itemError) throw itemError;
             }

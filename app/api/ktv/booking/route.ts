@@ -750,7 +750,7 @@ export async function PATCH(request: Request) {
                                         seg.startTime === turnForSync?.start_time;
 
                         if (isMySeg || isTeamSeg || action === 'EARLY_EXIT') {
-                            if (!isFeedback && !seg.actualEndTime) seg.actualEndTime = new Date().toISOString();
+                            if (!seg.actualEndTime) seg.actualEndTime = new Date().toISOString();
                             if (isFeedback && !seg.feedbackTime) seg.feedbackTime = new Date().toISOString();
                             // Đảm bảo có actualStartTime nếu chưa có
                             if (!seg.actualStartTime) seg.actualStartTime = seg.startTime || new Date().toISOString();
@@ -764,6 +764,7 @@ export async function PATCH(request: Request) {
                     });
 
                     const payload: any = { segments: JSON.stringify(segs) };
+
                     
                     if (isFeedback) {
                         if (allFeedback) payload.status = 'FEEDBACK';
