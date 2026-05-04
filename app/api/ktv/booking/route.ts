@@ -344,12 +344,18 @@ export async function PATCH(request: Request) {
         const { searchParams } = new URL(request.url);
         const techCodeFromQuery = searchParams.get('techCode'); // Lấy techCode từ query nếu có
         const body = await request.json();
-        const { bookingId, status, action, techCode: techCodeFromBody } = body;
+        const { bookingId, status: rawStatus, action, techCode: techCodeFromBody } = body;
         
+        let status = rawStatus;
         const technicianCode = techCodeFromQuery || techCodeFromBody;
 
         if (!bookingId || !status) {
             return NextResponse.json({ success: false, error: 'bookingId and status are required' }, { status: 400 });
+        }
+
+        // 🚀 BOUNDARY NORMALIZATION
+        if (status === 'COMPLETED') {
+            status = 'CLEANING';
         }
 
         const supabase = getSupabaseAdmin();
@@ -367,7 +373,7 @@ export async function PATCH(request: Request) {
 
         const updatePayload: any = { updatedAt: new Date().toISOString() };
         // 🚀 SMART BOOKING STATUS: Không set trực tiếp, tính toán dựa trên trạng thái tất cả items
-        const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'COMPLETED', 'CLEANING', 'FEEDBACK', 'DONE', 'CANCELLED'];
+        const validBookingStatuses = ['NEW', 'PREPARING', 'IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'DONE', 'CANCELLED'];
 
         const itemUpdatePayload: any = { status }; // BookingItems không có column updatedAt
         
