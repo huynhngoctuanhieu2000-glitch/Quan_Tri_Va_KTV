@@ -784,11 +784,14 @@ const ServiceGroupCard = ({
             <div className="px-5 py-5 space-y-4">
               {/* Service Name */}
               <div>
+
                   <div className="text-2xl font-black text-red-600 uppercase leading-tight">
                       {tName} ({ticketDur}&apos;)
                   </div>
                   {serviceDescription && (
-                      <p className="text-sm text-gray-500 font-semibold mt-1">{serviceDescription}</p>
+                      <div className="mt-2 bg-slate-50 border border-slate-100 rounded-xl p-3">
+                          <p className="text-base text-gray-800 font-black leading-relaxed">{serviceDescription}</p>
+                      </div>
                   )}
               </div>
 
@@ -815,6 +818,7 @@ const ServiceGroupCard = ({
                       <AlertCircle size={14} className="text-amber-500" /> Yêu Cầu Khách Hàng
                   </p>
                   <div className="flex flex-wrap gap-2">
+
                     {customerReqs.strength && (
                         <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
                             💪 Lực: {customerReqs.strength}

@@ -92,7 +92,16 @@ export function recomputeBookingStatus(itemStatuses: string[]): string {
 
     if (itemStatuses.includes('IN_PROGRESS')) return 'IN_PROGRESS';
     if (hasWaitingItems && hasProgressedItems) return 'IN_PROGRESS';
-    if (itemStatuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s))) return 'DONE';
+    
+    // Nếu có item đang Dọn phòng, cả Booking là đang Dọn phòng (Giữ phòng Bận)
+    if (itemStatuses.includes('CLEANING')) return 'CLEANING';
+    
+    // Nếu có item chờ Đánh giá (và không còn ai dọn phòng), cả Booking là Chờ đánh giá (Giữ phòng Bận)
+    if (itemStatuses.includes('FEEDBACK')) return 'FEEDBACK';
+    
+    // Chỉ khi TẤT CẢ đã hoàn thành thì Booking mới DONE (Giải phóng phòng)
+    if (itemStatuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED'].includes(s))) return 'DONE';
+    
     if (itemStatuses.includes('PREPARING')) return 'PREPARING';
     if (itemStatuses.includes('WAITING') || itemStatuses.includes('NEW')) return 'NEW';
     

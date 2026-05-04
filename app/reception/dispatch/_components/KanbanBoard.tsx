@@ -62,16 +62,15 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     const parseHHMM = (timeStr: string) => {
         const [h, m] = timeStr.split(':').map(Number);
         const d = new Date();
-        const currentHour = d.getHours();
-        
-        // Handle midnight crossing
-        if (h < 12 && currentHour >= 18) {
-             d.setDate(d.getDate() + 1);
-        } else if (h >= 18 && currentHour < 12) {
-             d.setDate(d.getDate() - 1);
+        d.setHours(h, m, 0, 0);
+
+        // Handle midnight crossing using absolute offset to avoid timezone shift bugs
+        if (d.getTime() < Date.now() - 12 * 60 * 60 * 1000) {
+             d.setDate(d.getDate() + 1); // Looks like tomorrow
+        } else if (d.getTime() > Date.now() + 12 * 60 * 60 * 1000) {
+             d.setDate(d.getDate() - 1); // Looks like yesterday
         }
         
-        d.setHours(h, m, 0, 0);
         return d;
     };
 
@@ -249,10 +248,10 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                         const estEnd = new Date();
                         estEnd.setHours(h, m, 0, 0);
                         
-                        // Handle midnight crossing
-                        if (h < 12 && now.getHours() >= 18) {
+                        // Handle midnight crossing using absolute offset to avoid timezone shift bugs
+                        if (estEnd.getTime() < now.getTime() - 12 * 60 * 60 * 1000) {
                              estEnd.setDate(estEnd.getDate() + 1);
-                        } else if (h >= 18 && now.getHours() < 12) {
+                        } else if (estEnd.getTime() > now.getTime() + 12 * 60 * 60 * 1000) {
                              estEnd.setDate(estEnd.getDate() - 1);
                         }
                         

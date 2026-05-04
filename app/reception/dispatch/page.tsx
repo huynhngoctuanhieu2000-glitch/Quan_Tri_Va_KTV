@@ -1490,7 +1490,7 @@ if (!hasPermission('dispatch_board')) {
                     beds={beds}
                     availableTurns={turns}
                     busyBedIds={orders
-                      .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'CLEANING' || o.dispatchStatus === 'PREPARING'))
+                      .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'PREPARING'))
                       .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                       .filter(Boolean) as string[]
                     }
@@ -1509,6 +1509,8 @@ if (!hasPermission('dispatch_board')) {
                       customerNote: selectedOrder.services[0].customerNote,
                     } : undefined}
                     reminders={reminders}
+                    billCode={selectedOrder.billCode}
+                    customerName={selectedOrder.customerName}
                   />
                 ) : (
                   /* Detail Dispatch Mode */
@@ -1523,7 +1525,7 @@ if (!hasPermission('dispatch_board')) {
                   >
                     {selectedOrder.services.map((svc, idx) => {
                       const busyInOtherOrders = orders
-                        .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'CLEANING' || o.dispatchStatus === 'PREPARING'))
+                        .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'PREPARING'))
                         .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                         .filter(Boolean) as string[];
                       const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);

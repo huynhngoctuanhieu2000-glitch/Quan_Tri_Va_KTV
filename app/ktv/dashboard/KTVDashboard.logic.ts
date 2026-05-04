@@ -305,7 +305,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 // 2. Clear UI state and local storage immediately
                 lastAcknowledgedIdRef.current = prevBookingIdRef.current;
                 setHasSubmittedReview(false);
-                setBooking(null);
+                // setBooking(null); // Không set null để tránh giật UI trắng màn hình, chờ fetch đè lên
                 setScreen('DASHBOARD');
                 postServiceBookingIdRef.current = null;
                 try {
@@ -313,6 +313,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     localStorage.removeItem('ktv_active_booking_id');
                     localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
                 } catch(e) {}
+                
+                // 3. ÉP GỌI LẠI NGAY LẬP TỨC ĐỂ XÓA ĐỘ TRỄ 5S
+                if (fetchBookingRef.current) {
+                    console.log("🚀 [KTV] Fetching next booking instantly...");
+                    fetchBookingRef.current();
+                }
             }
         };
 
