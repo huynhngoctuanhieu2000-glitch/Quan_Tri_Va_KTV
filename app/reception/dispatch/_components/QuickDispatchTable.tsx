@@ -144,6 +144,7 @@ export const QuickDispatchTable = ({
       });
     });
     if (newStates.size > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setGroupStates(newStates);
     }
   }, [initialGroups, services]);
@@ -260,6 +261,19 @@ export const QuickDispatchTable = ({
     syncToServices(groupStates);
   }, [groupStates]);
 
+  const getLatestEndTime = (ktvId: string) => {
+    let latestEndTime = '';
+    groupStates.forEach(gState => {
+      gState.selectedKtvIds.forEach((id, idx) => {
+        if (id === ktvId) {
+          const eT = (gState.ktvEndTimes || [])[idx];
+          if (eT && eT > latestEndTime) latestEndTime = eT;
+        }
+      });
+    });
+    return latestEndTime;
+  };
+
   return (
     <div className="space-y-5">
       {/* Customer Requirements Banner */}
@@ -316,6 +330,7 @@ export const QuickDispatchTable = ({
             onPrint={() => onPrintGroup({ serviceName: displayServiceName, items, ...state })}
             customerReqs={customerReqs}
             reminders={reminders}
+            getLatestEndTime={getLatestEndTime}
           />
         );
       })}
@@ -341,13 +356,14 @@ interface ServiceGroupCardProps {
   onPrint: () => void;
   customerReqs?: { genderReq?: string; strength?: string; focus?: string; avoid?: string; customerNote?: string; };
   reminders?: { id: string; content: string }[];
+  getLatestEndTime: (ktvId: string) => string;
 }
 
 const MAX_KTV_PER_GROUP = 10;
 
 const ServiceGroupCard = ({
   serviceName, count, duration, state, targetSkill,
-  availableTurns, allSelectedKtvIds, rooms, beds, busyBedIds, onUpdate, onPrint, customerReqs, reminders = []
+  availableTurns, allSelectedKtvIds, rooms, beds, busyBedIds, onUpdate, onPrint, customerReqs, reminders = [], getLatestEndTime
 }: ServiceGroupCardProps) => {
   const [isKtvDropdownOpen, setIsKtvDropdownOpen] = useState(false);
   const [ktvSearch, setKtvSearch] = useState('');
@@ -399,8 +415,13 @@ const ServiceGroupCard = ({
 
   const addKtv = (ktvId: string) => {
     if (state.selectedKtvIds.length >= MAX_KTV_PER_GROUP) return;
-    const defaultStart = (state.ktvStartTimes || [])[0] || getCurrentTime();
+
+    // Tính thời gian kết thúc trễ nhất của KTV này ở các dịch vụ khác trong cùng đơn
+    const latestEndTime = getLatestEndTime(ktvId);
+
+    const defaultStart = latestEndTime || (state.ktvStartTimes || [])[0] || getCurrentTime();
     const defaultEnd = calcEndTime(defaultStart, duration);
+    
     onUpdate({ selectedKtvIds: [...state.selectedKtvIds, ktvId], ktvStartTimes: [...(state.ktvStartTimes || []), defaultStart], ktvEndTimes: [...(state.ktvEndTimes || []), defaultEnd], ktvDurations: [...(state.ktvDurations || []), duration], ktvNotes: [...(state.ktvNotes || []), ''], ktvBedIds: [...(state.ktvBedIds || []), ''] });
     setKtvSearch('');
   };
@@ -542,10 +563,10 @@ const ServiceGroupCard = ({
               <div className="absolute z-50 w-full mt-1 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 overflow-hidden">
                 <div className="max-h-52 overflow-y-auto p-1.5 space-y-0.5">
                   {filteredTurns.map(turn => { const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true; const isUsed = allSelectedKtvIds.includes(turn.employee_id) && !state.selectedKtvIds.includes(turn.employee_id); return (
-                    <div key={turn.employee_id} onClick={() => { if (!isUsed) addKtv(turn.employee_id); }}
-                      className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center justify-between ${isUsed ? 'opacity-40 cursor-not-allowed bg-gray-50' : 'hover:bg-indigo-50 active:scale-[0.98]'} ${!hasSkill ? 'text-gray-400' : 'text-gray-700'}`}>
+                    <div key={turn.employee_id} onClick={() => { addKtv(turn.employee_id); }}
+                      className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center justify-between hover:bg-indigo-50 active:scale-[0.98] ${!hasSkill ? 'text-gray-400' : 'text-gray-700'}`}>
                       <div className="flex items-center gap-2"><span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span><span>{turn.employee_id}</span></div>
-                      <span className={`text-[10px] font-semibold ${turn.status === 'working' ? 'text-amber-500' : turn.status === 'assigned' ? 'text-indigo-500' : 'text-emerald-500'}`}>{isUsed ? '🚫 Đã gán nhóm khác' : turn.status === 'working' ? `⌛ Đến ${turn.estimated_end_time || '--:--'}` : turn.status === 'assigned' ? '🔒 Đã xếp lịch' : '✅ Sẵn sàng'}</span>
+                      <span className={`text-[10px] font-semibold ${isUsed ? 'text-indigo-500' : turn.status === 'working' ? 'text-amber-500' : turn.status === 'assigned' ? 'text-indigo-500' : 'text-emerald-500'}`}>{isUsed ? '🔄 Đã gán ở DV khác' : turn.status === 'working' ? `⌛ Đến ${turn.estimated_end_time || '--:--'}` : turn.status === 'assigned' ? '🔒 Đã xếp lịch' : '✅ Sẵn sàng'}</span>
                     </div>); })}
                   {ktvSearch.trim() && !availableTurns.some(t => t.employee_id.toLowerCase() === ktvSearch.trim().toLowerCase() || t.staff?.full_name?.toLowerCase() === ktvSearch.trim().toLowerCase()) && (
                     <div onClick={() => { addKtv(ktvSearch.trim()); setKtvSearch(''); }} className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer hover:bg-emerald-50 text-emerald-700 active:scale-[0.98] border border-dashed border-emerald-200 mt-2">
@@ -640,7 +661,7 @@ const ServiceGroupCard = ({
                       <span className="text-indigo-300 text-[10px]">&rarr;</span>
                       <span className="px-1.5 py-1 border border-indigo-200 rounded-lg text-[11px] font-black text-indigo-700 bg-indigo-50/50 w-[60px] text-center">{endT || '--:--'}</span>
                     </div>
-                    <button onClick={() => setShowTicketForIdx(idx)} className="p-1.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-lg transition-all active:scale-90 shrink-0" title="In phiếu"><Printer size={12} /></button>
+                    <button onClick={() => setShowTicketForIdx(idx)} className="p-2.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all active:scale-90 shrink-0" title="In phiếu"><Printer size={15} strokeWidth={2.5} /></button>
                   </div>
                   {/* Row 2: Per-KTV Note | Reminder Button | Dispatch button */}
                   <div className="flex items-center gap-2 ml-6">
@@ -718,6 +739,7 @@ const ServiceGroupCard = ({
       </div>
     </div>
 
+    <AnimatePresence>
     {showTicketForIdx !== null && (() => {
       const idx = showTicketForIdx; const ktvId = state.selectedKtvIds[idx] || ''; const rId = (state.selectedRoomIds || [])[idx] || '';
       const rName = rooms.find(r => r.id === rId)?.name || rId || '---'; const tName = state.displayName || serviceName;
@@ -726,42 +748,120 @@ const ServiceGroupCard = ({
       const ticketNote = (state.ktvNotes || [])[idx] || '';
       return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={() => setShowTicketForIdx(null)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-          <div onClick={(e: React.MouseEvent) => e.stopPropagation()} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setShowTicketForIdx(null)} className="absolute top-4 right-4 z-10 p-2 bg-white/80 hover:bg-white rounded-full shadow-lg border border-gray-200 transition-all active:scale-90"><X size={18} className="text-gray-500" /></button>
+          <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+          />
+          <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-[400px] max-h-[90vh] overflow-y-auto"
+          >
+            {/* Close button */}
+            <button onClick={() => setShowTicketForIdx(null)} className="absolute top-4 right-4 z-10 p-2 bg-white/80 hover:bg-white rounded-full shadow-lg border border-gray-200 transition-all active:scale-90">
+                <X size={18} className="text-gray-500" />
+            </button>
+            
+            {/* Ticket Header */}
             <div className="bg-slate-900 text-white px-6 py-5 flex justify-between items-center rounded-t-3xl">
               <div className="text-4xl font-black italic tracking-tight">{ktvId}</div>
-              <div className="text-right"><div className="text-[11px] font-bold tracking-wider opacity-70">Phiếu Tua KTV</div><div className="text-base font-black mt-0.5">{dateFormatted}</div></div>
+              <div className="text-right">
+                  <div className="text-[11px] font-bold tracking-wider opacity-70">Phiếu Tua KTV</div>
+                  <div className="text-base font-black mt-0.5">{dateFormatted}</div>
+              </div>
             </div>
+            
+            {/* Ticket Content */}
             <div className="px-5 py-5 space-y-4">
-              <div className="text-2xl font-black text-red-600 uppercase leading-tight">{tName} ({ticketDur}&apos;)</div>
-              <div className="border-[2.5px] border-dashed border-amber-400 rounded-2xl px-4 py-4 text-center">
-                <p className="text-[10px] font-black text-amber-800 uppercase tracking-[3px] mb-2">Thời gian thực hiện</p>
-                <p className="text-[32px] font-black text-red-600 leading-none tracking-tight">{sT} <span className="text-red-400">&rarr;</span> {eT}</p>
+              {/* Service Name */}
+              <div>
+                  <div className="text-2xl font-black text-red-600 uppercase leading-tight">
+                      {tName} ({ticketDur}&apos;)
+                  </div>
               </div>
-              <div className="bg-slate-100 rounded-xl px-4 py-3 border-l-4 border-slate-500">
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phòng</p>
-                <p className="text-xl font-black text-red-600 mt-0.5">{rName}</p>
+
+              {/* Segments (Always 1 for Quick Dispatch) */}
+              <div className="space-y-3">
+                  {/* Time */}
+                  <div className="border-[2.5px] border-dashed border-amber-400 rounded-2xl px-4 py-4 text-center">
+                      <p className="text-[10px] font-black text-amber-800 uppercase tracking-[3px] mb-2">Thời gian thực hiện</p>
+                      <p className="text-[32px] font-black text-red-600 leading-none tracking-tight">
+                          {sT} <span className="text-red-400">→</span> {eT}
+                      </p>
+                  </div>
+                  {/* Room */}
+                  <div className="bg-slate-100 rounded-xl px-4 py-3 border-l-4 border-slate-500">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Phòng</p>
+                      <p className="text-xl font-black text-red-600 mt-0.5">{rName}</p>
+                  </div>
               </div>
+
+              {/* Customer Requirements */}
               {customerReqs && (customerReqs.strength || customerReqs.focus || customerReqs.avoid || customerReqs.customerNote) && (
                 <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 space-y-3 shadow-inner">
-                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">⚠️ Yêu Cầu Khách Hàng</p>
+                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+                      <AlertCircle size={14} className="text-amber-500" /> Yêu Cầu Khách Hàng
+                  </p>
                   <div className="flex flex-wrap gap-2">
-                    {customerReqs.strength && <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100">💪 Lực: {customerReqs.strength}</span>}
-                    {customerReqs.focus && <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100">{customerReqs.focus}</span>}
-                    {customerReqs.avoid && <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100">🚫 Tránh: {customerReqs.avoid}</span>}
+                    {customerReqs.strength && (
+                        <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
+                            💪 Lực: {customerReqs.strength}
+                        </span>
+                    )}
+                    {customerReqs.focus && (() => {
+                        const FULL_BODY_THRESHOLD = 6;
+                        const areas = customerReqs.focus.split(',').map(s => s.trim()).filter(Boolean);
+                        const displayText = areas.length >= FULL_BODY_THRESHOLD ? 'Full Body' : customerReqs.focus;
+                        return (
+                            <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
+                                🎯 Tập trung: {displayText}
+                            </span>
+                        );
+                    })()}
+                    {customerReqs.avoid && (
+                        <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
+                            🚫 Tránh: {customerReqs.avoid}
+                        </span>
+                    )}
                   </div>
-                  {customerReqs.customerNote && <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-amber-200/50"><p className="text-xs font-bold text-amber-900 italic">{customerReqs.customerNote}</p></div>}
-                </div>)}
+                  {customerReqs.customerNote && (
+                      <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-amber-200/50">
+                          <p className="text-xs font-bold text-amber-900 italic flex items-start gap-2">
+                              <span className="text-amber-400 mt-0.5">📌</span> {customerReqs.customerNote}
+                          </p>
+                      </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Admin Note */}
               {ticketNote && (
                 <div className="bg-green-50/50 border border-green-200 rounded-2xl p-4 space-y-3 shadow-inner">
-                  <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">📝 Admin Dặn Dò</p>
-                  <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-green-200/50"><p className="text-xs font-bold text-green-900 uppercase">{ticketNote}</p></div>
-                </div>)}
+                  <p className="text-[10px] font-black text-green-700 uppercase tracking-widest flex items-center gap-2">
+                      📝 Admin Dặn Dò
+                  </p>
+                  <div className="bg-white/60 px-3 py-2.5 rounded-xl border border-green-200/50">
+                      <p className="text-xs font-bold text-green-900 flex items-start gap-2 uppercase">
+                          <span className="text-green-500 mt-0.5">💬</span> &quot;{ticketNote}&quot;
+                      </p>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="text-center py-4 border-t border-gray-200 mt-2"><p className="text-xs text-gray-400 font-semibold italic">Hệ thống Spa Ngân Hà</p></div>
-          </div>
-        </div>);
+            
+            {/* Footer */}
+            <div className="text-center py-4 border-t border-gray-200 mt-2">
+                <p className="text-xs text-gray-400 font-semibold italic">Hệ thống Spa Ngân Hà</p>
+            </div>
+          </motion.div>
+        </div>
+      );
     })()}
+    </AnimatePresence>
     </>);
 };

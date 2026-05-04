@@ -5,14 +5,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
 
-type OrderStatus = 'PREPARING' | 'IN_PROGRESS' | 'WAITING_RATING' | 'CLEANING' | 'DONE';
+import { RawStatus, getNextStatus, canTransition } from '@/lib/dispatch-status';
 
 const STATUS_CONFIG = [
-    { id: 'PREPARING' as OrderStatus, dispatchModeId: ['dispatched'], label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as OrderStatus, nextLabel: '▶️ Bắt đầu làm' },
-    { id: 'IN_PROGRESS' as OrderStatus, dispatchModeId: ['in_progress'], label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'WAITING_RATING' as OrderStatus, nextLabel: '⭐ Chờ Đánh Giá' },
-    { id: 'WAITING_RATING' as OrderStatus, dispatchModeId: ['waiting_rating'], label: 'Chờ Đánh Giá', shortLabel: 'Đánh giá', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: 'CLEANING' as OrderStatus, nextLabel: '🧹 Bắt đầu dọn' },
-    { id: 'CLEANING' as OrderStatus, dispatchModeId: ['cleaning'], label: 'Đang Dọn Phòng', shortLabel: 'Dọn phòng', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'DONE' as OrderStatus, nextLabel: '✅ Đã dọn xong' },
-    { id: 'DONE' as OrderStatus, dispatchModeId: ['done'], label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
+    { id: 'PREPARING' as RawStatus, dispatchModeId: ['PREPARING'], label: 'Chuẩn bị', shortLabel: 'Chuẩn bị', color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-600', border: 'border-orange-200', dot: 'bg-orange-500', next: 'IN_PROGRESS' as RawStatus, nextLabel: '▶️ Bắt đầu làm' },
+    { id: 'IN_PROGRESS' as RawStatus, dispatchModeId: ['IN_PROGRESS'], label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'CLEANING' as RawStatus, nextLabel: '🧹 Bắt đầu dọn' },
+    { id: 'CLEANING' as RawStatus, dispatchModeId: ['CLEANING'], label: 'Đang Dọn Phòng', shortLabel: 'Dọn phòng', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'FEEDBACK' as RawStatus, nextLabel: '⭐ Chờ Đánh Giá' },
+    { id: 'FEEDBACK' as RawStatus, dispatchModeId: ['FEEDBACK'], label: 'Chờ Đánh Giá', shortLabel: 'Đánh giá', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: 'DONE' as RawStatus, nextLabel: '✅ Hoàn tất' },
+    { id: 'DONE' as RawStatus, dispatchModeId: ['DONE', 'CANCELLED'], label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
 ];
 
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
@@ -42,6 +42,7 @@ interface KanbanBoardProps {
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
     onContextMenu?: (e: React.MouseEvent, orderId: string) => void;
+    roomTransitionTime?: number;
 }
 
 interface SubOrder {
@@ -107,7 +108,7 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     return order.time; 
 };
 
-export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu }: KanbanBoardProps) {
+export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, roomTransitionTime = 5 }: KanbanBoardProps) {
     const [draggedSubOrderId, setDraggedSubOrderId] = useState<string | null>(null);
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -152,7 +153,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                         let derivedStatus = svc.status || 'NEW';
                         if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
                             if (isAllFeedback && isAllCompleted) derivedStatus = 'FEEDBACK';
-                            else if (isAllCompleted) derivedStatus = 'COMPLETED';
+                            else if (isAllCompleted) derivedStatus = 'CLEANING';
                             else if (isAnyStarted) derivedStatus = 'IN_PROGRESS';
                             else derivedStatus = 'PREPARING';
                         }
@@ -175,18 +176,21 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
 
             ktvGroups.forEach((services, ktvSignature) => {
                 const statuses = services.map(s => s.status || 'NEW');
-                let dispatchStatus = 'pending'; // Default to pending
-                if (statuses.includes('in_progress') || statuses.includes('IN_PROGRESS')) dispatchStatus = 'in_progress';
-                else if (statuses.includes('waiting_rating')) dispatchStatus = 'waiting_rating';
-                else if (statuses.includes('cleaning') || statuses.includes('COMPLETED')) dispatchStatus = 'cleaning';
-                else if (statuses.includes('done') || statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'done';
-                else if (statuses.includes('dispatched') || statuses.includes('PREPARING')) dispatchStatus = 'dispatched';
+                let dispatchStatus = 'PREPARING'; // Default to PREPARING
+                if (statuses.includes('IN_PROGRESS')) dispatchStatus = 'IN_PROGRESS';
+                else if (statuses.includes('CLEANING')) dispatchStatus = 'CLEANING';
+                else if (statuses.includes('FEEDBACK')) dispatchStatus = 'FEEDBACK';
+                else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'DONE';
+                else if (statuses.includes('PREPARING')) dispatchStatus = 'PREPARING';
                 
                 // Only fallback to order status if we couldn't infer from items AND order has a global status
-                if (dispatchStatus === 'pending' && order.dispatchStatus !== 'pending') {
+                if (dispatchStatus === 'PREPARING' && order.dispatchStatus !== 'pending') {
                     // But if item is explicitly NEW, it should NOT inherit a higher status from the order
                     if (!statuses.includes('NEW')) {
-                        dispatchStatus = order.dispatchStatus;
+                         dispatchStatus = order.dispatchStatus === 'FEEDBACK' ? 'FEEDBACK' :
+                                          order.dispatchStatus === 'CLEANING' ? 'CLEANING' :
+                                          order.dispatchStatus === 'IN_PROGRESS' ? 'IN_PROGRESS' :
+                                          order.dispatchStatus === 'DONE' ? 'DONE' : 'PREPARING';
                     }
                 }
 
@@ -213,7 +217,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
             // 🔧 FIX: Kiểm tra theo TỪNG subOrder, không phải toàn booking
             // Và BỎ QUA booking còn items PREPARING (chưa ai bắt đầu)
             subOrders.forEach(subOrder => {
-                if (subOrder.dispatchStatus !== 'in_progress') return;
+                if (subOrder.dispatchStatus !== 'IN_PROGRESS' && subOrder.dispatchStatus !== 'CLEANING') return;
                 
                 // Skip nếu subOrder này đã được auto-finish trước đó
                 if (autoFinishedRef.current.has(subOrder.id)) return;
@@ -225,30 +229,54 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                     ['PREPARING', 'NEW', 'WAITING'].includes(s.status || '')
                 );
                 
-                // Chỉ tính estimated end time từ services CỦA subOrder này (không phải toàn booking)
-                const estEndStr = getEstimatedEndTime(originalOrder, subOrder.services);
-                if (estEndStr && estEndStr !== '--:--') {
-                    const [h, m] = estEndStr.split(':').map(Number);
-                    const estEnd = new Date();
-                    estEnd.setHours(h, m, 0, 0);
-                    
-                    // Handle midnight crossing
-                    if (h > 20 && now.getHours() < 4) {
-                         estEnd.setDate(estEnd.getDate() - 1);
+                if (subOrder.dispatchStatus === 'IN_PROGRESS') {
+                    // Chỉ tính estimated end time từ services CỦA subOrder này (không phải toàn booking)
+                    const estEndStr = getEstimatedEndTime(originalOrder, subOrder.services);
+                    if (estEndStr && estEndStr !== '--:--') {
+                        const [h, m] = estEndStr.split(':').map(Number);
+                        const estEnd = new Date();
+                        estEnd.setHours(h, m, 0, 0);
+                        
+                        // Handle midnight crossing
+                        if (h > 20 && now.getHours() < 4) {
+                             estEnd.setDate(estEnd.getDate() - 1);
+                        }
+                        
+                        // Allow 5 seconds grace period
+                        if (now.getTime() >= estEnd.getTime() + 5000) {
+                             console.log(`🤖 [Kanban AutoFinish] Time is up for subOrder ${subOrder.id} (${estEndStr}). Auto-completing...`);
+                             autoFinishedRef.current.add(subOrder.id);
+                             
+                             // 🔧 FIX: Truyền itemIds cụ thể → CHỈ update items của subOrder này
+                             const itemIds = subOrder.services.map(s => s.id);
+                             let targetKtvIds: string[] | undefined = undefined;
+                             if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
+                                 targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                             }
+                             // Chuyển sang CLEANING thay vì COMPLETED theo flow chuẩn mới
+                             onUpdateStatus(subOrder.bookingId, 'CLEANING', itemIds, true, targetKtvIds); // skipConfirm = true
+                        }
                     }
-                    
-                    // Allow 5 seconds grace period
-                    if (now.getTime() >= estEnd.getTime() + 5000) {
-                         console.log(`🤖 [Kanban AutoFinish] Time is up for subOrder ${subOrder.id} (${estEndStr}). Auto-completing...`);
-                         autoFinishedRef.current.add(subOrder.id);
-                         
-                         // 🔧 FIX: Truyền itemIds cụ thể → CHỈ update items của subOrder này
-                         const itemIds = subOrder.services.map(s => s.id);
-                         let targetKtvIds: string[] | undefined = undefined;
-                         if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
-                             targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
-                         }
-                         onUpdateStatus(subOrder.bookingId, 'COMPLETED', itemIds, true, targetKtvIds); // skipConfirm = true
+                } else if (subOrder.dispatchStatus === 'CLEANING') {
+                    // Xử lý auto chuyển từ CLEANING sang FEEDBACK / DONE
+                    const originalOrder = subOrder.originalOrder;
+                    if (originalOrder.updatedAt) {
+                        const updatedAt = new Date(originalOrder.updatedAt).getTime();
+                        const diffMins = (now.getTime() - updatedAt) / 60000;
+                        if (diffMins >= roomTransitionTime) {
+                            const itemIds = subOrder.services.map(s => s.id);
+                            let targetKtvIds: string[] | undefined = undefined;
+                            if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
+                                targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                            }
+                            if (originalOrder.rating) {
+                                console.log(`✅ [Kanban AutoFinish] Both done for subOrder ${subOrder.id}. Moving to DONE.`);
+                                onUpdateStatus(subOrder.bookingId, 'DONE', itemIds, true, targetKtvIds);
+                            } else {
+                                console.log(`🧹 [Kanban AutoFinish] Cleaning done for subOrder ${subOrder.id}. Moving to FEEDBACK.`);
+                                onUpdateStatus(subOrder.bookingId, 'FEEDBACK', itemIds, true, targetKtvIds);
+                            }
+                        }
                     }
                 }
             });
@@ -279,6 +307,13 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                     if (draggedSubOrder.ktvSignature && draggedSubOrder.ktvSignature !== 'unassigned_unknown_time') {
                                         targetKtvIds = draggedSubOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
                                     }
+                                    
+                                    if (!canTransition(draggedSubOrder.dispatchStatus, newStatus)) {
+                                        console.warn(`[Kanban] Cấm chuyển từ ${draggedSubOrder.dispatchStatus} sang ${newStatus}`);
+                                        setDraggedSubOrderId(null);
+                                        return;
+                                    }
+
                                     // if column is 'COMPLETED', use 'COMPLETED'
                                     onUpdateStatus(draggedSubOrder.bookingId, newStatus, itemIds, false, targetKtvIds);
                                 }
@@ -444,15 +479,15 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                 </div>
 
                                                 {/* 🏷️ 2 TAGS: Hiện ở cả cột "Dọn phòng" và "Chờ đánh giá" */}
-                                                {(subOrder.dispatchStatus === 'cleaning' || subOrder.dispatchStatus === 'waiting_rating') && (
+                                                {(subOrder.dispatchStatus === 'CLEANING' || subOrder.dispatchStatus === 'FEEDBACK') && (
                                                     <div className="mb-3 space-y-1.5">
                                                         {/* TAG 1: Dọn phòng */}
                                                         <div className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-bold border ${
-                                                            subOrder.dispatchStatus === 'waiting_rating' || subOrder.rawStatus === 'FEEDBACK'
+                                                            subOrder.dispatchStatus === 'FEEDBACK' || subOrder.rawStatus === 'FEEDBACK'
                                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                                 : 'bg-orange-50 text-orange-600 border-orange-200'
                                                         }`}>
-                                                            {subOrder.dispatchStatus === 'waiting_rating' || subOrder.rawStatus === 'FEEDBACK'
+                                                            {subOrder.dispatchStatus === 'FEEDBACK' || subOrder.rawStatus === 'FEEDBACK'
                                                                 ? <><Check size={12} /> Dọn phòng: Đã dọn xong</>
                                                                 : <><Clock size={12} className="animate-spin" style={{animationDuration: '3s'}}/> Dọn phòng: Đang dọn...</>
                                                             }
@@ -509,7 +544,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                 )}
 
                                                 {/* ✅ RATING RESULT: Chỉ hiện ở cột "Hoàn tất" */}
-                                                {subOrder.dispatchStatus === 'done' && subOrder.rating && (() => {
+                                                {subOrder.dispatchStatus === 'DONE' && subOrder.rating && (() => {
                                                     const ratingLabel = subOrder.rating >= 5 ? 'Xuất sắc' : subOrder.rating >= 4 ? 'Tốt' : subOrder.rating >= 3 ? 'Khá' : subOrder.rating >= 2 ? 'Trung bình' : 'Cần cải thiện';
                                                     const ratingColor = subOrder.rating >= 4 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : subOrder.rating >= 3 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
                                                     return (

@@ -450,8 +450,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
     // 🔑 NGUYÊN TẮC: Mỗi KTV CHỈ quan tâm assignedItem.status (item-level)
     // booking.status chỉ dùng cho: CANCELLED, co-working sync (forward only)
     const STATUS_ORDER: Record<string, number> = {
-        'PREPARING': 0, 'READY': 1, 'IN_PROGRESS': 2, 
-        'COMPLETED': 3, 'FEEDBACK': 4, 'CLEANING': 5, 'DONE': 6
+        'PREPARING': 0,
+        'READY': 1,
+        'IN_PROGRESS': 2,
+        'COMPLETED': 3,
+        'CLEANING': 3,
+        'FEEDBACK': 4,
+        'DONE': 5
     };
 
     useEffect(() => {
@@ -507,7 +512,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
             // Chỉ override nếu đã xong, chưa xong thì lấy theo status chung
             if (allFeedback) currentStatus = 'FEEDBACK';
-            else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'COMPLETED';
+            else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'CLEANING';
         }
         
         // Co-working sync: CHỈ cho tiến (PREPARING/READY → IN_PROGRESS), KHÔNG cho lùi
@@ -765,7 +770,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                                 if (!seg.feedbackTime) allFeedback = false;
                             });
                             if (allFeedback) currentStatus = 'FEEDBACK';
-                            else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'COMPLETED';
+                            else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'CLEANING';
                         }
 
                         // Debug log 
@@ -1220,7 +1225,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 bookingId: booking.id, 
-                status: 'COMPLETED',
+                status: 'CLEANING',
                 techCode: ktvId
                 // KHÔNG gọi RELEASE_KTV — KTV phải dọn phòng xong mới được giải phóng
             })

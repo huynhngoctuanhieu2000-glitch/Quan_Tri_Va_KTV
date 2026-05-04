@@ -153,11 +153,18 @@ export default function DispatchBoardPage() {
         console.log("🔄 [Dispatch] Booking updated:", payload.new.id, payload.new.status);
         
         // 🚀 STATE PATCHING: Update status locally before refetching
-        setOrders(prev => prev.map(o => 
-          o.id === payload.new.id 
-            ? { ...o, rawStatus: payload.new.status, dispatchStatus: (payload.new.status === 'DONE' && !o.hasAssignedKtv) ? 'done' : (payload.new.status === 'FEEDBACK' ? 'waiting_rating' : o.dispatchStatus) } 
-            : o
-        ));
+        setOrders(prev => prev.map(o => {
+          if (o.id === payload.new.id) {
+             const newStatus = payload.new.status;
+             const isOpenStatus = ['NEW', 'WAITING', 'READY', 'PREPARING'].includes(newStatus);
+             // Chỉ fallback về pending cho đơn chưa thực sự bước vào flow phục vụ.
+             const mappedStatus = !o.hasAssignedKtv && isOpenStatus
+                ? 'pending'
+                : (isOpenStatus ? 'PREPARING' : (newStatus === 'CANCELLED' ? 'DONE' : newStatus));
+             return { ...o, rawStatus: newStatus, dispatchStatus: mappedStatus };
+          }
+          return o;
+        }));
 
         // 🛡️ Skip full refetch if admin is editing dispatch form — avoid losing unsaved changes
         if (selectedOrderIdRef.current) {
@@ -255,44 +262,8 @@ export default function DispatchBoardPage() {
     return maxTime;
   };
 
-  // 🔄 AUTO-FINISH WORKER: Tự động chuyển trạng thái dựa trên thời gian
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date().getTime();
-      
-      orders.forEach(order => {
-        // 1. ĐANG LÀM -> ĐANG DỌN (Hết giờ phục vụ)
-        if (order.rawStatus === 'IN_PROGRESS') {
-          const estEndTime = getEstimatedEndTime(order);
-          if (estEndTime > 0 && now >= estEndTime + 5000) {
-            console.log(`⏰ [Auto-Finish] Service time up for ${order.billCode}. Moving to CLEANING.`);
-            handleUpdateStatus(order.id, 'CLEANING', undefined, true);
-          }
-        }
-        
-        // 2. ĐANG DỌN → xong dọn: nếu đã có rating → DONE, chưa có → FEEDBACK
-        if (order.rawStatus === 'CLEANING') {
-          if (order.updatedAt) {
-            const updatedAt = new Date(order.updatedAt).getTime();
-            const diffMins = (now - updatedAt) / 60000;
-            if (diffMins >= roomTransitionTime) {
-              if (order.rating) {
-                console.log(`✅ [Auto] Both done for ${order.billCode}. Moving to DONE.`);
-                handleUpdateStatus(order.id, 'DONE', undefined, true);
-              } else {
-                console.log(`🧹 [Auto] Cleaning done for ${order.billCode}. Moving to FEEDBACK.`);
-                handleUpdateStatus(order.id, 'FEEDBACK', undefined, true);
-              }
-            }
-          }
-        }
-
-        // 3. CHỜ ĐÁNH GIÁ: KHÔNG tự động chuyển DONE — chờ khách đánh giá hoặc Lễ tân bấm thủ công
-      });
-    }, 15000);
-    
-    return () => clearInterval(interval);
-  }, [orders, roomTransitionTime, selectedDate]);
+  // 🔄 AUTO-FINISH WORKER: Đã được chuyển về xử lý ở cấp độ KanbanBoard (sub-order level)
+  // để đảm bảo tính đồng nhất và tránh xung đột trạng thái.
 
   async function fetchData() {
     setLoading(true);
@@ -347,12 +318,12 @@ export default function DispatchBoardPage() {
           const hasAssignedKtv = assignedTurns.length > 0;
 
           let dStatus: DispatchStatus = 'pending';
-          if (b.status === 'PREPARING') dStatus = 'dispatched';
-          else if (b.status === 'IN_PROGRESS') dStatus = 'in_progress';
-          else if (b.status === 'CLEANING' || b.status === 'COMPLETED') dStatus = 'cleaning';
-          else if (b.status === 'FEEDBACK') dStatus = 'waiting_rating';
-          else if (b.status === 'DONE') dStatus = 'done';
-          else if (hasAssignedKtv) dStatus = 'dispatched'; // Fallback for transition state
+          if (b.status === 'PREPARING') dStatus = 'PREPARING';
+          else if (b.status === 'IN_PROGRESS') dStatus = 'IN_PROGRESS';
+          else if (b.status === 'CLEANING') dStatus = 'CLEANING';
+          else if (b.status === 'FEEDBACK') dStatus = 'FEEDBACK';
+          else if (b.status === 'DONE' || b.status === 'CANCELLED') dStatus = 'DONE';
+          else if (hasAssignedKtv) dStatus = 'PREPARING'; // Fallback for transition state
           
           return {
             id: b.id,
@@ -539,11 +510,11 @@ if (!hasPermission('dispatch_board')) {
 
   const LEFT_TABS: { id: DispatchStatus; label: string; color: string; activeBg: string; dot: string; badgeBg: string; badgeText: string }[] = [
     { id: 'pending', label: 'Chờ điều phối', color: 'text-rose-600', activeBg: 'bg-rose-500', dot: 'bg-rose-500', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700' },
-    { id: 'dispatched', label: 'Đã điều phối', color: 'text-indigo-600', activeBg: 'bg-indigo-500', dot: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-700' },
-    { id: 'in_progress', label: 'Đang làm', color: 'text-amber-600', activeBg: 'bg-amber-500', dot: 'bg-amber-500', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700' },
-    { id: 'cleaning', label: 'Đang dọn', color: 'text-purple-600', activeBg: 'bg-purple-500', dot: 'bg-purple-500', badgeBg: 'bg-purple-100', badgeText: 'text-purple-700' },
-    { id: 'waiting_rating', label: 'Chờ đánh giá', color: 'text-blue-600', activeBg: 'bg-blue-500', dot: 'bg-blue-500', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700' },
-    { id: 'done', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700' },
+    { id: 'PREPARING', label: 'Đã điều phối', color: 'text-indigo-600', activeBg: 'bg-indigo-500', dot: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-700' },
+    { id: 'IN_PROGRESS', label: 'Đang làm', color: 'text-amber-600', activeBg: 'bg-amber-500', dot: 'bg-amber-500', badgeBg: 'bg-amber-100', badgeText: 'text-amber-700' },
+    { id: 'CLEANING', label: 'Đang dọn', color: 'text-purple-600', activeBg: 'bg-purple-500', dot: 'bg-purple-500', badgeBg: 'bg-purple-100', badgeText: 'text-purple-700' },
+    { id: 'FEEDBACK', label: 'Chờ đánh giá', color: 'text-blue-600', activeBg: 'bg-blue-500', dot: 'bg-blue-500', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700' },
+    { id: 'DONE', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700' },
   ];
 
   const displayedOrders = orders.filter(o => o.dispatchStatus === leftPanelTab);
@@ -963,7 +934,7 @@ if (!hasPermission('dispatch_board')) {
     try {
       const clonedOrder = JSON.parse(JSON.stringify(orderToDispatch)) as PendingOrder;
 
-      const allStaffAssignments = [];
+      const allStaffAssignments: Array<{ ktvId: string; bookingItemId: string; roomId: string | null; bedId: string | null; turnsCompleted: number; queuePos: number; startTime: string; endTime: string }> = [];
       const techCodesSet = new Set<string>();
 
       const targetServices = specificSvcId 
@@ -985,8 +956,16 @@ if (!hasPermission('dispatch_board')) {
 
           if (currentTurn.current_order_id !== clonedOrder.id) {
             const currentMax = Math.max(...turns.map(t => t.queue_position), 0);
-            const addedCount = allStaffAssignments.length; 
-            queuePos = currentMax + addedCount + 1;
+            
+            // Fix: Check if this KTV is already added in a previous service of the same order
+            const existingAssignment = allStaffAssignments.find(a => a.ktvId === ktvId);
+            if (existingAssignment) {
+              queuePos = existingAssignment.queuePos;
+            } else {
+              const uniqueAddedKtvs = new Set(allStaffAssignments.map(a => a.ktvId));
+              const addedCount = uniqueAddedKtvs.size; 
+              queuePos = currentMax + addedCount + 1;
+            }
           }
           
           // Với đa chặng, TurnQueue theo chặng đầu tiên
@@ -1116,7 +1095,7 @@ if (!hasPermission('dispatch_board')) {
     
     if (!skipConfirm) {
       let confirmMsg = `Xác nhận cập nhật trạng thái đơn hàng này?`;
-      if (newStatus === 'COMPLETED' || newStatus === 'WAITING_RATING') {
+      if (newStatus === 'COMPLETED' || newStatus === 'DONE') {
         confirmMsg = `Xác nhận HẾT GIỜ? Khách sẽ được nhắc nhở đánh giá, và đơn sẽ chuyển sang trạng thái CHỜ ĐÁNH GIÁ.`;
       } else if (newStatus === 'CLEANING' || newStatus === 'FEEDBACK') {
         confirmMsg = `Xác nhận BẮT ĐẦU DỌN PHÒNG? KTV sẽ được giải phóng để nhận khách mới.`;
@@ -1511,7 +1490,7 @@ if (!hasPermission('dispatch_board')) {
                     beds={beds}
                     availableTurns={turns}
                     busyBedIds={orders
-                      .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
+                      .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'CLEANING' || o.dispatchStatus === 'PREPARING'))
                       .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                       .filter(Boolean) as string[]
                     }
@@ -1544,7 +1523,7 @@ if (!hasPermission('dispatch_board')) {
                   >
                     {selectedOrder.services.map((svc, idx) => {
                       const busyInOtherOrders = orders
-                        .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'in_progress' || o.dispatchStatus === 'cleaning' || o.dispatchStatus === 'dispatched'))
+                        .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'CLEANING' || o.dispatchStatus === 'PREPARING'))
                         .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                         .filter(Boolean) as string[];
                       const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
@@ -1866,7 +1845,7 @@ if (!hasPermission('dispatch_board')) {
               const order = orders.find(o => o.id === contextMenu.orderId);
               if (!order) return null;
 
-              if (order.dispatchStatus === 'dispatched') {
+              if (order.dispatchStatus === 'PREPARING') {
                 return (
                   <button
                     onClick={() => handleUpdateStatus(contextMenu.orderId, 'IN_PROGRESS')}
@@ -1877,36 +1856,36 @@ if (!hasPermission('dispatch_board')) {
                   </button>
                 );
               }
-              if (order.dispatchStatus === 'in_progress') {
+              if (order.dispatchStatus === 'IN_PROGRESS') {
                 return (
                   <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'COMPLETED')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
+                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'CLEANING')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
                   >
                     <CheckCircle2 size={18} className="shrink-0" />
-                    Hết giờ → Nhắc Khách Kiểm Tra Đồ & Đánh Giá
+                    Hết giờ → Bắt đầu dọn phòng
                   </button>
                 );
               }
-              if (order.dispatchStatus === 'waiting_rating') {
+              if (order.dispatchStatus === 'CLEANING') {
                 return (
                   <button
                     onClick={() => handleUpdateStatus(contextMenu.orderId, 'FEEDBACK')}
                     className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
                   >
                     <CheckCircle2 size={18} className="shrink-0" />
-                    Đã đánh giá xong → Bắt đầu dọn phòng
+                    Dọn xong → Khách đánh giá
                   </button>
                 );
               }
-              if (order.dispatchStatus === 'cleaning') {
+              if (order.dispatchStatus === 'FEEDBACK') {
                 return (
                   <button
                     onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}
                     className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
                   >
                     <CheckCircle2 size={18} className="shrink-0" />
-                    Đã dọn phòng xong (Khách ra sảnh)
+                    Đã đánh giá → Đóng bill
                   </button>
                 );
               }

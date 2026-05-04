@@ -268,13 +268,12 @@ export const DispatchStaffRow = ({
                                                     <div 
                                                         key={turn.employee_id} 
                                                         onClick={() => {
-                                                            if (isUsedInOtherSvc) return;
                                                             handleSelectKtv(turn.employee_id, turn.staff?.full_name || '');
                                                             setSearchQuery('');
                                                             setIsDropdownOpen(false);
                                                         }}
                                                         className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex flex-col gap-0.5
-                                                            ${isUsedInOtherSvc ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'cursor-pointer hover:bg-indigo-50 active:scale-[0.98]'}
+                                                            cursor-pointer hover:bg-indigo-50 active:scale-[0.98]
                                                             ${row.ktvId === turn.employee_id ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'text-gray-700'}
                                                             ${!hasSkill && !isUsedInOtherSvc ? 'text-gray-400' : ''}
                                                         `}
@@ -287,7 +286,7 @@ export const DispatchStaffRow = ({
                                                         </div>
                                                         <div className="text-[10px] font-semibold flex gap-2">
                                                             {isUsedInOtherSvc 
-                                                                ? <span className="text-rose-500">🚫 Đã gán dịch vụ khác</span> 
+                                                                ? <span className="text-indigo-500">🔄 Cùng đơn này</span> 
                                                                 : (turn.status === 'working' 
                                                                     ? <span className="text-amber-500">⌛ Đang làm đến {turn.estimated_end_time || '--:--'}</span> 
                                                                     : turn.status === 'assigned'

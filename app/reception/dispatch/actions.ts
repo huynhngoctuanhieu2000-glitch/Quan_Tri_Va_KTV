@@ -442,6 +442,15 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
+        // Lấy trạng thái hiện tại để check rule
+        const { data: bCurrent } = await supabase.from('Bookings').select('status').eq('id', bookingId).single();
+        if (bCurrent && bCurrent.status) {
+            const { canTransition } = await import('@/lib/dispatch-status');
+            if (!canTransition(bCurrent.status, newStatus)) {
+                return { success: false, error: `Lỗi: Không thể chuyển trạng thái từ ${bCurrent.status} sang ${newStatus}` };
+            }
+        }
+
         // 1. Cập nhật trạng thái Booking
         const { error: bError } = await supabase
             .from('Bookings')
@@ -455,12 +464,12 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
         // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
         // 🔧 FIX: KHÔNG ghi đè items đang PREPARING (chưa bắt đầu) → chỉ update items đã IN_PROGRESS trở lên
-        if (['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
+        if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
             const { data: itemsToUpdate } = await supabase
                 .from('BookingItems')
                 .select('id, segments')
                 .eq('bookingId', bookingId)
-                .in('status', ['IN_PROGRESS', 'COMPLETED', 'CLEANING', 'FEEDBACK']);
+                .in('status', ['IN_PROGRESS', 'CLEANING', 'FEEDBACK']);
             
             if (itemsToUpdate && itemsToUpdate.length > 0) {
                 for (const item of itemsToUpdate) {
@@ -493,17 +502,12 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             
             if (allItemsAfterPartial && allItemsAfterPartial.length > 0) {
                 const statuses = allItemsAfterPartial.map(i => i.status);
-                let smartStatus = newStatus; // Default to requested status
+                const { recomputeBookingStatus } = await import('@/lib/dispatch-status');
+                let smartStatus = recomputeBookingStatus(statuses);
                 
-                // Nếu còn items chờ nhưng đã có item từng bắt đầu/xong
-                // → booking vẫn đang ở giữa flow, không được lùi về PREPARING.
-                if (statuses.includes('PREPARING') || statuses.includes('NEW') || statuses.includes('WAITING')) {
-                    const hasProgressedItems = statuses.some(s => ['IN_PROGRESS', 'COMPLETED', 'DONE', 'CLEANING', 'FEEDBACK'].includes(s));
-                    smartStatus = hasProgressedItems ? 'IN_PROGRESS' : 'PREPARING';
-                } else if (statuses.some(s => s === 'IN_PROGRESS')) {
-                    smartStatus = 'IN_PROGRESS';
-                } else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(s))) {
-                    smartStatus = newStatus; // All done → use requested status
+                // Keep the requested status if recomputed is DONE but we want a specific terminal status (e.g. FEEDBACK)
+                if (smartStatus === 'DONE' && ['COMPLETED', 'DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
+                    smartStatus = newStatus;
                 }
                 
                 // Override booking status nếu khác
@@ -630,6 +634,17 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
+        // Lấy trạng thái hiện tại của items để check rule
+        const { data: itemsCurrent } = await supabase.from('BookingItems').select('status').in('id', itemIds);
+        if (itemsCurrent && itemsCurrent.length > 0) {
+            const { canTransition } = await import('@/lib/dispatch-status');
+            for (const item of itemsCurrent) {
+                if (item.status && !canTransition(item.status, newStatus)) {
+                    return { success: false, error: `Lỗi: Không thể chuyển một trong các item từ ${item.status} sang ${newStatus}` };
+                }
+            }
+        }
+
         // Cập nhật trạng thái các BookingItems
         const { error: itemError } = await supabase
             .from('BookingItems')
@@ -738,15 +753,12 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         const { data: allItems } = await supabase.from('BookingItems').select('status').eq('bookingId', bookingId);
         if (allItems && allItems.length > 0) {
             const statuses = allItems.map(i => i.status);
-            let bStatus = 'NEW';
-            const hasWaitingItems = statuses.some(s => ['PREPARING', 'WAITING', 'NEW'].includes(s));
-            const hasProgressedItems = statuses.some(s => ['IN_PROGRESS', 'COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s));
-
-            if (statuses.includes('IN_PROGRESS')) bStatus = 'IN_PROGRESS';
-            else if (hasWaitingItems && hasProgressedItems) bStatus = 'IN_PROGRESS';
-            else if (statuses.every(s => ['COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s))) bStatus = 'COMPLETED';
-            else if (statuses.includes('PREPARING')) bStatus = 'PREPARING';
-            else if (statuses.includes('WAITING') || statuses.includes('NEW')) bStatus = 'NEW';
+            const { recomputeBookingStatus } = await import('@/lib/dispatch-status');
+            let bStatus = recomputeBookingStatus(statuses);
+            
+            if (bStatus === 'DONE' && ['CLEANING', 'FEEDBACK', 'DONE', 'CANCELLED'].includes(newStatus)) {
+                bStatus = newStatus;
+            }
             
             await supabase.from('Bookings').update({ status: bStatus }).eq('id', bookingId);
         }
@@ -1355,7 +1367,7 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
 
         // Nếu đã dọn xong (FEEDBACK) → cả 2 tag ✅ → DONE
         // Nếu đang dọn (CLEANING) → chỉ lưu rating, giữ nguyên status
-        if (current?.status === 'FEEDBACK' || current?.status === 'COMPLETED') {
+        if (current?.status === 'FEEDBACK') {
             updatePayload.status = 'DONE';
         }
         // CLEANING → không đổi status, chờ dọn xong mới DONE

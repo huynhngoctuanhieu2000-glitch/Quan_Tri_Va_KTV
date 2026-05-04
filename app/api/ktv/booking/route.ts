@@ -711,9 +711,7 @@ export async function PATCH(request: Request) {
             }
         } else if (status === 'READY') {
             itemUpdatePayload.status = 'READY';
-        } else if (status === 'CLEANING') {
-            itemUpdatePayload.status = 'CLEANING';
-        } else if (status === 'DONE' || status === 'COMPLETED' || status === 'FEEDBACK') {
+        } else if (status === 'CLEANING' || status === 'DONE' || status === 'COMPLETED' || status === 'FEEDBACK') {
             const isFeedback = status === 'FEEDBACK';
             itemUpdatePayload.timeEnd = new Date().toISOString();
             
@@ -761,12 +759,9 @@ export async function PATCH(request: Request) {
                     
                     if (isFeedback) {
                         if (allFeedback) payload.status = 'FEEDBACK';
-                    } else {
-                        // COMPLETED
-                        if (allDone && item.status !== 'FEEDBACK' && item.status !== 'DONE') {
-                            payload.status = 'COMPLETED';
-                            payload.timeEnd = itemUpdatePayload.timeEnd;
-                        }
+                    } else if (allDone && item.status !== 'FEEDBACK' && item.status !== 'DONE') {
+                        payload.status = 'CLEANING';
+                        payload.timeEnd = itemUpdatePayload.timeEnd;
                     }
 
                     await supabase.from('BookingItems').update(payload).eq('id', item.id);
