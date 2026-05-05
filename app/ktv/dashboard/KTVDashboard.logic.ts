@@ -116,99 +116,6 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const timeOffsetRef = useRef<number>(0);
     const fetchBookingRef = useRef<(() => Promise<void>) | null>(null);
 
-    // --- SMART SKIP LOGIC ---
-    const [isLastInRoom, setIsLastInRoom] = useState(true);
-    const [isRoomCleaned, setIsRoomCleaned] = useState(false);
-    const isAutoReleasingRef = useRef(false);
-
-    useEffect(() => {
-        if (!booking || !ktvId) return;
-
-        let myRoomId: string | null = null;
-        const allItemIds: string[] = booking.assignedItemIds?.length > 0 ? booking.assignedItemIds : (booking.assignedItemId ? [booking.assignedItemId] : []);
-        const allAssignedItems = allItemIds.length > 0 ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || [] : [booking.BookingItems?.find((i: any) => i.id === booking.assignedItemId) || booking.BookingItems?.[0]].filter(Boolean);
-        
-        for (const ai of allAssignedItems) {
-            let segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (ai?.segments || []);
-            const mySeg = segs.find((seg: any) => seg.ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
-            if (mySeg?.roomId) {
-                myRoomId = mySeg.roomId;
-                break;
-            }
-        }
-
-        let _isLastInRoom = true;
-        let _isRoomCleaned = false;
-
-        if (myRoomId) {
-            let maxEndTime = 0;
-            let myMaxEndTime = 0;
-            let maxEndFeedbackTime: string | null = null;
-            
-            booking.BookingItems?.forEach((item: any) => {
-                let segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []);
-                segs.forEach((seg: any) => {
-                    if (seg.roomId === myRoomId) {
-                        const endStr = seg.actualEndTime || seg.endTime || seg.startTime;
-                        if (endStr) {
-                            const endTime = new Date(endStr).getTime();
-                            if (endTime > maxEndTime) {
-                                maxEndTime = endTime;
-                                maxEndFeedbackTime = seg.feedbackTime || null;
-                            } else if (endTime === maxEndTime) {
-                                if (seg.feedbackTime) maxEndFeedbackTime = seg.feedbackTime;
-                            }
-                            
-                            if (seg.ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase()) {
-                                if (endTime > myMaxEndTime) myMaxEndTime = endTime;
-                            }
-                        }
-                    }
-                });
-            });
-            
-            // Nếu có ai đó kết thúc sau mình hơn 1 phút -> Mình không phải người cuối cùng
-            if (myMaxEndTime > 0 && maxEndTime > 0 && myMaxEndTime < maxEndTime - 60000) {
-                _isLastInRoom = false; 
-            }
-
-            // Nếu người cuối cùng đã dọn xong -> Phòng đã sạch
-            if (maxEndFeedbackTime) {
-                _isRoomCleaned = true;
-            }
-        }
-
-        setIsLastInRoom(_isLastInRoom);
-        setIsRoomCleaned(_isRoomCleaned);
-
-    }, [booking, ktvId]);
-
-    const handleAutoRelease = useCallback(async () => {
-        if (!booking || !ktvId || isAutoReleasingRef.current) return;
-        isAutoReleasingRef.current = true;
-        setIsLoading(true);
-        try {
-            console.log("🚀 [SmartSkip] Auto-releasing KTV...");
-            const releaseBookingId = postServiceBookingIdRef.current || booking.id;
-            await fetch('/api/ktv/booking', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    bookingId: releaseBookingId, 
-                    status: 'FEEDBACK',
-                    action: 'RELEASE_KTV',
-                    techCode: ktvId 
-                })
-            });
-            setScreen('REWARD');
-        } catch (e) {
-            console.error('Auto release failed', e);
-        } finally {
-            setIsLoading(false);
-            isAutoReleasingRef.current = false;
-        }
-    }, [booking?.id, ktvId, setScreen]);
-
     // Auto-skip Review ONLY if THIS KTV has already submitted review for THIS specific booking.
     // Source of truth: per-KTV per-booking localStorage flag, NOT booking.rating (booking-level, too coarse).
     useEffect(() => {
@@ -217,24 +124,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
             const reviewKey = `ktv_review_submitted_${ktvId}_${booking.id}`;
             const alreadySubmitted = localStorage.getItem(reviewKey) === 'true';
             if (alreadySubmitted && !hasSubmittedReview) {
-                console.log("🌟 [SmartSkip] This KTV already submitted review for this booking, restoring skip...");
+                console.log("🌟 [ReviewRestore] This KTV already submitted review, forwarding to HANDOVER...");
                 setHasSubmittedReview(true);
-                if (!isLastInRoom || isRoomCleaned) {
-                    handleAutoRelease();
-                } else {
-                    setScreen('HANDOVER');
-                }
+                setScreen('HANDOVER');
             }
         } catch(e) {}
-    }, [booking?.id, hasSubmittedReview, ktvId, isLastInRoom, isRoomCleaned, handleAutoRelease]);
-
-    // Auto-skip Handover if teammate cleans the room
-    useEffect(() => {
-        if (screenRef.current === 'HANDOVER' && isRoomCleaned) {
-            console.log("🧹 [SmartSkip] Room already cleaned by teammate, skipping handover...");
-            handleAutoRelease();
-        }
-    }, [screenRef.current, isRoomCleaned, handleAutoRelease]);
+    }, [booking?.id, hasSubmittedReview, ktvId]);
 
     useEffect(() => { 
         screenRef.current = screen; 
@@ -1304,12 +1199,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 localStorage.setItem(reviewKey, 'true');
             } catch(e) {}
             
-            // Smart Skip logic
-            if (!isLastInRoom || isRoomCleaned) {
-                handleAutoRelease();
-            } else {
-                setScreen('HANDOVER');
-            }
+            // Always go to HANDOVER — commission is calculated in handleFinishHandover()
+            setScreen('HANDOVER');
         } catch (err) {
             console.error('❌ [KTV Logic] Network error submitting review:', err);
             alert('Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!');
