@@ -1759,8 +1759,8 @@ if (!hasPermission('dispatch_board')) {
                   </button>
                   <button
                     onClick={() => setShowDispatchConfirmModal(true)}
-                    disabled={!isDispatchReady(selectedOrder)}
-                    className={`flex-[2] py-5 rounded-3xl font-black text-sm lg:text-base tracking-widest uppercase transition-all flex items-center justify-center gap-3 shadow-2xl ${isDispatchReady(selectedOrder)
+                    disabled={!isDispatchReady(selectedSubOrder.originalOrder)}
+                    className={`flex-[2] py-5 rounded-3xl font-black text-sm lg:text-base tracking-widest uppercase transition-all flex items-center justify-center gap-3 shadow-2xl ${isDispatchReady(selectedSubOrder.originalOrder)
                       ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 active:scale-95'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
                       }`}
