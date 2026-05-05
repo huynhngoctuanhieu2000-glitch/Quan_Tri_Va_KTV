@@ -49,7 +49,7 @@ const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) 
 interface KanbanBoardProps {
     orders: PendingOrder[];
     onUpdateStatus: (orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean, targetKtvIds?: string[]) => void;
-    onOpenDetail: (orderId: string) => void;
+    onOpenDetail: (orderId: string, subOrderId?: string, status?: string) => void;
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId: string | null;
     onContextMenu?: (e: React.MouseEvent, orderId: string) => void;
