@@ -3,8 +3,11 @@ export interface WorkSegment {
   roomId: string | null;
   bedId: string | null;
   startTime: string;
+  actualStartTime?: string | null;
   duration: number;
   endTime: string;
+  actualEndTime?: string | null;
+  feedbackTime?: string | null;
 }
 
 export interface StaffAssignment {

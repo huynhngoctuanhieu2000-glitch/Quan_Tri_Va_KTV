@@ -49,9 +49,10 @@ export interface DashboardConfig {
 }
 
 export function useKTVDashboard(config?: DashboardConfig) {
-    const { user } = useAuth();
+    const { user, hasPermission } = useAuth();
     const { setKtvScreen } = useNotifications();
     const ktvId = config?.testTechCode || user?.id;
+    const canViewWallet = hasPermission('ktv_wallet');
     const [screen, setScreenState] = useState<ScreenState>('DASHBOARD');
     const setScreen = useCallback((val: ScreenState) => {
         setScreenState(val);
@@ -101,6 +102,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const [canStart, setCanStart] = useState(true);
     const [allowedStartTime, setAllowedStartTime] = useState<Date | null>(null);
     const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
+    const [walletBalance, setWalletBalance] = useState<any>(null);
+    const [walletTimeline, setWalletTimeline] = useState<any[]>([]);
 
     const lastAcknowledgedIdRef = useRef<string | null>(null);
     const prevBookingIdRef = useRef<string | null>(null);
@@ -135,6 +138,26 @@ export function useKTVDashboard(config?: DashboardConfig) {
     useEffect(() => { 
         screenRef.current = screen; 
     }, [screen]);
+
+    // 🔄 Fetch Wallet Balance when on Dashboard and idle
+    useEffect(() => {
+        if (screen === 'DASHBOARD' && (!booking || !booking.id) && ktvId) {
+            const fetchWallet = async () => {
+                try {
+                    const res = await fetch(`/api/ktv/wallet/balance?techCode=${ktvId}`);
+                    const json = await res.json();
+                    if (json.success) setWalletBalance(json.data);
+
+                    const res2 = await fetch(`/api/ktv/wallet/timeline?techCode=${ktvId}`);
+                    const json2 = await res2.json();
+                    if (json2.success) setWalletTimeline(json2.data);
+                } catch (e) {
+                    console.error('Error fetching wallet balance/timeline:', e);
+                }
+            };
+            fetchWallet();
+        }
+    }, [screen, booking?.id, ktvId]);
 
     // 🔄 Full reset of ALL transient state when booking.id changes
     // Prevents timer/segment/prepping/review state from leaking from order 1 into order 2.
@@ -1397,6 +1420,32 @@ export function useKTVDashboard(config?: DashboardConfig) {
         showRoomIssueModal,
         setShowRoomIssueModal,
         handleReportRoomIssue,
-        settings
+        settings,
+        walletBalance,
+        walletTimeline,
+        fetchWalletBalance: async () => {
+            if (!ktvId) return;
+            try {
+                const res = await fetch(`/api/ktv/wallet/balance?techCode=${ktvId}`);
+                const json = await res.json();
+                if (json.success) setWalletBalance(json.data);
+            } catch (e) {
+                console.error('Error fetching wallet balance:', e);
+            }
+        },
+        fetchWalletTimeline: async (month?: number, year?: number) => {
+            if (!ktvId) return;
+            try {
+                let url = `/api/ktv/wallet/timeline?techCode=${ktvId}`;
+                if (month) url += `&month=${month}`;
+                if (year) url += `&year=${year}`;
+                const res = await fetch(url);
+                const json = await res.json();
+                if (json.success) setWalletTimeline(json.data);
+            } catch (e) {
+                console.error('Error fetching wallet timeline:', e);
+            }
+        },
+        canViewWallet
     };
 }

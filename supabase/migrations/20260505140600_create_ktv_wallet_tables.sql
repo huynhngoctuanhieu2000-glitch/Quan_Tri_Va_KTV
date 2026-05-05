@@ -94,41 +94,42 @@ BEGIN
     -- 2. Calculate Adjustments (+/-)
     SELECT COALESCE(SUM(amount), 0) INTO v_total_adjustment
     FROM "WalletAdjustments"
-    WHERE staff_id = p_staff_id;
+    WHERE staff_id = p_staff_id AND created_at >= '2026-05-04'::date;
 
     -- 3. Calculate Withdrawals (-)
     SELECT COALESCE(SUM(amount), 0) INTO v_total_withdrawn
     FROM "KTVWithdrawals"
-    WHERE staff_id = p_staff_id AND status = 'APPROVED';
+    WHERE staff_id = p_staff_id AND status = 'APPROVED' AND request_date >= '2026-05-04'::date;
 
     SELECT COALESCE(SUM(amount), 0) INTO v_total_pending
     FROM "KTVWithdrawals"
-    WHERE staff_id = p_staff_id AND status = 'PENDING';
+    WHERE staff_id = p_staff_id AND status = 'PENDING' AND request_date >= '2026-05-04'::date;
 
     -- 4. Calculate Tips
     SELECT COALESCE(SUM(
         CASE 
-            WHEN array_length(technicianCodes, 1) > 0 THEN tip / array_length(technicianCodes, 1)
+            WHEN array_length("technicianCodes", 1) > 0 THEN tip / array_length("technicianCodes", 1)
             ELSE tip 
         END
     ), 0) INTO v_total_tip
     FROM "BookingItems"
-    WHERE p_staff_id = ANY(technicianCodes) AND status = 'DONE';
+    WHERE p_staff_id = ANY("technicianCodes") AND status = 'DONE' AND "timeEnd" >= '2026-05-04'::date;
 
     -- 5. Calculate Commission from TurnLedger & BookingItems
     FOR v_turn IN 
         SELECT DISTINCT booking_id 
         FROM "TurnLedger" 
-        WHERE employee_id = p_staff_id
+        WHERE employee_id = p_staff_id AND counted_at >= '2026-05-04'::date
     LOOP
         v_ktv_duration := 0;
 
         FOR v_item IN 
-            SELECT id, duration, segments, status 
-            FROM "BookingItems" 
-            WHERE booking_id = v_turn.booking_id 
-              AND p_staff_id = ANY(technicianCodes)
-              AND status IN ('COMPLETED', 'DONE', 'FEEDBACK', 'CLEANING')
+            SELECT i.id, s.duration, i.segments, i.status 
+            FROM "BookingItems" i
+            LEFT JOIN "Services" s ON i."serviceId" = s.id
+            WHERE i."bookingId" = v_turn.booking_id 
+              AND p_staff_id = ANY(i."technicianCodes")
+              AND i.status IN ('COMPLETED', 'DONE', 'FEEDBACK', 'CLEANING')
         LOOP
             IF v_item.segments IS NOT NULL THEN
                 BEGIN
@@ -168,9 +169,9 @@ BEGIN
         'total_adjustment', v_total_adjustment,
         'total_withdrawn', v_total_withdrawn,
         'total_pending', v_total_pending,
-        'gross_income', v_total_commission + v_total_tip + v_total_adjustment,
-        'available_balance', (v_total_commission + v_total_tip + v_total_adjustment) - v_total_withdrawn,
-        'effective_balance', (v_total_commission + v_total_tip + v_total_adjustment) - v_total_withdrawn - v_total_pending,
+        'gross_income', v_total_commission + v_total_adjustment,
+        'available_balance', (v_total_commission + v_total_adjustment) - v_total_withdrawn,
+        'effective_balance', (v_total_commission + v_total_adjustment) - v_total_withdrawn - v_total_pending,
         'min_deposit', v_min_deposit
     );
 END;

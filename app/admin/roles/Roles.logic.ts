@@ -12,21 +12,21 @@ const MOCK_ROLES: Role[] = [
         name: 'Admin Tối Cao',
         permissions: [
             'dashboard', 'dispatch_board', 'order_management', 'customer_management',
-            'revenue_reports', 'payroll_commissions', 'cashbook_supplies', 'web_booking',
+            'revenue_reports', 'payroll_commissions', 'cashbook_supplies', 'finance_management', 'web_booking',
             'service_menu', 'role_management', 'employee_management', 'ktv_hub',
-            'ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance',
+            'ktv_dashboard', 'ktv_wallet', 'ktv_attendance', 'ktv_schedule', 'ktv_performance',
             'ktv_history', 'turn_tracking', 'service_handbook', 'ai_features', 'settings',
         ],
     },
     {
         id: 'reception',
         name: 'Lễ Tân',
-        permissions: ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'settings'],
+        permissions: ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'finance_management', 'ktv_hub', 'turn_tracking', 'service_handbook', 'settings'],
     },
     {
         id: 'ktv',
         name: 'Kỹ Thuật Viên',
-        permissions: ['ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'],
+        permissions: ['ktv_dashboard', 'ktv_wallet', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'],
     },
 ];
 

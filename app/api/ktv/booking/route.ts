@@ -452,6 +452,20 @@ export async function PATCH(request: Request) {
                 });
                 await supabase.from('BookingItems').update({ segments: JSON.stringify(segs), status: isFeedback ? 'FEEDBACK' : 'CLEANING' }).eq('id', item.id);
             }
+            
+            // 🔄 ĐỒNG BỘ TRẠNG THÁI BOOKING & GIẢI PHÓNG PHÒNG
+            const { data: allItems } = await supabase.from('BookingItems').select('status, Services!BookingItems_serviceId_fkey(nameVN)').eq('bookingId', bookingId);
+            if (allItems && allItems.length > 0) {
+                const validItems = allItems.filter((i: any) => {
+                    const name = i.Services?.nameVN || '';
+                    return !name.toLowerCase().includes('phòng riêng');
+                });
+                const finalItems = validItems.length > 0 ? validItems : allItems;
+                const statuses = finalItems.map(i => i.status);
+                const { recomputeBookingStatus } = await import('@/lib/dispatch-status');
+                const bStatus = recomputeBookingStatus(statuses);
+                updatePayload.status = bStatus;
+            }
         }
 
         let data = null;

@@ -35,6 +35,17 @@ const formatToHourMinute = (isoString?: string | null) => {
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
+    if (!startStr) return '--:--';
+    const formatted = formatToHourMinute(startStr);
+    if (formatted === '--:--') return '--:--';
+    
+    const [h, m] = formatted.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m + durationMins, 0, 0);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
 interface KanbanBoardProps {
     orders: PendingOrder[];
     onUpdateStatus: (orderId: string, newStatus: string, itemIds?: string[], skipConfirm?: boolean, targetKtvIds?: string[]) => void;
@@ -84,10 +95,17 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
             for (const staff of svc.staffList) {
                 if (!staff.segments) continue;
                 for (const seg of staff.segments) {
-                    if (seg.endTime && seg.endTime !== '--:--') {
-                        const d = parseHHMM(seg.endTime);
-                        if (d.getTime() > maxTime) maxTime = d.getTime();
-                        hasValidSegmentTime = true;
+                    const start = seg.actualStartTime || svc.timeStart || seg.startTime;
+                    const duration = Number(seg.duration) || Number(svc.duration) || 60;
+                    const finalEnd = seg.actualEndTime ? seg.actualEndTime : (seg.actualStartTime || svc.timeStart ? getDynamicEndTime(start, duration) : (svc.timeEnd || seg.endTime));
+                    
+                    if (finalEnd && finalEnd !== '--:--') {
+                        const formattedEnd = formatToHourMinute(finalEnd);
+                        if (formattedEnd !== '--:--') {
+                            const d = parseHHMM(formattedEnd);
+                            if (d.getTime() > maxTime) maxTime = d.getTime();
+                            hasValidSegmentTime = true;
+                        }
                     }
                 }
             }
@@ -435,7 +453,22 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                 </div>
 
                                                 <div className="bg-gray-50/50 rounded-xl p-3 space-y-3 mb-4">
-                                                    {services.map((s: any) => (
+                                                    {(() => {
+                                                        let currentCumulativeStr: string | null = null;
+                                                        return services.map((s: any, idx: number) => {
+                                                            const firstSeg = s.staffList?.[0]?.segments?.[0];
+                                                            const explicitStart = firstSeg?.actualStartTime || s.timeStart || firstSeg?.startTime;
+                                                            const duration = Number(firstSeg?.duration) || Number(s.duration) || 60;
+                                                            
+                                                            let displayStart = currentCumulativeStr || explicitStart;
+                                                            if (idx === 0 && firstSeg?.actualStartTime) {
+                                                                displayStart = firstSeg.actualStartTime;
+                                                            }
+                                                            
+                                                            const displayEnd = firstSeg?.actualEndTime ? firstSeg.actualEndTime : (displayStart ? getDynamicEndTime(displayStart, duration) : (s.timeEnd || firstSeg?.endTime));
+                                                            currentCumulativeStr = displayEnd;
+
+                                                            return (
                                                         <div key={s.id} className="flex flex-col gap-1.5">
                                                             <div className="flex items-center justify-between text-[11px]">
                                                                 <span className="text-gray-700 font-black truncate pr-2">{s.options?.displayName || s.serviceName}</span>
@@ -457,9 +490,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             {s.staffList && s.staffList.length > 1 ? (
                                                                 <div className="space-y-1 mt-1">
                                                                     {s.staffList.map((st: any, stIdx: number) => {
-                                                                        const seg = st.segments?.[0];
-                                                                        const ktvStart = seg?.startTime || s.timeStart;
-                                                                        const ktvEnd = seg?.endTime || s.timeEnd;
+                                                                        const ktvStart = displayStart;
+                                                                        const ktvEnd = displayEnd;
                                                                         return (
                                                                             <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
                                                                                 <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
@@ -476,19 +508,23 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 <div className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1.5 border border-indigo-100/50 mt-1">
                                                                     <div className="flex flex-col">
                                                                         <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
-                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(s.staffList?.[0]?.segments?.[0]?.startTime || s.timeStart)}</span>
+                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(displayStart)}</span>
                                                                     </div>
                                                                     <div className="text-indigo-300">
                                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                                                                     </div>
                                                                     <div className="flex flex-col text-right">
                                                                         <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Kết thúc</span>
-                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(s.staffList?.[0]?.segments?.[0]?.endTime || s.timeEnd)}</span>
+                                                                        <span className="text-[10px] font-black text-indigo-700">
+                                                                            {formatToHourMinute(displayEnd)}
+                                                                        </span>
                                                                     </div>
                                                                 </div>
                                                             )}
                                                         </div>
-                                                    ))}
+                                                            );
+                                                        });
+                                                    })()}
                                                 </div>
 
                                                 {/* 🏷️ 2 TAGS: Hiện ở cả cột "Dọn phòng" và "Chờ đánh giá" */}

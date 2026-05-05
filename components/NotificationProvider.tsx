@@ -91,7 +91,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             if (existingSub) {
                 console.log('✅ [Push] Already subscribed, syncing to DB...');
                 // Sync existing subscription to DB (in case it was lost)
-                await fetch('/api/notifications/subscribe', {
+                await fetch('/api/ktv/push-sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -99,6 +99,8 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                         subscription: existingSub.toJSON(),
                         userAgent: navigator.userAgent
                     })
+                }).catch(err => {
+                    console.warn('⚠️ [Push] Sync failed (Network/AdBlocker):', err.message);
                 });
                 return;
             }
@@ -120,7 +122,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             console.log('✅ [Push] Subscribed successfully');
 
             // Save subscription via API route (bypasses RLS)
-            const res = await fetch('/api/notifications/subscribe', {
+            const res = await fetch('/api/ktv/push-sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -128,7 +130,13 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                     subscription: sub.toJSON(),
                     userAgent: navigator.userAgent
                 })
+            }).catch(err => {
+                console.warn('⚠️ [Push] Sync failed (Network/AdBlocker):', err.message);
+                return null;
             });
+            
+            if (!res) return;
+            
             const result = await res.json();
 
             if (result.success) {

@@ -9,10 +9,11 @@ import {
   ClipboardList, Coffee, LogOut, Sparkles, User, Users,
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
   Dumbbell, Quote, BookOpen, BellRing, QrCode,
-  ChevronDown, ChevronUp, Heart, MicOff
+  ChevronDown, ChevronUp, Heart, MicOff, Banknote, TrendingDown, TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 import { useKTVDashboard } from './KTVDashboard.logic';
 import { ROOM_ISSUE_OPTIONS } from './KTVDashboard.logic';
@@ -264,7 +265,7 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments:
 // ----------------------------------------------------
 
 function ScreenDashboard({ logic }: { logic: any }) {
-  const { booking, checklist, isChecklistComplete, handleConfirmSetup, setShowProcedure, activeSegmentIndex, prepProcedure, toggleChecklist, checkAllChecklist, setShowRoomIssueModal } = logic;
+  const { booking, checklist, isChecklistComplete, handleConfirmSetup, setShowProcedure, activeSegmentIndex, prepProcedure, toggleChecklist, checkAllChecklist, setShowRoomIssueModal, walletBalance, canViewWallet, walletTimeline } = logic;
 
   // Lấy tất cả dịch vụ mà KTV này được gán (hỗ trợ multi-item)
   const allItemIds: string[] = booking?.assignedItemIds?.length > 0
@@ -321,6 +322,21 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
       {(!booking || !booking.id) ? (
         <div className="space-y-6">
+          {canViewWallet && (
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 rounded-[32px] shadow-lg text-white flex items-center justify-between mb-6">
+              <div>
+                <h3 className="font-bold text-emerald-100 flex items-center gap-2 uppercase tracking-widest text-xs mb-1">
+                  <Zap size={16} className="text-amber-300 fill-amber-300" />
+                  Ví Thu Nhập KTV
+                </h3>
+                <p className="text-xs text-emerald-100/80">Xem số dư, lịch sử giao dịch và rút tiền</p>
+              </div>
+              <Link href="/ktv/wallet" className="bg-white text-emerald-700 font-bold px-4 py-2.5 rounded-xl text-xs uppercase tracking-widest active:scale-95 transition-transform shadow-md flex items-center gap-2">
+                Mở Ví <ArrowRight size={16} />
+              </Link>
+            </div>
+          )}
+
           <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} p-8 text-center border shadow-sm`}>
             {/* QR Code Section - Web Booking for Customers */}
             <div className="flex flex-col items-center mb-8">
@@ -429,7 +445,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                   <WorkingTimeline 
                     segments={ktvSegments} 
                     activeIndex={booking.status === 'IN_PROGRESS' ? activeSegmentIndex : undefined}
-                    actualStartTime={item.timeStart || null}
+                    actualStartTime={ktvSegments[0]?.actualStartTime || booking?.timeStart || null}
                   />
                 </div>
               )}
@@ -653,7 +669,7 @@ function ScreenTimer({ logic }: { logic: any }) {
           <WorkingTimeline 
             segments={ktvSegments} 
             activeIndex={activeSegmentIndex} 
-            actualStartTime={item.timeStart || null}
+            actualStartTime={ktvSegments[0]?.actualStartTime || booking?.timeStart || null}
           />
         </div>
       )}

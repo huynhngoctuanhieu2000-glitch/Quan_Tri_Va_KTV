@@ -800,9 +800,14 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         }
         
         // Auto-update Booking status based on remaining items
-        const { data: allItems } = await supabase.from('BookingItems').select('status').eq('bookingId', bookingId);
+        const { data: allItems } = await supabase.from('BookingItems').select('status, Services!BookingItems_serviceId_fkey(nameVN)').eq('bookingId', bookingId);
         if (allItems && allItems.length > 0) {
-            const statuses = allItems.map(i => i.status);
+            const validItems = allItems.filter((i: any) => {
+                const name = i.Services?.nameVN || '';
+                return !name.toLowerCase().includes('phòng riêng');
+            });
+            const finalItems = validItems.length > 0 ? validItems : allItems;
+            const statuses = finalItems.map(i => i.status);
             const { recomputeBookingStatus } = await import('@/lib/dispatch-status');
             let bStatus = recomputeBookingStatus(statuses);
             

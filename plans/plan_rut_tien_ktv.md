@@ -32,18 +32,17 @@ Theo các yêu cầu mới nhất, tính năng này không chỉ đơn thuần l
 - Tạo bảng **`KTVWithdrawals`** (Quản lý rút tiền: `id`, `staff_id`, `amount`, `status`, `request_date`,...).
 - Tạo bảng **`WalletAdjustments`** (Quản lý nạp/trừ tiền: `id`, `staff_id`, `amount`, `type`, `reason`, `created_by`,...).
 
-**2. UI Admin (Phân quyền & Điều chỉnh):**
-- Cập nhật Popup "Phân quyền chi tiết": Thêm checkbox `[x] Thu Nhập & Rút Tiền` vào nhóm **Kỹ Thuật Viên** hoặc **Tài Chính & Kế Toán**.
-- **Màn hình Nạp/Trừ tiền:** Cho phép Admin nhập số tiền cộng/trừ, chọn loại (Tặng/Phạt/Điều chỉnh) và ghi chú lý do.
+**2. UI Quầy Lễ Tân / Kế Toán (Xác nhận giao tiền):**
+- Xây dựng màn hình/bảng theo dõi yêu cầu rút tiền tại Quầy.
+- Hiển thị danh sách các lệnh đang chờ KTV ra nhận tiền (`PENDING`).
+- Cột hiển thị: Mã KTV, Số tiền, Thời gian yêu cầu.
+- Nút **"Xác nhận đã giao tiền"**: Khi bấm, lưu lại ID của người đang trực quầy và cập nhật trạng thái hoàn tất.
 
-**3. UI KTV (Cơ bản):**
+**3. UI KTV (Rút tiền & Thông báo tự động):**
 - Ẩn/Hiện menu "Ví / Thu Nhập" theo quyền truy cập.
-- **Thẻ Số Dư:** Hiển thị **Số Dư Ví** (Số tiền thực tế KTV đang có).
-- **Form yêu cầu rút tiền:** Khi bấm Rút tiền, hệ thống check `Số dư ví - Tiền rút >= 500k`. Nếu vi phạm sẽ chặn lại và hiện Popup cảnh báo.
-
-**4. UI Admin (Quản lý Rút tiền):**
-- Màn hình duyệt lệnh rút tiền (Tabs: Chờ duyệt, Đã duyệt, Từ chối).
-- Logic duyệt (Approve) và Từ chối (Reject - kèm lý do).
+- **Thẻ Số Dư:** Hiển thị Số Dư Ví thực tế.
+- **Form yêu cầu rút tiền:** Kiểm tra điều kiện `Số dư - Tiền rút >= 500k`. 
+- **Auto-Approve (Mô hình Spa):** Ngay sau khi tạo lệnh thành công, UI hiển thị ngay thông báo: *"Yêu cầu rút tiền của bạn đã được duyệt. Hãy đến quầy để nhận tiền mặt nhé!"*. Trạng thái lệnh lúc này là `PENDING` (Chờ nhận tiền).
 
 ---
 

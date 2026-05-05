@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 /**
- * POST /api/notifications/subscribe
+ * POST /api/ktv/push-sync
  * Save push subscription to database using admin client (bypasses RLS)
+ * Renamed to evade AdBlockers that block /notifications/subscribe
  */
 export async function POST(request: Request) {
     try {
@@ -38,12 +39,11 @@ export async function POST(request: Request) {
             });
 
         if (error) {
-            console.error('❌ [Subscribe API] Error saving subscription:', error);
+            console.error('❌ [Push Sync API] Error saving subscription:', error);
             return NextResponse.json({ success: false, error: error.message }, { status: 500 });
         }
 
-        // 🧹 DỌN DẸP SPAM: Nếu thiết bị này (cùng endpoint) đã từng đăng nhập tài khoản khác,
-        // hãy xoá các đăng ký cũ của tài khoản đó để tránh trùng lặp khi Push.
+        // 🧹 DỌN DẸP SPAM
         try {
             const { data: allSubs } = await supabase.from('StaffPushSubscriptions').select('staff_id, subscription');
             if (allSubs) {
@@ -56,18 +56,18 @@ export async function POST(request: Request) {
                             .delete()
                             .eq('staff_id', sub.staff_id)
                             .eq('subscription', sub.subscription);
-                        console.log(`🧹 [Subscribe API] Xoá subscription cũ của user ${sub.staff_id} do trùng thiết bị.`);
+                        console.log(`🧹 [Push Sync API] Xoá subscription cũ của user ${sub.staff_id} do trùng thiết bị.`);
                     }
                 }
             }
         } catch (cleanupErr) {
-            console.error('⚠️ [Subscribe API] Cleanup old subscriptions failed:', cleanupErr);
+            console.error('⚠️ [Push Sync API] Cleanup old subscriptions failed:', cleanupErr);
         }
 
-        console.log('✅ [Subscribe API] Push subscription saved for staff:', staffId);
+        console.log('✅ [Push Sync API] Push subscription saved for staff:', staffId);
         return NextResponse.json({ success: true });
     } catch (error: any) {
-        console.error('❌ [Subscribe API] Error:', error);
+        console.error('❌ [Push Sync API] Error:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
