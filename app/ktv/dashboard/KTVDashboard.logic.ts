@@ -213,6 +213,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 // 3. ÉP GỌI LẠI NGAY LẬP TỨC ĐỂ XÓA ĐỘ TRỄ 5S
                 if (fetchBookingRef.current) {
                     console.log("🚀 [KTV] Fetching next booking instantly...");
+                    // Set targetBookingIdRef to the one we just detected to ensure the next fetch pulls it
+                    if (bookingRef.current?.nextBookingId) {
+                        targetBookingIdRef.current = bookingRef.current.nextBookingId;
+                    }
                     fetchBookingRef.current();
                 }
             }
@@ -883,7 +887,31 @@ export function useKTVDashboard(config?: DashboardConfig) {
             supabase.removeChannel(channel);
             clearInterval(intervalId);
         };
-    }, [ktvId, booking?.id, booking?.assignedItemId, isTimerRunning, isPrepping]); // Added assignedItemId and isPrepping to re-bind filter
+    }, [ktvId, booking?.id, booking?.assignedItemId, isTimerRunning, isPrepping]);
+
+    // 🕵️ Next Order Watcher — Polls for new assignments while KTV is finishing the current one
+    // This ensures the "Next Order" button appears even if the dispatch happens late.
+    useEffect(() => {
+        if (!ktvId || !['HANDOVER', 'REWARD'].includes(screen)) return;
+
+        const checkNextOrder = async () => {
+            try {
+                // Fetch using techCode only to find what's in their TurnQueue queue
+                const res = await fetch(`/api/ktv/booking?techCode=${ktvId}`).then(r => r.json());
+                if (res.success && res.data?.nextBookingId) {
+                    setBooking((prev: any) => {
+                        if (!prev || prev.nextBookingId === res.data.nextBookingId) return prev;
+                        console.log("🔔 [KTV Watcher] New order detected:", res.data.nextBookingId);
+                        return { ...prev, nextBookingId: res.data.nextBookingId };
+                    });
+                }
+            } catch (e) {}
+        };
+
+        const tid = setInterval(checkNextOrder, 5000);
+        checkNextOrder(); // Initial check
+        return () => clearInterval(tid);
+    }, [ktvId, screen]);
 
     // ⏱️ Timer countdown only — NO side effects inside setState
     useEffect(() => {
