@@ -7,6 +7,13 @@ export function useFinanceKTV() {
     const [summaries, setSummaries] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // Adjustment Modal State
+    const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+    const [selectedKtv, setSelectedKtv] = useState<{id: string, name: string} | null>(null);
+    const [adjAmount, setAdjAmount] = useState('');
+    const [adjType, setAdjType] = useState('GIFT');
+    const [adjReason, setAdjReason] = useState('');
     
     const canAccessPage = hasPermission('finance_management');
 
@@ -94,6 +101,58 @@ export function useFinanceKTV() {
         }
     };
 
+    const handleOpenAdjustment = (ktvId: string, ktvName: string) => {
+        setSelectedKtv({ id: ktvId, name: ktvName });
+        setAdjAmount('');
+        setAdjReason('');
+        setAdjType('GIFT');
+        setIsAdjustmentModalOpen(true);
+    };
+
+    const handleSubmitAdjustment = async () => {
+        if (!selectedKtv) return;
+        if (!adjAmount || !adjReason) {
+            alert('Vui lòng nhập số tiền và lý do.');
+            return;
+        }
+
+        const numericAmount = Number(adjAmount.replace(/[^0-9]/g, ''));
+        if (numericAmount <= 0) {
+            alert('Số tiền không hợp lệ.');
+            return;
+        }
+
+        if (confirm(`Bạn có chắc chắn muốn ${adjType === 'GIFT' ? 'Thưởng' : 'Phạt'} KTV ${selectedKtv.name} số tiền ${numericAmount.toLocaleString()}đ?`)) {
+            setIsProcessing(true);
+            try {
+                const res = await fetch('/api/finance/adjustment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        staff_id: selectedKtv.id,
+                        amount: numericAmount,
+                        type: adjType,
+                        reason: adjReason
+                    })
+                });
+
+                if (res.ok) {
+                    alert('Đã thêm giao dịch điều chỉnh thành công!');
+                    setIsAdjustmentModalOpen(false);
+                    fetchData();
+                } else {
+                    const data = await res.json();
+                    alert(`Lỗi: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error creating adjustment:', error);
+                alert('Có lỗi xảy ra khi tạo giao dịch điều chỉnh.');
+            } finally {
+                setIsProcessing(false);
+            }
+        }
+    };
+
     return {
         user,
         canAccessPage,
@@ -101,8 +160,19 @@ export function useFinanceKTV() {
         summaries,
         isLoading,
         isProcessing,
+        isAdjustmentModalOpen,
+        selectedKtv,
+        adjAmount,
+        setAdjAmount,
+        adjType,
+        setAdjType,
+        adjReason,
+        setAdjReason,
+        setIsAdjustmentModalOpen,
         handleApprove,
         handleReject,
+        handleOpenAdjustment,
+        handleSubmitAdjustment,
         refresh: fetchData
     };
 }

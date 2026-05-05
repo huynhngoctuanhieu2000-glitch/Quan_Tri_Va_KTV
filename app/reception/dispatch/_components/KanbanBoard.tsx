@@ -382,7 +382,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                             draggable
                                             onDragStart={() => setDraggedSubOrderId(subOrder.id)}
                                             onDragEnd={() => setDraggedSubOrderId(null)}
-                                            onClick={() => onOpenDetail(subOrder.bookingId)}
+                                            onClick={() => onOpenDetail(subOrder.bookingId, subOrder.id, subOrder.dispatchStatus)}
+
                                             onContextMenu={(e: React.MouseEvent) => {
                                                 if (onContextMenu) {
                                                     e.preventDefault();
@@ -642,7 +643,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                         return null;
                                                     })()}
                                                     <button
-                                                        onClick={e => { e.stopPropagation(); onOpenDetail(order.id); }}
+                                                        onClick={e => { e.stopPropagation(); onOpenDetail(order.id, subOrder.id, subOrder.dispatchStatus); }}
                                                         className="px-3 py-2.5 rounded-xl text-[11px] font-black text-gray-400 bg-gray-50 hover:bg-gray-100 transition-all border border-gray-100"
                                                     >
                                                         Chi tiết

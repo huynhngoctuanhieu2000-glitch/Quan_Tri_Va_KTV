@@ -28,12 +28,30 @@ const getMinsFromTimes = (start: string, end: string) => {
     return mins2 - mins1;
 };
 
-export async function GET() {
+// API: POST /api/cron/sync-daily-ledger
+// Body: { targetDate: 'YYYY-MM-DD' } (Optional, defaults to yesterday)
+export async function POST(request: Request) {
     try {
-        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-        const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-        const todayStr = nowVn.toISOString().split('T')[0];
-        const todayStartStr = `${todayStr}T00:00:00+07:00`;
+        let targetDateStr = '';
+        try {
+            const body = await request.json();
+            targetDateStr = body.targetDate;
+        } catch { }
+
+        // Determine target date in VN time
+        // If no targetDate provided, default to YESTERDAY
+        if (!targetDateStr) {
+            const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+            const nowVn = new Date(Date.now() + VN_OFFSET_MS);
+            nowVn.setDate(nowVn.getDate() - 1); // Yesterday
+            targetDateStr = nowVn.toISOString().split('T')[0];
+        }
+
+        console.log(`[Cron] Syncing Daily Ledger for date: ${targetDateStr}`);
+
+        // Boundaries in VN time
+        const startTimeStr = `${targetDateStr}T00:00:00+07:00`;
+        const endTimeStr = `${targetDateStr}T23:59:59.999+07:00`;
 
         // 1. Get configs
         const [{ data: milestoneConf }, { data: rateConf }] = await Promise.all([
@@ -51,56 +69,50 @@ export async function GET() {
         // 2. Fetch KTVs
         const { data: ktvs } = await supabase
             .from('Staff')
-            .select('id, full_name, position')
+            .select('id, full_name')
             .eq('status', 'ĐANG LÀM')
-            .ilike('id', 'NH%')
-            .order('id');
+            .ilike('id', 'NH%');
         
-        if (!ktvs || ktvs.length === 0) return NextResponse.json({ success: true, data: [] });
+        if (!ktvs || ktvs.length === 0) return NextResponse.json({ success: true, message: 'No KTVs found' });
 
-        // 3. Fetch Historical Ledger Data (Bulk)
-        const { data: ledgers } = await supabase
-            .from('KTVDailyLedger')
-            .select('staff_id, total_commission, total_tip, total_adjustment, total_withdrawn');
-
-        const ledgerMap: Record<string, any> = {};
-        ktvs.forEach(k => {
-            ledgerMap[k.id] = { comm: 0, tip: 0, adj: 0, withdrawn: 0 };
-        });
-        (ledgers || []).forEach(l => {
-            if (ledgerMap[l.staff_id]) {
-                ledgerMap[l.staff_id].comm += Number(l.total_commission);
-                ledgerMap[l.staff_id].tip += Number(l.total_tip);
-                ledgerMap[l.staff_id].adj += Number(l.total_adjustment);
-                ledgerMap[l.staff_id].withdrawn += Number(l.total_withdrawn);
-            }
-        });
-
-        // 4. Fetch TODAY's Realtime Data (Bulk)
+        // 3. Fetch Bookings for the target date
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
                 id, timeStart, timeEnd, status, technicianCode,
                 BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
             `)
-            .gte('timeStart', todayStartStr)
+            .gte('timeStart', startTimeStr)
+            .lte('timeStart', endTimeStr)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
 
         const { data: services } = await supabase.from('Services').select('id, duration');
         const svcDurationMap: Record<string, number> = {};
         (services || []).forEach(s => { svcDurationMap[String(s.id)] = s.duration || 60; });
 
-        const { data: todayAdjustments } = await supabase.from('WalletAdjustments').select('staff_id, amount').gte('created_at', todayStartStr);
-        const { data: todayWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount, status').gte('request_date', todayStartStr);
-        const { data: pendingWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount').eq('status', 'PENDING');
+        // 4. Fetch Adjustments & Withdrawals for the target date
+        const { data: adjustments } = await supabase
+            .from('WalletAdjustments')
+            .select('staff_id, amount')
+            .gte('created_at', startTimeStr)
+            .lte('created_at', endTimeStr);
+
+        const { data: withdrawals } = await supabase
+            .from('KTVWithdrawals')
+            .select('staff_id, amount')
+            .eq('status', 'APPROVED')
+            .gte('request_date', startTimeStr)
+            .lte('request_date', endTimeStr);
 
         const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
+        const upsertRows = [];
+
         // 5. Calculate per KTV
-        const summaries = ktvs.map(ktv => {
+        for (const ktv of ktvs) {
             const techCode = ktv.id;
-            let today_commission = 0;
-            let today_tip = 0;
+            let total_commission = 0;
+            let total_tip = 0;
 
             for (const b of validBookings) {
                 const relevantItems = (b.BookingItems || []).filter((i: any) =>
@@ -128,47 +140,46 @@ export async function GET() {
                     }
                 }
 
-                today_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
-                today_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
+                total_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
+                total_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
             }
 
-            const ktvTodayAdj = (todayAdjustments || []).filter(a => a.staff_id === techCode).reduce((sum, a) => sum + Number(a.amount), 0);
-            const ktvTodayWithdrawn = (todayWithdrawals || []).filter(w => w.staff_id === techCode && w.status === 'APPROVED').reduce((sum, w) => sum + Number(w.amount), 0);
-            const ktvPending = (pendingWithdrawals || []).filter(w => w.staff_id === techCode).reduce((sum, w) => sum + Number(w.amount), 0);
+            const ktvAdjustments = (adjustments || []).filter(a => a.staff_id === techCode);
+            const ktvWithdrawals = (withdrawals || []).filter(w => w.staff_id === techCode);
 
-            const ledger = ledgerMap[techCode];
+            const total_adjustment = ktvAdjustments.reduce((sum, a) => sum + Number(a.amount), 0);
+            const total_withdrawn = ktvWithdrawals.reduce((sum, w) => sum + Number(w.amount), 0);
 
-            const total_commission = ledger.comm + today_commission;
-            const total_tip = ledger.tip + today_tip;
-            const total_adjustment = ledger.adj + ktvTodayAdj;
-            const total_withdrawn = ledger.withdrawn + ktvTodayWithdrawn;
-            const total_pending = ktvPending;
-            const gross_income = total_commission + total_adjustment;
-            const min_deposit = 500000;
-            const net_balance = gross_income - total_withdrawn - total_pending;
-            const available_balance = Math.max(0, net_balance - min_deposit);
-            const effective_balance = Math.max(0, net_balance);
-
-            return {
-                id: ktv.id,
-                name: ktv.full_name,
-                position: ktv.position,
+            // Only add to upsert if there is actual activity, to keep DB lean,
+            // OR we can just add everyone so balance is continuous. Let's add everyone to be safe.
+            upsertRows.push({
+                date: targetDateStr,
+                staff_id: techCode,
                 total_commission,
                 total_tip,
                 total_adjustment,
                 total_withdrawn,
-                total_pending,
-                gross_income,
-                min_deposit,
-                net_balance,
-                available_balance,
-                effective_balance
-            };
-        });
+                updated_at: new Date().toISOString()
+            });
+        }
 
-        return NextResponse.json({ success: true, data: summaries });
+        // 6. Bulk UPSERT
+        if (upsertRows.length > 0) {
+            const { error: upsertErr } = await supabase
+                .from('KTVDailyLedger')
+                .upsert(upsertRows, {
+                    onConflict: 'date, staff_id'
+                });
+
+            if (upsertErr) {
+                console.error('Upsert Error:', upsertErr);
+                throw upsertErr;
+            }
+        }
+
+        return NextResponse.json({ success: true, message: `Synced ${upsertRows.length} ledgers for ${targetDateStr}` });
     } catch (err: any) {
-        console.error('Exception in /api/finance/ktv-summary:', err);
-        return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+        console.error('Exception in sync-daily-ledger:', err);
+        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
     }
 }

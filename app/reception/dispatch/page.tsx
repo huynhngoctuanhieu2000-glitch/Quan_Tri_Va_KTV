@@ -33,6 +33,15 @@ import {
   StaffNotification 
 } from './types';
 
+interface SubOrder {
+    id: string;
+    bookingId: string;
+    originalOrder: PendingOrder;
+    services: ServiceBlock[];
+    dispatchStatus: DispatchStatus;
+    ktvSignature: string;
+}
+
 
 
 
@@ -56,6 +65,29 @@ import {
 const getCurrentTime = () => {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const formatToHourMinute = (isoString?: string | null) => {
+    if (!isoString) return '--:--';
+    if (/^\d{1,2}:\d{2}$/.test(isoString)) return isoString;
+    let parseString = isoString;
+    if (!isoString.endsWith('Z') && !isoString.includes('+')) {
+        parseString = isoString.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(parseString);
+    if (isNaN(d.getTime())) return isoString;
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
+    if (!startStr) return '--:--';
+    const formatted = formatToHourMinute(startStr);
+    if (formatted === '--:--') return '--:--';
+    
+    const [h, m] = formatted.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m + durationMins, 0, 0);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
 const formatTime = (timeStr: string | null | undefined) => {
@@ -89,6 +121,7 @@ export default function DispatchBoardPage() {
 
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedSubOrderId, setSelectedSubOrderId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => {
     const vnTime = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
     if (vnTime.getUTCHours() < 6) {
@@ -201,31 +234,48 @@ export default function DispatchBoardPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedDate]); // REMOVED soundEnabled from deps
 
-  const getEstimatedEndTime = (order: PendingOrder) => {
+  const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services) => {
     let maxTime = 0;
+
+    if (!servicesToCheck || servicesToCheck.length === 0) return null;
 
     const parseHHMM = (timeStr: string) => {
         const [h, m] = timeStr.split(':').map(Number);
         const d = new Date();
         d.setHours(h, m, 0, 0);
-        return d.getTime();
+
+        if (d.getTime() < Date.now() - 12 * 60 * 60 * 1000) {
+             d.setDate(d.getDate() + 1);
+        } else if (d.getTime() > Date.now() + 12 * 60 * 60 * 1000) {
+             d.setDate(d.getDate() - 1);
+        }
+        
+        return d;
     };
 
-    if (order.services && order.services.length > 0) {
-      for (const svc of order.services) {
+    for (const svc of servicesToCheck) {
+        let hasValidSegmentTime = false;
         if (svc.staffList) {
             for (const staff of svc.staffList) {
                 if (!staff.segments) continue;
                 for (const seg of staff.segments) {
-                    if (seg.endTime && seg.endTime !== '--:--') {
-                        const t = parseHHMM(seg.endTime);
-                        if (t > maxTime) maxTime = t;
+                    const start = seg.actualStartTime || svc.timeStart || seg.startTime;
+                    const duration = Number(seg.duration) || Number(svc.duration) || 60;
+                    const finalEnd = seg.actualEndTime ? seg.actualEndTime : (seg.actualStartTime || svc.timeStart ? getDynamicEndTime(start, duration) : (svc.timeEnd || seg.endTime));
+                    
+                    if (finalEnd && finalEnd !== '--:--') {
+                        const formattedEnd = formatToHourMinute(finalEnd);
+                        if (formattedEnd !== '--:--') {
+                            const d = parseHHMM(formattedEnd);
+                            if (d.getTime() > maxTime) maxTime = d.getTime();
+                            hasValidSegmentTime = true;
+                        }
                     }
                 }
             }
         }
         
-        if (svc.timeEnd) {
+        if (!hasValidSegmentTime && svc.timeEnd) {
             let tEnd = svc.timeEnd;
             if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
                 tEnd = tEnd.replace(' ', 'T') + 'Z';
@@ -234,33 +284,114 @@ export default function DispatchBoardPage() {
             if (!isNaN(d.getTime())) {
                 if (d.getTime() > maxTime) maxTime = d.getTime();
             }
-        } else if (svc.timeStart && svc.duration) {
-            let tStart = svc.timeStart;
-            if (!tStart.endsWith('Z') && !tStart.includes('+')) {
-                tStart = tStart.replace(' ', 'T') + 'Z';
-            }
-            const d = new Date(tStart);
-            if (!isNaN(d.getTime())) {
-                const end = d.getTime() + svc.duration * 60000;
-                if (end > maxTime) maxTime = end;
-            }
-        }
-      }
-    }
-    
-    if (maxTime === 0 && order.timeEnd) {
-        let tEnd = order.timeEnd;
-        if (!tEnd.endsWith('Z') && !tEnd.includes('+')) {
-            tEnd = tEnd.replace(' ', 'T') + 'Z';
-        }
-        const d = new Date(tEnd);
-        if (!isNaN(d.getTime())) {
-            maxTime = d.getTime();
         }
     }
-    
-    return maxTime;
+
+    if (maxTime > 0) {
+        const mDate = new Date(maxTime);
+        return `${String(mDate.getHours()).padStart(2, '0')}:${String(mDate.getMinutes()).padStart(2, '0')}`;
+    }
+
+    if (order.timeEnd && servicesToCheck === order.services) {
+        return formatToHourMinute(order.timeEnd);
+    }
+
+    return order.time; 
   };
+
+  const subOrders = React.useMemo(() => {
+    const result: SubOrder[] = [];
+    orders.forEach(order => {
+        const ktvGroups = new Map<string, ServiceBlock[]>();
+        
+        order.services.forEach(svc => {
+            if (svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) {
+                return;
+            }
+            
+            if (svc.staffList && svc.staffList.length > 0) {
+                const staffsAtTime = svc.staffList;
+                const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).sort().join(',') || 'unassigned';
+                const ktvSignature = ktvSignatureBase;
+                
+                if (!ktvGroups.has(ktvSignature)) {
+                    ktvGroups.set(ktvSignature, []);
+                }
+                    
+                let isAllCompleted = true;
+                let isAnyStarted = false;
+                let isAllFeedback = true;
+                
+                staffsAtTime.forEach(st => {
+                    if (!st.segments || st.segments.length === 0) {
+                        isAllCompleted = false;
+                        isAllFeedback = false;
+                    }
+                    st.segments?.forEach((seg: any) => {
+                        if (seg.actualStartTime) isAnyStarted = true;
+                        if (!seg.actualEndTime) isAllCompleted = false;
+                        if (!seg.feedbackTime) isAllFeedback = false;
+                    });
+                });
+                
+                let derivedStatus = svc.status || 'NEW';
+                if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
+                    if (isAllFeedback && isAllCompleted) derivedStatus = 'FEEDBACK';
+                    else if (isAllCompleted) derivedStatus = 'CLEANING';
+                    else if (isAnyStarted) derivedStatus = 'IN_PROGRESS';
+                    else derivedStatus = 'PREPARING';
+                }
+
+                const svcClone = {
+                    ...svc,
+                    staffList: staffsAtTime,
+                    status: derivedStatus
+                };
+                ktvGroups.get(ktvSignature)!.push(svcClone);
+            } else {
+                const ktvSignature = 'unassigned_unknown_time';
+                if (!ktvGroups.has(ktvSignature)) {
+                    ktvGroups.set(ktvSignature, []);
+                }
+                ktvGroups.get(ktvSignature)!.push(svc);
+            }
+        });
+
+        ktvGroups.forEach((services, ktvSignature) => {
+            const statuses = services.map(s => s.status || 'NEW');
+            let dispatchStatus: DispatchStatus = 'PREPARING';
+            
+            if (order.dispatchStatus === 'pending') {
+                dispatchStatus = 'pending';
+            } else {
+                if (statuses.includes('IN_PROGRESS')) dispatchStatus = 'IN_PROGRESS';
+                else if (statuses.includes('CLEANING')) dispatchStatus = 'CLEANING';
+                else if (statuses.includes('FEEDBACK')) dispatchStatus = 'FEEDBACK';
+                else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'DONE';
+                else if (statuses.includes('PREPARING')) dispatchStatus = 'PREPARING';
+                
+                if (dispatchStatus === 'PREPARING') {
+                    if (!statuses.includes('NEW')) {
+                        dispatchStatus = order.dispatchStatus === 'FEEDBACK' ? 'FEEDBACK' :
+                                        order.dispatchStatus === 'CLEANING' ? 'CLEANING' :
+                                        order.dispatchStatus === 'IN_PROGRESS' ? 'IN_PROGRESS' :
+                                        order.dispatchStatus === 'DONE' ? 'DONE' : 'PREPARING';
+                    }
+                }
+            }
+
+            result.push({
+                id: `${order.id}_${ktvSignature}`,
+                bookingId: order.id,
+                originalOrder: order,
+                services,
+                dispatchStatus,
+                ktvSignature
+            });
+        });
+    });
+    return result;
+  }, [orders]);
 
   // 🔄 AUTO-FINISH WORKER: Đã được chuyển về xử lý ở cấp độ KanbanBoard (sub-order level)
   // để đảm bảo tính đồng nhất và tránh xung đột trạng thái.
@@ -507,6 +638,8 @@ if (!hasPermission('dispatch_board')) {
 
   const pendingOrders = orders.filter(o => o.dispatchStatus === 'pending');
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null;
+  const selectedSubOrder = subOrders.find(so => so.id === selectedSubOrderId) 
+      || (selectedOrder ? { id: selectedOrder.id, bookingId: selectedOrder.id, originalOrder: selectedOrder, services: selectedOrder.services, dispatchStatus: selectedOrder.dispatchStatus, ktvSignature: '' } : null);
 
   const LEFT_TABS: { id: DispatchStatus; label: string; color: string; activeBg: string; dot: string; badgeBg: string; badgeText: string }[] = [
     { id: 'pending', label: 'Chờ điều phối', color: 'text-rose-600', activeBg: 'bg-rose-500', dot: 'bg-rose-500', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700' },
@@ -517,7 +650,7 @@ if (!hasPermission('dispatch_board')) {
     { id: 'DONE', label: 'Hoàn tất', color: 'text-emerald-600', activeBg: 'bg-emerald-500', dot: 'bg-emerald-500', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700' },
   ];
 
-  const displayedOrders = orders.filter(o => o.dispatchStatus === leftPanelTab);
+  const displayedOrders = subOrders.filter(o => o.dispatchStatus === leftPanelTab);
 
   const updateOrder = (orderId: string, patchFn: (o: PendingOrder) => PendingOrder) => {
     setOrders(prev => prev.map(o => o.id === orderId ? patchFn(o) : o));
@@ -1360,11 +1493,16 @@ if (!hasPermission('dispatch_board')) {
 
             <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/50">
               {displayedOrders.length > 0 ? (
-                displayedOrders.map(order => (
+                displayedOrders.map(subOrder => {
+                  const order = subOrder.originalOrder;
+                  return (
                   <motion.div
                     layout
-                    key={order.id}
-                    onClick={() => setSelectedOrderId(order.id)}
+                    key={subOrder.id}
+                    onClick={() => {
+                        setSelectedOrderId(order.id);
+                        setSelectedSubOrderId(subOrder.id);
+                    }}
                     onContextMenu={(e: React.MouseEvent) => {
                       e.preventDefault();
                       setContextMenu({ x: e.clientX, y: e.clientY, orderId: order.id });
@@ -1385,31 +1523,33 @@ if (!hasPermission('dispatch_board')) {
                       if (longPressTimer.current) clearTimeout(longPressTimer.current);
                     }}
                     style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
-                    className={`bg-white p-5 rounded-3xl border-2 cursor-pointer transition-all active:scale-[0.98] relative ${selectedOrderId === order.id ? 'border-indigo-600 shadow-2xl shadow-indigo-100 ring-4 ring-indigo-50/50' : 'border-transparent shadow-sm hover:border-indigo-100 hover:shadow-lg'}`}
+                    className={`bg-white p-5 rounded-3xl border-2 cursor-pointer transition-all active:scale-[0.98] relative ${selectedSubOrderId === subOrder.id ? 'border-indigo-600 shadow-2xl shadow-indigo-100 ring-4 ring-indigo-50/50' : 'border-transparent shadow-sm hover:border-indigo-100 hover:shadow-lg'}`}
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wider">#{order.billCode}</span>
-                      <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1.5"><Clock size={12} className="text-gray-300" /> {order.time}</span>
+                      <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wider">
+                        #{order.billCode} {subOrder.services.length < order.services.length && '(Tách)'}
+                      </span>
+                      <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1.5"><Clock size={12} className="text-gray-300" /> {getEstimatedEndTime(order, subOrder.services) || order.time}</span>
                     </div>
                     <div className="flex justify-between items-baseline gap-2">
                       <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors uppercase tracking-tight truncate">{order.customerName}</p>
                         <div className="shrink-0 text-[11px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-emerald-100/50">
-                          <span>{(order.totalAmount || 0).toLocaleString('vi-VN')}đ</span>
+                          <span>{(subOrder.services.reduce((acc, svc) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0)).toLocaleString('vi-VN')}đ</span>
                           <span className="opacity-30">·</span>
                           <span>{order.paymentMethod === 'Cash' || order.paymentMethod === 'cash_vnd' ? 'cash' : (order.paymentMethod === 'Transfer' ? 'ck' : order.paymentMethod)}</span>
                         </div>
                     </div>
                     <div className="mt-2.5 flex items-center justify-between gap-4">
                       <p className="text-[10px] text-gray-500 font-medium truncate flex-1 leading-tight">
-                        {order.services.length > 0 
-                          ? `${order.services.map(s => s.serviceName || 'Dịch vụ').join(', ')} · ${order.services.reduce((acc, s) => acc + (s.duration || 0), 0)}p`
+                        {subOrder.services.length > 0 
+                          ? `${subOrder.services.map(s => s.serviceName || 'Dịch vụ').join(', ')} · ${subOrder.services.reduce((acc, s) => acc + (s.duration || 0), 0)}p`
                           : 'Chưa có dịch vụ'
                         }
                       </p>
-                      {selectedOrderId === order.id && <span className="shrink-0 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Đang chọn →</span>}
+                      {selectedSubOrderId === subOrder.id && <span className="shrink-0 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Đang chọn →</span>}
                     </div>
                   </motion.div>
-                ))
+                )})
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60 py-10">
                   <Package className="mb-3 opacity-20" size={40} />
@@ -1424,17 +1564,17 @@ if (!hasPermission('dispatch_board')) {
             <div className="p-4 lg:p-5 border-b border-gray-100 bg-white shrink-0 flex items-center gap-3">
               {selectedOrderId && (
                 <button 
-                  onClick={() => setSelectedOrderId(null)}
+                  onClick={() => { setSelectedOrderId(null); setSelectedSubOrderId(null); }}
                   className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-xl text-gray-400"
                 >
                   <ChevronLeft size={24} />
                 </button>
               )}
-              {selectedOrder ? (
+              {selectedSubOrder ? (
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
-                    <h2 className="font-black text-gray-900 text-base truncate">Đơn {selectedOrder.id} — {selectedOrder.customerName}</h2>
+                    <h2 className="font-black text-gray-900 text-base truncate">Đơn {selectedSubOrder.originalOrder.billCode} — {selectedSubOrder.originalOrder.customerName}</h2>
                   </div>
                   <div className="flex items-center gap-2 mt-1 ml-4">
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Đang điều phối</p>
@@ -1460,7 +1600,7 @@ if (!hasPermission('dispatch_board')) {
                   </div>
                   
                   {/* Cảnh báo Phát sinh chưa thu */}
-                  {selectedOrder.services.some(s => s.options?.isAddon && !s.options?.isPaid) && (
+                  {selectedSubOrder.services.some(s => s.options?.isAddon && !s.options?.isPaid) && (
                     <div className="mt-2 ml-4 px-3 py-1.5 bg-rose-50 border border-rose-100 rounded-lg inline-flex items-center gap-2">
                         <ShieldAlert size={14} className="text-rose-500" />
                         <span className="text-rose-600 font-black text-xs uppercase tracking-wider">
@@ -1479,58 +1619,66 @@ if (!hasPermission('dispatch_board')) {
               )}
             </div>
 
-            {selectedOrder ? (
+            {selectedSubOrder ? (
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6 bg-slate-50/30">
                 {/* Quick Dispatch Mode */}
                 {dispatchMode === 'quick' ? (
                   <QuickDispatchTable
-                    services={selectedOrder.services}
-                    orderId={selectedOrder.id}
+                    services={selectedSubOrder.services}
+                    orderId={selectedSubOrder.bookingId}
                     rooms={rooms}
                     beds={beds}
                     availableTurns={turns}
                     busyBedIds={orders
-                      .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'PREPARING'))
+                      .filter(o => o.id !== selectedSubOrder.bookingId && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'PREPARING'))
                       .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                       .filter(Boolean) as string[]
                     }
                     onUpdateServices={(updatedServices) => {
-                      updateOrder(selectedOrder.id, o => ({ ...o, services: updatedServices }));
+                      updateOrder(selectedSubOrder.bookingId, o => {
+                          const mergedServices = o.services.map(origSvc => {
+                              const found = updatedServices.find(u => u.id === origSvc.id);
+                              return found ? found : origSvc;
+                          });
+                          return { ...o, services: mergedServices };
+                      });
                     }}
                     onPrintGroup={(group) => {
                       // TODO: QuickPrintTicket integration
                       alert(`🖨️ In phiếu: ${group.displayName || group.serviceName} x${group.items.length}\nKTV: ${group.selectedKtvIds.join(', ')}\n${(group.ktvStartTimes || [])[0] || '--:--'} → ${(group.ktvEndTimes || [])[0] || '--:--'}`);
                     }}
-                    customerReqs={selectedOrder.services[0] ? {
-                      genderReq: selectedOrder.services[0].genderReq,
-                      strength: selectedOrder.services[0].strength,
-                      focus: selectedOrder.services[0].focus,
-                      avoid: selectedOrder.services[0].avoid,
-                      customerNote: selectedOrder.services[0].customerNote,
+                    customerReqs={selectedSubOrder.services[0] ? {
+                      genderReq: selectedSubOrder.services[0].genderReq,
+                      strength: selectedSubOrder.services[0].strength,
+                      focus: selectedSubOrder.services[0].focus,
+                      avoid: selectedSubOrder.services[0].avoid,
+                      customerNote: selectedSubOrder.services[0].customerNote,
                     } : undefined}
                     reminders={reminders}
-                    billCode={selectedOrder.billCode}
-                    customerName={selectedOrder.customerName}
+                    billCode={selectedSubOrder.originalOrder.billCode}
+                    customerName={selectedSubOrder.originalOrder.customerName}
                   />
                 ) : (
                   /* Detail Dispatch Mode */
                   <Reorder.Group
                     axis="y"
-                    values={selectedOrder.services}
+                    values={selectedSubOrder.services}
                     onReorder={(newServices) => {
-                      const recalculated = recalculateAllTimes({ ...selectedOrder, services: newServices }, roomTransitionTime);
-                      updateOrder(selectedOrder.id, o => ({ ...o, services: recalculated.services }));
+                      const recalculated = recalculateAllTimes({ ...selectedSubOrder.originalOrder, services: newServices }, roomTransitionTime);
+                      updateOrder(selectedSubOrder.bookingId, o => {
+                          const nonSubOrderServices = o.services.filter(s => !newServices.some(ns => ns.id === s.id));
+                          return { ...o, services: [...nonSubOrderServices, ...recalculated.services.filter(s => newServices.some(ns => ns.id === s.id))] };
+                      });
                     }}
                     className="space-y-6"
                   >
-                    {selectedOrder.services.map((svc, idx) => {
+                    {selectedSubOrder.services.map((svc, idx) => {
                       const busyInOtherOrders = orders
-                        .filter(o => o.id !== selectedOrder.id && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'PREPARING'))
+                        .filter(o => o.id !== selectedSubOrder.bookingId && (o.dispatchStatus === 'IN_PROGRESS' || o.dispatchStatus === 'PREPARING'))
                         .flatMap(o => o.services.flatMap(s => s.staffList.flatMap(r => r.segments.map(seg => seg.bedId))))
                         .filter(Boolean) as string[];
                       const currentSvcKtvIds = svc.staffList.map(r => r.ktvId).filter(Boolean);
-                      const busyInCurrentOrder = selectedOrder.services
-                        .filter(s => s.id !== svc.id)
+                      const busyInCurrentOrder = selectedSubOrder.originalOrder.services.filter(s => s.id !== svc.id)
                         .flatMap(s => s.staffList
                           .filter(r => !currentSvcKtvIds.includes(r.ktvId))
                           .flatMap(r => r.segments.map(seg => seg.bedId)))
@@ -1542,7 +1690,7 @@ if (!hasPermission('dispatch_board')) {
                           <DispatchServiceBlock
                             svc={svc}
                             svcIndex={idx}
-                            orderId={selectedOrder.id}
+                            orderId={selectedSubOrder.bookingId}
                             rooms={rooms}
                             beds={beds}
                             busyBedIds={allBusyBedIds}
@@ -1562,7 +1710,7 @@ if (!hasPermission('dispatch_board')) {
                               setExpandedSvcIds(prev => 
                                   isOpening ? [...prev, svc.id] : prev.filter(id => id !== svc.id)
                               );
-                              if (isOpening && selectedOrder?.dispatchStatus === 'pending') {
+                              if (isOpening && selectedSubOrder?.dispatchStatus === 'pending') {
                                 const now = new Date();
                                 const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                                 setOrders(prev => prev.map(o => 
@@ -1636,8 +1784,10 @@ if (!hasPermission('dispatch_board')) {
             <KanbanBoard 
               orders={orders} 
               onUpdateStatus={handleUpdateStatus} 
-              onOpenDetail={(id) => {
-                setSelectedOrderId(id);
+              onOpenDetail={(orderId, subOrderId, status) => {
+                setLeftPanelTab((status || 'pending') as DispatchStatus);
+                setSelectedOrderId(orderId);
+                setSelectedSubOrderId(subOrderId);
                 setActiveMode('DISPATCH');
               }}
               onConfirmAddonPayment={handleConfirmAddonPayment}

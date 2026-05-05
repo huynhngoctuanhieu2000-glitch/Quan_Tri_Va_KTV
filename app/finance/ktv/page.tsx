@@ -3,12 +3,16 @@
 import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useFinanceKTV } from './FinanceKTV.logic';
-import { ShieldAlert, CheckCircle, Clock, XCircle, RefreshCcw, Banknote } from 'lucide-react';
+import { ShieldAlert, CheckCircle, Clock, XCircle, RefreshCcw, Banknote, Edit3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 export default function FinanceKTVPage() {
-    const { user, canAccessPage, withdrawals, summaries, isLoading, isProcessing, handleApprove, handleReject, refresh } = useFinanceKTV();
+    const { 
+        user, canAccessPage, withdrawals, summaries, isLoading, isProcessing, 
+        handleApprove, handleReject, refresh,
+        isAdjustmentModalOpen, selectedKtv, adjAmount, setAdjAmount, adjType, setAdjType, adjReason, setAdjReason, setIsAdjustmentModalOpen, handleOpenAdjustment, handleSubmitAdjustment
+    } = useFinanceKTV();
 
     if (!user || !canAccessPage) {
         return (
@@ -184,6 +188,7 @@ export default function FinanceKTVPage() {
                                         <th className="px-6 py-4 text-right">Tổng thu nhập</th>
                                         <th className="px-6 py-4 text-right text-rose-600">Đã rút / Chờ</th>
                                         <th className="px-6 py-4 text-right text-emerald-600">Tiền khả dụng</th>
+                                        <th className="px-6 py-4 text-center">Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 font-medium">
@@ -214,6 +219,14 @@ export default function FinanceKTVPage() {
                                                         - Cọc {(Number(ktv.min_deposit || 500000) / 1000)}k
                                                     </span>
                                                 </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <button 
+                                                        onClick={() => handleOpenAdjustment(ktv.id, ktv.name)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold transition-colors"
+                                                    >
+                                                        <Edit3 size={14} /> Thưởng / Phạt
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))
                                     )}
@@ -222,6 +235,84 @@ export default function FinanceKTVPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* MODAL THƯỞNG PHẠT */}
+                {isAdjustmentModalOpen && selectedKtv && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                            <div className="bg-indigo-600 p-6 text-center relative">
+                                <button 
+                                    onClick={() => setIsAdjustmentModalOpen(false)}
+                                    className="absolute top-4 right-4 text-white/50 hover:text-white"
+                                >
+                                    <XCircle size={24} />
+                                </button>
+                                <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <Edit3 size={32} className="text-white" />
+                                </div>
+                                <h3 className="text-xl font-black text-white">Điều chỉnh Thu Nhập</h3>
+                                <p className="text-indigo-200 text-sm mt-1">KTV: {selectedKtv.name} ({selectedKtv.id})</p>
+                            </div>
+                            
+                            <div className="p-6 space-y-5">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Loại điều chỉnh</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={() => setAdjType('GIFT')}
+                                            className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${adjType === 'GIFT' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 text-slate-400'}`}
+                                        >
+                                            Thưởng (+)
+                                        </button>
+                                        <button 
+                                            onClick={() => setAdjType('PENALTY')}
+                                            className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${adjType === 'PENALTY' ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-100 text-slate-400'}`}
+                                        >
+                                            Phạt (-)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Số tiền (VNĐ)</label>
+                                    <input 
+                                        type="text" 
+                                        value={adjAmount}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                            if (val) {
+                                                setAdjAmount(Number(val).toLocaleString());
+                                            } else {
+                                                setAdjAmount('');
+                                            }
+                                        }}
+                                        placeholder="Ví dụ: 500,000"
+                                        className="w-full text-center text-2xl font-black text-slate-800 border-2 border-slate-200 rounded-2xl py-3 focus:outline-none focus:border-indigo-500 transition-colors"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Lý do</label>
+                                    <textarea 
+                                        value={adjReason}
+                                        onChange={(e) => setAdjReason(e.target.value)}
+                                        placeholder="Nhập lý do thưởng/phạt..."
+                                        rows={3}
+                                        className="w-full text-sm text-slate-800 border-2 border-slate-200 rounded-2xl p-4 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                                    />
+                                </div>
+
+                                <button 
+                                    onClick={handleSubmitAdjustment}
+                                    disabled={isProcessing || !adjAmount || !adjReason}
+                                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                    {isProcessing ? 'Đang xử lý...' : 'Xác nhận'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
             </div>
         </AppLayout>

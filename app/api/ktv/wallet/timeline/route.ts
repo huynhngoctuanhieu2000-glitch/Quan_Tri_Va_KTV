@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -58,10 +60,11 @@ export async function GET(request: Request) {
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
-                id, timeStart, timeEnd, status, source, technicianCode, billCode, createdAt,
-                BookingItems ( id, serviceId, duration, technicianCodes, segments, status, tip )
+                id, timeStart, timeEnd, status, technicianCode, billCode, createdAt,
+                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
             `)
-            .gte('timeStart', START_DATE);
+            .gte('timeStart', START_DATE)
+            .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
 
         const { data: services } = await supabase.from('Services').select('id, duration');
         const svcDurationMap: Record<string, number> = {};
@@ -126,7 +129,7 @@ export async function GET(request: Request) {
         // 2. Adjustments
         const { data: adjustments } = await supabase
             .from('WalletAdjustments')
-            .select('id, amount, note, created_at')
+            .select('id, amount, reason, type, created_at')
             .eq('staff_id', techCode)
             .gte('created_at', START_DATE);
         
@@ -136,7 +139,7 @@ export async function GET(request: Request) {
                 type: Number(a.amount) >= 0 ? 'GIFT' : 'ADJUSTMENT',
                 title: Number(a.amount) >= 0 ? 'Thưởng hệ thống' : 'Trừ tiền hệ thống',
                 amount: a.amount,
-                note: a.note || '',
+                note: a.reason || '',
                 created_at: a.created_at,
                 status: 'APPROVED'
             });
@@ -145,7 +148,7 @@ export async function GET(request: Request) {
         // 3. Withdrawals
         const { data: withdrawals } = await supabase
             .from('KTVWithdrawals')
-            .select('id, amount, note, created_at, status')
+            .select('id, amount, note, request_date, status')
             .eq('staff_id', techCode)
             .gte('request_date', START_DATE);
 
@@ -156,12 +159,27 @@ export async function GET(request: Request) {
                 title: 'Rút tiền mặt',
                 amount: -Math.abs(Number(w.amount)),
                 note: w.note || '',
-                created_at: w.created_at,
+                created_at: w.request_date,
                 status: w.status
             });
         });
 
-        // Sort timeline desc by created_at
+        // Sort timeline asc by created_at to calculate running balance
+        timeline.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+        let currentBalance = 0;
+        timeline.forEach(item => {
+            if (item.type !== 'TIP' && item.status !== 'REJECTED') {
+                // Pending withdrawals shouldn't deduct from the physical running balance until approved?
+                // Actually, in bank statements, pending usually holds funds, but let's just deduct it to show the available balance dropping, or wait. 
+                // Let's only add/deduct if it's not a TIP and not REJECTED.
+                // Wait, if it's PENDING withdrawal, should we deduct it? Let's deduct it so they see their balance dropped.
+                currentBalance += Number(item.amount);
+            }
+            item.running_balance = currentBalance;
+        });
+
+        // Sort timeline desc for display
         timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         return NextResponse.json({ success: true, data: timeline });
