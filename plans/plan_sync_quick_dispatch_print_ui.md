@@ -1,25 +1,21 @@
-# Kế hoạch Đồng bộ Giao diện Nút In và Phiếu In ở phần Điều Phối Nhanh
+# Kế hoạch đồng bộ UI phiếu in ở điều phối nhanh
+
+## Vấn đề hiện tại
+- Trong hình 1 (Điều phối nhanh), phiếu in (modal xem trước) **không hiển thị** phần mô tả chi tiết của dịch vụ (subtitle).
+- Trong hình 2 (Điều phối chi tiết), phiếu in hiển thị rõ phần mô tả dịch vụ bên dưới tên dịch vụ dưới dạng text chữ màu xám, không có viền.
+- Hiện tại code trên repository đang có một box xám bao quanh description, nhưng UI gốc trong ảnh 2 của User chỉ là chữ plain text.
 
 ## Mục tiêu
-Đồng bộ hóa nút bấm "In phiếu" và modal "Phiếu Tua KTV" trong bảng Điều phối nhanh (`QuickDispatchTable.tsx`) để giống 100% về mặt UI/UX với bên phần Chi tiết (`DispatchStaffRow.tsx`), trong khi vẫn giữ nguyên tính năng lấy đúng "Tên in phiếu" (đã custom) và "Thời gian" (đã sửa tay) của Lễ tân.
+1. Đảm bảo mô tả dịch vụ (`serviceDescription`) luôn hiển thị đầy đủ trên phiếu in của bảng "Điều phối nhanh".
+2. Đồng bộ style của phần mô tả này giữa `QuickDispatchTable.tsx` và `DispatchStaffRow.tsx` để nó giống hệt với ảnh 2 (không có box xám, chỉ là text màu xám đậm, font chữ vừa phải).
 
-## Chi tiết các bước triển khai
+## Các bước triển khai
 
-### Bước 1: Đồng bộ UI nút bấm (Print Button)
-- File tác động: `app/reception/dispatch/_components/QuickDispatchTable.tsx`
-- Nội dung thay đổi: 
-  - Đổi size của container từ `p-1.5 rounded-lg` sang `p-2.5 rounded-xl`.
-  - Nâng size icon Máy In: `<Printer size={15} strokeWidth={2.5} />`.
-  - Giữ nguyên tooltip `title="In phiếu"` và event `onClick`.
+### 1. Chỉnh sửa `QuickDispatchTable.tsx`
+- Sửa lại phần render `serviceDescription` trong modal in phiếu.
+- Đổi style từ `<div className="mt-2 bg-slate-50 border border-slate-100 rounded-xl p-3">` thành dạng text plain giống ảnh 2: `<p className="mt-1.5 text-sm font-bold text-gray-600 leading-relaxed">`.
 
-### Bước 2: Đồng bộ cấu trúc Phiếu In (Ticket Preview Modal)
-- File tác động: `app/reception/dispatch/_components/QuickDispatchTable.tsx`
-- Nội dung thay đổi:
-  - Copy toàn bộ layout DOM tree của Modal in từ `DispatchStaffRow.tsx` (gồm nền đen mờ `backdrop-blur-md`, box trắng `rounded-3xl`, phần header đen `bg-slate-900` và các phần tử nội dung).
-  - Bổ sung UI in "Nhiều chặng" (mặc dù Điều phối nhanh thường chỉ có 1 chặng, nhưng code render sẽ dùng chung cấu trúc mảng cho đồng bộ thiết kế).
-  - Copy chuẩn xác thiết kế của block **Yêu Cầu Khách Hàng** (có các icon 💪, 🎯, 🚫, 📌).
-  - Copy chuẩn xác thiết kế của block **Admin Dặn Dò** (có nền xanh lá, icon 💬).
-  - Cập nhật các biến đổ dữ liệu như `tName`, `sT`, `eT`, `ticketDur`, `ticketNote` để binding vào UI mới này.
+### 2. Chỉnh sửa `DispatchStaffRow.tsx`
+- Sửa lại phần render `serviceDescription` trong modal in phiếu tương tự như trên để đồng bộ hoàn toàn 100% giữa 2 giao diện.
 
-## Kết quả dự kiến
-Sau khi triển khai, việc in phiếu từ cả 2 luồng (Điều phối nhanh và Chi tiết) sẽ cho ra trải nghiệm thị giác nhất quán hoàn toàn, đồng thời đảm bảo nội dung in (thời gian, tên custom) là hoàn toàn chính xác.
+Bạn có đồng ý với kế hoạch này không để mình tiến hành code?

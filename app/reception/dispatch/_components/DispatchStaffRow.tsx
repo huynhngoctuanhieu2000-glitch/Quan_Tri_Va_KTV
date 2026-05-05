@@ -543,9 +543,9 @@ export const DispatchStaffRow = ({
                                         {displayName || serviceName} ({svcDuration}&apos;)
                                     </div>
                                     {serviceDescription && (
-                                        <div className="mt-2 bg-slate-50 border border-slate-100 rounded-xl p-3">
-                                            <p className="text-base text-gray-800 font-black leading-relaxed">{serviceDescription}</p>
-                                        </div>
+                                        <p className="mt-1.5 text-sm font-bold text-gray-600 leading-relaxed">
+                                            {serviceDescription}
+                                        </p>
                                     )}
                                 </div>
 
