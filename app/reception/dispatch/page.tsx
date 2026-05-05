@@ -1787,7 +1787,7 @@ if (!hasPermission('dispatch_board')) {
               onOpenDetail={(orderId, subOrderId, status) => {
                 setLeftPanelTab((status || 'pending') as DispatchStatus);
                 setSelectedOrderId(orderId);
-                setSelectedSubOrderId(subOrderId);
+                setSelectedSubOrderId(subOrderId || null);
                 setActiveMode('DISPATCH');
               }}
               onConfirmAddonPayment={handleConfirmAddonPayment}
