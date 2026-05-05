@@ -199,6 +199,37 @@
 
 ---
 
+### 6.1. WalletAdjustments ✅ CHỦ LỰC (PHA 1 - RÚT TIỀN)
+**Nhiệm vụ**: Sổ ghi nhận các khoản điều chỉnh ví KTV (Tặng tiền, Phạt tiền, Sửa sai sót). Dùng nguyên tắc "Audit Trail" (Không xoá/sửa, chỉ đảo ngược).
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `staff_id` | text FK → Staff | Mã KTV nhận điều chỉnh |
+| `amount` | numeric | Số tiền (Dương: Cộng, Âm: Trừ) |
+| `type` | text | Loại: `GIFT`, `PENALTY`, `INITIAL`, `ADJUST` |
+| `reason` | text | Lý do chi tiết |
+| `created_by` | text | ID Admin/Kế toán thực hiện |
+| `created_at` | timestamptz | Thời điểm tạo |
+
+---
+
+### 6.2. KTVWithdrawals ✅ CHỦ LỰC (PHA 1 - RÚT TIỀN)
+**Nhiệm vụ**: Quản lý các lệnh yêu cầu rút tiền của KTV.
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `staff_id` | text FK → Staff | Mã KTV yêu cầu rút |
+| `amount` | numeric | Số tiền muốn rút |
+| `status` | text | Trạng thái: `PENDING`, `APPROVED`, `REJECTED` |
+| `note` | text | Ghi chú/Lý do từ chối từ Kế toán |
+| `request_date` | timestamptz | Thời điểm yêu cầu |
+| `processed_at` | timestamptz | Thời điểm được Kế toán duyệt/từ chối |
+| `processed_by` | text | ID Admin/Kế toán xử lý |
+
+---
+
 ## NHÓM 3: THÔNG BÁO & CẤU HÌNH (Notification & Config)
 
 ### 7. StaffNotifications ✅ CHỦ LỰC

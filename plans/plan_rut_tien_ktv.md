@@ -13,7 +13,10 @@ Theo các yêu cầu mới nhất, tính năng này không chỉ đơn thuần l
    - Luồng tiền RA (-): Rút tiền.
 3. **Giải pháp chặn Race Condition & Tiền Cọc:**
    - Số dư ví (Tổng tiền KTV đang có) = `SUM(Tiền Vào)` - `SUM(Tiền Ra + Đang chờ duyệt)`.
+   - **Tiền Vào (+):** Bao gồm Tiền Tua, Tiền Tip, và **Các khoản điều chỉnh cộng (GIFT/ADJUSTMENT)**.
+   - **Tiền Ra (-):** Bao gồm Lệnh rút đã duyệt và **Các khoản điều chỉnh trừ (PENALTY/ADJUSTMENT)**.
    - **Validation khi rút tiền:** `Số dư ví - Số tiền muốn rút >= Cọc (500k)`. Nếu vi phạm (VD: Có 565k muốn rút 68k -> còn 497k < 500k), sẽ block và hiện popup thông báo: *"Số dư ví sau khi rút phải còn tối thiểu 500.000đ tiền cọc"*.
+   - **Nguyên tắc Audit Trail (Bắt buộc):** Hệ thống tài chính **KHÔNG XOÁ/SỬA** bản ghi. Nếu nhập sai, Admin phải tạo lệnh **Đảo ngược (Reverse)** để bù trừ. Mọi biến động tiền đều phải để lại dấu vết.
    - **Chống Spam/Trùng lặp:** Chỉ cho phép 1 lệnh rút tiền ở trạng thái `PENDING` cho mỗi KTV. Nếu KTV bấm liên tục (spam click) tạo ra nhiều request cùng lúc, Backend sẽ chặn lại và trả về thông báo khéo léo: *"Hệ thống đang quá tải, vui lòng thử lại sau"* để tránh làm KTV hoang mang.
 
 ---
@@ -26,10 +29,12 @@ Theo các yêu cầu mới nhất, tính năng này không chỉ đơn thuần l
 **1. Database & Security:**
 - Cập nhật bảng `Users` (cột `permissions`): Thêm quyền `KTV_WITHDRAWAL_ACCESS`.
 - Thêm `KTV_MINIMUM_DEPOSIT` (500,000đ) vào bảng `SystemConfigs`.
-- Tạo bảng **`KTVWithdrawalRequests`** (Quản lý các lệnh rút tiền: `id`, `ktv_id`, `amount`, `status`, `request_date`,...).
+- Tạo bảng **`KTVWithdrawals`** (Quản lý rút tiền: `id`, `staff_id`, `amount`, `status`, `request_date`,...).
+- Tạo bảng **`WalletAdjustments`** (Quản lý nạp/trừ tiền: `id`, `staff_id`, `amount`, `type`, `reason`, `created_by`,...).
 
-**2. UI Admin (Phân quyền):**
+**2. UI Admin (Phân quyền & Điều chỉnh):**
 - Cập nhật Popup "Phân quyền chi tiết": Thêm checkbox `[x] Thu Nhập & Rút Tiền` vào nhóm **Kỹ Thuật Viên** hoặc **Tài Chính & Kế Toán**.
+- **Màn hình Nạp/Trừ tiền:** Cho phép Admin nhập số tiền cộng/trừ, chọn loại (Tặng/Phạt/Điều chỉnh) và ghi chú lý do.
 
 **3. UI KTV (Cơ bản):**
 - Ẩn/Hiện menu "Ví / Thu Nhập" theo quyền truy cập.
@@ -48,9 +53,10 @@ Theo các yêu cầu mới nhất, tính năng này không chỉ đơn thuần l
 **1. Backend (API/RPC):**
 - Viết RPC `get_ktv_wallet_timeline(ktv_id, month, year)`.
 - Hàm này gom dữ liệu từ:
-  - `TurnLedger`: Lấy ngày giờ + số tiền tua `->` Trả ra object giao dịch **Cộng tiền** (Màu xanh).
-  - `BookingItems`: Lấy tiền tip của KTV `->` Trả ra object giao dịch **Cộng tiền** (Màu xanh).
-  - `KTVWithdrawalRequests` (APPROVED): `->` Trả ra object giao dịch **Trừ tiền** (Màu đỏ).
+  - `TurnLedger`: Lấy ngày giờ + số tiền tua.
+  - `BookingItems`: Lấy tiền tip của KTV.
+  - `WalletAdjustments`: Lấy các khoản thưởng/phạt.
+  - `KTVWithdrawals` (APPROVED): Lấy các khoản đã rút.
 
 **2. UI KTV (Lịch sử giao dịch):**
 - Giao diện dạng Timeline / Feed y hệt thiết kế mẫu.

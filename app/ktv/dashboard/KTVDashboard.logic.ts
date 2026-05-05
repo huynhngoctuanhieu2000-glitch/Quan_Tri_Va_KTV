@@ -174,58 +174,6 @@ export function useKTVDashboard(config?: DashboardConfig) {
     useEffect(() => { isPreppingRef.current = isPrepping; }, [isPrepping]);
     useEffect(() => { isTimerRunningRef.current = isTimerRunning; }, [isTimerRunning]);
 
-    // 🚀 Fast-Track Handover Skip
-    useEffect(() => {
-        const handleFastTrack = async () => {
-            if (screenRef.current === 'HANDOVER' || screenRef.current === 'REWARD') {
-                console.log("🚀 [KTV] Fast-tracking to new order...");
-                
-                // 1. Auto-complete the current order in DB (only if from HANDOVER)
-                if (screenRef.current === 'HANDOVER' && bookingRef.current) {
-                    try {
-                        await fetch('/api/ktv/booking', {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                bookingId: bookingRef.current.id, 
-                                status: 'DONE',
-                                action: 'RELEASE_KTV', // Ensure release just in case
-                                techCode: ktvId 
-                            })
-                        });
-                    } catch (e) {
-                        console.error('Failed to auto-complete booking during fast-track', e);
-                    }
-                }
-                
-                // 2. Clear UI state and local storage immediately
-                lastAcknowledgedIdRef.current = prevBookingIdRef.current;
-                setHasSubmittedReview(false);
-                // setBooking(null); // Không set null để tránh giật UI trắng màn hình, chờ fetch đè lên
-                setScreen('DASHBOARD');
-                postServiceBookingIdRef.current = null;
-                try {
-                    localStorage.removeItem('ktv_active_screen');
-                    localStorage.removeItem('ktv_active_booking_id');
-                    localStorage.removeItem(POST_SERVICE_BOOKING_KEY);
-                } catch(e) {}
-                
-                // 3. ÉP GỌI LẠI NGAY LẬP TỨC ĐỂ XÓA ĐỘ TRỄ 5S
-                if (fetchBookingRef.current) {
-                    console.log("🚀 [KTV] Fetching next booking instantly...");
-                    // Set targetBookingIdRef to the one we just detected to ensure the next fetch pulls it
-                    if (bookingRef.current?.nextBookingId) {
-                        targetBookingIdRef.current = bookingRef.current.nextBookingId;
-                    }
-                    fetchBookingRef.current();
-                }
-            }
-        };
-
-        window.addEventListener('KTV_FAST_TRACK', handleFastTrack);
-        return () => window.removeEventListener('KTV_FAST_TRACK', handleFastTrack);
-    }, [ktvId, setScreen]);
-
     // 🔒 Start Lock Logic
     useEffect(() => {
         if (!booking) {
@@ -892,16 +840,22 @@ export function useKTVDashboard(config?: DashboardConfig) {
     // 🕵️ Next Order Watcher — Polls for new assignments while KTV is finishing the current one
     // This ensures the "Next Order" button appears even if the dispatch happens late.
     useEffect(() => {
-        if (!ktvId || !['HANDOVER', 'REWARD'].includes(screen)) return;
+        if (!ktvId || !['DASHBOARD', 'HANDOVER', 'REWARD'].includes(screen)) return;
 
         const checkNextOrder = async () => {
             try {
-                // Fetch using techCode only to find what's in their TurnQueue queue
-                const res = await fetch(`/api/ktv/booking?techCode=${ktvId}`).then(r => r.json());
+                // Fetch using techCode + current bookingId to exclude it from "next order" search
+                const currentId = bookingRef.current?.id || '';
+                const url = `/api/ktv/booking?techCode=${ktvId}${currentId ? `&bookingId=${currentId}` : ''}`;
+                const res = await fetch(url).then(r => r.json());
                 if (res.success && res.data?.nextBookingId) {
                     setBooking((prev: any) => {
-                        if (!prev || prev.nextBookingId === res.data.nextBookingId) return prev;
+                        // If current booking is the same as nextBookingId, don't show it as "next"
+                        if (prev?.id === res.data.nextBookingId) return prev;
+                        if (prev && prev.nextBookingId === res.data.nextBookingId) return prev;
+                        
                         console.log("🔔 [KTV Watcher] New order detected:", res.data.nextBookingId);
+                        if (!prev) return { nextBookingId: res.data.nextBookingId };
                         return { ...prev, nextBookingId: res.data.nextBookingId };
                     });
                 }

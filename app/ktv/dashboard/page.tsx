@@ -306,7 +306,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
   return (
     <div className="p-2 lg:p-4 space-y-4 lg:space-y-6">
       {/* Header - Only show when NO active booking - Hidden on Mobile */}
-      {!booking && (
+      {(!booking || !booking.id) && (
         <div className="hidden lg:flex items-center justify-between">
           <div>
             <h1 className={`text-xl font-bold ${THEME.textBase}`}>
@@ -319,7 +319,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
         </div>
       )}
 
-      {!booking ? (
+      {(!booking || !booking.id) ? (
         <div className="space-y-6">
           <div className={`${THEME.bgCard} ${THEME.border} ${THEME.radius} p-8 text-center border shadow-sm`}>
             {/* QR Code Section - Web Booking for Customers */}
@@ -342,9 +342,42 @@ function ScreenDashboard({ logic }: { logic: any }) {
             <div className={`w-12 h-12 ${THEME.primaryMuted} rounded-full flex items-center justify-center mx-auto mb-4 opacity-50`}>
               <Clock size={20} className="text-emerald-600" />
             </div>
-            <h3 className={`text-lg font-bold ${THEME.textBase} mb-2`}>Chưa có đơn hàng</h3>
-            <p className={`text-sm ${THEME.textMuted}`}>Hệ thống sẽ thông báo ngay khi có khách hàng được xếp phòng.</p>
+            <h3 className={`text-lg font-bold ${THEME.textBase} mb-2`}>
+              {logic.booking?.nextBookingId ? 'Có đơn hàng chờ xác nhận' : 'Chưa có đơn hàng'}
+            </h3>
+            <p className={`text-sm ${THEME.textMuted}`}>
+              {logic.booking?.nextBookingId 
+                ? 'Vui lòng nhấn nút bên dưới để nhận đơn và xem thông tin chi tiết.'
+                : 'Hệ thống sẽ thông báo ngay khi có khách hàng được xếp phòng.'}
+            </p>
           </div>
+
+          {/* Next Order Notification when Dashboard is empty */}
+          {logic.booking?.nextBookingId && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="p-5 rounded-[28px] bg-emerald-50 border-2 border-emerald-200 shadow-xl shadow-emerald-100/50"
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3 text-emerald-700">
+                  <div className="w-10 h-10 bg-emerald-200 rounded-full flex items-center justify-center">
+                    <BellRing size={20} className="animate-bounce" />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm uppercase tracking-tight">Đơn mới đã sẵn sàng!</p>
+                    <p className="text-[10px] font-bold opacity-70">Mã đơn: {logic.booking.nextBookingId}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => logic.goToDashboard(logic.booking.nextBookingId)}
+                  className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Play size={14} fill="white" />
+                  Nhận ngay đơn tiếp theo
+                </button>
+              </div>
+            </motion.div>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
@@ -444,6 +477,29 @@ function ScreenDashboard({ logic }: { logic: any }) {
           >
             {logic.isLoading ? 'Đang xử lý...' : 'Xác nhận chuẩn bị xong'}
           </button>
+
+          {/* Next Order Notification when prepping current one */}
+          {logic.booking?.nextBookingId && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              className="p-5 rounded-[28px] bg-amber-50 border-2 border-amber-200 shadow-xl shadow-amber-100/50"
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3 text-amber-700">
+                  <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center">
+                    <BellRing size={20} className="animate-bounce" />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm uppercase tracking-tight">Đơn tiếp theo đã có!</p>
+                    <p className="text-[10px] font-bold opacity-70">Mã đơn: {logic.booking.nextBookingId.substring(0, 8).toUpperCase()}</p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-amber-800/80 font-bold leading-relaxed">
+                  Vui lòng hoàn thành đơn hiện tại để nhận khách tiếp theo. Hệ thống đã giữ suất cho bạn.
+                </p>
+              </div>
+            </motion.div>
+          )}
         </div>
       )}
     </div>
@@ -902,39 +958,6 @@ function ScreenHandover({ logic }: { logic: any }) {
         {logic.isLoading ? 'Đang xử lý...' : 'Xong & Sẵn sàng đón khách'}
       </button>
 
-      {/* Liên tục nhận đơn - Bỏ qua dọn phòng nếu có đơn mới */}
-      {logic.booking?.nextBookingId && (
-        <motion.div 
-          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className="mt-6 p-5 rounded-[28px] bg-amber-50 border-2 border-amber-200 shadow-xl shadow-amber-100/50"
-        >
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3 text-amber-700">
-              <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center">
-                <BellRing size={20} className="animate-bounce" />
-              </div>
-              <div>
-                <p className="font-black text-sm uppercase tracking-tight">Đơn mới đang chờ!</p>
-                <p className="text-[10px] font-bold opacity-70">Mã đơn: {logic.booking.nextBookingId}</p>
-              </div>
-            </div>
-            <p className="text-[11px] text-amber-800/80 font-bold leading-relaxed">
-              Bạn có thể nhờ đồng nghiệp dọn phòng và <span className="text-amber-700 underline">chuyển ngay</span> sang đơn mới.
-            </p>
-            <button
-              onClick={() => {
-                if (window.confirm('Bỏ qua dọn phòng và chuyển ngay sang đơn mới?')) {
-                  window.dispatchEvent(new Event('KTV_FAST_TRACK'));
-                }
-              }}
-              className="w-full py-4 bg-amber-600 text-white font-black rounded-2xl text-xs uppercase tracking-widest shadow-lg shadow-amber-200 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Play size={14} fill="white" />
-              Nhận đơn & Chuyển ngay
-            </button>
-          </div>
-        </motion.div>
-      )}
     </div>
   );
 }
