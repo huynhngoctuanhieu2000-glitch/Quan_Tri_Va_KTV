@@ -5,6 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
     const supabase = getSupabaseAdmin();
+    if (!supabase) return NextResponse.json({ error: 'Supabase admin not initialized' }, { status: 500 });
+
     const date = '2026-05-05';
     const techCode = 'NH007';
 
