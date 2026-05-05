@@ -115,6 +115,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
     const timeOffsetRef = useRef<number>(0);
     const fetchBookingRef = useRef<(() => Promise<void>) | null>(null);
+    const targetBookingIdRef = useRef<string | null>(config?.targetBookingId || null);
 
     // Auto-skip Review ONLY if THIS KTV has already submitted review for THIS specific booking.
     // Source of truth: per-KTV per-booking localStorage flag, NOT booking.rating (booking-level, too coarse).
@@ -580,8 +581,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     } catch (e) {}
                 }
                 
-                if (config?.targetBookingId) {
-                    url = `/api/ktv/booking?bookingId=${config.targetBookingId}&techCode=${ktvId}`;
+                const overrideBookingId = targetBookingIdRef.current || config?.targetBookingId;
+                if (overrideBookingId) {
+                    url = `/api/ktv/booking?bookingId=${overrideBookingId}&techCode=${ktvId}`;
                 } else if (isPostService && postServiceBookingIdRef.current) {
                     // Ưu tiên fetch theo ID đơn vừa làm để tránh bị mất dữ liệu khi đã RELEASE_KTV
                     url = `/api/ktv/booking?bookingId=${postServiceBookingIdRef.current}&techCode=${ktvId}`;
@@ -1355,10 +1357,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
         
         // Nếu có đơn tiếp theo, cưỡng bức fetch đơn đó bằng cách set targetBookingId
         if (nextId) {
-            setConfig(prev => ({ ...prev, targetBookingId: nextId }));
-        } else if (config?.targetBookingId) {
+            targetBookingIdRef.current = nextId;
+        } else {
             // Ngược lại nếu không có đơn mới, xóa target cũ để fetch tự do từ TurnQueue
-            setConfig(prev => ({ ...prev, targetBookingId: undefined }));
+            targetBookingIdRef.current = null;
         }
 
         try {
