@@ -370,7 +370,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
             let allDone = true;
             let allFeedback = true;
             let allReview = true;
+            let isAnyStarted = false;
             allMySegsForStatus.forEach(seg => {
+                if (seg.actualStartTime) isAnyStarted = true;
                 if (!seg.actualEndTime) allDone = false;
                 if (!seg.feedbackTime) allFeedback = false;
                 if (!seg.reviewTime) allReview = false;
@@ -391,6 +393,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             // Chỉ override nếu đã xong, chưa xong thì lấy theo status chung
             if (allFeedback) currentStatus = 'FEEDBACK';
             else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'CLEANING';
+            else if (isAnyStarted && !['DONE', 'CLEANING', 'FEEDBACK', 'IN_PROGRESS'].includes(currentStatus)) currentStatus = 'IN_PROGRESS';
         }
         
         // Co-working sync: CHỈ cho tiến (PREPARING/READY → IN_PROGRESS), KHÔNG cho lùi
@@ -644,12 +647,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         if (allMySegs.length > 0) {
                             let allDone = true;
                             let allFeedback = true;
+                            let isAnyStarted = false;
                             allMySegs.forEach(seg => {
+                                if (seg.actualStartTime) isAnyStarted = true;
                                 if (!seg.actualEndTime) allDone = false;
                                 if (!seg.feedbackTime) allFeedback = false;
                             });
                             if (allFeedback) currentStatus = 'FEEDBACK';
                             else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'CLEANING';
+                            else if (isAnyStarted && !['DONE', 'CLEANING', 'FEEDBACK', 'IN_PROGRESS'].includes(currentStatus)) currentStatus = 'IN_PROGRESS';
                         }
 
                         // Debug log 
