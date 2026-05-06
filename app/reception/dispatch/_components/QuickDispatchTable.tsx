@@ -73,8 +73,9 @@ export const QuickDispatchTable = ({
   const initialGroups = useMemo(() => {
     const map = new Map<string, ServiceBlock[]>();
     services.forEach(svc => {
-      if (svc.serviceName?.toLowerCase().includes('phòng riêng')) return;
-      const key = `${svc.serviceName}_${svc.duration}`;
+      // Utilities (like Phòng Riêng) are still grouped but have isUtility flag
+      const isUtil = !!(svc as any).isUtility;
+      const key = `${svc.serviceName}_${svc.duration}${isUtil ? '_utility' : ''}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(svc);
     });
@@ -88,6 +89,7 @@ export const QuickDispatchTable = ({
     ktvStartTimes: string[]; ktvEndTimes: string[];
     ktvDurations: number[]; ktvNotes: string[]; ktvBedIds: string[];
     note: string; duration: number;
+    isUtility?: boolean;
   };
   const [groupStates, setGroupStates] = useState<Map<string, GroupState>>(new Map());
 
@@ -143,6 +145,7 @@ export const QuickDispatchTable = ({
         ktvBedIds: bedIdsList,
         note: items[0]?.staffList?.[0]?.noteForKtv || '',
         duration,
+        isUtility: !!(items[0] as any).isUtility,
       });
     });
     if (newStates.size > 0) {
@@ -537,9 +540,10 @@ const ServiceGroupCard = ({
     <div className="border border-gray-100 rounded-3xl overflow-visible bg-white shadow-sm hover:shadow-md transition-all">
       <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2 rounded-t-3xl">
         <div className="flex items-center gap-2">
-          <h3 className="font-black text-gray-900 text-sm">{serviceName}</h3>
+          {state.isUtility && <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-amber-200">[Tiện ích]</span>}
+          <h3 className={`font-black text-sm ${state.isUtility ? 'text-amber-700 italic' : 'text-gray-900'}`}>{serviceName}</h3>
           <span className="bg-indigo-600 text-white text-[10px] font-black px-2.5 py-1 rounded-xl">x{count}</span>
-          <span className="text-xs text-gray-400 font-bold">{duration}p</span>
+          {(!state.isUtility) && <span className="text-xs text-gray-400 font-bold">{duration}p</span>}
           {state.selectedKtvIds.length > count && <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-amber-200">+{state.selectedKtvIds.length - count} nối tiếp</span>}
         </div>
         <div className="flex items-center gap-2">
@@ -550,6 +554,7 @@ const ServiceGroupCard = ({
       </div>
 
       <div className="p-4 space-y-4">
+        {!state.isUtility && (
         <div className="space-y-2">
           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nhân viên ({state.selectedKtvIds.length})</label>
           <div className="relative" ref={dropdownRef}>
@@ -581,6 +586,7 @@ const ServiceGroupCard = ({
               </div>)}
           </div>
         </div>
+        )}
 
         {state.selectedKtvIds.length > 0 && (
           <div className="space-y-2">

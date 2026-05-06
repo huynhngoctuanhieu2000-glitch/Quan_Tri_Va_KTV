@@ -357,6 +357,7 @@ export default function DispatchBoardPage() {
             }
         });
 
+        const resultForOrder: SubOrder[] = [];
         ktvGroups.forEach((services, ktvSignature) => {
             const statuses = services.map(s => s.status || 'NEW');
             let dispatchStatus: DispatchStatus = 'PREPARING';
@@ -380,7 +381,7 @@ export default function DispatchBoardPage() {
                 }
             }
 
-            result.push({
+            resultForOrder.push({
                 id: `${order.id}_${ktvSignature}`,
                 bookingId: order.id,
                 originalOrder: order,
@@ -389,6 +390,28 @@ export default function DispatchBoardPage() {
                 ktvSignature
             });
         });
+
+        // 🌟 Inject Utilities (Phòng Riêng) back into UI 🌟
+        const privateRooms = order.services.filter(svc => svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng'));
+        if (privateRooms.length > 0) {
+            const utilityServices = privateRooms.map(pr => ({ ...pr, isUtility: true }));
+            if (resultForOrder.length > 0) {
+                // Đính kèm vào SubOrder đầu tiên để Lễ tân nhìn thấy
+                resultForOrder[0].services.push(...utilityServices);
+            } else {
+                // Trường hợp hiếm: Đơn hàng chỉ có Phòng Riêng
+                resultForOrder.push({
+                    id: `${order.id}_utility`,
+                    bookingId: order.id,
+                    originalOrder: order,
+                    services: utilityServices,
+                    dispatchStatus: order.dispatchStatus || 'PREPARING',
+                    ktvSignature: 'unassigned_unknown_time'
+                });
+            }
+        }
+
+        result.push(...resultForOrder);
     });
     return result;
   }, [orders]);
