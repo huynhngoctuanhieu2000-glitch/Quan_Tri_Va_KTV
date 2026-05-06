@@ -37,13 +37,15 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: false, error: 'Thiếu mã KTV' }, { status: 400 });
         }
 
-        const [{ data: milestoneConf }, { data: rateConf }] = await Promise.all([
+        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
-            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single()
+            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single(),
+            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single()
         ]);
 
         let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
         let ratePer60 = 100000;
+        let minDeposit = 500000;
 
         if (milestoneConf?.value) {
             try { milestones = typeof milestoneConf.value === 'string' ? JSON.parse(milestoneConf.value) : milestoneConf.value; } catch { }
@@ -51,6 +53,10 @@ export async function GET(request: Request) {
         if (rateConf?.value) {
             const rawRate = String(rateConf.value).replace(/[^0-9]/g, '');
             if (rawRate) ratePer60 = Number(rawRate);
+        }
+        if (depositConf?.value) {
+            const rawDeposit = String(depositConf.value).replace(/[^0-9]/g, '');
+            if (rawDeposit) minDeposit = Number(rawDeposit);
         }
 
         const START_DATE = '2026-05-04T00:00:00.000Z';
@@ -170,13 +176,9 @@ export async function GET(request: Request) {
         let currentBalance = 0;
         timeline.forEach(item => {
             if (item.type !== 'TIP' && item.status !== 'REJECTED') {
-                // Pending withdrawals shouldn't deduct from the physical running balance until approved?
-                // Actually, in bank statements, pending usually holds funds, but let's just deduct it to show the available balance dropping, or wait. 
-                // Let's only add/deduct if it's not a TIP and not REJECTED.
-                // Wait, if it's PENDING withdrawal, should we deduct it? Let's deduct it so they see their balance dropped.
                 currentBalance += Number(item.amount);
             }
-            item.running_balance = currentBalance;
+            item.running_balance = currentBalance - minDeposit;
         });
 
         // Sort timeline desc for display
