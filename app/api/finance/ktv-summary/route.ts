@@ -30,10 +30,7 @@ const getMinsFromTimes = (start: string, end: string) => {
 
 export async function GET() {
     try {
-        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-        const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-        const todayStr = nowVn.toISOString().split('T')[0];
-        const todayStartStr = `${todayStr}T00:00:00+07:00`;
+        const GLOBAL_START_DATE = '2026-05-04T00:00:00+07:00';
 
         // 1. Get configs
         const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
@@ -64,51 +61,62 @@ export async function GET() {
             .ilike('id', 'NH%')
             .order('id');
         
-        if (!ktvs || ktvs.length === 0) return NextResponse.json({ success: true, data: [] });
-
-        // 3. Fetch Historical Ledger Data (Bulk)
+        // 3. 🌉 DYNAMIC BRIDGE: Fetch Ledger & Calculate realtimeStartStr
         const { data: ledgers } = await supabase
             .from('KTVDailyLedger')
-            .select('staff_id, total_commission, total_tip, total_adjustment, total_withdrawn');
+            .select('date, staff_id, total_commission, total_tip, total_adjustment, total_withdrawn');
 
+        let realtimeStartStr = GLOBAL_START_DATE;
         const ledgerMap: Record<string, any> = {};
         ktvs.forEach(k => {
             ledgerMap[k.id] = { comm: 0, tip: 0, adj: 0, withdrawn: 0 };
         });
-        (ledgers || []).forEach(l => {
-            if (ledgerMap[l.staff_id]) {
-                ledgerMap[l.staff_id].comm += Number(l.total_commission);
-                ledgerMap[l.staff_id].tip += Number(l.total_tip);
-                ledgerMap[l.staff_id].adj += Number(l.total_adjustment);
-                ledgerMap[l.staff_id].withdrawn += Number(l.total_withdrawn);
-            }
-        });
 
-        // 4. Fetch TODAY's Realtime Data (Bulk)
+        if (ledgers && ledgers.length > 0) {
+            // Find max date
+            let maxDateStr = ledgers[0].date;
+            ledgers.forEach(l => {
+                if (l.date > maxDateStr) maxDateStr = l.date;
+                if (ledgerMap[l.staff_id]) {
+                    ledgerMap[l.staff_id].comm += Number(l.total_commission);
+                    ledgerMap[l.staff_id].tip += Number(l.total_tip);
+                    // We intentionally ignore ledger.adj and ledger.withdrawn to prevent double counting
+                    // because we fetch their FULL history dynamically in the next step.
+                }
+            });
+
+            // realtimeStartStr = maxDate + 1 day at 00:00:00+07:00
+            const lastDate = new Date(`${maxDateStr}T00:00:00+07:00`);
+            lastDate.setDate(lastDate.getDate() + 1);
+            realtimeStartStr = `${lastDate.toISOString().split('T')[0]}T00:00:00+07:00`;
+        }
+
+        // 4. Fetch Realtime Bookings from realtimeStartStr
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
                 id, timeStart, timeEnd, status, technicianCode,
-                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, duration, technicianCodes, segments, status, tip )
+                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
             `)
-            .gte('timeStart', todayStartStr)
+            .gte('timeStart', realtimeStartStr)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
 
         const { data: services } = await supabase.from('Services').select('id, duration');
         const svcDurationMap: Record<string, number> = {};
         (services || []).forEach(s => { svcDurationMap[String(s.id)] = s.duration || 60; });
 
-        const { data: todayAdjustments } = await supabase.from('WalletAdjustments').select('staff_id, amount').gte('created_at', todayStartStr);
-        const { data: todayWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount, status').gte('request_date', todayStartStr);
-        const { data: pendingWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount').eq('status', 'PENDING');
-
         const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
+
+        // 4. Fetch Realtime Adjustments and Withdrawals (Fetch ALL history to not miss past withdrawals/starting balances)
+        const { data: realtimeAdjustments } = await supabase.from('WalletAdjustments').select('staff_id, amount');
+        const { data: realtimeWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount, status');
+        const { data: pendingWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount').eq('status', 'PENDING');
 
         // 5. Calculate per KTV
         const summaries = ktvs.map(ktv => {
             const techCode = ktv.id;
-            let today_commission = 0;
-            let today_tip = 0;
+            let rt_commission = 0;
+            let rt_tip = 0;
 
             for (const b of validBookings) {
                 const relevantItems = (b.BookingItems || []).filter((i: any) =>
@@ -132,30 +140,26 @@ export async function GET() {
                             return sum + (Number(seg.duration) || 0);
                         }, 0);
                     } else {
-                        // Ưu tiên duration của item gốc nếu có (đã qua split), sau đó mới tới Service
-                        totalDuration += Number(item.duration) || svcDurationMap[String(item.serviceId)] || 60;
+                        totalDuration += svcDurationMap[String(item.serviceId)] || 60;
                     }
                 }
 
-                today_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
-                today_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
+                rt_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
+                rt_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
             }
 
-            const ktvTodayAdj = (todayAdjustments || []).filter(a => a.staff_id === techCode).reduce((sum, a) => sum + Number(a.amount), 0);
-            const ktvTodayWithdrawn = (todayWithdrawals || []).filter(w => w.staff_id === techCode && w.status === 'APPROVED').reduce((sum, w) => sum + Number(w.amount), 0);
-            const ktvPending = (pendingWithdrawals || []).filter(w => w.staff_id === techCode).reduce((sum, w) => sum + Number(w.amount), 0);
+            const rt_adjustment = (realtimeAdjustments || []).filter(a => a.staff_id === techCode).reduce((sum, a) => sum + Number(a.amount), 0);
+            const rt_withdrawn = (realtimeWithdrawals || []).filter(w => w.staff_id === techCode && w.status === 'APPROVED').reduce((sum, w) => sum + Number(w.amount), 0);
+            const total_pending = (pendingWithdrawals || []).filter(w => w.staff_id === techCode).reduce((sum, w) => sum + Number(w.amount), 0);
 
             const ledger = ledgerMap[techCode];
+            const total_commission = ledger.comm + rt_commission;
+            const total_tip = ledger.tip + rt_tip;
 
-            const total_commission = ledger.comm + today_commission;
-            const total_tip = ledger.tip + today_tip;
-            const total_adjustment = ledger.adj + ktvTodayAdj;
-            const total_withdrawn = ledger.withdrawn + ktvTodayWithdrawn;
-            const total_pending = ktvPending;
-
-            const gross_income = total_commission + total_adjustment;
+            // rt_adjustment and rt_withdrawn already contain ALL history, so we don't add ledger.adj or ledger.withdrawn
+            const gross_income = total_commission + rt_adjustment;
             const min_deposit = global_min_deposit;
-            const net_balance = gross_income - total_withdrawn - total_pending;
+            const net_balance = gross_income - rt_withdrawn - total_pending;
             const available_balance = Math.max(0, net_balance - min_deposit);
             const effective_balance = Math.max(0, net_balance);
 
@@ -165,8 +169,8 @@ export async function GET() {
                 position: ktv.position,
                 total_commission,
                 total_tip,
-                total_adjustment,
-                total_withdrawn,
+                total_adjustment: rt_adjustment,
+                total_withdrawn: rt_withdrawn,
                 total_pending,
                 gross_income,
                 min_deposit,
