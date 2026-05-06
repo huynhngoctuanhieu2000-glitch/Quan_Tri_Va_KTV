@@ -309,6 +309,20 @@ export default function DispatchBoardPage() {
                 return;
             }
             
+            if (order.dispatchStatus === 'pending') {
+                const ktvSignature = 'pending_order';
+                if (!ktvGroups.has(ktvSignature)) {
+                    ktvGroups.set(ktvSignature, []);
+                }
+                let derivedStatus = svc.status || 'NEW';
+                if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
+                    // For pending orders, we can just use PREPARING or NEW. 
+                    // Let's stick to the base status
+                }
+                ktvGroups.get(ktvSignature)!.push({ ...svc, status: derivedStatus });
+                return;
+            }
+
             if (svc.staffList && svc.staffList.length > 0) {
                 const staffsAtTime = svc.staffList;
                 const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).sort().join(',') || 'unassigned';
