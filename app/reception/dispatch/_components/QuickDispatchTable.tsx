@@ -352,7 +352,7 @@ interface ServiceGroupCardProps {
   serviceDescription?: string;
   count: number;
   duration: number;
-  state: { displayName: string; selectedKtvIds: string[]; selectedRoomIds?: string[]; ktvStartTimes?: string[]; ktvEndTimes?: string[]; ktvDurations?: number[]; ktvNotes?: string[]; ktvBedIds?: string[]; note: string; duration: number; };
+  state: { displayName: string; selectedKtvIds: string[]; selectedRoomIds?: string[]; ktvStartTimes?: string[]; ktvEndTimes?: string[]; ktvDurations?: number[]; ktvNotes?: string[]; ktvBedIds?: string[]; note: string; duration: number; isUtility?: boolean; };
   targetSkill: string | null;
   availableTurns: (TurnQueueData & { staff?: StaffData })[];
   allSelectedKtvIds: string[];
