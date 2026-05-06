@@ -60,7 +60,9 @@ export async function GET() {
             .eq('status', 'ĐANG LÀM')
             .ilike('id', 'NH%')
             .order('id');
-        
+            
+        if (!ktvs || ktvs.length === 0) return NextResponse.json({ success: true, data: [] });
+
         // 3. 🌉 DYNAMIC BRIDGE: Fetch Ledger & Calculate realtimeStartStr
         const { data: ledgers } = await supabase
             .from('KTVDailyLedger')
