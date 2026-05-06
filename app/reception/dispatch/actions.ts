@@ -386,7 +386,7 @@ export async function cancelBooking(bookingId: string, date: string) {
         // 2. Lấy thông tin trạng thái KTV trước khi giải phóng để quyết định có xóa Ledger không
         const { data: currentTurns } = await supabase
             .from('TurnQueue')
-            .select('employee_id, status')
+            .select('id, employee_id, status')
             .eq('current_order_id', bookingId)
             .eq('date', date);
 
@@ -405,28 +405,27 @@ export async function cancelBooking(bookingId: string, date: string) {
                     // ⚠️ Nếu đã đang làm (working) mà bị hủy -> GIỮ Ledger để tính tua/tiền cho KTV
                     console.log(`⚠️ KTV ${turn.employee_id} giữ nguyên lượt tua do hủy đơn KHI ĐANG LÀM.`);
                 }
+
+                // 3. Giải phóng KTV trong TurnQueue
+                const newStatus = turn.status === 'off' ? 'off' : 'waiting';
+                const { error: tError } = await supabase
+                    .from('TurnQueue')
+                    .update({
+                        status: newStatus,
+                        current_order_id: null,
+                        booking_item_id: null,
+                        booking_item_ids: [],
+                        room_id: null,
+                        bed_id: null,
+                        start_time: null,
+                        estimated_end_time: null
+                    })
+                    .eq('id', turn.id);
+                    
+                if (tError) {
+                    console.error('❌ [Server] TurnQueue cleanup error:', tError);
+                }
             }
-        }
-
-        // 3. Giải phóng KTV trong TurnQueue
-        const { error: tError } = await supabase
-            .from('TurnQueue')
-            .update({
-                status: 'waiting',
-                current_order_id: null,
-                booking_item_id: null,
-                booking_item_ids: [],
-                room_id: null,
-                bed_id: null,
-                start_time: null,
-                estimated_end_time: null
-            })
-            .eq('current_order_id', bookingId)
-            .eq('date', date);
-
-        if (tError) {
-            console.error('❌ [Server] TurnQueue cleanup error:', tError);
-            // Không throw lỗi ở đây để vẫn hoàn tất việc hủy đơn
         }
 
         return { success: true };
@@ -782,10 +781,11 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                     } else {
                         // KTV đã xong tất cả item của họ
                         let newTurnsCompleted = turn.turns_completed || 0;
+                        const newStatus = turn.status === 'off' ? 'off' : 'waiting';
                         await supabase
                             .from('TurnQueue')
                             .update({
-                                status: 'waiting',
+                                status: newStatus,
                                 current_order_id: null,
                                 booking_item_id: null,
                                 booking_item_ids: [], // Set về mảng rỗng thay vì mảng chuỗi '{}'
@@ -1191,7 +1191,7 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
         // Thay vì xóa bung toàn bộ, ta chỉ gỡ item bị xóa ra khỏi mảng
         const { data: turnsAffected } = await supabase
             .from('TurnQueue')
-            .select('id, booking_item_ids')
+            .select('id, status, booking_item_ids')
             .eq('current_order_id', bookingId)
             .contains('booking_item_ids', [itemId]);
 
@@ -1209,10 +1209,11 @@ export async function removeBookingItem(bookingId: string, itemId: string) {
                         })
                         .eq('id', turn.id);
                 } else {
+                    const newStatus = turn.status === 'off' ? 'off' : 'waiting';
                     await supabase
                         .from('TurnQueue')
                         .update({
-                            status: 'waiting',
+                            status: newStatus,
                             current_order_id: null,
                             booking_item_id: null,
                             booking_item_ids: [],
@@ -1436,6 +1437,77 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
         return { success: true };
     } catch (error: any) {
         console.error("❌ [Server] submitCustomerRating error:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function splitBookingItem(bookingId: string, itemId: string, dur1: number, dur2: number, date: string) {
+    try {
+        await requirePermission('dispatch_board');
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        // 1. Lấy thông tin Item gốc
+        const { data: originalItem, error: fetchErr } = await supabase
+            .from('BookingItems')
+            .select('*')
+            .eq('id', itemId)
+            .single();
+            
+        if (fetchErr || !originalItem) throw new Error('Không tìm thấy dịch vụ gốc để tách');
+
+        // 2. Cập nhật Item gốc (KTV 1) với thời lượng mới
+        // Lưu ý: Cần tính toán lại duration của segment nếu đã có
+        let originalSegs: any[] = [];
+        try { originalSegs = typeof originalItem.segments === 'string' ? JSON.parse(originalItem.segments) : (originalItem.segments || []); } catch {}
+        
+        if (originalSegs.length > 0) {
+            originalSegs[0].duration = dur1;
+        }
+
+        const { error: updateErr } = await supabase
+            .from('BookingItems')
+            .update({ 
+                duration: dur1,
+                segments: originalSegs
+            })
+            .eq('id', itemId);
+
+        if (updateErr) throw updateErr;
+
+        // 3. Tạo Item mới (nhân bản) cho KTV 2
+        // Bỏ qua id gốc để supabase tự tạo id mới, set giá = 0, xóa bỏ ktv cũ
+        const { id, created_at, ...newItemData } = originalItem;
+        
+        newItemData.duration = dur2;
+        newItemData.price = 0; // Giá = 0 để không đội tiền
+        newItemData.technicianCodes = []; // Trống để Lễ tân chọn người mới
+        newItemData.segments = []; // Trống để Lễ tân set giờ mới
+        newItemData.timeStart = null;
+        newItemData.timeEnd = null;
+        newItemData.status = 'NEW';
+        
+        // Thêm 1 tí flag vào options để biết là bị tách
+        let opts = typeof newItemData.options === 'string' ? JSON.parse(newItemData.options) : (newItemData.options || {});
+        opts.isSplitItem = true;
+        opts.parentItemId = itemId;
+        newItemData.options = opts;
+
+        const { error: insertErr } = await supabase
+            .from('BookingItems')
+            .insert(newItemData);
+
+        if (insertErr) throw insertErr;
+
+        // 4. Sync lại tua nếu cần
+        if (date) {
+            const { syncTurnsForDate } = await import('@/lib/turn-sync');
+            await syncTurnsForDate(date);
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('❌ [Server] splitBookingItem error:', error);
         return { success: false, error: error.message };
     }
 }

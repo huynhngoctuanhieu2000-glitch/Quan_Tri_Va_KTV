@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone,
-  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save, Zap
+  ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save, Zap, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { supabase } from '@/lib/supabase';
@@ -145,6 +145,16 @@ export default function DispatchBoardPage() {
   const [roomTransitionTime, setRoomTransitionTime] = useState(5);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<any>(null);
+
+  // 🔧 NEW: Split Service State
+  const [splitConfig, setSplitConfig] = useState<{
+    orderId: string;
+    svcId: string;
+    duration: number;
+    ktv1Dur: number;
+    ktv2Dur: number;
+    isSaving: boolean;
+  } | null>(null);
 
   const { user } = useAuth();
   const lastSoundTimeRef = useRef<number>(0);
@@ -756,10 +766,73 @@ if (!hasPermission('dispatch_board')) {
     });
   };
 
+  const confirmSplitService = async () => {
+      if (!splitConfig) return;
+      const { orderId, svcId, duration, ktv1Dur, ktv2Dur } = splitConfig;
+      
+      setSplitConfig(prev => prev ? { ...prev, isSaving: true } : null);
+      
+      try {
+          if (ktv1Dur === duration && ktv2Dur === duration) {
+              // 1. LÀM CHUNG (Giữ nguyên mảng)
+              const svc = orders.find(o => o.id === orderId)?.services.find(s => s.id === svcId);
+              const st = getCurrentTime();
+              const newRow: StaffAssignment = {
+                  id: genId(),
+                  ktvId: '',
+                  ktvName: '',
+                  segments: [{
+                      id: `seg-${genId()}`,
+                      roomId: null,
+                      bedId: null,
+                      startTime: st,
+                      duration: ktv2Dur,
+                      endTime: calcEndTime(st, ktv2Dur)
+                  }],
+                  noteForKtv: '',
+              };
+              updateOrder(orderId, o => ({
+                  ...o,
+                  services: o.services.map(s => s.id === svcId
+                      ? { ...s, staffList: [...s.staffList, newRow] }
+                      : s
+                  ),
+              }));
+          } else {
+              // 2. LÀM NỐI TIẾP (Tách API)
+              const realSvcId = orders.find(o => o.id === orderId)?.services.find(s => s.id === svcId)?.id;
+              if (!realSvcId) throw new Error('Không tìm thấy ID dịch vụ');
+              
+              const { splitBookingItem } = await import('./actions');
+              const res = await splitBookingItem(orderId, realSvcId, ktv1Dur, ktv2Dur, selectedDate);
+              if (!res.success) throw new Error(res.error);
+              
+              await fetchData();
+          }
+      } catch (err: any) {
+          alert('Lỗi: ' + err.message);
+      } finally {
+          setSplitConfig(null);
+      }
+  };
+
   const addStaffRow = (orderId: string, svcId: string) => {
     const svc = orders.find(o => o.id === orderId)?.services.find(s => s.id === svcId);
-    const st = getCurrentTime();
     const dur = svc?.duration ?? DEFAULT_DURATION;
+    
+    if (svc && svc.staffList.length >= 1) {
+       setSplitConfig({
+           orderId,
+           svcId,
+           duration: dur,
+           ktv1Dur: dur,
+           ktv2Dur: dur,
+           isSaving: false
+       });
+       return;
+    }
+
+    const st = getCurrentTime();
     const newRow: StaffAssignment = {
       id: genId(),
       ktvId: '',
@@ -2172,6 +2245,109 @@ if (!hasPermission('dispatch_board')) {
         selectedDate={selectedDate}
       />
 
+      {/* Split Service Modal */}
+      <AnimatePresence>
+        {splitConfig && (
+          <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6"
+            >
+              <h3 className="text-xl font-black text-gray-900 mb-2">Phân bổ thời gian KTV</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                Thời lượng gốc: <span className="font-bold text-gray-900">{splitConfig.duration} phút</span>
+              </p>
+
+              <div className="space-y-4 mb-6">
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">
+                    KTV Hiện Tại (Phút)
+                  </label>
+                  <input
+                    type="number"
+                    value={splitConfig.ktv1Dur}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val >= 0 && val <= splitConfig.duration) {
+                        setSplitConfig(prev => prev ? {
+                          ...prev,
+                          ktv1Dur: val,
+                          ktv2Dur: prev.duration - val
+                        } : null);
+                      }
+                    }}
+                    className="w-full text-center font-black text-2xl text-indigo-600 bg-white border border-gray-200 rounded-xl py-2 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-center text-gray-300">
+                  <Plus size={24} />
+                </div>
+
+                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">
+                    KTV Thêm Vào (Phút)
+                  </label>
+                  <input
+                    type="number"
+                    value={splitConfig.ktv2Dur}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val >= 0 && val <= splitConfig.duration) {
+                        setSplitConfig(prev => prev ? {
+                          ...prev,
+                          ktv2Dur: val,
+                          ktv1Dur: prev.duration - val
+                        } : null);
+                      }
+                    }}
+                    className="w-full text-center font-black text-2xl text-indigo-700 bg-white border border-indigo-200 rounded-xl py-2 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
+                  />
+                </div>
+              </div>
+              
+              {splitConfig.ktv1Dur !== splitConfig.duration && (
+                <div className="mb-6 p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2">
+                  <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 font-medium">
+                    <span className="font-bold block mb-1">Làm Nối Tiếp</span>
+                    Hệ thống sẽ <strong className="font-black">tách dịch vụ thành 2 dòng riêng biệt</strong> trên màn hình Lễ tân & KTV để tính giờ độc lập.
+                  </p>
+                </div>
+              )}
+              
+              {splitConfig.ktv1Dur === splitConfig.duration && splitConfig.ktv2Dur === splitConfig.duration && (
+                <div className="mb-6 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-2">
+                  <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-emerald-700 font-medium">
+                    <span className="font-bold block mb-1">Làm Chung (Song song)</span>
+                    Hai KTV sẽ cùng dùng chung 1 khung giờ. 1 người bấm sẽ cập nhật cho người kia.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setSplitConfig(null)}
+                  disabled={splitConfig.isSaving}
+                  className="px-4 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={confirmSplitService}
+                  disabled={splitConfig.isSaving || (splitConfig.ktv1Dur + splitConfig.ktv2Dur !== splitConfig.duration && splitConfig.ktv1Dur !== splitConfig.duration)}
+                  className="px-6 py-3 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-200 disabled:opacity-50"
+                >
+                  {splitConfig.isSaving ? 'ĐANG LƯU...' : 'LƯU & TIẾP TỤC'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </AppLayout>
   );
 }

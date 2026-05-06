@@ -78,15 +78,15 @@ export default function KTVWalletPage() {
                                     <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold">VNĐ</span>
                                 </div>
                                 <div className="mb-5">
-                                    <p className="text-[10px] text-emerald-200 uppercase tracking-widest mb-1">Khả dụng rút (Đã trừ cọc)</p>
+                                    <p className="text-[10px] text-emerald-200 uppercase tracking-widest mb-1">Số dư khả dụng</p>
                                     <p className="text-4xl font-black tracking-tight drop-shadow-sm">
                                         {Number(walletBalance.available_balance || 0).toLocaleString()}đ
                                     </p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4 text-xs p-3 bg-black/10 rounded-2xl mb-4">
                                     <div>
-                                        <p className="text-emerald-200/70 text-[10px] uppercase mb-0.5">Tổng thu nhập</p>
-                                        <p className="font-bold">{Number(walletBalance.gross_income || 0).toLocaleString()}đ</p>
+                                        <p className="text-emerald-200/70 text-[10px] uppercase mb-0.5">Số dư hiện tại</p>
+                                        <p className="font-bold">{Number(walletBalance.net_balance || 0).toLocaleString()}đ</p>
                                     </div>
                                     <div>
                                         <p className="text-emerald-200/70 text-[10px] uppercase mb-0.5">Đang chờ duyệt</p>

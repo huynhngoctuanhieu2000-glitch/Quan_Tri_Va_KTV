@@ -36,16 +36,24 @@ export async function GET() {
         const todayStartStr = `${todayStr}T00:00:00+07:00`;
 
         // 1. Get configs
-        const [{ data: milestoneConf }, { data: rateConf }] = await Promise.all([
+        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
-            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single()
+            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single(),
+            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single()
         ]);
+        
         let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
         let ratePer60 = 100000;
+        let global_min_deposit = 500000;
+        
         if (milestoneConf?.value) { try { milestones = typeof milestoneConf.value === 'string' ? JSON.parse(milestoneConf.value) : milestoneConf.value; } catch { } }
         if (rateConf?.value) {
             const rawRate = String(rateConf.value).replace(/[^0-9]/g, '');
             if (rawRate) ratePer60 = Number(rawRate);
+        }
+        if (depositConf?.value) {
+            const rawDeposit = String(depositConf.value).replace(/[^0-9]/g, '');
+            if (rawDeposit) global_min_deposit = Number(rawDeposit);
         }
 
         // 2. Fetch KTVs
@@ -81,7 +89,7 @@ export async function GET() {
             .from('Bookings')
             .select(`
                 id, timeStart, timeEnd, status, technicianCode,
-                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
+                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, duration, technicianCodes, segments, status, tip )
             `)
             .gte('timeStart', todayStartStr)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
@@ -124,7 +132,8 @@ export async function GET() {
                             return sum + (Number(seg.duration) || 0);
                         }, 0);
                     } else {
-                        totalDuration += svcDurationMap[String(item.serviceId)] || 60;
+                        // Ưu tiên duration của item gốc nếu có (đã qua split), sau đó mới tới Service
+                        totalDuration += Number(item.duration) || svcDurationMap[String(item.serviceId)] || 60;
                     }
                 }
 
@@ -143,8 +152,9 @@ export async function GET() {
             const total_adjustment = ledger.adj + ktvTodayAdj;
             const total_withdrawn = ledger.withdrawn + ktvTodayWithdrawn;
             const total_pending = ktvPending;
+
             const gross_income = total_commission + total_adjustment;
-            const min_deposit = 500000;
+            const min_deposit = global_min_deposit;
             const net_balance = gross_income - total_withdrawn - total_pending;
             const available_balance = Math.max(0, net_balance - min_deposit);
             const effective_balance = Math.max(0, net_balance);
