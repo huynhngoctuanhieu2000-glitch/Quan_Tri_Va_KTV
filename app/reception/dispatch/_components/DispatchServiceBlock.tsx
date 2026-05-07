@@ -135,7 +135,7 @@ export const DispatchServiceBlock = ({
                                 <AlertTriangle size={14} className="text-amber-500" /> Yêu Cầu Từ Khách
                             </p>
                             <div className="flex flex-wrap gap-2">
-                                {svc.genderReq && svc.genderReq !== 'Ngẫu nhiên' && (
+                                {svc.genderReq && (
                                     <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-100 flex items-center gap-1.5 shadow-sm">
                                         <UserCheck size={12} /> {svc.genderReq}
                                     </span>
@@ -218,6 +218,7 @@ export const DispatchServiceBlock = ({
                                         avoid={svc.avoid}
                                         realSvcId={svc.serviceId}
                                         reminders={reminders}
+                                        genderReq={svc.genderReq}
                                     />
                                 ))}
                             </div>

@@ -576,13 +576,18 @@ export const DispatchStaffRow = ({
                                 })}
 
                                 {/* Customer Requirements */}
-                                {(strength || focus || avoid || customerNote) && (
+                                {(genderReq || strength || focus || avoid || customerNote) && (
                                     <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 space-y-3 shadow-inner">
                                         <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
                                             <AlertCircle size={14} className="text-amber-500" /> Yêu Cầu Khách Hàng
                                         </p>
                                         <div className="flex flex-wrap gap-2">
 
+                                            {genderReq && (
+                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-100 shadow-sm">
+                                                    🧑 KTV: {genderReq}
+                                                </span>
+                                            )}
                                             {strength && (
                                                 <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
                                                     💪 Lực: {strength}

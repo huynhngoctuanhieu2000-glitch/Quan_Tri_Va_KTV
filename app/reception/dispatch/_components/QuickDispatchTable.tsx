@@ -286,7 +286,7 @@ export const QuickDispatchTable = ({
         <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-3 space-y-2">
           <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">⚠️ Yêu Cầu Từ Khách</p>
           <div className="flex flex-wrap gap-1.5">
-            {customerReqs.genderReq && customerReqs.genderReq !== 'Ngẫu nhiên' && (
+            {customerReqs.genderReq && (
               <span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-100">🧑 {customerReqs.genderReq}</span>
             )}
             {customerReqs.strength && (
@@ -818,13 +818,18 @@ const ServiceGroupCard = ({
               </div>
 
               {/* Customer Requirements */}
-              {customerReqs && (customerReqs.strength || customerReqs.focus || customerReqs.avoid || customerReqs.customerNote) && (
+              {customerReqs && (customerReqs.genderReq || customerReqs.strength || customerReqs.focus || customerReqs.avoid || customerReqs.customerNote) && (
                 <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 space-y-3 shadow-inner">
                   <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
                       <AlertCircle size={14} className="text-amber-500" /> Yêu Cầu Khách Hàng
                   </p>
                   <div className="flex flex-wrap gap-2">
 
+                    {customerReqs.genderReq && (
+                        <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-100 shadow-sm">
+                            🧑 KTV: {customerReqs.genderReq}
+                        </span>
+                    )}
                     {customerReqs.strength && (
                         <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
                             💪 Lực: {customerReqs.strength}
