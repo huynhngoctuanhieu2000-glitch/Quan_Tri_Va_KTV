@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase';
 import {
   ShieldAlert, Tablet, Trash2, Power, PowerOff,
-  RefreshCw, AlertCircle, CheckCircle2, Plus
+  RefreshCw, AlertCircle, CheckCircle2, Plus, Wifi
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -30,6 +30,7 @@ const DeviceManagementPage = () => {
   const [devices, setDevices] = useState<RegisteredDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [isUpdatingWifi, setIsUpdatingWifi] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -85,6 +86,28 @@ const DeviceManagementPage = () => {
     }
   };
 
+  // Update Wifi IP
+  const handleUpdateWifiIp = async () => {
+    if (!confirm('Bạn có chắc chắn thiết bị này đang kết nối đúng Wi-Fi của Spa?\n\nViệc này sẽ cập nhật lại IP mạng cho toàn bộ hệ thống điểm danh để khắc phục lỗi "Sai Wi-Fi".')) return;
+    
+    setIsUpdatingWifi(true);
+    try {
+      const res = await fetch('/api/admin/update-wifi-ip', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`✅ ${data.message}\nIP mạng mới của Spa là: ${data.newIp}`);
+      } else {
+        alert(`❌ Lỗi: ${data.error}`);
+      }
+    } catch (err) {
+      console.error('Lỗi cập nhật IP Wifi:', err);
+      alert('Đã xảy ra lỗi khi gọi API cập nhật IP.');
+    } finally {
+      setIsUpdatingWifi(false);
+    }
+  };
+
   if (!mounted) return null;
 
   if (!hasPermission('device_management')) {
@@ -114,14 +137,24 @@ const DeviceManagementPage = () => {
               <span className="text-gray-400">{devices.length} tổng</span>
             </p>
           </div>
-          <button
-            onClick={fetchDevices}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold text-gray-700 transition-colors"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Làm mới
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleUpdateWifiIp}
+              disabled={isUpdatingWifi}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-sm font-bold transition-colors border border-blue-200 shadow-sm"
+            >
+              <Wifi size={14} className={isUpdatingWifi ? 'animate-pulse' : ''} />
+              Cập nhật IP Wi-Fi
+            </button>
+            <button
+              onClick={fetchDevices}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold text-gray-700 transition-colors"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Làm mới
+            </button>
+          </div>
         </div>
 
         {/* Info Banner */}
