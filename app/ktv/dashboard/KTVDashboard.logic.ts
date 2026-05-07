@@ -559,7 +559,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     } catch (e) {}
                 }
                 
-                const overrideBookingId = targetBookingIdRef.current || config?.targetBookingId;
+                const overrideBookingId = targetBookingIdRef.current;
                 if (overrideBookingId) {
                     url = `/api/ktv/booking?bookingId=${overrideBookingId}&techCode=${ktvId}`;
                 } else if (isPostService && postServiceBookingIdRef.current) {
@@ -1372,6 +1372,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
         } else {
             // Ngược lại nếu không có đơn mới, xóa target cũ để fetch tự do từ TurnQueue
             targetBookingIdRef.current = null;
+            // Xóa query param từ URL để nếu refresh trang không bị dính lại đơn cũ
+            try {
+                window.history.replaceState(null, '', window.location.pathname);
+            } catch(e) {}
         }
 
         try {
