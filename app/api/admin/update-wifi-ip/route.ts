@@ -14,19 +14,28 @@ export async function GET(request: Request) {
 
         const { data: configData, error: configError } = await supabase
             .from('SystemConfigs')
-            .select('value')
-            .eq('key', 'spa_wifi_ips')
-            .single();
+            .select('key, value')
+            .in('key', ['spa_wifi_ips', 'spa_wifi_last_rejected_ip']);
 
         let currentIps = [];
-        if (!configError && configData?.value && Array.isArray(configData.value)) {
-            currentIps = configData.value.map(item => {
-                if (typeof item === 'string') return { ip: item, addedAt: new Date().toISOString() };
-                return item;
-            });
+        let lastRejected = null;
+        
+        if (!configError && configData) {
+            const ipsConfig = configData.find(c => c.key === 'spa_wifi_ips');
+            if (ipsConfig?.value && Array.isArray(ipsConfig.value)) {
+                currentIps = ipsConfig.value.map((item: any) => {
+                    if (typeof item === 'string') return { ip: item, addedAt: new Date().toISOString() };
+                    return item;
+                });
+            }
+            
+            const rejectedConfig = configData.find(c => c.key === 'spa_wifi_last_rejected_ip');
+            if (rejectedConfig?.value) {
+                lastRejected = rejectedConfig.value;
+            }
         }
 
-        return NextResponse.json({ success: true, clientIp, currentIps });
+        return NextResponse.json({ success: true, clientIp, currentIps, lastRejected });
     } catch (error: any) {
         console.error('❌ [GET Wifi IP] Unhandled error:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -36,7 +45,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { action, ipToRemove } = body; // action: 'overwrite' | 'append' | 'remove'
+        const { action, ipToRemove, rejectedIp } = body; // action: 'overwrite' | 'append' | 'remove' | 'append_rejected'
 
         const forwardedFor = request.headers.get('x-forwarded-for');
         const realIp = request.headers.get('x-real-ip');
@@ -44,6 +53,10 @@ export async function POST(request: Request) {
 
         if ((action === 'overwrite' || action === 'append') && clientIp === 'unknown') {
             return NextResponse.json({ success: false, error: 'Không thể xác định địa chỉ IP mạng của bạn.' }, { status: 400 });
+        }
+        
+        if (action === 'append_rejected' && !rejectedIp) {
+            return NextResponse.json({ success: false, error: 'Không tìm thấy IP để thêm.' }, { status: 400 });
         }
 
         const supabase = getSupabaseAdmin();
@@ -75,8 +88,17 @@ export async function POST(request: Request) {
             if (!newIps.find(item => item.ip === clientIp)) {
                 newIps.push({ ip: clientIp, addedAt: now });
             }
+        } else if (action === 'append_rejected') {
+            if (!newIps.find(item => item.ip === rejectedIp)) {
+                newIps.push({ ip: rejectedIp, addedAt: now });
+            }
         } else if (action === 'remove' && ipToRemove) {
             newIps = newIps.filter(item => item.ip !== ipToRemove);
+        }
+
+        // Nếu là append_rejected, xóa record rejected
+        if (action === 'append_rejected') {
+            await supabase.from('SystemConfigs').delete().eq('key', 'spa_wifi_last_rejected_ip');
         }
 
         // Cập nhật cấu hình IP vào DB

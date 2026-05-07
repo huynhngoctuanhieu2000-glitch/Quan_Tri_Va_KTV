@@ -666,9 +666,26 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
             
             let segmentsModified = false;
+            // Cập nhật actualStartTime khi bắt đầu làm
+            if (['IN_PROGRESS'].includes(newStatus)) {
+                segs.forEach((s: any) => {
+                    if (targetKtvIds && targetKtvIds.length > 0 && s.ktvId && !targetKtvIds.includes(s.ktvId)) {
+                        return;
+                    }
+                    if (!s.actualStartTime) {
+                        s.actualStartTime = new Date().toISOString();
+                        segmentsModified = true;
+                    }
+                });
+            }
+
             // Luôn đảm bảo có actualEndTime nếu đang chuyển sang trạng thái kết thúc
             if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK', 'COMPLETED'].includes(newStatus)) {
                 segs.forEach((s: any) => {
+                    // Chỉ update nếu KTV này nằm trong targetKtvIds (nếu có)
+                    if (targetKtvIds && targetKtvIds.length > 0 && s.ktvId && !targetKtvIds.includes(s.ktvId)) {
+                        return; 
+                    }
                     if (!s.actualEndTime) {
                         s.actualEndTime = new Date().toISOString();
                         segmentsModified = true;

@@ -144,6 +144,47 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
     const subOrders = React.useMemo(() => {
         const result: SubOrder[] = [];
         orders.forEach(order => {
+            // TÍNH TOÁN GIỜ NỐI TIẾP (DYNAMIC TIMELINE)
+            const dynamicStartTimes = new Map<string, string>();
+            order.services.forEach(svc => {
+                if (svc.staffList && svc.staffList.length > 1) {
+                    let currentMaxEndStr = '';
+                    let lastGroupStartTime = '';
+                    let lastGroupCalculatedStart = '';
+                    
+                    svc.staffList.forEach((st, idx) => {
+                        const seg = st.segments?.[0];
+                        if (!seg) return;
+                        const origStart = seg.startTime || '';
+                        let calculatedStart = origStart || svc.timeStart || '';
+                        
+                        if (idx > 0) {
+                            if (origStart === lastGroupStartTime) {
+                                // Fourhand: xài chung giờ nhóm
+                                calculatedStart = lastGroupCalculatedStart;
+                            } else if (currentMaxEndStr) {
+                                // Nối tiếp: kế thừa giờ KẾT THÚC của nhóm trước làm giờ BẮT ĐẦU!
+                                calculatedStart = currentMaxEndStr;
+                            }
+                        }
+                        
+                        dynamicStartTimes.set(`${svc.id}_${st.ktvId}`, calculatedStart);
+                        
+                        const ktvStart = seg.actualStartTime || calculatedStart;
+                        const duration = Number(seg.duration) || Number(svc.duration) || 60;
+                        const ktvEnd = seg.actualEndTime || getDynamicEndTime(ktvStart, duration);
+                        
+                        if (origStart !== lastGroupStartTime) {
+                            currentMaxEndStr = ktvEnd;
+                        } else {
+                            if (ktvEnd > currentMaxEndStr) currentMaxEndStr = ktvEnd;
+                        }
+                        lastGroupStartTime = origStart;
+                        lastGroupCalculatedStart = calculatedStart;
+                    });
+                }
+            });
+
             // Group services by assigned KTV
             const ktvGroups = new Map<string, ServiceBlock[]>();
             
@@ -154,13 +195,22 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                 }
                 
                 if (svc.staffList && svc.staffList.length > 0) {
-                    const staffsAtTime = svc.staffList;
-                    const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).sort().join(',') || 'unassigned';
-                    const ktvSignature = ktvSignatureBase;
-                    
-                    if (!ktvGroups.has(ktvSignature)) {
-                        ktvGroups.set(ktvSignature, []);
-                    }
+                    // CÁCH MỚI: Tự động tách các KTV làm nối tiếp thành các thẻ độc lập!
+                    // Gộp chung những KTV làm cùng khung giờ (Fourhand).
+                    const timeGroups = new Map<string, typeof svc.staffList>();
+                    svc.staffList.forEach(st => {
+                        const calculatedStart = dynamicStartTimes.get(`${svc.id}_${st.ktvId}`) || st.segments?.[0]?.startTime || 'unknown';
+                        const stClone = { ...st, _calculatedStartTime: calculatedStart };
+                        if (!timeGroups.has(calculatedStart)) timeGroups.set(calculatedStart, []);
+                        timeGroups.get(calculatedStart)!.push(stClone);
+                    });
+
+                    timeGroups.forEach((staffsAtTime, calculatedStart) => {
+                        const ktvSignature = `${svc.id}_${calculatedStart}`;
+                        
+                        if (!ktvGroups.has(ktvSignature)) {
+                            ktvGroups.set(ktvSignature, []);
+                        }
                         
                         // Xác định trạng thái cục bộ cho nhóm KTV này dựa trên segments của họ
                         let isAllCompleted = true;
@@ -194,8 +244,9 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                             status: derivedStatus
                         };
                         ktvGroups.get(ktvSignature)!.push(svcClone);
+                    });
                 } else {
-                    const ktvSignature = 'unassigned_unknown_time';
+                    const ktvSignature = `${svc.id}_unassigned`;
                     if (!ktvGroups.has(ktvSignature)) {
                         ktvGroups.set(ktvSignature, []);
                     }
@@ -212,16 +263,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                 else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'DONE';
                 else if (statuses.includes('PREPARING')) dispatchStatus = 'PREPARING';
                 
-                // Only fallback to order status if we couldn't infer from items AND order has a global status
-                if (dispatchStatus === 'PREPARING' && order.dispatchStatus !== 'pending') {
-                    // But if item is explicitly NEW, it should NOT inherit a higher status from the order
-                    if (!statuses.includes('NEW')) {
-                         dispatchStatus = order.dispatchStatus === 'FEEDBACK' ? 'FEEDBACK' :
-                                          order.dispatchStatus === 'CLEANING' ? 'CLEANING' :
-                                          order.dispatchStatus === 'IN_PROGRESS' ? 'IN_PROGRESS' :
-                                          order.dispatchStatus === 'DONE' ? 'DONE' : 'PREPARING';
-                    }
-                }
+                // BỎ FALLBACK: Không cho phép trạng thái của Đơn Hàng (Order) kéo trạng thái của Thẻ Nối Tiếp (SubOrder) đi lên sai lệch!
+                // Chỉ tôn trọng trạng thái đã được tính toán từ các segments (derivedStatus).
 
                 result.push({
                     id: `${order.id}_${ktvSignature}`,
@@ -466,7 +509,15 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 displayStart = firstSeg.actualStartTime;
                                                             }
                                                             
-                                                            const displayEnd = firstSeg?.actualEndTime ? firstSeg.actualEndTime : (displayStart ? getDynamicEndTime(displayStart, duration) : (s.timeEnd || firstSeg?.endTime));
+                                                            let displayEnd = firstSeg?.actualEndTime ? firstSeg.actualEndTime : (displayStart ? getDynamicEndTime(displayStart, duration) : (s.timeEnd || firstSeg?.endTime));
+                                                            if (s.staffList && s.staffList.length > 1) {
+                                                                const lastSt = s.staffList[s.staffList.length - 1];
+                                                                const lastSeg = lastSt?.segments?.[0];
+                                                                if (lastSeg) {
+                                                                    const kStart = lastSeg.actualStartTime || lastSeg.startTime || displayStart;
+                                                                    displayEnd = lastSeg.actualEndTime ? lastSeg.actualEndTime : (lastSeg.endTime || getDynamicEndTime(kStart, Number(lastSeg.duration) || 60));
+                                                                }
+                                                            }
                                                             currentCumulativeStr = displayEnd;
 
                                                             return (
@@ -496,8 +547,9 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             {s.staffList && s.staffList.length > 1 ? (
                                                                 <div className="space-y-1 mt-1">
                                                                     {s.staffList.map((st: any, stIdx: number) => {
-                                                                        const ktvStart = displayStart;
-                                                                        const ktvEnd = displayEnd;
+                                                                        const seg = st?.segments?.[0];
+                                                                        const ktvStart = seg?.actualStartTime || st._calculatedStartTime || seg?.startTime || displayStart;
+                                                                        const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : (seg?.endTime || getDynamicEndTime(ktvStart, Number(seg?.duration) || duration));
                                                                         return (
                                                                             <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
                                                                                 <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>

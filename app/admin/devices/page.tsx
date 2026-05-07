@@ -32,7 +32,7 @@ const DeviceManagementPage = () => {
   const [mounted, setMounted] = useState(false);
   const [isUpdatingWifi, setIsUpdatingWifi] = useState(false);
   const [isWifiModalOpen, setIsWifiModalOpen] = useState(false);
-  const [wifiData, setWifiData] = useState<{clientIp: string, currentIps: any[]}>({ clientIp: '', currentIps: [] });
+  const [wifiData, setWifiData] = useState<{clientIp: string, currentIps: any[], lastRejected: any | null}>({ clientIp: '', currentIps: [], lastRejected: null });
   const [isFetchingWifi, setIsFetchingWifi] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -97,7 +97,7 @@ const DeviceManagementPage = () => {
       const res = await fetch('/api/admin/update-wifi-ip');
       const data = await res.json();
       if (data.success) {
-        setWifiData({ clientIp: data.clientIp, currentIps: data.currentIps });
+        setWifiData({ clientIp: data.clientIp, currentIps: data.currentIps, lastRejected: data.lastRejected });
       }
     } catch (err) {
       console.error(err);
@@ -106,17 +106,17 @@ const DeviceManagementPage = () => {
     }
   };
 
-  const updateWifiAction = async (action: 'overwrite' | 'append' | 'remove', ipToRemove?: string) => {
+  const updateWifiAction = async (action: 'overwrite' | 'append' | 'remove' | 'append_rejected', ipToRemove?: string, rejectedIp?: string) => {
     setIsUpdatingWifi(true);
     try {
       const res = await fetch('/api/admin/update-wifi-ip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ipToRemove })
+        body: JSON.stringify({ action, ipToRemove, rejectedIp })
       });
       const data = await res.json();
       if (data.success) {
-        setWifiData(prev => ({ ...prev, currentIps: data.currentIps }));
+        setWifiData(prev => ({ ...prev, currentIps: data.currentIps, lastRejected: action === 'append_rejected' ? null : prev.lastRejected }));
         if (action !== 'remove') {
           alert(`✅ Cập nhật thành công!`);
         }
@@ -304,6 +304,22 @@ const DeviceManagementPage = () => {
                           <p className="text-lg font-bold text-blue-800 font-mono">{wifiData.clientIp}</p>
                         </div>
                       </div>
+
+                      {wifiData.lastRejected && (
+                        <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                          <p className="text-xs font-bold text-amber-700 mb-1 flex items-center gap-1"><AlertCircle size={14}/> Phát hiện IP vừa bị từ chối</p>
+                          <p className="text-sm text-amber-800 mb-2">
+                            Nhân viên <strong className="font-bold">{wifiData.lastRejected.name}</strong> vừa điểm danh thất bại bằng IP <code className="bg-amber-100 px-1 py-0.5 rounded font-bold font-mono">{wifiData.lastRejected.ip}</code> lúc {new Date(wifiData.lastRejected.time).toLocaleTimeString('vi-VN')}.
+                          </p>
+                          <button
+                            onClick={() => updateWifiAction('append_rejected', undefined, wifiData.lastRejected.ip)}
+                            disabled={isUpdatingWifi}
+                            className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+                          >
+                            + Thêm IP bị từ chối này vào danh sách
+                          </button>
+                        </div>
+                      )}
 
                       <div>
                         <h4 className="text-sm font-bold text-gray-700 mb-2">Danh sách IP đang cho phép:</h4>

@@ -99,6 +99,34 @@ export async function POST(request: Request) {
             if (clientIp !== '::1' && clientIp !== '127.0.0.1' && clientIp !== 'unknown') {
                 if (checkType !== 'SUDDEN_OFF' && !allowedIps.includes(clientIp)) {
                     console.error(`❌ [Attendance] IP mismatch: clientIp=${clientIp}, allowedIps=${allowedIps}`);
+                    
+                    // SAVE REJECTED IP TO SYSTEM CONFIGS
+                    const rejectedInfo = {
+                        ip: clientIp,
+                        name: displayName || staffCode || employeeId,
+                        time: new Date().toISOString()
+                    };
+                    
+                    try {
+                        const { data: existing } = await supabase
+                            .from('SystemConfigs')
+                            .select('id')
+                            .eq('key', 'spa_wifi_last_rejected_ip')
+                            .maybeSingle();
+
+                        if (existing) {
+                            await supabase.from('SystemConfigs').update({ value: rejectedInfo, updated_at: new Date().toISOString() }).eq('id', existing.id);
+                        } else {
+                            await supabase.from('SystemConfigs').insert({ 
+                                key: 'spa_wifi_last_rejected_ip', 
+                                value: rejectedInfo, 
+                                description: 'IP vừa bị từ chối khi điểm danh gần nhất' 
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Lỗi khi lưu IP từ chối:', e);
+                    }
+
                     return NextResponse.json({ 
                         success: false, 
                         error: `Vui lòng kết nối vào mạng Wi-Fi của Spa để điểm danh! (IP của bạn: ${clientIp})` 
