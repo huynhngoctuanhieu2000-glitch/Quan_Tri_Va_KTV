@@ -25,6 +25,8 @@ export interface LeaveRequest {
     reviewedBy?: string | null;
     reviewedAt?: string | null;
     createdAt: string;
+    is_extension?: boolean;
+    is_sudden_off?: boolean;
 }
 
 export interface ShiftRecord {

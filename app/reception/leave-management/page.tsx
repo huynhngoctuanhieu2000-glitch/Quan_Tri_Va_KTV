@@ -272,7 +272,16 @@ const OffTab = ({ logic, allShifts }: { logic: ReturnType<typeof useLeaveManagem
                                         return (
                                             <div key={leave.id} className="flex items-center justify-between p-2 rounded-xl border border-rose-100 bg-rose-50/50 group">
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="font-bold text-[13px] text-rose-700">{leave.employeeId}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-[13px] text-rose-700">{leave.employeeId}</p>
+                                                        {leave.is_sudden_off && <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Đột xuất</span>}
+                                                        {leave.is_extension && !leave.is_sudden_off && <span className="text-[9px] font-black bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Gia hạn</span>}
+                                                    </div>
+                                                    {leave.createdAt && (
+                                                        <p className="text-[10px] text-rose-500/80 mt-0.5 font-medium">
+                                                            Gửi lúc: {new Date(leave.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 
                                                 <button
