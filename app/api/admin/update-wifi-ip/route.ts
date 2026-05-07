@@ -1,14 +1,48 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
     try {
-        // Lấy IP của người dùng từ headers
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+            return NextResponse.json({ success: false, error: 'Supabase không được khởi tạo.' }, { status: 500 });
+        }
+
         const forwardedFor = request.headers.get('x-forwarded-for');
         const realIp = request.headers.get('x-real-ip');
         const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : (realIp || 'unknown');
 
-        if (clientIp === 'unknown') {
+        const { data: configData, error: configError } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_wifi_ips')
+            .single();
+
+        let currentIps = [];
+        if (!configError && configData?.value && Array.isArray(configData.value)) {
+            currentIps = configData.value.map(item => {
+                if (typeof item === 'string') return { ip: item, addedAt: new Date().toISOString() };
+                return item;
+            });
+        }
+
+        return NextResponse.json({ success: true, clientIp, currentIps });
+    } catch (error: any) {
+        console.error('❌ [GET Wifi IP] Unhandled error:', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
+
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+        const { action, ipToRemove } = body; // action: 'overwrite' | 'append' | 'remove'
+
+        const forwardedFor = request.headers.get('x-forwarded-for');
+        const realIp = request.headers.get('x-real-ip');
+        const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : (realIp || 'unknown');
+
+        if ((action === 'overwrite' || action === 'append') && clientIp === 'unknown') {
             return NextResponse.json({ success: false, error: 'Không thể xác định địa chỉ IP mạng của bạn.' }, { status: 400 });
         }
 
@@ -17,10 +51,38 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase không được khởi tạo.' }, { status: 500 });
         }
 
+        // Fetch current list
+        const { data: configData } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_wifi_ips')
+            .single();
+
+        let currentIps: any[] = [];
+        if (configData?.value && Array.isArray(configData.value)) {
+            currentIps = configData.value.map(item => {
+                if (typeof item === 'string') return { ip: item, addedAt: new Date().toISOString() };
+                return item;
+            });
+        }
+
+        let newIps = [...currentIps];
+        const now = new Date().toISOString();
+
+        if (action === 'overwrite') {
+            newIps = [{ ip: clientIp, addedAt: now }];
+        } else if (action === 'append') {
+            if (!newIps.find(item => item.ip === clientIp)) {
+                newIps.push({ ip: clientIp, addedAt: now });
+            }
+        } else if (action === 'remove' && ipToRemove) {
+            newIps = newIps.filter(item => item.ip !== ipToRemove);
+        }
+
         // Cập nhật cấu hình IP vào DB
         const { error: updateError } = await supabase
             .from('SystemConfigs')
-            .update({ value: [clientIp] })
+            .update({ value: newIps })
             .eq('key', 'spa_wifi_ips');
 
         if (updateError) {
@@ -31,7 +93,8 @@ export async function POST(request: Request) {
         return NextResponse.json({
             success: true,
             message: 'Cập nhật IP Wi-Fi thành công!',
-            newIp: clientIp
+            clientIp,
+            currentIps: newIps
         });
 
     } catch (error: any) {

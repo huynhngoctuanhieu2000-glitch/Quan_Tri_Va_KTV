@@ -94,7 +94,7 @@ export async function POST(request: Request) {
 
         // Nếu có cấu hình dải IP (dạng array) thì mới kiểm tra
         if (!configError && configData?.value && Array.isArray(configData.value) && configData.value.length > 0) {
-            const allowedIps: string[] = configData.value;
+            const allowedIps: string[] = configData.value.map((item: any) => typeof item === 'string' ? item : item.ip).filter(Boolean);
             // Cho phép localhost (cho môi trường dev) hoặc IP phải nằm trong mảng cấu hình
             if (clientIp !== '::1' && clientIp !== '127.0.0.1' && clientIp !== 'unknown') {
                 if (checkType !== 'SUDDEN_OFF' && !allowedIps.includes(clientIp)) {
