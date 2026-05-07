@@ -232,15 +232,28 @@ export async function processDispatch(bookingId: string, dispatchData: {
 
         // 4. Send background push and realtime notification to KTVs
         if (dispatchData.staffAssignments && dispatchData.staffAssignments.length > 0) {
+            // Lấy thông tin hiện tại của các item để so sánh, tránh spam thông báo
+            const { data: existingItems } = await supabase.from('BookingItems').select('id, segments').eq('bookingId', bookingId);
+            const oldKtvIds = new Set<string>();
+            (existingItems || []).forEach(item => {
+                let segs = [];
+                try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+                segs.forEach((s: any) => { if (s.ktvId) oldKtvIds.add(s.ktvId); });
+            });
+
             const staffIds = dispatchData.staffAssignments.map(a => a.ktvId).filter(Boolean);
-            // Lọc unique staffIds
             const uniqueStaffIds = Array.from(new Set(staffIds));
             
             for (const staffId of uniqueStaffIds) {
+                // CHỈ gửi thông báo nếu là KTV mới hoặc đơn đang ở trạng thái chuyển đổi từ Pending
+                const isNewKtv = !oldKtvIds.has(staffId);
+                const isDispatchAction = dispatchData.status !== 'pending';
+                
+                if (!isNewKtv && !isDispatchAction) continue;
+
                 let svcName = 'dịch vụ mới';
                 let svcTime = '';
                 
-                // Tìm item mà KTV này được phân công để lấy displayName và startTime
                 const ktvItem = dispatchData.itemUpdates?.find((i: any) => 
                     i.technicianCodes && (Array.isArray(i.technicianCodes) ? i.technicianCodes.includes(staffId) : i.technicianCodes === staffId)
                 );
@@ -257,7 +270,17 @@ export async function processDispatch(bookingId: string, dispatchData: {
 
                 const message = `Bạn được phân công: ${svcName}${svcTime}. Vui lòng kiểm tra ứng dụng.`;
 
-                // 4a. Insert StaffNotifications for realtime UI updates
+                // Kiểm tra xem đã có thông báo NEW_ORDER chưa đọc cho đơn này chưa để tránh spam
+                const { data: existingNotif } = await supabase.from('StaffNotifications')
+                    .select('id')
+                    .eq('bookingId', bookingId)
+                    .eq('employeeId', staffId)
+                    .eq('type', 'NEW_ORDER')
+                    .eq('isRead', false)
+                    .limit(1);
+
+                if (existingNotif && existingNotif.length > 0) continue;
+
                 await supabase.from('StaffNotifications').insert({
                     bookingId: bookingId,
                     employeeId: String(staffId),
@@ -266,7 +289,6 @@ export async function processDispatch(bookingId: string, dispatchData: {
                     isRead: false
                 });
 
-                // 4b. Send Push Notification for OS level alerts
                 await sendPushNotification({
                     title: 'Bạn có ca làm mới! 💆',
                     message: message,
@@ -278,6 +300,9 @@ export async function processDispatch(bookingId: string, dispatchData: {
 
         const { syncTurnsForDate } = await import('@/lib/turn-sync');
         await syncTurnsForDate(dispatchData.date);
+
+        // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB (OPTION B)
+        await syncOrderTimelineToDb(bookingId);
 
         return { success: true };
     } catch (error: any) {
@@ -427,6 +452,9 @@ export async function cancelBooking(bookingId: string, date: string) {
                 }
             }
         }
+
+        // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB
+        await syncOrderTimelineToDb(bookingId);
 
         return { success: true };
     } catch (error: any) {
@@ -837,6 +865,9 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
 
         const { syncTurnsForDate } = await import('@/lib/turn-sync');
         await syncTurnsForDate(date);
+
+        // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB
+        await syncOrderTimelineToDb(bookingId);
 
         return { success: true };
     } catch (error: any) {
@@ -1522,9 +1553,139 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
             await syncTurnsForDate(date);
         }
 
+        // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB
+        await syncOrderTimelineToDb(bookingId);
+
         return { success: true };
     } catch (error: any) {
         console.error('❌ [Server] splitBookingItem error:', error);
         return { success: false, error: error.message };
+    }
+}
+
+/**
+ * 🔄 ĐỒNG BỘ TIMELINE TOÀN BỘ ORDER XUỐNG DATABASE (OPTION B)
+ * Tính toán giờ nối tiếp thực tế dựa trên actualStartTime và ghi đè vào segments của từng BookingItem.
+ * Điều này đảm bảo KTV Dashboard và các API khác luôn thấy giờ chính xác nhất.
+ */
+export async function syncOrderTimelineToDb(bookingId: string) {
+    try {
+        const supabase = getSupabaseAdmin();
+        if (!supabase) return;
+
+        // 1. Fetch toàn bộ items của order
+        const { data: items, error: fetchErr } = await supabase
+            .from('BookingItems')
+            .select('id, segments, duration, timeStart, serviceName, options')
+            .eq('bookingId', bookingId);
+        
+        if (fetchErr || !items || items.length === 0) return;
+
+        // Helpers copy từ frontend (bản server-side)
+        const formatToHourMinute = (isoString: string | null | undefined): string => {
+            if (!isoString) return '--:--';
+            if (/^\d{1,2}:\d{2}$/.test(isoString)) return isoString;
+            let parseString = isoString;
+            if (!isoString.endsWith('Z') && !isoString.includes('+')) {
+                parseString = isoString.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(parseString);
+            if (isNaN(d.getTime())) return isoString;
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+
+        const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
+            if (!startStr) return '--:--';
+            const formatted = formatToHourMinute(startStr);
+            if (formatted === '--:--') return '--:--';
+            const [h, m] = formatted.split(':').map(Number);
+            const d = new Date();
+            d.setHours(h, m + durationMins, 0, 0);
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+
+        // 2. Gom tất cả segments vào mảng phẳng để tính toán
+        const allSegments: any[] = [];
+        items.forEach(item => {
+            // Bỏ qua phòng riêng
+            if (item.serviceName?.toLowerCase().includes('phòng riêng') || item.serviceName?.toLowerCase().includes('phong rieng')) return;
+            
+            let segs = [];
+            try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+            
+            segs.forEach((s: any) => {
+                allSegments.push({
+                    itemId: item.id,
+                    ktvId: s.ktvId,
+                    origStart: s.startTime || '',
+                    duration: Number(s.duration) || Number(item.duration) || 60,
+                    actualStartTime: s.actualStartTime,
+                    actualEndTime: s.actualEndTime,
+                    _originalSeg: s,
+                    _parentItem: item
+                });
+            });
+        });
+
+        // Sắp xếp theo giờ xuất phát gốc
+        allSegments.sort((a, b) => a.origStart.localeCompare(b.origStart));
+
+        let currentMaxEndStr = '';
+        let lastGroupStartTime = '';
+        let lastGroupCalculatedStart = '';
+        const updates = new Map<string, any[]>(); // itemId -> newSegments[]
+
+        allSegments.forEach((seg, idx) => {
+            let calculatedStart = seg.origStart;
+            
+            if (idx > 0) {
+                if (seg.origStart === lastGroupStartTime) {
+                    calculatedStart = lastGroupCalculatedStart;
+                } else if (currentMaxEndStr) {
+                    calculatedStart = currentMaxEndStr;
+                }
+            }
+
+            // Ghi nhận sự thay đổi nếu có
+            const newSeg = { ...seg._originalSeg, startTime: calculatedStart };
+            if (!updates.has(seg.itemId)) updates.set(seg.itemId, []);
+            updates.get(seg.itemId)!.push(newSeg);
+
+            // Tính mốc kết thúc để gối đầu cho KTV sau
+            const runtimeAnchor = seg.actualStartTime || calculatedStart;
+            const ktvEnd = seg.actualEndTime || getDynamicEndTime(runtimeAnchor, seg.duration);
+
+            if (seg.origStart !== lastGroupStartTime) {
+                currentMaxEndStr = ktvEnd;
+            } else {
+                if (ktvEnd > currentMaxEndStr) currentMaxEndStr = ktvEnd;
+            }
+
+            lastGroupStartTime = seg.origStart;
+            lastGroupCalculatedStart = calculatedStart;
+        });
+
+        // 3. Thực hiện update DB cho các item có thay đổi segments
+        for (const [itemId, newSegs] of updates.entries()) {
+            const originalItem = items.find(i => i.id === itemId);
+            let oldSegsStr = '';
+            try { oldSegsStr = typeof originalItem?.segments === 'string' ? originalItem.segments : JSON.stringify(originalItem?.segments || []); } catch {}
+            
+            const newSegsStr = JSON.stringify(newSegs);
+            
+            if (oldSegsStr !== newSegsStr) {
+                console.log(`[syncOrderTimeline] Updating Item ${itemId}: shifted timeline detected.`);
+                const payload: any = { segments: newSegsStr };
+                
+                // Nếu là segment đầu tiên của item này, cập nhật cả timeStart của item để đồng bộ
+                if (newSegs.length > 0 && newSegs[0].startTime) {
+                    payload.timeStart = newSegs[0].startTime;
+                }
+
+                await supabase.from('BookingItems').update(payload).eq('id', itemId);
+            }
+        }
+    } catch (err) {
+        console.error('❌ [Server] syncOrderTimelineToDb error:', err);
     }
 }

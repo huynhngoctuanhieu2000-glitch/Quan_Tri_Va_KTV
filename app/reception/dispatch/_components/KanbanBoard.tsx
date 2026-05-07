@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
+import { SubOrder, buildOrderTimeline } from './dispatch-timeline';
 
 import { RawStatus, getNextStatus, canTransition } from '@/lib/dispatch-status';
 
@@ -54,15 +55,6 @@ interface KanbanBoardProps {
     selectedOrderId: string | null;
     onContextMenu?: (e: React.MouseEvent, orderId: string) => void;
     roomTransitionTime?: number;
-}
-
-interface SubOrder {
-    id: string; // bookingId_ktvSignature
-    bookingId: string;
-    originalOrder: PendingOrder;
-    services: ServiceBlock[];
-    dispatchStatus: string;
-    ktvSignature: string;
 }
 
 const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services) => {
@@ -142,141 +134,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     const subOrders = React.useMemo(() => {
-        const result: SubOrder[] = [];
-        orders.forEach(order => {
-            // TÍNH TOÁN GIỜ NỐI TIẾP (DYNAMIC TIMELINE)
-            const dynamicStartTimes = new Map<string, string>();
-            order.services.forEach(svc => {
-                if (svc.staffList && svc.staffList.length > 1) {
-                    let currentMaxEndStr = '';
-                    let lastGroupStartTime = '';
-                    let lastGroupCalculatedStart = '';
-                    
-                    svc.staffList.forEach((st, idx) => {
-                        const seg = st.segments?.[0];
-                        if (!seg) return;
-                        const origStart = seg.startTime || '';
-                        let calculatedStart = origStart || svc.timeStart || '';
-                        
-                        if (idx > 0) {
-                            if (origStart === lastGroupStartTime) {
-                                // Fourhand: xài chung giờ nhóm
-                                calculatedStart = lastGroupCalculatedStart;
-                            } else if (currentMaxEndStr) {
-                                // Nối tiếp: kế thừa giờ KẾT THÚC của nhóm trước làm giờ BẮT ĐẦU!
-                                calculatedStart = currentMaxEndStr;
-                            }
-                        }
-                        
-                        dynamicStartTimes.set(`${svc.id}_${st.ktvId}`, calculatedStart);
-                        
-                        const ktvStart = seg.actualStartTime || calculatedStart;
-                        const duration = Number(seg.duration) || Number(svc.duration) || 60;
-                        const ktvEnd = seg.actualEndTime || getDynamicEndTime(ktvStart, duration);
-                        
-                        if (origStart !== lastGroupStartTime) {
-                            currentMaxEndStr = ktvEnd;
-                        } else {
-                            if (ktvEnd > currentMaxEndStr) currentMaxEndStr = ktvEnd;
-                        }
-                        lastGroupStartTime = origStart;
-                        lastGroupCalculatedStart = calculatedStart;
-                    });
-                }
-            });
-
-            // Group services by assigned KTV
-            const ktvGroups = new Map<string, ServiceBlock[]>();
-            
-            order.services.forEach(svc => {
-                // Lọc bỏ 'Phòng riêng' vì đây là option
-                if (svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) {
-                    return;
-                }
-                
-                if (svc.staffList && svc.staffList.length > 0) {
-                    // CÁCH MỚI: Tự động tách các KTV làm nối tiếp thành các thẻ độc lập!
-                    // Gộp chung những KTV làm cùng khung giờ (Fourhand).
-                    const timeGroups = new Map<string, typeof svc.staffList>();
-                    svc.staffList.forEach(st => {
-                        const calculatedStart = dynamicStartTimes.get(`${svc.id}_${st.ktvId}`) || st.segments?.[0]?.startTime || 'unknown';
-                        const stClone = { ...st, _calculatedStartTime: calculatedStart };
-                        if (!timeGroups.has(calculatedStart)) timeGroups.set(calculatedStart, []);
-                        timeGroups.get(calculatedStart)!.push(stClone);
-                    });
-
-                    timeGroups.forEach((staffsAtTime, calculatedStart) => {
-                        const ktvSignature = `${svc.id}_${calculatedStart}`;
-                        
-                        if (!ktvGroups.has(ktvSignature)) {
-                            ktvGroups.set(ktvSignature, []);
-                        }
-                        
-                        // Xác định trạng thái cục bộ cho nhóm KTV này dựa trên segments của họ
-                        let isAllCompleted = true;
-                        let isAnyStarted = false;
-                        let isAllFeedback = true;
-                        
-                        staffsAtTime.forEach(st => {
-                            if (!st.segments || st.segments.length === 0) {
-                                isAllCompleted = false;
-                                isAllFeedback = false;
-                            }
-                            st.segments?.forEach((seg: any) => {
-                                if (seg.actualStartTime) isAnyStarted = true;
-                                if (!seg.actualEndTime) isAllCompleted = false;
-                                if (!seg.feedbackTime) isAllFeedback = false;
-                            });
-                        });
-                        
-                        let derivedStatus = svc.status || 'NEW';
-                        if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
-                            if (isAllFeedback && isAllCompleted) derivedStatus = 'FEEDBACK';
-                            else if (isAllCompleted) derivedStatus = 'CLEANING';
-                            else if (isAnyStarted) derivedStatus = 'IN_PROGRESS';
-                            else derivedStatus = 'PREPARING';
-                        }
-
-                        // Tạo clone của svc chỉ chứa các staff của khung giờ này
-                        const svcClone = {
-                            ...svc,
-                            staffList: staffsAtTime,
-                            status: derivedStatus
-                        };
-                        ktvGroups.get(ktvSignature)!.push(svcClone);
-                    });
-                } else {
-                    const ktvSignature = `${svc.id}_unassigned`;
-                    if (!ktvGroups.has(ktvSignature)) {
-                        ktvGroups.set(ktvSignature, []);
-                    }
-                    ktvGroups.get(ktvSignature)!.push(svc);
-                }
-            });
-
-            ktvGroups.forEach((services, ktvSignature) => {
-                const statuses = services.map(s => s.status || 'NEW');
-                let dispatchStatus = 'PREPARING'; // Default to PREPARING
-                if (statuses.includes('IN_PROGRESS')) dispatchStatus = 'IN_PROGRESS';
-                else if (statuses.includes('CLEANING')) dispatchStatus = 'CLEANING';
-                else if (statuses.includes('FEEDBACK')) dispatchStatus = 'FEEDBACK';
-                else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'DONE';
-                else if (statuses.includes('PREPARING')) dispatchStatus = 'PREPARING';
-                
-                // BỎ FALLBACK: Không cho phép trạng thái của Đơn Hàng (Order) kéo trạng thái của Thẻ Nối Tiếp (SubOrder) đi lên sai lệch!
-                // Chỉ tôn trọng trạng thái đã được tính toán từ các segments (derivedStatus).
-
-                result.push({
-                    id: `${order.id}_${ktvSignature}`,
-                    bookingId: order.id,
-                    originalOrder: order,
-                    services,
-                    dispatchStatus,
-                    ktvSignature
-                });
-            });
-        });
-        return result;
+        return buildOrderTimeline(orders);
     }, [orders]);
 
     // 🔥 FIX: Track đơn đã auto-finish để không hỏi lại liên tục
@@ -324,8 +182,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                              // 🔧 FIX: Truyền itemIds cụ thể → CHỈ update items của subOrder này
                              const itemIds = subOrder.services.map(s => s.id);
                              let targetKtvIds: string[] | undefined = undefined;
-                             if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
-                                 targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                             if (subOrder.ktvIds && subOrder.ktvIds.length > 0) {
+                                 targetKtvIds = subOrder.ktvIds;
                              }
                              // Chuyển sang CLEANING thay vì COMPLETED theo flow chuẩn mới
                              onUpdateStatus(subOrder.bookingId, 'CLEANING', itemIds, true, targetKtvIds); // skipConfirm = true
@@ -340,8 +198,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                         if (diffMins >= roomTransitionTime) {
                             const itemIds = subOrder.services.map(s => s.id);
                             let targetKtvIds: string[] | undefined = undefined;
-                            if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
-                                targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                            if (subOrder.ktvIds && subOrder.ktvIds.length > 0) {
+                                targetKtvIds = subOrder.ktvIds;
                             }
                             if (originalOrder.rating) {
                                 console.log(`✅ [Kanban AutoFinish] Both done for subOrder ${subOrder.id}. Moving to DONE.`);
@@ -378,8 +236,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                     const itemIds = draggedSubOrder.services.map(s => s.id);
                                     let newStatus = column.id;
                                     let targetKtvIds: string[] | undefined = undefined;
-                                    if (draggedSubOrder.ktvSignature && draggedSubOrder.ktvSignature !== 'unassigned_unknown_time') {
-                                        targetKtvIds = draggedSubOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                                    if (draggedSubOrder.ktvIds && draggedSubOrder.ktvIds.length > 0) {
+                                        targetKtvIds = draggedSubOrder.ktvIds;
                                     }
                                     
                                     if (!canTransition(draggedSubOrder.dispatchStatus, newStatus)) {
@@ -548,7 +406,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 <div className="space-y-1 mt-1">
                                                                     {s.staffList.map((st: any, stIdx: number) => {
                                                                         const seg = st?.segments?.[0];
-                                                                        const ktvStart = seg?.actualStartTime || st._calculatedStartTime || seg?.startTime || displayStart;
+                                                                        const ktvStart = seg?.actualStartTime || subOrder.calculatedStart || seg?.startTime || displayStart;
                                                                         const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : (seg?.endTime || getDynamicEndTime(ktvStart, Number(seg?.duration) || duration));
                                                                         return (
                                                                             <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
@@ -686,8 +544,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                         e.stopPropagation(); 
                                                                         const itemIds = services.map((s: any) => s.id);
                                                                         let targetKtvIds: string[] | undefined = undefined;
-                                                                        if (subOrder.ktvSignature && subOrder.ktvSignature !== 'unassigned_unknown_time') {
-                                                                            targetKtvIds = subOrder.ktvSignature.split('_')[0].split(',').filter(Boolean);
+                                                                        if (subOrder.ktvIds && subOrder.ktvIds.length > 0) {
+                                                                            targetKtvIds = subOrder.ktvIds;
                                                                         }
                                                                         onUpdateStatus(order.id, currentCfg.next!, itemIds, false, targetKtvIds); 
                                                                     }}

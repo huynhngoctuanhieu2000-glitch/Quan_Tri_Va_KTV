@@ -33,14 +33,7 @@ import {
   StaffNotification 
 } from './types';
 
-interface SubOrder {
-    id: string;
-    bookingId: string;
-    originalOrder: PendingOrder;
-    services: ServiceBlock[];
-    dispatchStatus: DispatchStatus;
-    ktvSignature: string;
-}
+import { SubOrder, buildOrderTimeline } from './_components/dispatch-timeline';
 
 
 
@@ -310,134 +303,7 @@ export default function DispatchBoardPage() {
   };
 
   const subOrders = React.useMemo(() => {
-    const result: SubOrder[] = [];
-    orders.forEach(order => {
-        const ktvGroups = new Map<string, ServiceBlock[]>();
-        
-        order.services.forEach(svc => {
-            if (svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) {
-                return;
-            }
-            
-            if (order.dispatchStatus === 'pending') {
-                const ktvSignature = 'pending_order';
-                if (!ktvGroups.has(ktvSignature)) {
-                    ktvGroups.set(ktvSignature, []);
-                }
-                let derivedStatus = svc.status || 'NEW';
-                if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
-                    // For pending orders, we can just use PREPARING or NEW. 
-                    // Let's stick to the base status
-                }
-                ktvGroups.get(ktvSignature)!.push({ ...svc, status: derivedStatus });
-                return;
-            }
-
-            if (svc.staffList && svc.staffList.length > 0) {
-                const staffsAtTime = svc.staffList;
-                const ktvSignatureBase = staffsAtTime.map(r => r.ktvId).filter(Boolean).sort().join(',') || 'unassigned';
-                const ktvSignature = ktvSignatureBase;
-                
-                if (!ktvGroups.has(ktvSignature)) {
-                    ktvGroups.set(ktvSignature, []);
-                }
-                    
-                let isAllCompleted = true;
-                let isAnyStarted = false;
-                let isAllFeedback = true;
-                
-                staffsAtTime.forEach(st => {
-                    if (!st.segments || st.segments.length === 0) {
-                        isAllCompleted = false;
-                        isAllFeedback = false;
-                    }
-                    st.segments?.forEach((seg: any) => {
-                        if (seg.actualStartTime) isAnyStarted = true;
-                        if (!seg.actualEndTime) isAllCompleted = false;
-                        if (!seg.feedbackTime) isAllFeedback = false;
-                    });
-                });
-                
-                let derivedStatus = svc.status || 'NEW';
-                if (derivedStatus !== 'CANCELLED' && derivedStatus !== 'DONE') {
-                    if (isAllFeedback && isAllCompleted) derivedStatus = 'FEEDBACK';
-                    else if (isAllCompleted) derivedStatus = 'CLEANING';
-                    else if (isAnyStarted) derivedStatus = 'IN_PROGRESS';
-                    else derivedStatus = 'PREPARING';
-                }
-
-                const svcClone = {
-                    ...svc,
-                    staffList: staffsAtTime,
-                    status: derivedStatus
-                };
-                ktvGroups.get(ktvSignature)!.push(svcClone);
-            } else {
-                const ktvSignature = 'unassigned_unknown_time';
-                if (!ktvGroups.has(ktvSignature)) {
-                    ktvGroups.set(ktvSignature, []);
-                }
-                ktvGroups.get(ktvSignature)!.push(svc);
-            }
-        });
-
-        const resultForOrder: SubOrder[] = [];
-        ktvGroups.forEach((services, ktvSignature) => {
-            const statuses = services.map(s => s.status || 'NEW');
-            let dispatchStatus: DispatchStatus = 'PREPARING';
-            
-            if (order.dispatchStatus === 'pending') {
-                dispatchStatus = 'pending';
-            } else {
-                if (statuses.includes('IN_PROGRESS')) dispatchStatus = 'IN_PROGRESS';
-                else if (statuses.includes('CLEANING')) dispatchStatus = 'CLEANING';
-                else if (statuses.includes('FEEDBACK')) dispatchStatus = 'FEEDBACK';
-                else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'DONE';
-                else if (statuses.includes('PREPARING')) dispatchStatus = 'PREPARING';
-                
-                if (dispatchStatus === 'PREPARING') {
-                    if (!statuses.includes('NEW')) {
-                        dispatchStatus = order.dispatchStatus === 'FEEDBACK' ? 'FEEDBACK' :
-                                        order.dispatchStatus === 'CLEANING' ? 'CLEANING' :
-                                        order.dispatchStatus === 'IN_PROGRESS' ? 'IN_PROGRESS' :
-                                        order.dispatchStatus === 'DONE' ? 'DONE' : 'PREPARING';
-                    }
-                }
-            }
-
-            resultForOrder.push({
-                id: `${order.id}_${ktvSignature}`,
-                bookingId: order.id,
-                originalOrder: order,
-                services,
-                dispatchStatus,
-                ktvSignature
-            });
-        });
-
-        // 🌟 Inject Utilities (Phòng Riêng) back into UI 🌟
-        const privateRooms = order.services.filter(svc => svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng'));
-        if (privateRooms.length > 0) {
-            const utilityServices = privateRooms.map(pr => ({ ...pr, isUtility: true }));
-            if (resultForOrder.length > 0) {
-                // Đính kèm vào SubOrder đầu tiên để Lễ tân nhìn thấy
-                resultForOrder[0].services.push(...utilityServices);
-            } else {
-                // Trường hợp hiếm: Đơn hàng chỉ có Phòng Riêng
-                resultForOrder.push({
-                    id: `${order.id}_utility`,
-                    bookingId: order.id,
-                    originalOrder: order,
-                    services: utilityServices,
-                    dispatchStatus: order.dispatchStatus || 'PREPARING',
-                    ktvSignature: 'unassigned_unknown_time'
-                });
-            }
-        }
-
-        result.push(...resultForOrder);
-    });
-    return result;
+    return buildOrderTimeline(orders);
   }, [orders]);
 
   // 🔄 AUTO-FINISH WORKER: Đã được chuyển về xử lý ở cấp độ KanbanBoard (sub-order level)
@@ -686,7 +552,7 @@ if (!hasPermission('dispatch_board')) {
   const pendingOrders = orders.filter(o => o.dispatchStatus === 'pending');
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null;
   const selectedSubOrder = subOrders.find(so => so.id === selectedSubOrderId) 
-      || (selectedOrder ? { id: selectedOrder.id, bookingId: selectedOrder.id, originalOrder: selectedOrder, services: selectedOrder.services, dispatchStatus: selectedOrder.dispatchStatus, ktvSignature: '' } : null);
+      || (selectedOrder ? { id: selectedOrder.id, bookingId: selectedOrder.id, originalOrder: selectedOrder, services: selectedOrder.services, dispatchStatus: selectedOrder.dispatchStatus, ktvSignature: '', ktvIds: [], calculatedStart: '' } : null);
 
   const LEFT_TABS: { id: DispatchStatus; label: string; color: string; activeBg: string; dot: string; badgeBg: string; badgeText: string }[] = [
     { id: 'pending', label: 'Chờ điều phối', color: 'text-rose-600', activeBg: 'bg-rose-500', dot: 'bg-rose-500', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700' },
@@ -1274,7 +1140,9 @@ if (!hasPermission('dispatch_board')) {
 
       const isPartial = !!specificSvcId;
       const res = await processDispatch(clonedOrder.id, {
-        status: clonedOrder.rawStatus === 'NEW' ? 'PREPARING' : (clonedOrder.rawStatus || 'PREPARING'),
+        status: (clonedOrder.rawStatus && !['NEW', 'pending', 'WAITING'].includes(clonedOrder.rawStatus)) 
+          ? clonedOrder.rawStatus 
+          : 'PREPARING',
         technicianCode: isPartial ? undefined : combinedTechCodes,
         bedId: isPartial ? undefined : (primarySeg?.bedId || null),
         roomName: isPartial ? undefined : (primarySeg?.roomId || null),

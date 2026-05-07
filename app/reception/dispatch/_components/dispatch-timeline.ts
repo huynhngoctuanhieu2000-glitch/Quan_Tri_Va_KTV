@@ -1,5 +1,20 @@
 import { PendingOrder, ServiceBlock } from '../types';
-import { formatToHourMinute } from '@/lib/utils';
+
+export const formatToHourMinute = (isoString: string | null | undefined): string => {
+    if (!isoString) return '--:--';
+    if (/^\d{1,2}:\d{2}$/.test(isoString)) return isoString;
+    
+    // Normalize string to ISO if possible
+    let parseString = isoString;
+    if (!isoString.endsWith('Z') && !isoString.includes('+')) {
+        parseString = isoString.replace(' ', 'T') + 'Z';
+    }
+    
+    const d = new Date(parseString);
+    if (isNaN(d.getTime())) return isoString;
+    
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 
 export const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
     if (!startStr) return '--:--';
@@ -195,6 +210,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             }
         });
 
+        const resultForOrder: SubOrder[] = [];
         ktvGroups.forEach((services, ktvSignature) => {
             const statuses = services.map(s => s.status || 'NEW');
             let dispatchStatus = 'PREPARING';
@@ -204,7 +220,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dispatchStatus = 'DONE';
             else if (statuses.includes('PREPARING')) dispatchStatus = 'PREPARING';
 
-            result.push({
+            resultForOrder.push({
                 id: `${order.id}_${ktvSignature}`,
                 bookingId: order.id,
                 originalOrder: order,
@@ -215,6 +231,30 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 calculatedStart: groupCalculatedStarts.get(ktvSignature) || ''
             });
         });
+
+        // 🌟 Inject Utilities (Phòng Riêng) back into UI 🌟
+        const privateRooms = order.services.filter(svc => svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng'));
+        if (privateRooms.length > 0) {
+            const utilityServices = privateRooms.map(pr => ({ ...pr, isUtility: true }));
+            if (resultForOrder.length > 0) {
+                // Đính kèm vào SubOrder đầu tiên để Lễ tân nhìn thấy
+                resultForOrder[0].services.push(...utilityServices as ServiceBlock[]);
+            } else {
+                // Trường hợp hiếm: Đơn hàng chỉ có Phòng Riêng
+                resultForOrder.push({
+                    id: `${order.id}_utility`,
+                    bookingId: order.id,
+                    originalOrder: order,
+                    services: utilityServices as ServiceBlock[],
+                    dispatchStatus: 'PREPARING',
+                    ktvSignature: 'utility',
+                    ktvIds: [],
+                    calculatedStart: order.timeStart || ''
+                });
+            }
+        }
+
+        result.push(...resultForOrder);
     });
 
     return result;
