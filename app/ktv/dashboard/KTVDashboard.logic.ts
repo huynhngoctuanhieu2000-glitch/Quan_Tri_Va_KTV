@@ -766,7 +766,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 } else if (res.success && !res.data) {
                     // Chỉ xóa booking khỏi state nếu KHÔNG phải màn hình hậu kỳ
                     const isPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
-                    if (!isPostService) {
+                    
+                    // 🛡️ RACE CONDITION GUARD: Khi screen vẫn là TIMER nhưng booking đã kết thúc
+                    // → Screen Engine chưa kịp chuyển sang REVIEW → KHÔNG được đá về DASHBOARD
+                    const isTimerWithActiveBooking = screenRef.current === 'TIMER' && bookingRef.current?.id;
+                    
+                    if (!isPostService && !isTimerWithActiveBooking) {
                         setBooking(null);
                         setScreen('DASHBOARD');
                         setIsTimerRunning(false);
@@ -775,6 +780,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         setTimeRemaining(60 * 60);
                         manualSegmentOverrideRef.current = false;
                         setActiveSegmentIndex(0);
+                    } else if (isTimerWithActiveBooking && !isPostService) {
+                        // Set postServiceBookingIdRef sớm để bảo vệ khỏi các poll tiếp theo
+                        const lockedId = bookingRef.current!.id;
+                        postServiceBookingIdRef.current = lockedId;
+                        try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, lockedId); } catch (e) {}
+                        console.log("🛡️ [KTV] Booking released while on TIMER — locking for post-service flow:", lockedId);
                     } else {
                         console.log("🕯️ [KTV] Booking released from DB, but keeping UI for cleanup...");
                     }
