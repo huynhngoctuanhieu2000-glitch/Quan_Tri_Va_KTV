@@ -1516,7 +1516,6 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
         const { error: updateErr } = await supabase
             .from('BookingItems')
             .update({ 
-                duration: dur1,
                 segments: originalSegs
             })
             .eq('id', itemId);
@@ -1527,10 +1526,9 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
         // Bỏ qua id gốc để supabase tự tạo id mới, set giá = 0, xóa bỏ ktv cũ
         const { id, created_at, ...newItemData } = originalItem;
         
-        newItemData.duration = dur2;
         newItemData.price = 0; // Giá = 0 để không đội tiền
         newItemData.technicianCodes = []; // Trống để Lễ tân chọn người mới
-        newItemData.segments = []; // Trống để Lễ tân set giờ mới
+        newItemData.segments = [{ duration: dur2 }]; // Segment mới với duration mới
         newItemData.timeStart = null;
         newItemData.timeEnd = null;
         newItemData.status = 'NEW';
