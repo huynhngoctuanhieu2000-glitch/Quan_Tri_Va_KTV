@@ -115,6 +115,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const isPreppingRef = useRef<boolean>(false);
     const isTimerRunningRef = useRef<boolean>(false);
     const manualSegmentOverrideRef = useRef<boolean>(false);
+    const activeSegmentIndexRef = useRef<number>(activeSegmentIndex);
     const handleFinishTimerRef = useRef<() => Promise<void>>(async () => {});
     const timeOffsetRef = useRef<number>(0);
     const fetchBookingRef = useRef<(() => Promise<void>) | null>(null);
@@ -196,6 +197,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     useEffect(() => { bookingRef.current = booking; }, [booking]);
     useEffect(() => { isPreppingRef.current = isPrepping; }, [isPrepping]);
     useEffect(() => { isTimerRunningRef.current = isTimerRunning; }, [isTimerRunning]);
+    useEffect(() => { activeSegmentIndexRef.current = activeSegmentIndex; }, [activeSegmentIndex]);
 
     // 🔒 Start Lock Logic
     useEffect(() => {
