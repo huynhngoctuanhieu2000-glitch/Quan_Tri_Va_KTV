@@ -485,6 +485,7 @@ export async function PATCH(request: Request) {
                 if (action === 'START_TIMER' || action === 'NEXT_SEGMENT') {
                     const startIdx = action === 'START_TIMER' ? 0 : activeSegmentIndex;
                     if (allGlobalSegs[startIdx]) {
+                        const myStartTime = allGlobalSegs[startIdx].seg.startTime;
                         if (action === 'NEXT_SEGMENT' && startIdx > 0) allGlobalSegs[startIdx - 1].seg.actualEndTime = sharedTimeStart;
                         allGlobalSegs[startIdx].seg.actualStartTime = sharedTimeStart;
                         
@@ -495,6 +496,20 @@ export async function PATCH(request: Request) {
                         if (action === 'NEXT_SEGMENT' && startIdx > 0) {
                             const prevTarget = allGlobalSegs[startIdx - 1];
                             originalItemsData[prevTarget.item.id][prevTarget.idx] = prevTarget.seg;
+                        }
+
+                        // 🤝 PARALLEL START SYNC: Co-start co-workers with SAME startTime (song song)
+                        if (action === 'START_TIMER' && myStartTime) {
+                            const targetItemId = target.item.id;
+                            originalItemsData[targetItemId].forEach((seg: any) => {
+                                if (seg.ktvId
+                                    && seg.ktvId.toLowerCase() !== technicianCode?.toLowerCase()
+                                    && seg.startTime === myStartTime
+                                    && !seg.actualStartTime) {
+                                    seg.actualStartTime = sharedTimeStart;
+                                    console.log(`🤝 [Parallel Sync] Co-started ${seg.ktvId}'s segment at ${myStartTime}`);
+                                }
+                            });
                         }
                     }
                 }
@@ -508,16 +523,47 @@ export async function PATCH(request: Request) {
         if (status === 'CLEANING' || status === 'DONE' || status === 'FEEDBACK') {
             const isFeedback = status === 'FEEDBACK';
             itemUpdatePayload.timeEnd = new Date().toISOString();
+            const nowISO = new Date().toISOString();
             const { data: items } = await supabase.from('BookingItems').select('id, segments, status').in('id', allItemIdsForThisKTV);
             for (const item of items || []) {
                 let segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
+                
+                // 1. Mark this KTV's segments as done
+                const myDoneStartTimes: string[] = [];
                 segs.forEach((seg: any) => {
                     if (seg.ktvId?.toLowerCase() === technicianCode?.toLowerCase()) {
-                        if (!seg.actualEndTime) seg.actualEndTime = new Date().toISOString();
-                        if (isFeedback && !seg.feedbackTime) seg.feedbackTime = new Date().toISOString();
+                        if (!seg.actualEndTime) seg.actualEndTime = nowISO;
+                        if (isFeedback && !seg.feedbackTime) seg.feedbackTime = nowISO;
+                        if (seg.startTime) myDoneStartTimes.push(seg.startTime);
                     }
                 });
-                await supabase.from('BookingItems').update({ segments: JSON.stringify(segs), status: isFeedback ? 'FEEDBACK' : 'CLEANING' }).eq('id', item.id);
+
+                // 2. 🤝 PARALLEL CLEANING SYNC: Also finish co-workers with SAME startTime (song song)
+                myDoneStartTimes.forEach(st => {
+                    segs.forEach((seg: any) => {
+                        if (seg.ktvId
+                            && seg.ktvId.toLowerCase() !== technicianCode?.toLowerCase()
+                            && seg.startTime === st) {
+                            if (!seg.actualEndTime) {
+                                seg.actualEndTime = nowISO;
+                                console.log(`🤝 [Parallel Sync] Co-finished ${seg.ktvId}'s segment at ${st}`);
+                            }
+                            if (isFeedback && !seg.feedbackTime) {
+                                seg.feedbackTime = nowISO;
+                            }
+                        }
+                    });
+                });
+
+                // 3. 🧠 SMART STATUS: Only set CLEANING when ALL segments in item have actualEndTime
+                //    Prevents sequential bug (KTV1 done but KTV2 not started yet)
+                const allSegsDone = segs.every((s: any) => !!s.actualEndTime);
+                const newItemStatus = allSegsDone
+                    ? (isFeedback ? 'FEEDBACK' : 'CLEANING')
+                    : 'IN_PROGRESS';
+                
+                await supabase.from('BookingItems').update({ segments: JSON.stringify(segs), status: newItemStatus }).eq('id', item.id);
+                console.log(`🧠 [Smart Status] Item ${item.id}: allSegsDone=${allSegsDone} → ${newItemStatus}`);
             }
             
             // 🔄 ĐỒNG BỘ TRẠNG THÁI BOOKING & GIẢI PHÓNG PHÒNG
