@@ -277,19 +277,76 @@ export async function GET(request: Request) {
             }
         }
 
+        // 🔄 ON-THE-FLY TIMELINE SHIFT CALCULATION
+        // Tính toán giờ gối đầu động bằng cách duyệt qua tất cả segments của booking
+        // giống hệt thuật toán KanbanBoard. 
         let finalDispatchStartTime = turnInfo?.start_time;
-        if (activeItemId) {
-            const activeItem = ktvItems.find((i: any) => i.id === activeItemId);
-            if (activeItem) {
-                let segs: any[] = [];
-                try { segs = typeof activeItem.segments === 'string' ? JSON.parse(activeItem.segments) : (Array.isArray(activeItem.segments) ? activeItem.segments : []); } catch { segs = []; }
-                const mySegs = segs.filter((s: any) => s.ktvId && technicianCode && s.ktvId.trim().toUpperCase() === technicianCode.trim().toUpperCase());
-                if (mySegs[activeSegmentIndex] && mySegs[activeSegmentIndex].startTime) {
-                    finalDispatchStartTime = mySegs[activeSegmentIndex].startTime;
-                } else if (mySegs.length > 0 && mySegs[0].startTime) {
-                    finalDispatchStartTime = mySegs[0].startTime;
-                }
+        
+        // Helpers for math
+        const formatToHourMinute = (isoString: string | null | undefined): string => {
+            if (!isoString) return '--:--';
+            if (/^\d{1,2}:\d{2}$/.test(isoString)) return isoString;
+            let parseString = isoString;
+            if (!isoString.endsWith('Z') && !isoString.includes('+')) parseString = isoString.replace(' ', 'T') + 'Z';
+            const d = new Date(parseString);
+            if (isNaN(d.getTime())) return isoString;
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+        const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
+            if (!startStr) return '--:--';
+            const formatted = formatToHourMinute(startStr);
+            if (formatted === '--:--') return '--:--';
+            const [h, m] = formatted.split(':').map(Number);
+            const d = new Date(); d.setHours(h, m + durationMins, 0, 0);
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+
+        const allSegments: any[] = [];
+        itemsWithService.forEach((item: any) => {
+            if (item.service_name?.toLowerCase().includes('phòng riêng') || item.service_name?.toLowerCase().includes('phong rieng')) return;
+            let segs = [];
+            try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+            segs.forEach((s: any) => {
+                allSegments.push({
+                    ktvId: s.ktvId,
+                    origStart: s.startTime || item.timeStart || '',
+                    duration: Number(s.duration) || Number(item.duration) || 60,
+                    actualStartTime: s.actualStartTime,
+                    actualEndTime: s.actualEndTime
+                });
+            });
+        });
+
+        allSegments.sort((a, b) => a.origStart.localeCompare(b.origStart));
+
+        let currentMaxEndStr = '';
+        let lastGroupStartTime = '';
+        let lastGroupCalculatedStart = '';
+        let myCalculatedStart = '';
+
+        allSegments.forEach((seg, idx) => {
+            let calculatedStart = seg.origStart;
+            if (idx > 0) {
+                if (seg.origStart === lastGroupStartTime) calculatedStart = lastGroupCalculatedStart;
+                else if (currentMaxEndStr) calculatedStart = currentMaxEndStr;
             }
+
+            if (seg.ktvId && technicianCode && seg.ktvId.trim().toUpperCase() === technicianCode.trim().toUpperCase()) {
+                if (!myCalculatedStart) myCalculatedStart = calculatedStart; // Lưu lại giờ đã shift của chặng ĐẦU TIÊN của mình
+            }
+
+            const runtimeAnchor = seg.actualStartTime || calculatedStart;
+            const ktvEnd = seg.actualEndTime || getDynamicEndTime(runtimeAnchor, seg.duration);
+
+            if (seg.origStart !== lastGroupStartTime) currentMaxEndStr = ktvEnd;
+            else if (ktvEnd > currentMaxEndStr) currentMaxEndStr = ktvEnd;
+
+            lastGroupStartTime = seg.origStart;
+            lastGroupCalculatedStart = calculatedStart;
+        });
+
+        if (myCalculatedStart) {
+            finalDispatchStartTime = myCalculatedStart;
         }
 
         let nextBookingId = null;
@@ -414,9 +471,11 @@ export async function PATCH(request: Request) {
                 const { data: currentItems } = await supabase.from('BookingItems').select('id, segments, timeStart').in('id', allItemIdsForThisKTV);
                 const activeSegmentIndex = body.activeSegmentIndex || 0;
                 let allGlobalSegs: any[] = [];
+                let originalItemsData: Record<string, any[]> = {};
                 
                 for (const item of currentItems || []) {
                     let segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
+                    originalItemsData[item.id] = [...segs]; // Backup the entire array
                     segs.forEach((seg: any, idx: number) => {
                         if (seg.ktvId?.toLowerCase() === technicianCode?.toLowerCase()) allGlobalSegs.push({ item, idx, seg });
                     });
@@ -428,12 +487,20 @@ export async function PATCH(request: Request) {
                     if (allGlobalSegs[startIdx]) {
                         if (action === 'NEXT_SEGMENT' && startIdx > 0) allGlobalSegs[startIdx - 1].seg.actualEndTime = sharedTimeStart;
                         allGlobalSegs[startIdx].seg.actualStartTime = sharedTimeStart;
+                        
+                        // Update back into the original backup
+                        const target = allGlobalSegs[startIdx];
+                        originalItemsData[target.item.id][target.idx] = target.seg;
+                        
+                        if (action === 'NEXT_SEGMENT' && startIdx > 0) {
+                            const prevTarget = allGlobalSegs[startIdx - 1];
+                            originalItemsData[prevTarget.item.id][prevTarget.idx] = prevTarget.seg;
+                        }
                     }
                 }
 
                 for (const item of currentItems || []) {
-                    const itemSegs = allGlobalSegs.filter(s => s.item.id === item.id).map(s => s.seg);
-                    await supabase.from('BookingItems').update({ segments: JSON.stringify(itemSegs) }).eq('id', item.id);
+                    await supabase.from('BookingItems').update({ segments: JSON.stringify(originalItemsData[item.id]) }).eq('id', item.id);
                 }
             }
         }
@@ -481,6 +548,8 @@ export async function PATCH(request: Request) {
             await supabase.from('KtvAssignments').update({ status: 'COMPLETED', updated_at: new Date().toISOString() }).eq('employee_id', technicianCode).eq('business_date', today).eq('booking_id', bookingId).in('status', ['ACTIVE', 'QUEUED', 'READY']);
             await supabase.rpc('promote_next_assignment', { p_employee_id: technicianCode, p_business_date: today });
         }
+
+        // Removed destructive syncOrderTimelineToDb
 
         return NextResponse.json({ success: true, data });
     } catch (error: any) {

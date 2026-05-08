@@ -194,10 +194,19 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments:
   const getShiftedTime = (offsetMins: number) => {
     if (!actualStartTime) return null;
     let tStart = actualStartTime;
+    // Xử lý chuỗi HH:mm hoặc HH:mm:ss
+    if (typeof tStart === 'string' && /^\d{1,2}:\d{2}/.test(tStart)) {
+        const [h, m] = tStart.split(':').map(Number);
+        const d = new Date();
+        d.setHours(h, m + offsetMins, 0, 0);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
     if (typeof tStart === 'string' && !tStart.includes('Z') && !tStart.includes('+')) {
         tStart = tStart.replace(' ', 'T') + 'Z';
     }
     const date = new Date(new Date(tStart).getTime() + (offsetMins * 60 * 1000));
+    if (isNaN(date.getTime())) return actualStartTime; // Fallback
     return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -286,7 +295,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId === logic.ktvId);
+    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase());
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
@@ -445,7 +454,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                   <WorkingTimeline 
                     segments={ktvSegments} 
                     activeIndex={booking.status === 'IN_PROGRESS' ? activeSegmentIndex : undefined}
-                    actualStartTime={ktvSegments[0]?.actualStartTime || booking?.timeStart || null}
+                    actualStartTime={ktvSegments[0]?.actualStartTime || booking?.dispatchStartTime || booking?.timeStart || null}
                   />
                 </div>
               )}
@@ -562,7 +571,7 @@ function ScreenTimer({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId === logic.ktvId);
+    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase());
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
@@ -669,7 +678,7 @@ function ScreenTimer({ logic }: { logic: any }) {
           <WorkingTimeline 
             segments={ktvSegments} 
             activeIndex={activeSegmentIndex} 
-            actualStartTime={ktvSegments[0]?.actualStartTime || booking?.timeStart || null}
+            actualStartTime={ktvSegments[0]?.actualStartTime || booking?.dispatchStartTime || booking?.timeStart || null}
           />
         </div>
       )}

@@ -53,8 +53,8 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             if (pendingServices.length > 0) {
                 // Tự suy diễn status của pending order (thường là NEW hoặc PREPARING)
                 const statuses = pendingServices.map(s => s.status || 'NEW');
-                let dispatchStatus = 'PREPARING';
-                if (statuses.includes('NEW')) dispatchStatus = 'PREPARING'; // Để chung cột chuẩn bị
+                let dispatchStatus = 'pending';
+                if (statuses.includes('NEW')) dispatchStatus = 'pending'; // Để chung cột chờ điều phối
                 
                 result.push({
                     id: `${order.id}_pending_order`,
@@ -152,27 +152,28 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 const timeGroups = new Map<string, typeof svc.staffList>();
                 
                 svc.staffList.forEach(st => {
-                    const calculatedStart = dynamicStartTimes.get(`${svc.id}_${st.ktvId}`) || st.segments?.[0]?.startTime || 'unknown';
+                    const origStart = st.segments?.[0]?.startTime || svc.timeStart || 'unknown';
+                    const calculatedStart = dynamicStartTimes.get(`${svc.id}_${st.ktvId}`) || origStart;
                     const stClone = { ...st, _calculatedStartTime: calculatedStart };
-                    if (!timeGroups.has(calculatedStart)) timeGroups.set(calculatedStart, []);
-                    timeGroups.get(calculatedStart)!.push(stClone);
+                    if (!timeGroups.has(origStart)) timeGroups.set(origStart, { calculatedStart, staffs: [] });
+                    timeGroups.get(origStart)!.staffs.push(stClone);
                 });
 
-                timeGroups.forEach((staffsAtTime, calculatedStart) => {
-                    // Unique ID cho subOrder: kết hợp svc.id và calculatedStart
-                    const ktvSignature = `${svc.id}_${calculatedStart.replace(/:/g, '')}`; 
+                timeGroups.forEach((groupInfo, origStart) => {
+                    // Unique ID cho subOrder CỐ ĐỊNH: dựa trên origStart để thẻ Kanban không bị mất/nhảy ID
+                    const ktvSignature = `${svc.id}_${origStart.replace(/:/g, '')}`; 
                     
                     if (!ktvGroups.has(ktvSignature)) {
                         ktvGroups.set(ktvSignature, []);
-                        groupKtvIds.set(ktvSignature, staffsAtTime.map(s => s.ktvId));
-                        groupCalculatedStarts.set(ktvSignature, calculatedStart);
+                        groupKtvIds.set(ktvSignature, groupInfo.staffs.map(s => s.ktvId));
+                        groupCalculatedStarts.set(ktvSignature, groupInfo.calculatedStart);
                     }
                     
                     let isAllCompleted = true;
                     let isAnyStarted = false;
                     let isAllFeedback = true;
                     
-                    staffsAtTime.forEach(st => {
+                    groupInfo.staffs.forEach(st => {
                         if (!st.segments || st.segments.length === 0) {
                             isAllCompleted = false;
                             isAllFeedback = false;
@@ -194,7 +195,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
 
                     const svcClone = {
                         ...svc,
-                        staffList: staffsAtTime,
+                        staffList: groupInfo.staffs,
                         status: derivedStatus
                     };
                     ktvGroups.get(ktvSignature)!.push(svcClone);

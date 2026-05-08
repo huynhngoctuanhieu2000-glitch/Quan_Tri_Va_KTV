@@ -73,34 +73,78 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: true, data: data || [], shiftTypes: SHIFT_TYPES });
         }
 
+        // ─── Lấy ngày Business Hôm Nay ───
+        const { data: configCutoff } = await supabase.from('SystemConfigs').select('value').eq('key', 'spa_day_cutoff_hours').maybeSingle();
+        const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
+        const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+        const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
+        const businessDateStr = businessNow.toISOString().slice(0, 10);
+        
+        const fetchDate = targetDate || businessDateStr;
+
         if (all === 'true') {
-            // Fetch all ACTIVE shifts (admin overview)
+            // Fetch ALL shifts (ACTIVE + REPLACED) that started on or before the fetchDate
             const { data, error } = await supabase
                 .from('KTVShifts')
                 .select('*')
-                .eq('status', 'ACTIVE')
-                .order('createdAt', { ascending: false }); // Newest first for dedup
+                .lte('effectiveFrom', fetchDate)
+                .in('status', ['ACTIVE', 'REPLACED'])
+                .order('createdAt', { ascending: false }); // Newest first
 
             if (error) {
                 console.error('❌ [Shift GET] All query error:', error);
                 return NextResponse.json({ success: false, error: error.message }, { status: 500 });
             }
 
+            // ─── LỌC CA THEO NGÀY (Lịch sử + Tự động khôi phục ca tạm thời) ───
+            const dedupMap = new Map<string, typeof data[0]>();
+
+            for (const shift of (data || [])) {
+                // Tự động dọn dẹp (revert) ca tạm thời trong DB nếu nó đang ACTIVE và đã qua ngày hôm nay
+                const isTempShift = shift.reason === 'Tự chọn ca lúc điểm danh' || shift.shiftType === 'FREE' || shift.shiftType === 'REQUEST';
+                
+                if (shift.status === 'ACTIVE' && isTempShift && shift.effectiveFrom < businessDateStr) {
+                    supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', shift.id).then(() => {
+                        supabase.from('KTVShifts').insert({
+                            employeeId: shift.employeeId,
+                            employeeName: shift.employeeName,
+                            shiftType: shift.previousShift || 'SHIFT_1',
+                            effectiveFrom: businessDateStr,
+                            previousShift: shift.shiftType,
+                            reason: 'Khôi phục ca gốc sau điểm danh',
+                            status: 'ACTIVE',
+                            reviewedBy: 'SYSTEM',
+                            reviewedAt: new Date().toISOString()
+                        }).then(() => console.log(`✅ [Shift] Auto-reverted expired temp shift for ${shift.employeeId}`));
+                    });
+                }
+
+                // Nếu chưa có trong map, đây là bản ghi mới nhất trước hoặc bằng fetchDate
+                if (!dedupMap.has(shift.employeeId)) {
+                    const isTempShift = shift.reason === 'Tự chọn ca lúc điểm danh' || shift.shiftType === 'FREE' || shift.shiftType === 'REQUEST';
+                    const isExpiredForTarget = isTempShift && shift.effectiveFrom < fetchDate;
+
+                    if (isExpiredForTarget) {
+                        // Trả về ca gốc ảo nếu ca tạm thời không áp dụng cho ngày đang xem
+                        dedupMap.set(shift.employeeId, {
+                            ...shift,
+                            shiftType: shift.previousShift || 'SHIFT_1',
+                            reason: 'Khôi phục ca gốc',
+                            effectiveFrom: fetchDate
+                        });
+                    } else {
+                        dedupMap.set(shift.employeeId, shift);
+                    }
+                }
+            }
+
             // Đè ca làm việc nếu là ngày lễ
-            const holidayApplied = data ? data.map(shift => {
+            const holidayApplied = Array.from(dedupMap.values()).map(shift => {
                 if (isHolidayOverride) {
                     return { ...shift, shiftType: 'SHIFT_2' };
                 }
                 return shift;
-            }) : [];
-
-            // 🔧 DEDUP: Chỉ giữ bản ghi ACTIVE mới nhất cho mỗi employeeId
-            const dedupMap = new Map<string, typeof holidayApplied[0]>();
-            for (const shift of holidayApplied) {
-                if (!dedupMap.has(shift.employeeId)) {
-                    dedupMap.set(shift.employeeId, shift); // Already sorted newest first
-                }
-            }
+            });
 
             // 🔧 Filter bỏ nhân viên đã nghỉ việc
             const { data: activeStaff } = await supabase
@@ -109,7 +153,7 @@ export async function GET(request: NextRequest) {
                 .eq('status', 'ĐANG LÀM');
             const activeStaffIds = new Set(activeStaff?.map(s => s.id) || []);
 
-            const finalData = Array.from(dedupMap.values())
+            const finalData = holidayApplied
                 .filter(s => activeStaffIds.has(s.employeeId))
                 .sort((a, b) => (a.employeeName || '').localeCompare(b.employeeName || ''));
 

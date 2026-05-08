@@ -302,7 +302,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
         await syncTurnsForDate(dispatchData.date);
 
         // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB (OPTION B)
-        await syncOrderTimelineToDb(bookingId);
+        // Removed destructive syncOrderTimelineToDb
 
         return { success: true };
     } catch (error: any) {
@@ -454,7 +454,7 @@ export async function cancelBooking(bookingId: string, date: string) {
         }
 
         // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB
-        await syncOrderTimelineToDb(bookingId);
+        // Removed destructive syncOrderTimelineToDb
 
         return { success: true };
     } catch (error: any) {
@@ -579,7 +579,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             // Cập nhật TurnQueue thành working cho các KTV liên quan
             const { error: tError } = await supabase
                 .from('TurnQueue')
-                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
+                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }) })
                 .eq('current_order_id', bookingId)
                 .eq('date', date)
                 .in('status', ['waiting', 'assigned', 'working']);
@@ -867,7 +867,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         await syncTurnsForDate(date);
 
         // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB
-        await syncOrderTimelineToDb(bookingId);
+        // Removed destructive syncOrderTimelineToDb
 
         return { success: true };
     } catch (error: any) {
@@ -1554,7 +1554,7 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
         }
 
         // 🔄 ĐỒNG BỘ TIMELINE SÂU XUỐNG DB
-        await syncOrderTimelineToDb(bookingId);
+        // Removed destructive syncOrderTimelineToDb
 
         return { success: true };
     } catch (error: any) {

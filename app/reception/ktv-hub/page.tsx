@@ -1404,9 +1404,14 @@ const LeaveOffTab = () => {
                                     </h4>
                                     <div className="space-y-3">
                                         {['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'FREE', 'REQUEST'].map(shiftType => {
-                                            const activeShifts = allShifts.filter(shift => 
-                                                shift.shiftType === shiftType && !selectedLeaves.some(l => l.employeeId === shift.employeeId)
-                                            );
+                                            const activeShifts = allShifts.filter(shift => {
+                                                if (shift.shiftType !== shiftType) return false;
+                                                const isOff = selectedLeaves.some(l => l.employeeId === shift.employeeId);
+                                                if (!isOff) return true;
+                                                // Đã đăng ký OFF nhưng có điểm danh chọn ca tạm thời (hoặc tự do/khách yêu cầu) thì vẫn hiển thị
+                                                const isTempShift = shift.reason === 'Tự chọn ca lúc điểm danh' || shift.shiftType === 'FREE' || shift.shiftType === 'REQUEST';
+                                                return isTempShift;
+                                            });
                                             
                                             if (activeShifts.length === 0) return null;
                                             
@@ -1419,11 +1424,17 @@ const LeaveOffTab = () => {
                                                         <span className="px-1.5 py-0.5 bg-white/50 rounded-md">{activeShifts.length}</span>
                                                     </div>
                                                     <div className="p-2 grid grid-cols-3 gap-2 bg-gray-50/30">
-                                                        {activeShifts.map(shift => (
-                                                            <div key={shift.id} className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl border bg-white shadow-sm ${c.border}`}>
-                                                                <p className={`font-bold text-[12px] ${c.text} truncate`}>{shift.employeeId}</p>
-                                                            </div>
-                                                        ))}
+                                                        {activeShifts.map(shift => {
+                                                            const isOff = selectedLeaves.some(l => l.employeeId === shift.employeeId);
+                                                            return (
+                                                                <div key={shift.id} className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl border bg-white shadow-sm ${c.border}`}>
+                                                                    <div className="flex items-center gap-1">
+                                                                        <p className={`font-bold text-[12px] ${c.text} truncate`}>{shift.employeeId}</p>
+                                                                        {isOff && <span className="text-[8px] font-black bg-rose-100 text-rose-600 px-1 py-0.5 rounded uppercase" title="Có đăng ký OFF nhưng vẫn đi làm">OFF</span>}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             );

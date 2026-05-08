@@ -70,11 +70,11 @@ export async function POST(request: Request) {
         });
 
         if (!ktvItems || ktvItems.length === 0) {
-            // [Lỗ hổng P2]: KTV không có trong technicianCodes của bất kỳ item nào, không thể tạo source of truth!
+            // [Lỗ hổng P2]: KTV không có trong technicianCodes của bất kỳ item nào
             console.error(`[KTV Review API] FAILED ASSIGNMENT CHECK. `);
-            console.error(`- techCode resolved to: "${techCode}" (from bUser? ${!!bUser}, body.techCode: "${body.techCode}")`);
+            console.error(`- techCode resolved to: "${techCode}"`);
             console.error(`- normalizedTechCode: "${normalizedTechCode}"`);
-            console.error(`- allItems from DB:`, JSON.stringify(allItems, null, 2));
+            // Trả về false nhưng KHÔNG văng lỗi 500, để KTV có thể thoát màn hình
             return NextResponse.json({ success: false, error: 'KTV is not assigned to any items in this booking' }, { status: 403 });
         }
         console.log(`[KTV Review API] ASSIGNMENT CHECK PASSED. ktvItems count:`, ktvItems.length);

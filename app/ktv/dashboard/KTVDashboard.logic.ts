@@ -721,37 +721,40 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             // Lưu trạng thái tính toán vào object để so sánh lần sau
                             res.data.currentStatus = currentStatus;
                             
-                            // Gộp TỔNG duration của tất cả chặng/dịch vụ
-                            const totalSegDuration = allMySegs.length > 0
-                                ? allMySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0)
-                                : (assignedItem?.duration || 60);
+                            // [Sửa đổi]: Đếm lùi theo từng chặng (current segment only)
+                            const currentSeg = allMySegs[calculatedSegIdx] || allMySegs[0] || {};
+                            const currentSegDuration = Number(currentSeg.duration) || assignedItem?.duration || 60;
                             
-                            console.log("⏱️ [Timer] calculatedSegIdx:", calculatedSegIdx, "totalSegDuration:", totalSegDuration, "totalSegs:", allMySegs.length);
+                            console.log("⏱️ [Timer] calculatedSegIdx:", calculatedSegIdx, "currentSegDuration:", currentSegDuration, "totalSegs:", allMySegs.length);
 
-                            // Cập nhật thời gian dựa trên tổng thời gian
-                            const totalSecs = totalSegDuration * 60;
+                            // Cập nhật thời gian dựa trên chặng hiện tại
+                            const currentSecs = currentSegDuration * 60;
                             let tStart = assignedItem?.timeStart || res.data.timeStart;
                             
                             if (currentStatus === 'IN_PROGRESS') {
                                 // Nếu đã override chặng thủ công, KHÔNG ghi đè timer
                                 if (!manualSegmentOverrideRef.current) {
-                                    // Bỏ actualStartTime từng chặng, dùng chung tStart
-                                    let activeSegStartTime = allMySegs[0]?.actualStartTime || tStart;
+                                    // Dùng actualStartTime của chặng HIỆN TẠI
+                                    let activeSegStartTime = currentSeg.actualStartTime || tStart;
                                     if (activeSegStartTime) {
-                                        if (typeof activeSegStartTime === 'string' && !activeSegStartTime.includes('Z') && !activeSegStartTime.includes('+')) {
+                                        if (typeof activeSegStartTime === 'string' && /^\d{1,2}:\d{2}/.test(activeSegStartTime)) {
+                                            const [h, m] = activeSegStartTime.split(':').map(Number);
+                                            const d = new Date(); d.setHours(h, m, 0, 0);
+                                            activeSegStartTime = d.toISOString();
+                                        } else if (typeof activeSegStartTime === 'string' && !activeSegStartTime.includes('Z') && !activeSegStartTime.includes('+')) {
                                             activeSegStartTime = activeSegStartTime.replace(' ', 'T') + 'Z';
                                         }
                                         const start = new Date(activeSegStartTime).getTime();
                                         const now = new Date().getTime() + timeOffsetRef.current;
                                         const elapsed = Math.floor((now - start) / 1000);
                                         
-                                        // Đếm lùi một vòng duy nhất
-                                        setTimeRemaining(Math.max(0, totalSecs - elapsed));
+                                        // Đếm lùi cho chặng hiện tại
+                                        setTimeRemaining(Math.max(0, currentSecs - elapsed));
                                     }
                                 }
                             } else if (!isTimerRunningRef.current) {
                                 // Chỉ reset timer khi CHƯA chạy (tránh nhảy số khi đang đếm ngược)
-                                setTimeRemaining(totalSecs);
+                                setTimeRemaining(currentSecs);
                             }
 
                             return res.data;
@@ -957,25 +960,31 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 return timeA.localeCompare(timeB);
             });
 
-            // Gộp tổng thời gian
-            const totalSegDuration = allMySegs.length > 0
-                ? allMySegs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0)
-                : (assignedItem?.duration || 60);
+            // [Sửa đổi]: Gộp theo chặng hiện tại
+            const calculatedSegIdx = activeSegmentIndexRef.current;
+            const currentSeg = allMySegs[calculatedSegIdx] || allMySegs[0] || {};
+            const currentSegDuration = Number(currentSeg.duration) || assignedItem?.duration || 60;
 
-            const totalSecs = totalSegDuration * 60;
+            const currentSecs = currentSegDuration * 60;
             
-            let activeSegStartTime = allMySegs[0]?.actualStartTime || tStart;
-            if (typeof activeSegStartTime === 'string' && !activeSegStartTime.includes('Z') && !activeSegStartTime.includes('+')) {
+            let activeSegStartTime = currentSeg.actualStartTime || tStart;
+            if (activeSegStartTime && typeof activeSegStartTime === 'string' && /^\d{1,2}:\d{2}/.test(activeSegStartTime)) {
+                const [h, m] = activeSegStartTime.split(':').map(Number);
+                const d = new Date(); d.setHours(h, m, 0, 0);
+                activeSegStartTime = d.toISOString();
+            } else if (activeSegStartTime && typeof activeSegStartTime === 'string' && !activeSegStartTime.includes('Z') && !activeSegStartTime.includes('+')) {
                 activeSegStartTime = activeSegStartTime.replace(' ', 'T') + 'Z';
             }
 
-            const start = new Date(activeSegStartTime).getTime();
-            const now = new Date().getTime() + timeOffsetRef.current;
-            const elapsed = Math.floor((now - start) / 1000);
+            if (activeSegStartTime) {
+                const start = new Date(activeSegStartTime).getTime();
+                const now = new Date().getTime() + timeOffsetRef.current;
+                const elapsed = Math.floor((now - start) / 1000);
 
-            const newRemaining = Math.max(0, totalSecs - elapsed);
-            console.log(`📱 [Timer Sync] Recalculated timer: ${newRemaining}s remaining (total duration: ${totalSegDuration}m)`);
-            setTimeRemaining(newRemaining);
+                const newRemaining = Math.max(0, currentSecs - elapsed);
+                console.log(`📱 [Timer Sync] Recalculated timer: ${newRemaining}s remaining (duration: ${currentSegDuration}m)`);
+                setTimeRemaining(newRemaining);
+            }
         };
 
         // Chạy ngay khi booking thay đổi (do Lễ tân update hoặc Realtime)

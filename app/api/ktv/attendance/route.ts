@@ -247,7 +247,7 @@ export async function POST(request: Request) {
                 // 🔹 Active shift for User
                 await supabase.from('Users').update({ isOnShift: true }).eq('id', employeeId);
 
-                // 🔹 Update KTVShifts if selectedShiftType is provided
+                // 🔹 Update KTVShifts if selectedShiftType is provided (Tạm thời cho hôm nay)
                 if (selectedShiftType) {
                     const { data: currentActive } = await supabase
                         .from('KTVShifts')

@@ -36,7 +36,7 @@ function normalizePermissions(permissions: unknown): string[] {
 }
 
 function getFallbackPermissions(roleId: string) {
-    if (roleId === 'admin' || roleId === 'dev') {
+    if (roleId === 'admin' || roleId === 'dev' || roleId === 'branch_manager') {
         return MODULES.map(module => module.id);
     }
 
