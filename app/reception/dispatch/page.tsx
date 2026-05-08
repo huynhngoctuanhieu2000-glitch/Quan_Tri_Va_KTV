@@ -244,13 +244,14 @@ export default function DispatchBoardPage() {
         fetchData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'BookingItems' }, (payload) => {
-        console.log("🔄 [Dispatch] BookingItem changed:", payload.new?.id, payload.new?.status);
+        const newItem = payload.new as any;
+        console.log("🔄 [Dispatch] BookingItem changed:", newItem?.id, newItem?.status);
         // 🚀 Granular patch: Always update service status in local state (even when editing)
-        if (payload.new?.bookingId && payload.new?.status) {
+        if (newItem?.bookingId && newItem?.status) {
           setOrders(prev => prev.map(o => {
-            if (o.id === payload.new.bookingId) {
+            if (o.id === newItem.bookingId) {
               const updatedServices = o.services.map((svc: any) =>
-                svc.id === payload.new.id ? { ...svc, status: payload.new.status } : svc
+                svc.id === newItem.id ? { ...svc, status: newItem.status } : svc
               );
               return { ...o, services: updatedServices };
             }
