@@ -176,8 +176,8 @@ export async function GET() {
             const total_bonus = ledger.bonus; // Realtime bonus not yet implemented in summary (cron only)
             const total_penalty = ledger.penalty;
 
-            // rt_adjustment and rt_withdrawn already contain ALL history, so we don't add ledger.adj or ledger.withdrawn
-            const gross_income = total_commission + total_bonus + rt_adjustment - total_penalty;
+            // ⚠️ Bonus KHÔNG cộng vào ví rút tiền — chỉ hiển thị riêng
+            const gross_income = total_commission + rt_adjustment - total_penalty;
             const min_deposit = global_min_deposit;
             const net_balance = gross_income - rt_withdrawn - total_pending;
             const available_balance = Math.max(0, net_balance - min_deposit);

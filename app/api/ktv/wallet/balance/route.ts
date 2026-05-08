@@ -41,10 +41,11 @@ export async function GET(request: Request) {
         const GLOBAL_START_DATE_ISO = '2026-05-04T00:00:00.000Z';
 
         // 1. Fetch configs
-        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
+        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }, { data: bonusConfigs }] = await Promise.all([
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single(),
-            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single()
+            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single(),
+            supabase.from('SystemConfigs').select('key, value').in('key', ['ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus'])
         ]);
         
         let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
@@ -56,6 +57,13 @@ export async function GET(request: Request) {
             const rawRate = String(rateConf.value).replace(/[^0-9]/g, '');
             if (rawRate) ratePer60 = Number(rawRate);
         }
+        // Bonus config per shift
+        const bonusMap: Record<string, number> = {};
+        (bonusConfigs || []).forEach((c: any) => { bonusMap[c.key] = Number(c.value) || 20; });
+        const s1Bonus = bonusMap['ktv_shift_1_bonus'] || 20;
+        const s2Bonus = bonusMap['ktv_shift_2_bonus'] || 20;
+        const s3Bonus = bonusMap['ktv_shift_3_bonus'] || 40;
+
         if (depositConf?.value) {
             const rawDeposit = String(depositConf.value).replace(/[^0-9]/g, '');
             if (rawDeposit) min_deposit = Number(rawDeposit);
@@ -71,12 +79,12 @@ export async function GET(request: Request) {
         // 2. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
         const { data: ledgers } = await supabase
             .from('KTVDailyLedger')
-            .select('date, total_commission, total_tip')
+            .select('date, total_commission, total_tip, total_bonus')
             .eq('staff_id', techCode)
             .gte('date', GLOBAL_START_DATE_STR);
 
         let realtimeStartStr = `${GLOBAL_START_DATE_STR}T00:00:00+07:00`;
-        const ledgerSummary = { comm: 0, tip: 0 };
+        const ledgerSummary = { comm: 0, tip: 0, bonus: 0 };
 
         if (ledgers && ledgers.length > 0) {
             // LOẠI BỎ Sổ cái của ngày hôm nay (nếu có) do Cron hoặc Admin chạy tay sinh ra
@@ -88,6 +96,7 @@ export async function GET(request: Request) {
                     if (l.date > maxDateStr) maxDateStr = l.date;
                     ledgerSummary.comm += Number(l.total_commission);
                     ledgerSummary.tip += Number(l.total_tip);
+                    ledgerSummary.bonus += Number(l.total_bonus || 0);
                 });
 
                 // Tính toán chính xác ngày tiếp theo mà không bị lệch múi giờ
@@ -104,11 +113,24 @@ export async function GET(request: Request) {
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
-                id, timeStart, timeEnd, status, technicianCode,
-                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
+                id, timeStart, timeEnd, status, technicianCode, rating, createdAt,
+                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip, itemRating )
             `)
             .gte('timeStart', realtimeStartStr)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
+
+        // Fetch KTV shift for bonus calculation
+        const { data: shiftsData } = await supabase
+            .from('KTVShifts')
+            .select('shiftType')
+            .eq('employeeId', techCode)
+            .eq('status', 'ACTIVE')
+            .order('effectiveFrom', { ascending: false })
+            .limit(1);
+        const shiftType = shiftsData?.[0]?.shiftType || 'SHIFT_1';
+        let basePoints = s1Bonus;
+        if (shiftType === 'SHIFT_2') basePoints = s2Bonus;
+        else if (shiftType === 'SHIFT_3') basePoints = s3Bonus;
 
         const { data: services } = await supabase.from('Services').select('id, duration');
         const svcDurationMap: Record<string, number> = {};
@@ -116,6 +138,7 @@ export async function GET(request: Request) {
 
         let rt_commission = 0;
         let rt_tip = 0;
+        let rt_bonus = 0;
         const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
         for (const b of validBookings) {
@@ -146,6 +169,22 @@ export async function GET(request: Request) {
 
             rt_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
             rt_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
+
+            // Bonus: tính điểm thưởng theo rating >= 4
+            const bRating = Number(b.rating) || 0;
+            let bookingBonusPoints = 0;
+            for (const item of relevantItems) {
+                const iRating = Number(item.itemRating) || bRating || 0;
+                if (iRating >= 4) {
+                    let numTechs = 1;
+                    if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
+                        numTechs = item.technicianCodes.length;
+                    }
+                    bookingBonusPoints += numTechs > 0 ? (basePoints / numTechs) : 0;
+                }
+            }
+            if (bookingBonusPoints > basePoints) bookingBonusPoints = basePoints;
+            rt_bonus += Math.round(bookingBonusPoints);
         }
 
         // 4. Fetch Adjustments (Luôn lấy từ GLOBAL_START_DATE_ISO để khớp Timeline, KHÔNG dùng ledger)
@@ -172,7 +211,9 @@ export async function GET(request: Request) {
         // 6. Calculate Final Balances (Kết hợp Ledger và Realtime)
         const total_commission = ledgerSummary.comm + rt_commission;
         const total_tip = ledgerSummary.tip + rt_tip;
+        const total_bonus = ledgerSummary.bonus + rt_bonus;
 
+        // ⚠️ Bonus KHÔNG cộng vào ví rút tiền — chỉ hiển thị ở lịch sử
         const gross_income = total_commission + total_adjustment;
         const net_balance = gross_income - total_withdrawn - total_pending;
         const available_balance = Math.max(0, net_balance - min_deposit);
@@ -183,6 +224,7 @@ export async function GET(request: Request) {
             data: {
                 total_commission,
                 total_tip,
+                total_bonus,
                 total_adjustment,
                 total_withdrawn,
                 total_pending,
