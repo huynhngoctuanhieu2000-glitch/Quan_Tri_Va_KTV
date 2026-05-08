@@ -391,7 +391,7 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             </div>
                                                             
                                                             {/* Danh sách KTV */}
-                                                            {s.staffList && s.staffList.length > 0 && (
+                                                            {!s.isUtility && s.staffList && s.staffList.length > 0 && (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {s.staffList.map((st: any, idx: number) => (
                                                                         <span key={idx} className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
@@ -402,40 +402,42 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             )}
 
                                                             {/* Hiển thị thời gian THEO TỪNG KTV */}
-                                                            {s.staffList && s.staffList.length > 1 ? (
-                                                                <div className="space-y-1 mt-1">
-                                                                    {s.staffList.map((st: any, stIdx: number) => {
-                                                                        const seg = st?.segments?.[0];
-                                                                        const ktvStart = seg?.actualStartTime || subOrder.calculatedStart || seg?.startTime || displayStart;
-                                                                        const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : (seg?.endTime || getDynamicEndTime(ktvStart, Number(seg?.duration) || duration));
-                                                                        return (
-                                                                            <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
-                                                                                <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>
-                                                                                    <span className="text-indigo-300 text-[8px]">→</span>
-                                                                                    <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvEnd)}</span>
+                                                            {!s.isUtility && (
+                                                                s.staffList && s.staffList.length > 1 ? (
+                                                                    <div className="space-y-1 mt-1">
+                                                                        {s.staffList.map((st: any, stIdx: number) => {
+                                                                            const seg = st?.segments?.[0];
+                                                                            const ktvStart = seg?.actualStartTime || subOrder.calculatedStart || seg?.startTime || displayStart;
+                                                                            const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : (seg?.endTime || getDynamicEndTime(ktvStart, Number(seg?.duration) || duration));
+                                                                            return (
+                                                                                <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
+                                                                                    <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
+                                                                                    <div className="flex items-center gap-1.5">
+                                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>
+                                                                                        <span className="text-indigo-300 text-[8px]">→</span>
+                                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvEnd)}</span>
+                                                                                    </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1.5 border border-indigo-100/50 mt-1">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
-                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(displayStart)}</span>
+                                                                            );
+                                                                        })}
                                                                     </div>
-                                                                    <div className="text-indigo-300">
-                                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                                                ) : (
+                                                                    <div className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1.5 border border-indigo-100/50 mt-1">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
+                                                                            <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(displayStart)}</span>
+                                                                        </div>
+                                                                        <div className="text-indigo-300">
+                                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                                                        </div>
+                                                                        <div className="flex flex-col text-right">
+                                                                            <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Kết thúc</span>
+                                                                            <span className="text-[10px] font-black text-indigo-700">
+                                                                                {formatToHourMinute(displayEnd)}
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="flex flex-col text-right">
-                                                                        <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Kết thúc</span>
-                                                                        <span className="text-[10px] font-black text-indigo-700">
-                                                                            {formatToHourMinute(displayEnd)}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
+                                                                )
                                                             )}
                                                         </div>
                                                             );

@@ -46,6 +46,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         // Nếu là order pending chưa phân KTV
         if (order.dispatchStatus === 'pending') {
             const pendingServices = order.services.filter(svc => 
+                svc.serviceId !== 'NHS0900' &&
                 !svc.serviceName?.toLowerCase().includes('phòng riêng') && 
                 !svc.serviceName?.toLowerCase().includes('phong rieng')
             );
@@ -82,7 +83,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         const allStaffs: Array<{ st: any, svcId: string, svcDuration: number, svcTimeStart: string, origStart: string }> = [];
         
         order.services.forEach(svc => {
-            if (svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return;
+            if (svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return;
             if (!svc.staffList) return;
             
             svc.staffList.forEach(st => {
@@ -146,10 +147,10 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         const groupCalculatedStarts = new Map<string, string>();
 
         order.services.forEach(svc => {
-            if (svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return;
+            if (svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return;
             
             if (svc.staffList && svc.staffList.length > 0) {
-                const timeGroups = new Map<string, typeof svc.staffList>();
+                const timeGroups = new Map<string, { calculatedStart: string, staffs: any[] }>();
                 
                 svc.staffList.forEach(st => {
                     const origStart = st.segments?.[0]?.startTime || svc.timeStart || 'unknown';
@@ -165,7 +166,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     
                     if (!ktvGroups.has(ktvSignature)) {
                         ktvGroups.set(ktvSignature, []);
-                        groupKtvIds.set(ktvSignature, groupInfo.staffs.map(s => s.ktvId));
+                        groupKtvIds.set(ktvSignature, groupInfo.staffs.map((s: any) => s.ktvId));
                         groupCalculatedStarts.set(ktvSignature, groupInfo.calculatedStart);
                     }
                     
@@ -173,7 +174,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     let isAnyStarted = false;
                     let isAllFeedback = true;
                     
-                    groupInfo.staffs.forEach(st => {
+                    groupInfo.staffs.forEach((st: any) => {
                         if (!st.segments || st.segments.length === 0) {
                             isAllCompleted = false;
                             isAllFeedback = false;
@@ -234,7 +235,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         });
 
         // 🌟 Inject Utilities (Phòng Riêng) back into UI 🌟
-        const privateRooms = order.services.filter(svc => svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng'));
+        const privateRooms = order.services.filter(svc => svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng'));
         if (privateRooms.length > 0) {
             const utilityServices = privateRooms.map(pr => ({ ...pr, isUtility: true }));
             if (resultForOrder.length > 0) {
@@ -242,12 +243,20 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 resultForOrder[0].services.push(...utilityServices as ServiceBlock[]);
             } else {
                 // Trường hợp hiếm: Đơn hàng chỉ có Phòng Riêng
+                const statuses = utilityServices.map(s => s.status || 'NEW');
+                let dStatus = 'PREPARING';
+                if (statuses.includes('IN_PROGRESS')) dStatus = 'IN_PROGRESS';
+                else if (statuses.includes('CLEANING')) dStatus = 'CLEANING';
+                else if (statuses.includes('FEEDBACK')) dStatus = 'FEEDBACK';
+                else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dStatus = 'DONE';
+                else if (statuses.includes('PREPARING')) dStatus = 'PREPARING';
+
                 resultForOrder.push({
                     id: `${order.id}_utility`,
                     bookingId: order.id,
                     originalOrder: order,
                     services: utilityServices as ServiceBlock[],
-                    dispatchStatus: 'PREPARING',
+                    dispatchStatus: dStatus as any,
                     ktvSignature: 'utility',
                     ktvIds: [],
                     calculatedStart: order.timeStart || ''
