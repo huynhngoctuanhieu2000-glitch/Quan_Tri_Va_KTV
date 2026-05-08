@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Các config mặc định nếu chưa có trong DB
 const DEFAULT_CONFIGS = {
