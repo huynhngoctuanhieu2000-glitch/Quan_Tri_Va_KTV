@@ -211,11 +211,30 @@ export function useKTVDashboard(config?: DashboardConfig) {
             let allowed: Date | null = null;
 
             if (booking.dispatchStartTime) {
-                // Quầy có nhập giờ bắt đầu (HH:mm)
-                const [h, m] = String(booking.dispatchStartTime).split(':').map(Number);
-                const d = new Date();
-                d.setHours(h, m, 0, 0);
-                allowed = d;
+                // Parse dispatchStartTime — có thể là "HH:mm" hoặc ISO timestamp
+                const raw = String(booking.dispatchStartTime);
+                let d: Date | null = null;
+                
+                if (/^\d{1,2}:\d{2}$/.test(raw)) {
+                    // Format HH:mm
+                    const [h, m] = raw.split(':').map(Number);
+                    d = new Date();
+                    d.setHours(h, m, 0, 0);
+                } else {
+                    // ISO timestamp hoặc format khác
+                    d = new Date(raw);
+                }
+                
+                // Guard: Invalid Date → cho phép bắt đầu ngay
+                if (!d || isNaN(d.getTime())) {
+                    allowed = null;
+                } else {
+                    // 🌙 FIX CA ĐÊM: Nếu allowed > now hơn 12h → ca đêm cross midnight → lùi 1 ngày
+                    if (d.getTime() - Date.now() > 12 * 60 * 60 * 1000) {
+                        d.setDate(d.getDate() - 1);
+                    }
+                    allowed = d;
+                }
             } else if (booking.last_served_at) {
                 // Quầy không nhập -> Dùng mốc điều phối + thời gian chuẩn bị
                 if (settings.ktv_setup_duration_minutes != null && !isNaN(Number(settings.ktv_setup_duration_minutes))) {

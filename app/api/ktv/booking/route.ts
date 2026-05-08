@@ -450,7 +450,14 @@ export async function PATCH(request: Request) {
                     const nowUtc = new Date();
                     const vnOffsetMs = 7 * 60 * 60 * 1000;
                     const nowVn = new Date(nowUtc.getTime() + vnOffsetMs);
-                    const allowedUtc = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate(), h, m, 0) - vnOffsetMs);
+                    let allowedUtc = new Date(Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate(), h, m, 0) - vnOffsetMs);
+                    
+                    // 🌙 FIX CA ĐÊM: Nếu start_time chiều (VD: 17:29) nhưng hiện tại đã qua 0:00
+                    // → allowed bị tính vào ngày hôm sau → lùi 1 ngày
+                    if (allowedUtc.getTime() - nowUtc.getTime() > 12 * 60 * 60 * 1000) {
+                        allowedUtc = new Date(allowedUtc.getTime() - 24 * 60 * 60 * 1000);
+                    }
+                    
                     allowed = allowedUtc;
                 }
                 if (allowed && new Date().getTime() < (allowed.getTime() - 5000)) {

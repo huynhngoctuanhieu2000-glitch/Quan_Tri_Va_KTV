@@ -1505,12 +1505,43 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
         if (fetchErr || !originalItem) throw new Error('Không tìm thấy dịch vụ gốc để tách');
 
         // 2. Cập nhật Item gốc (KTV 1) với thời lượng mới
-        // Lưu ý: Cần tính toán lại duration của segment nếu đã có
+        // Lưu ý: Cần tính toán lại duration + endTime của segment
         let originalSegs: any[] = [];
         try { originalSegs = typeof originalItem.segments === 'string' ? JSON.parse(originalItem.segments) : (originalItem.segments || []); } catch {}
         
+        // Helper: tính endTime = startTime + duration (phút)
+        const calcEnd = (start: string, mins: number): string => {
+            if (!start || !/^\d{1,2}:\d{2}$/.test(start)) {
+                // Nếu startTime không phải HH:mm, tạo từ giờ hiện tại
+                const now = new Date();
+                const h = now.getHours();
+                const m = now.getMinutes();
+                const d = new Date();
+                d.setHours(h, m + mins, 0, 0);
+                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            }
+            const [h, m] = start.split(':').map(Number);
+            const d = new Date();
+            d.setHours(h, m + mins, 0, 0);
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+
+        // Lấy startTime gốc của KTV1 (nếu chưa có → dùng giờ hiện tại)
+        let ktv1Start = originalSegs[0]?.startTime || '';
+        if (!ktv1Start) {
+            const now = new Date();
+            ktv1Start = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+        const ktv1End = calcEnd(ktv1Start, dur1);
+        const ktv2Start = ktv1End; // Nối tiếp: KTV2 bắt đầu ngay khi KTV1 kết thúc
+        const ktv2End = calcEnd(ktv2Start, dur2);
+
         if (originalSegs.length > 0) {
             originalSegs[0].duration = dur1;
+            originalSegs[0].startTime = ktv1Start;
+            originalSegs[0].endTime = ktv1End;
+        } else {
+            originalSegs = [{ duration: dur1, startTime: ktv1Start, endTime: ktv1End }];
         }
 
         const { error: updateErr } = await supabase
@@ -1523,12 +1554,18 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
         if (updateErr) throw updateErr;
 
         // 3. Tạo Item mới (nhân bản) cho KTV 2
-        // Bỏ qua id gốc để supabase tự tạo id mới, set giá = 0, xóa bỏ ktv cũ
-        const { id, created_at, ...newItemData } = originalItem;
+        // Bỏ qua id gốc, tạo id mới vì BookingItems.id là text PK không auto-generate
+        const { id: _oldId, created_at: _ca, ...newItemData } = originalItem;
+        newItemData.id = crypto.randomUUID();
         
         newItemData.price = 0; // Giá = 0 để không đội tiền
         newItemData.technicianCodes = []; // Trống để Lễ tân chọn người mới
-        newItemData.segments = [{ duration: dur2 }]; // Segment mới với duration mới
+        // ✅ Auto-fill segment nối tiếp: bắt đầu = KTV1 kết thúc
+        newItemData.segments = [{ 
+            duration: dur2, 
+            startTime: ktv2Start, 
+            endTime: ktv2End 
+        }];
         newItemData.timeStart = null;
         newItemData.timeEnd = null;
         newItemData.status = 'NEW';
@@ -1538,6 +1575,8 @@ export async function splitBookingItem(bookingId: string, itemId: string, dur1: 
         opts.isSplitItem = true;
         opts.parentItemId = itemId;
         newItemData.options = opts;
+
+        console.log(`📐 [Split] KTV1: ${ktv1Start}→${ktv1End} (${dur1}p) | KTV2: ${ktv2Start}→${ktv2End} (${dur2}p)`);
 
         const { error: insertErr } = await supabase
             .from('BookingItems')
