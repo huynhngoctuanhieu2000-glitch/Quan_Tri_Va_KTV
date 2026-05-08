@@ -6,10 +6,9 @@
   - API `balance` sử dụng cơ chế lai (Hybrid) giữa dữ liệu đã chốt trong `KTVDailyLedger` và đơn hàng thực tế (Realtime). Do lỗi tính toán mốc thời gian, các đơn hàng của "ngày hôm nay" bị tính trùng (double count) cả trong Ledger và Realtime.
   - API `balance` cộng gộp các khoản Điều chỉnh (WalletAdjustments) và Rút tiền (KTVWithdrawals) từ toàn bộ lịch sử, thay vì từ mốc bắt đầu `2026-05-04` như API `timeline`.
 
-## Giải pháp triển khai (Tạm thời)
-Nhằm giải quyết triệt để lỗi hiển thị tức thời cho người dùng, đảm bảo số dư tổng khớp 100% với lịch sử:
-1. **Đồng nhất cơ chế**: Chỉnh sửa API `/api/ktv/wallet/balance/route.ts` để loại bỏ việc đọc từ `KTVDailyLedger`. 
-2. **Tính toán Realtime toàn phần**: API `balance` sẽ tính lại toàn bộ tiền tua từ bảng `Bookings` và `BookingItems` bắt đầu từ mốc thời gian `2026-05-04` (tương tự như API `timeline`).
-3. **Đồng bộ mốc thời gian**: Giới hạn việc truy vấn dữ liệu từ bảng `WalletAdjustments` và `KTVWithdrawals` cũng từ mốc `2026-05-04`.
-
-*Lưu ý: Đây là biện pháp tạm thời để fix bug khẩn cấp. Về lâu dài, cơ chế Daily Ledger cần được fix triệt để để giảm tải query cho database khi số lượng đơn hàng tăng lên.*
+## Giải pháp triển khai
+1. **Khôi phục cơ chế Hybrid an toàn**: API `/api/ktv/wallet/balance/route.ts` VẪN SẼ tiếp tục sử dụng `KTVDailyLedger` để giữ hiệu năng hệ thống khi scale.
+2. **Fix triệt để lỗi Double-Counting**: 
+   - Lọc bỏ Sổ cái (Ledger) của "ngày hôm nay" (VD: `date === '2026-05-08'`) ra khỏi phép cộng của Sổ cái.
+   - Tính toán mốc `realtimeStartStr` chuẩn xác dựa trên các Ledger trong quá khứ mà không bị lệch múi giờ UTC. Điều này đảm bảo toàn bộ đơn hàng của "ngày hôm nay" sẽ luôn được tính bằng cơ chế Realtime.
+3. **Đồng bộ mốc thời gian**: Giới hạn việc truy vấn dữ liệu từ bảng `WalletAdjustments` và `KTVWithdrawals` bắt đầu từ mốc `2026-05-04` để khớp 100% với màn hình Timeline.

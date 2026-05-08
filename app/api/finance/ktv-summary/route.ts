@@ -30,7 +30,8 @@ const getMinsFromTimes = (start: string, end: string) => {
 
 export async function GET() {
     try {
-        const GLOBAL_START_DATE = '2026-05-04T00:00:00+07:00';
+        const GLOBAL_START_DATE_STR = '2026-05-04';
+        const GLOBAL_START_DATE_ISO = '2026-05-04T00:00:00.000Z';
 
         // 1. Get configs
         const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
@@ -63,36 +64,49 @@ export async function GET() {
             
         if (!ktvs || ktvs.length === 0) return NextResponse.json({ success: true, data: [] });
 
-        // 3. 🌉 DYNAMIC BRIDGE: Fetch Ledger & Calculate realtimeStartStr
+        // --- CƠ CHẾ DYNAMIC BRIDGE (Đã fix lỗi trùng lặp dữ liệu) ---
+        // Lấy ngày hiện tại ở Việt Nam (YYYY-MM-DD)
+        const nowVn = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+        const tzOffsetVn = 7 * 60;
+        const localTimeVn = new Date(nowVn.getTime() + tzOffsetVn * 60 * 1000);
+        const todayStr = localTimeVn.toISOString().split('T')[0];
+
+        // 3. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
         const { data: ledgers } = await supabase
             .from('KTVDailyLedger')
-            .select('date, staff_id, total_commission, total_tip, total_bonus, total_penalty, total_adjustment, total_withdrawn');
+            .select('date, staff_id, total_commission, total_tip, total_bonus, total_penalty, total_adjustment, total_withdrawn')
+            .gte('date', GLOBAL_START_DATE_STR);
 
-        let realtimeStartStr = GLOBAL_START_DATE;
+        let realtimeStartStr = `${GLOBAL_START_DATE_STR}T00:00:00+07:00`;
         const ledgerMap: Record<string, any> = {};
         ktvs.forEach(k => {
             ledgerMap[k.id] = { comm: 0, tip: 0, bonus: 0, penalty: 0, adj: 0, withdrawn: 0 };
         });
 
         if (ledgers && ledgers.length > 0) {
-            // Find max date
-            let maxDateStr = ledgers[0].date;
-            ledgers.forEach(l => {
-                if (l.date > maxDateStr) maxDateStr = l.date;
-                if (ledgerMap[l.staff_id]) {
-                    ledgerMap[l.staff_id].comm += Number(l.total_commission || 0);
-                    ledgerMap[l.staff_id].tip += Number(l.total_tip || 0);
-                    ledgerMap[l.staff_id].bonus += Number(l.total_bonus || 0);
-                    ledgerMap[l.staff_id].penalty += Number(l.total_penalty || 0);
-                    // We intentionally ignore ledger.adj and ledger.withdrawn to prevent double counting
-                    // because we fetch their FULL history dynamically in the next step.
-                }
-            });
+            // LOẠI BỎ Sổ cái của ngày hôm nay (nếu có)
+            const pastLedgers = ledgers.filter(l => l.date < todayStr);
+            
+            if (pastLedgers.length > 0) {
+                let maxDateStr = pastLedgers[0].date;
+                pastLedgers.forEach(l => {
+                    if (l.date > maxDateStr) maxDateStr = l.date;
+                    if (ledgerMap[l.staff_id]) {
+                        ledgerMap[l.staff_id].comm += Number(l.total_commission || 0);
+                        ledgerMap[l.staff_id].tip += Number(l.total_tip || 0);
+                        ledgerMap[l.staff_id].bonus += Number(l.total_bonus || 0);
+                        ledgerMap[l.staff_id].penalty += Number(l.total_penalty || 0);
+                    }
+                });
 
-            // realtimeStartStr = maxDate + 1 day at 00:00:00+07:00
-            const lastDate = new Date(`${maxDateStr}T00:00:00+07:00`);
-            lastDate.setDate(lastDate.getDate() + 1);
-            realtimeStartStr = `${lastDate.toISOString().split('T')[0]}T00:00:00+07:00`;
+                // Tính toán chính xác ngày tiếp theo mà không bị lệch múi giờ
+                const lastDate = new Date(`${maxDateStr}T00:00:00+07:00`);
+                const nextDate = new Date(lastDate.getTime() + 24 * 60 * 60 * 1000);
+                const localNextDate = new Date(nextDate.getTime() + tzOffsetVn * 60 * 1000);
+                const nextDateStr = localNextDate.toISOString().split('T')[0];
+                
+                realtimeStartStr = `${nextDateStr}T00:00:00+07:00`;
+            }
         }
 
         // 4. Fetch Realtime Bookings from realtimeStartStr
@@ -111,10 +125,10 @@ export async function GET() {
 
         const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
-        // 4. Fetch Realtime Adjustments and Withdrawals (Fetch ALL history to not miss past withdrawals/starting balances)
-        const { data: realtimeAdjustments } = await supabase.from('WalletAdjustments').select('staff_id, amount');
-        const { data: realtimeWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount, status');
-        const { data: pendingWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount').eq('status', 'PENDING');
+        // 5. Fetch Realtime Adjustments and Withdrawals (Luôn lấy từ GLOBAL_START_DATE_ISO)
+        const { data: realtimeAdjustments } = await supabase.from('WalletAdjustments').select('staff_id, amount').gte('created_at', GLOBAL_START_DATE_ISO);
+        const { data: realtimeWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount, status').gte('request_date', GLOBAL_START_DATE_ISO);
+        const { data: pendingWithdrawals } = await supabase.from('KTVWithdrawals').select('staff_id, amount').eq('status', 'PENDING').gte('request_date', GLOBAL_START_DATE_ISO);
 
         // 5. Calculate per KTV
         const summaries = ktvs.map(ktv => {

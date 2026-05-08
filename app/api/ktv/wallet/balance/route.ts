@@ -37,7 +37,8 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: false, error: 'Thiếu mã KTV' }, { status: 400 });
         }
 
-        const GLOBAL_START_DATE = '2026-05-04T00:00:00.000Z';
+        const GLOBAL_START_DATE_STR = '2026-05-04';
+        const GLOBAL_START_DATE_ISO = '2026-05-04T00:00:00.000Z';
 
         // 1. Fetch configs
         const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
@@ -60,22 +61,61 @@ export async function GET(request: Request) {
             if (rawDeposit) min_deposit = Number(rawDeposit);
         }
 
-        // 2. Fetch Realtime Bookings (Tạm thời bỏ qua Ledger để khớp với Timeline)
+        // --- CƠ CHẾ DYNAMIC BRIDGE (Đã fix lỗi trùng lặp dữ liệu) ---
+        // Lấy ngày hiện tại ở Việt Nam (YYYY-MM-DD)
+        const nowVn = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+        const tzOffsetVn = 7 * 60;
+        const localTimeVn = new Date(nowVn.getTime() + tzOffsetVn * 60 * 1000);
+        const todayStr = localTimeVn.toISOString().split('T')[0];
+
+        // 2. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
+        const { data: ledgers } = await supabase
+            .from('KTVDailyLedger')
+            .select('date, total_commission, total_tip')
+            .eq('staff_id', techCode)
+            .gte('date', GLOBAL_START_DATE_STR);
+
+        let realtimeStartStr = `${GLOBAL_START_DATE_STR}T00:00:00+07:00`;
+        const ledgerSummary = { comm: 0, tip: 0 };
+
+        if (ledgers && ledgers.length > 0) {
+            // LOẠI BỎ Sổ cái của ngày hôm nay (nếu có) do Cron hoặc Admin chạy tay sinh ra
+            const pastLedgers = ledgers.filter(l => l.date < todayStr);
+            
+            if (pastLedgers.length > 0) {
+                let maxDateStr = pastLedgers[0].date;
+                pastLedgers.forEach(l => {
+                    if (l.date > maxDateStr) maxDateStr = l.date;
+                    ledgerSummary.comm += Number(l.total_commission);
+                    ledgerSummary.tip += Number(l.total_tip);
+                });
+
+                // Tính toán chính xác ngày tiếp theo mà không bị lệch múi giờ
+                const lastDate = new Date(`${maxDateStr}T00:00:00+07:00`);
+                const nextDate = new Date(lastDate.getTime() + 24 * 60 * 60 * 1000);
+                const localNextDate = new Date(nextDate.getTime() + tzOffsetVn * 60 * 1000);
+                const nextDateStr = localNextDate.toISOString().split('T')[0];
+                
+                realtimeStartStr = `${nextDateStr}T00:00:00+07:00`;
+            }
+        }
+
+        // 3. Fetch Realtime Bookings (Từ mốc realtimeStartStr đến hiện tại)
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
                 id, timeStart, timeEnd, status, technicianCode,
                 BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
             `)
-            .gte('timeStart', GLOBAL_START_DATE)
+            .gte('timeStart', realtimeStartStr)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
 
         const { data: services } = await supabase.from('Services').select('id, duration');
         const svcDurationMap: Record<string, number> = {};
         (services || []).forEach(s => { svcDurationMap[String(s.id)] = s.duration || 60; });
 
-        let total_commission = 0;
-        let total_tip = 0;
+        let rt_commission = 0;
+        let rt_tip = 0;
         const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
         for (const b of validBookings) {
@@ -104,24 +144,24 @@ export async function GET(request: Request) {
                 }
             }
 
-            total_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
-            total_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
+            rt_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
+            rt_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
         }
 
-        // 3. Fetch Adjustments (Chỉ lấy từ mốc GLOBAL_START_DATE)
+        // 4. Fetch Adjustments (Luôn lấy từ GLOBAL_START_DATE_ISO để khớp Timeline, KHÔNG dùng ledger)
         const { data: adjustments } = await supabase
             .from('WalletAdjustments')
             .select('amount')
             .eq('staff_id', techCode)
-            .gte('created_at', GLOBAL_START_DATE);
+            .gte('created_at', GLOBAL_START_DATE_ISO);
         const total_adjustment = (adjustments || []).reduce((sum, a) => sum + Number(a.amount), 0);
 
-        // 4. Fetch Withdrawals (Chỉ lấy từ mốc GLOBAL_START_DATE)
+        // 5. Fetch Withdrawals (Luôn lấy từ GLOBAL_START_DATE_ISO để khớp Timeline, KHÔNG dùng ledger)
         const { data: withdrawals } = await supabase
             .from('KTVWithdrawals')
             .select('amount, status')
             .eq('staff_id', techCode)
-            .gte('request_date', GLOBAL_START_DATE);
+            .gte('request_date', GLOBAL_START_DATE_ISO);
             
         const total_withdrawn = (withdrawals || [])
             .filter(w => w.status === 'APPROVED')
@@ -129,7 +169,10 @@ export async function GET(request: Request) {
             
         const total_pending = (withdrawals || []).filter(w => w.status === 'PENDING').reduce((sum, w) => sum + Math.abs(Number(w.amount)), 0);
 
-        // 5. Calculate Final Balances
+        // 6. Calculate Final Balances (Kết hợp Ledger và Realtime)
+        const total_commission = ledgerSummary.comm + rt_commission;
+        const total_tip = ledgerSummary.tip + rt_tip;
+
         const gross_income = total_commission + total_adjustment;
         const net_balance = gross_income - total_withdrawn - total_pending;
         const available_balance = Math.max(0, net_balance - min_deposit);
