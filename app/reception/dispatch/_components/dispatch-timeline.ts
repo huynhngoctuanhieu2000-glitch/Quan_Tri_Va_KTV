@@ -230,7 +230,8 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 dispatchStatus,
                 ktvSignature, // Legacy
                 ktvIds: groupKtvIds.get(ktvSignature) || [],
-                calculatedStart: groupCalculatedStarts.get(ktvSignature) || ''
+                calculatedStart: groupCalculatedStarts.get(ktvSignature) || '',
+                rating: order.rating ?? null
             });
         });
 
@@ -259,7 +260,8 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     dispatchStatus: dStatus as any,
                     ktvSignature: 'utility',
                     ktvIds: [],
-                    calculatedStart: order.timeStart || ''
+                    calculatedStart: order.timeStart || '',
+                    rating: order.rating ?? null
                 });
             }
         }
