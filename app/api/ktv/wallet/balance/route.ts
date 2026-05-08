@@ -37,7 +37,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: false, error: 'Thiếu mã KTV' }, { status: 400 });
         }
 
-        const GLOBAL_START_DATE = '2026-05-04T00:00:00+07:00';
+        const GLOBAL_START_DATE = '2026-05-04T00:00:00.000Z';
 
         // 1. Fetch configs
         const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
@@ -60,44 +60,22 @@ export async function GET(request: Request) {
             if (rawDeposit) min_deposit = Number(rawDeposit);
         }
 
-        // 2. 🌉 DYNAMIC BRIDGE: Fetch Ledger
-        const { data: ledgers } = await supabase
-            .from('KTVDailyLedger')
-            .select('date, total_commission, total_tip')
-            .eq('staff_id', techCode);
-
-        let realtimeStartStr = GLOBAL_START_DATE;
-        const ledgerSummary = { comm: 0, tip: 0 };
-
-        if (ledgers && ledgers.length > 0) {
-            let maxDateStr = ledgers[0].date;
-            ledgers.forEach(l => {
-                if (l.date > maxDateStr) maxDateStr = l.date;
-                ledgerSummary.comm += Number(l.total_commission);
-                ledgerSummary.tip += Number(l.total_tip);
-            });
-
-            const lastDate = new Date(`${maxDateStr}T00:00:00+07:00`);
-            lastDate.setDate(lastDate.getDate() + 1);
-            realtimeStartStr = `${lastDate.toISOString().split('T')[0]}T00:00:00+07:00`;
-        }
-
-        // 3. Fetch Realtime Bookings
+        // 2. Fetch Realtime Bookings (Tạm thời bỏ qua Ledger để khớp với Timeline)
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
                 id, timeStart, timeEnd, status, technicianCode,
                 BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
             `)
-            .gte('timeStart', realtimeStartStr)
+            .gte('timeStart', GLOBAL_START_DATE)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
 
         const { data: services } = await supabase.from('Services').select('id, duration');
         const svcDurationMap: Record<string, number> = {};
         (services || []).forEach(s => { svcDurationMap[String(s.id)] = s.duration || 60; });
 
-        let rt_commission = 0;
-        let rt_tip = 0;
+        let total_commission = 0;
+        let total_tip = 0;
         const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
         for (const b of validBookings) {
@@ -126,35 +104,34 @@ export async function GET(request: Request) {
                 }
             }
 
-            rt_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
-            rt_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
+            total_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
+            total_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
         }
 
-        // 4. Fetch Realtime Adjustments (ALL history to include starting balances)
+        // 3. Fetch Adjustments (Chỉ lấy từ mốc GLOBAL_START_DATE)
         const { data: adjustments } = await supabase
             .from('WalletAdjustments')
             .select('amount')
-            .eq('staff_id', techCode);
-        const rt_adjustment = (adjustments || []).reduce((sum, a) => sum + Number(a.amount), 0);
+            .eq('staff_id', techCode)
+            .gte('created_at', GLOBAL_START_DATE);
+        const total_adjustment = (adjustments || []).reduce((sum, a) => sum + Number(a.amount), 0);
 
-        // 5. Fetch Realtime Withdrawals (ALL history to not miss past withdrawals)
+        // 4. Fetch Withdrawals (Chỉ lấy từ mốc GLOBAL_START_DATE)
         const { data: withdrawals } = await supabase
             .from('KTVWithdrawals')
             .select('amount, status')
-            .eq('staff_id', techCode);
+            .eq('staff_id', techCode)
+            .gte('request_date', GLOBAL_START_DATE);
             
-        const rt_withdrawn = (withdrawals || [])
+        const total_withdrawn = (withdrawals || [])
             .filter(w => w.status === 'APPROVED')
-            .reduce((sum, w) => sum + Number(w.amount), 0);
+            .reduce((sum, w) => sum + Math.abs(Number(w.amount)), 0);
             
-        const total_pending = (withdrawals || []).filter(w => w.status === 'PENDING').reduce((sum, w) => sum + Number(w.amount), 0);
+        const total_pending = (withdrawals || []).filter(w => w.status === 'PENDING').reduce((sum, w) => sum + Math.abs(Number(w.amount)), 0);
 
-        // 6. Calculate Final Balances
-        const total_commission = ledgerSummary.comm + rt_commission;
-        const total_tip = ledgerSummary.tip + rt_tip;
-
-        const gross_income = total_commission + rt_adjustment;
-        const net_balance = gross_income - rt_withdrawn - total_pending;
+        // 5. Calculate Final Balances
+        const gross_income = total_commission + total_adjustment;
+        const net_balance = gross_income - total_withdrawn - total_pending;
         const available_balance = Math.max(0, net_balance - min_deposit);
         const effective_balance = Math.max(0, net_balance);
 
@@ -163,8 +140,8 @@ export async function GET(request: Request) {
             data: {
                 total_commission,
                 total_tip,
-                total_adjustment: rt_adjustment,
-                total_withdrawn: rt_withdrawn,
+                total_adjustment,
+                total_withdrawn,
                 total_pending,
                 gross_income,
                 min_deposit,
