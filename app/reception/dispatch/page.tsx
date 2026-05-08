@@ -492,17 +492,21 @@ export default function DispatchBoardPage() {
                       };
                   });
               } else {
+                  // Chưa có KTV gán — ưu tiên dùng segments từ DB (VD: từ splitBookingItem)
+                  const dbSeg = parsedSegments.length > 0 ? parsedSegments[0] : null;
+                  const fallbackStart = dbSeg?.startTime || getCurrentTime();
+                  const fallbackDur = dbSeg?.duration || Number(bi.duration) || 0;
                   staffList = [{
                       id: `st-${bi.id}`,
                       ktvId: '',
                       ktvName: '',
                       segments: [{
-                          id: `seg-${genId()}`,
-                          roomId: null,
-                          bedId: null,
-                          startTime: getCurrentTime(),
-                          duration: bi.duration ?? 0,
-                          endTime: calcEndTime(getCurrentTime(), bi.duration ?? 0)
+                          id: dbSeg?.id || `seg-${genId()}`,
+                          roomId: dbSeg?.roomId || null,
+                          bedId: dbSeg?.bedId || null,
+                          startTime: fallbackStart,
+                          duration: fallbackDur,
+                          endTime: dbSeg?.endTime || calcEndTime(fallbackStart, fallbackDur)
                       }],
                       noteForKtv: ''
                   }];
