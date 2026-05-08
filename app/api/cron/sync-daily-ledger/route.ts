@@ -71,12 +71,28 @@ async function processLedgerSync(targetDateStr: string) {
     // 2.5 Fetch Shifts
     const { data: shiftsData } = await supabase
         .from('KTVShifts')
-        .select('ktvId, shiftType')
-        .eq('date', targetDateStr)
-        .eq('status', 'ACTIVE');
+        .select('employeeId, shiftType, effectiveFrom')
+        .lte('effectiveFrom', targetDateStr)
+        .in('status', ['ACTIVE', 'REPLACED'])
+        .order('effectiveFrom', { ascending: true })
+        .order('createdAt', { ascending: true });
         
     const ktvShiftMap = new Map<string, string>();
-    (shiftsData || []).forEach(s => ktvShiftMap.set(s.ktvId, s.shiftType));
+    (shiftsData || []).forEach(s => ktvShiftMap.set(s.employeeId, s.shiftType));
+
+    // Lấy config ngày lễ để đè ca 2
+    let isHoliday = false;
+    const holidayDates = configMap['holiday_shift2_dates'];
+    if (holidayDates && Array.isArray(holidayDates)) {
+        const targetMonthDay = targetDateStr.slice(5, 10);
+        if (holidayDates.includes(targetMonthDay)) {
+            isHoliday = true;
+        }
+    }
+    
+    if (isHoliday) {
+        ktvs.forEach(ktv => ktvShiftMap.set(ktv.id, 'SHIFT_2'));
+    }
 
     // 3. Fetch Bookings for the target date
     const { data: bookings } = await supabase

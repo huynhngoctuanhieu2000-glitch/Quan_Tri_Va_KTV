@@ -78,16 +78,46 @@ export async function GET(request: Request) {
         // ─── Fetch KTVShifts ─────────────────────────────────────────────
         const { data: shiftsData } = await supabase
             .from('KTVShifts')
-            .select('date, shiftType')
-            .eq('ktvId', techCode)
-            .gte('date', fromDate)
-            .lte('date', toDate)
-            .eq('status', 'ACTIVE');
+            .select('effectiveFrom, shiftType')
+            .eq('employeeId', techCode)
+            .lte('effectiveFrom', toDate)
+            .in('status', ['ACTIVE', 'REPLACED'])
+            .order('effectiveFrom', { ascending: true })
+            .order('createdAt', { ascending: true });
             
+        // Map ngày => Ca (Tính từ ngày effectiveFrom đến toDate)
         const shiftMap = new Map<string, string>();
-        (shiftsData || []).forEach((s: any) => {
-            shiftMap.set(s.date, s.shiftType);
-        });
+        let currentShift = 'SHIFT_1';
+        
+        // Tạo map cho tất cả các ngày từ fromDate tới toDate
+        const startD = new Date(fromDate);
+        const endD = new Date(toDate);
+        
+        for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            
+            // Tìm shift có hiệu lực cho dateStr này
+            // Do shiftsData đã được sort theo effectiveFrom asc, ta lấy cái cuối cùng <= dateStr
+            let activeForDate = currentShift;
+            for (const s of (shiftsData || [])) {
+                if (s.effectiveFrom <= dateStr) {
+                    activeForDate = s.shiftType;
+                }
+            }
+            
+            // Áp dụng ngày lễ
+            const targetMonthDay = dateStr.slice(5, 10);
+            let isHoliday = false;
+            try {
+                const { data: configData } = await supabase.from('SystemConfigs').select('value').eq('key', 'holiday_shift2_dates').maybeSingle();
+                const holidayDates = configData?.value || ['04-30', '09-02', '12-31'];
+                if (Array.isArray(holidayDates) && holidayDates.includes(targetMonthDay)) {
+                    isHoliday = true;
+                }
+            } catch (e) {}
+            
+            shiftMap.set(dateStr, isHoliday ? 'SHIFT_2' : activeForDate);
+        }
 
         // ─── Fetch Bookings ──────────────────────────────────────────────
         const { data: bookings, error: bErr } = await supabase

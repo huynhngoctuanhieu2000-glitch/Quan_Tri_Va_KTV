@@ -167,8 +167,16 @@ export default function DispatchBoardPage() {
 
   // 🛡️ Ref to track if admin is actively editing dispatch form
   const selectedOrderIdRef = useRef(selectedOrderId);
+  const needsRefreshRef = useRef(false);
   useEffect(() => {
+    const wasEditing = !!selectedOrderIdRef.current;
     selectedOrderIdRef.current = selectedOrderId;
+    // 🔄 Auto-refresh when admin closes the editing form and there are pending updates
+    if (wasEditing && !selectedOrderId && needsRefreshRef.current) {
+      needsRefreshRef.current = false;
+      console.log('🔄 [Dispatch] Form closed — syncing pending realtime updates');
+      fetchData();
+    }
   }, [selectedOrderId]);
 
   // 📡 Realtime Subscriptions
@@ -202,9 +210,10 @@ export default function DispatchBoardPage() {
           return o;
         }));
 
-        // 🛡️ Skip full refetch if admin is editing dispatch form — avoid losing unsaved changes
+        // 🛡️ Skip full refetch if admin is editing — status already patched above
         if (selectedOrderIdRef.current) {
-          console.log('🛡️ [Dispatch] Skipping fetchData — admin editing form');
+          needsRefreshRef.current = true;
+          console.log('🛡️ [Dispatch] Status patched locally — deferring full fetchData until form closes');
           return;
         }
         fetchData();
@@ -218,19 +227,41 @@ export default function DispatchBoardPage() {
         } else if (payload.eventType === 'DELETE') {
           setTurns(prev => prev.filter(t => t.id !== payload.old.id));
         } else {
-          // INSERT: full sync — but skip if editing
-          if (!selectedOrderIdRef.current) fetchData();
+          // INSERT: full sync — defer if editing
+          if (selectedOrderIdRef.current) {
+            needsRefreshRef.current = true;
+          } else {
+            fetchData();
+          }
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'StaffNotifications' }, (payload) => {
         console.log("📡 [Dispatch] New StaffNotification", payload.new.type);
-        // 🛡️ Skip refetch if editing form
-        if (!selectedOrderIdRef.current) fetchData();
+        if (selectedOrderIdRef.current) {
+          needsRefreshRef.current = true;
+          return;
+        }
+        fetchData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'BookingItems' }, (payload) => {
-        console.log("🔄 [Dispatch] BookingItem changed");
-        // 🛡️ Skip refetch if editing form
-        if (!selectedOrderIdRef.current) fetchData();
+        console.log("🔄 [Dispatch] BookingItem changed:", payload.new?.id, payload.new?.status);
+        // 🚀 Granular patch: Always update service status in local state (even when editing)
+        if (payload.new?.bookingId && payload.new?.status) {
+          setOrders(prev => prev.map(o => {
+            if (o.id === payload.new.bookingId) {
+              const updatedServices = o.services.map((svc: any) =>
+                svc.id === payload.new.id ? { ...svc, status: payload.new.status } : svc
+              );
+              return { ...o, services: updatedServices };
+            }
+            return o;
+          }));
+        }
+        if (selectedOrderIdRef.current) {
+          needsRefreshRef.current = true;
+          return;
+        }
+        fetchData();
       })
       .subscribe();
 

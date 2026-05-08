@@ -869,7 +869,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
             supabase.removeChannel(channel);
             clearInterval(intervalId);
         };
-    }, [ktvId, booking?.id, booking?.assignedItemId, isTimerRunning, isPrepping]);
+    // ⚡ PERF: Removed isTimerRunning & isPrepping from deps to prevent channel re-subscription
+    // on every timer state change. These values are accessed via refs inside fetchBooking.
+    }, [ktvId, booking?.id, booking?.assignedItemId]);
 
     // 🕵️ Next Order Watcher — Polls for new assignments while KTV is finishing the current one
     // This ensures the "Next Order" button appears even if the dispatch happens late.
