@@ -66,12 +66,12 @@ export async function GET() {
         // 3. 🌉 DYNAMIC BRIDGE: Fetch Ledger & Calculate realtimeStartStr
         const { data: ledgers } = await supabase
             .from('KTVDailyLedger')
-            .select('date, staff_id, total_commission, total_tip, total_adjustment, total_withdrawn');
+            .select('date, staff_id, total_commission, total_tip, total_bonus, total_penalty, total_adjustment, total_withdrawn');
 
         let realtimeStartStr = GLOBAL_START_DATE;
         const ledgerMap: Record<string, any> = {};
         ktvs.forEach(k => {
-            ledgerMap[k.id] = { comm: 0, tip: 0, adj: 0, withdrawn: 0 };
+            ledgerMap[k.id] = { comm: 0, tip: 0, bonus: 0, penalty: 0, adj: 0, withdrawn: 0 };
         });
 
         if (ledgers && ledgers.length > 0) {
@@ -80,8 +80,10 @@ export async function GET() {
             ledgers.forEach(l => {
                 if (l.date > maxDateStr) maxDateStr = l.date;
                 if (ledgerMap[l.staff_id]) {
-                    ledgerMap[l.staff_id].comm += Number(l.total_commission);
-                    ledgerMap[l.staff_id].tip += Number(l.total_tip);
+                    ledgerMap[l.staff_id].comm += Number(l.total_commission || 0);
+                    ledgerMap[l.staff_id].tip += Number(l.total_tip || 0);
+                    ledgerMap[l.staff_id].bonus += Number(l.total_bonus || 0);
+                    ledgerMap[l.staff_id].penalty += Number(l.total_penalty || 0);
                     // We intentionally ignore ledger.adj and ledger.withdrawn to prevent double counting
                     // because we fetch their FULL history dynamically in the next step.
                 }
@@ -157,9 +159,11 @@ export async function GET() {
             const ledger = ledgerMap[techCode];
             const total_commission = ledger.comm + rt_commission;
             const total_tip = ledger.tip + rt_tip;
+            const total_bonus = ledger.bonus; // Realtime bonus not yet implemented in summary (cron only)
+            const total_penalty = ledger.penalty;
 
             // rt_adjustment and rt_withdrawn already contain ALL history, so we don't add ledger.adj or ledger.withdrawn
-            const gross_income = total_commission + rt_adjustment;
+            const gross_income = total_commission + total_bonus + rt_adjustment - total_penalty;
             const min_deposit = global_min_deposit;
             const net_balance = gross_income - rt_withdrawn - total_pending;
             const available_balance = Math.max(0, net_balance - min_deposit);
@@ -171,6 +175,8 @@ export async function GET() {
                 position: ktv.position,
                 total_commission,
                 total_tip,
+                total_bonus,
+                total_penalty,
                 total_adjustment: rt_adjustment,
                 total_withdrawn: rt_withdrawn,
                 total_pending,

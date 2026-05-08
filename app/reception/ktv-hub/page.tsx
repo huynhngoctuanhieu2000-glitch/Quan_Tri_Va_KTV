@@ -1361,35 +1361,63 @@ const LeaveOffTab = () => {
                                             <p className="text-xs text-gray-400 font-medium">Không có ai OFF.</p>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {selectedLeaves.map(leave => {
-                                                const loadState = actionLoading[leave.id];
-                                                return (
-                                                    <div key={leave.id} className="flex items-center justify-between p-2 rounded-xl border border-rose-100 bg-rose-50/50 group">
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="font-bold text-[13px] text-rose-700">{leave.employeeId}</p>
-                                                                {leave.is_sudden_off && <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Đột xuất</span>}
-                                                                {leave.is_extension && !leave.is_sudden_off && <span className="text-[9px] font-black bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Gia hạn</span>}
-                                                            </div>
-                                                            {leave.createdAt && (
-                                                                <p className="text-[10px] text-rose-500/80 mt-0.5 font-medium">
-                                                                    Gửi lúc: {new Date(leave.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        
-                                                        <button
-                                                            onClick={() => handleDelete(leave.id)}
-                                                            disabled={!!loadState}
-                                                            className="p-1.5 text-rose-300 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-all disabled:opacity-50"
-                                                            title="Huỷ ngày OFF này"
-                                                        >
-                                                            {loadState === 'delete' ? <Loader2 size={12} className="animate-spin text-rose-500" /> : <Trash2 size={12} />}
-                                                        </button>
+                                        <div className="space-y-4">
+                                            {/* NHÓM 1: NGHỈ ĐỘT XUẤT (CÓ PHẠT) */}
+                                            {selectedLeaves.filter(l => l.is_sudden_off).length > 0 && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100 inline-block uppercase tracking-tighter">⚠️ Nghỉ Đột Xuất (Tính Phạt)</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {selectedLeaves.filter(l => l.is_sudden_off).map(leave => {
+                                                            const loadState = actionLoading[leave.id];
+                                                            return (
+                                                                <div key={leave.id} className="flex items-center justify-between p-2 rounded-xl border border-red-100 bg-red-50/30 group">
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <p className="font-bold text-[13px] text-red-700">{leave.employeeId}</p>
+                                                                        {leave.createdAt && (
+                                                                            <p className="text-[9px] text-red-500/80 mt-0.5 font-medium">
+                                                                                Lúc: {new Date(leave.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <button onClick={() => handleDelete(leave.id)} disabled={!!loadState} className="p-1.5 text-red-300 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all">
+                                                                        {loadState === 'delete' ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
-                                                );
-                                            })}
+                                                </div>
+                                            )}
+
+                                            {/* NHÓM 2: NGHỈ CÓ PHÉP / GIA HẠN */}
+                                            {selectedLeaves.filter(l => !l.is_sudden_off).length > 0 && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100 inline-block uppercase tracking-tighter">✅ Nghỉ Có Phép / Gia Hạn</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {selectedLeaves.filter(l => !l.is_sudden_off).map(leave => {
+                                                            const loadState = actionLoading[leave.id];
+                                                            return (
+                                                                <div key={leave.id} className="flex items-center justify-between p-2 rounded-xl border border-rose-100 bg-rose-50/50 group">
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <p className="font-bold text-[13px] text-rose-700">{leave.employeeId}</p>
+                                                                            {leave.is_extension && <span className="text-[8px] font-black bg-purple-100 text-purple-600 px-1 py-0.5 rounded uppercase tracking-wider">Gia hạn</span>}
+                                                                        </div>
+                                                                        {leave.createdAt && (
+                                                                            <p className="text-[9px] text-rose-500/80 mt-0.5 font-medium">
+                                                                                Gửi lúc: {new Date(leave.createdAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <button onClick={() => handleDelete(leave.id)} disabled={!!loadState} className="p-1.5 text-rose-300 hover:text-rose-600 hover:bg-rose-100 rounded-lg transition-all">
+                                                                        {loadState === 'delete' ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1430,7 +1458,14 @@ const LeaveOffTab = () => {
                                                                 <div key={shift.id} className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl border bg-white shadow-sm ${c.border}`}>
                                                                     <div className="flex items-center gap-1">
                                                                         <p className={`font-bold text-[12px] ${c.text} truncate`}>{shift.employeeId}</p>
-                                                                        {isOff && <span className="text-[8px] font-black bg-rose-100 text-rose-600 px-1 py-0.5 rounded uppercase" title="Có đăng ký OFF nhưng vẫn đi làm">OFF</span>}
+                                                                        {isOff && (
+                                                                            <span 
+                                                                                className={`text-[8px] font-black px-1 py-0.5 rounded uppercase ${selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'}`} 
+                                                                                title={selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? "KTV nghỉ đột xuất nhưng vẫn đi làm" : "Có đăng ký OFF nhưng vẫn đi làm"}
+                                                                            >
+                                                                                {selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? 'Đột xuất' : 'OFF'}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             );

@@ -53,14 +53,19 @@ const KTVAttendancePage = () => {
         );
     }
 
-    const openForm = (type: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN') => {
+    const openForm = (type: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN', isEarlyCheckout?: boolean) => {
         if (type === 'CHECK_IN') {
             checkIsLate();
         }
         setFormType(type);
         setPhotos([]);
         setReason('');
-        setSelectedShiftType(activeShiftType || 'FREE');
+        
+        if (type === 'CHECK_OUT' && isEarlyCheckout) {
+            setSelectedShiftType('SUDDEN_OFF_CHECKOUT');
+        } else {
+            setSelectedShiftType(activeShiftType || 'FREE');
+        }
         setIsFormOpen(true);
     };
 
@@ -136,7 +141,7 @@ const KTVAttendancePage = () => {
         }
 
         setIsFormOpen(false);
-        handleAttendance(formType, photos.length > 0 ? photos : null, reason, formType === 'CHECK_IN' ? selectedShiftType : null);
+        handleAttendance(formType, photos.length > 0 ? photos : null, reason, (formType === 'CHECK_IN' || formType === 'CHECK_OUT') ? selectedShiftType : null);
     };
 
     return (
@@ -278,12 +283,14 @@ const KTVAttendancePage = () => {
                                     ) : null}
                                     <button
                                         onClick={() => {
+                                            let isEarly = false;
                                             if (!canCheckOut && checkoutBlockedUntil) {
                                                 if (!window.confirm(`Bạn chưa tới giờ tan ca (${checkoutBlockedUntil}). Bạn có chắc chắn muốn tan ca SỚM không?`)) {
                                                     return;
                                                 }
+                                                isEarly = true;
                                             }
-                                            openForm('CHECK_OUT');
+                                            openForm('CHECK_OUT', isEarly);
                                         }}
                                         disabled={isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
                                         className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
@@ -379,6 +386,16 @@ const KTVAttendancePage = () => {
                                     )}
                                 </div>
                             )}
+                            
+                            {formType === 'CHECK_OUT' && selectedShiftType === 'SUDDEN_OFF_CHECKOUT' && (
+                                <div className="bg-amber-50 text-amber-700 p-3 rounded-xl border border-amber-200 text-sm mb-2 font-medium flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <AlertCircle size={16} className="shrink-0 text-amber-600" />
+                                        <span className="font-bold">ĐĂNG KÝ TAN CA SỚM</span>
+                                    </div>
+                                    <span className="text-amber-600 text-xs pl-6">Hành động này sẽ được ghi nhận là Nghỉ đột xuất.</span>
+                                </div>
+                            )}
                             {/* Sections hidden if SUDDEN_OFF is selected */}
                             {selectedShiftType !== 'SUDDEN_OFF' && (
                                 <>
@@ -420,8 +437,7 @@ const KTVAttendancePage = () => {
                                         )}
                                     </div>
 
-                                    {/* Reason input -> Logic: show if LATE_CHECKIN or if isLate===true on CHECK_IN */}
-                                    {(formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate)) && (
+                                    {(formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate) || (formType === 'CHECK_OUT' && selectedShiftType === 'SUDDEN_OFF_CHECKOUT')) && (
                                         <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                                             {formType === 'CHECK_IN' && isLate && (
                                                 <div className="text-xs font-medium text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 mb-2">
@@ -429,13 +445,13 @@ const KTVAttendancePage = () => {
                                                 </div>
                                             )}
                                             <label className="text-sm font-semibold text-gray-700 block text-left flex gap-1 items-center">
-                                                {formType === 'LATE_CHECKIN' ? t.reasonRequiredGeneral : t.reasonRequired} 
+                                                {formType === 'LATE_CHECKIN' ? t.reasonRequiredGeneral : formType === 'CHECK_OUT' ? 'Lý do tan ca sớm' : t.reasonRequired} 
                                                 <span className="text-rose-500">(*)</span>
                                             </label>
                                             <textarea 
                                                 value={reason} onChange={e => setReason(e.target.value)}
                                                 className="w-full border border-gray-200 rounded-xl min-h-[80px] max-h-32 p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-y" 
-                                                placeholder={t.reasonPlaceholder}
+                                                placeholder={formType === 'CHECK_OUT' ? 'Bắt buộc nhập lý do tan ca sớm...' : t.reasonPlaceholder}
                                             />
                                         </div>
                                     )}
@@ -446,7 +462,7 @@ const KTVAttendancePage = () => {
                                 <button onClick={() => setIsFormOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
                                 <button 
                                    onClick={handleSubmitForm}
-                                   disabled={selectedShiftType !== 'SUDDEN_OFF' && ((formType !== 'CHECK_OUT' && photos.length === 0) || ((formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate)) && !reason.trim()))}
+                                   disabled={selectedShiftType !== 'SUDDEN_OFF' && ((formType !== 'CHECK_OUT' && photos.length === 0) || ((formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate) || (formType === 'CHECK_OUT' && selectedShiftType === 'SUDDEN_OFF_CHECKOUT')) && !reason.trim()))}
                                    className="flex-1 py-3.5 bg-emerald-600 active:scale-95 transition-transform text-white rounded-xl font-bold disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2">
                                     <CheckCircle2 size={18} /> Gửi
                                 </button>

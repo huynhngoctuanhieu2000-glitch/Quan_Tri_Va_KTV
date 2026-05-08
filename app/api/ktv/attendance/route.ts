@@ -333,6 +333,21 @@ export async function POST(request: Request) {
                             status: 'off' 
                         }, { onConflict: 'employee_id,date' });
                 }
+                
+                // 🔸 Ghi nhận "Nghỉ đột xuất" vào bảng Lịch OFF (KTVLeaveRequests) theo đúng Business Date
+                if (checkType === 'SUDDEN_OFF' || selectedShiftType === 'SUDDEN_OFF_CHECKOUT') {
+                    const leaveReason = reason || (checkType === 'SUDDEN_OFF' ? 'Xin nghỉ đột xuất ngay đầu ca' : 'Tan ca sớm (Nghỉ đột xuất)');
+                    const { error: leaveErr } = await supabase.from('KTVLeaveRequests').insert({
+                        employeeId,
+                        employeeName: displayName,
+                        date: today, // Sử dụng Business Date chuẩn
+                        reason: leaveReason,
+                        status: 'APPROVED',
+                        is_sudden_off: true,
+                        is_extension: false,
+                    });
+                    if (leaveErr) console.error('❌ [KTVLeaveRequests] Insert Error:', leaveErr);
+                }
             }
         }
 
@@ -342,10 +357,12 @@ export async function POST(request: Request) {
             : '';
 
         let actionText = 'yêu cầu điểm danh';
-        if (checkType === 'CHECK_OUT') actionText = 'yêu cầu tan ca';
+        if (checkType === 'CHECK_OUT') {
+            actionText = selectedShiftType === 'SUDDEN_OFF_CHECKOUT' ? 'vừa bấm TAN CA SỚM (Ghi nhận là Nghỉ đột xuất)' : 'yêu cầu tan ca';
+        }
         else if (checkType === 'LATE_CHECKIN') actionText = 'điểm danh bổ sung';
         else if (checkType === 'OFF_REQUEST') actionText = 'gửi yêu cầu OFF';
-        else if (checkType === 'SUDDEN_OFF') actionText = 'xin nghỉ đột xuất';
+        else if (checkType === 'SUDDEN_OFF') actionText = 'xin NGHỈ ĐỘT XUẤT nguyên ngày hôm nay';
 
         const autoSuffix = isAutoApprove ? ' [AUTO]' : '';
         

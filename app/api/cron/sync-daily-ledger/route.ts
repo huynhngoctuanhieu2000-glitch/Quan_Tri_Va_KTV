@@ -37,17 +37,27 @@ async function processLedgerSync(targetDateStr: string) {
     const endTimeStr = `${targetDateStr}T23:59:59.999+07:00`;
 
     // 1. Get configs
-    const [{ data: milestoneConf }, { data: rateConf }] = await Promise.all([
-        supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
-        supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single()
-    ]);
+    const { data: configs } = await supabase
+        .from('SystemConfigs')
+        .select('key, value')
+        .in('key', ['ktv_commission_milestones', 'ktv_commission_per_60min', 'ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus', 'ktv_sudden_off_penalty']);
+        
+    const configMap: Record<string, any> = {};
+    (configs || []).forEach((c: any) => { configMap[c.key] = c.value; });
+
     let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
     let ratePer60 = 100000;
-    if (milestoneConf?.value) { try { milestones = typeof milestoneConf.value === 'string' ? JSON.parse(milestoneConf.value) : milestoneConf.value; } catch { } }
-    if (rateConf?.value) {
-        const rawRate = String(rateConf.value).replace(/[^0-9]/g, '');
+    
+    if (configMap['ktv_commission_milestones']) { try { milestones = typeof configMap['ktv_commission_milestones'] === 'string' ? JSON.parse(configMap['ktv_commission_milestones']) : configMap['ktv_commission_milestones']; } catch { } }
+    if (configMap['ktv_commission_per_60min']) {
+        const rawRate = String(configMap['ktv_commission_per_60min']).replace(/[^0-9]/g, '');
         if (rawRate) ratePer60 = Number(rawRate);
     }
+    
+    const s1Bonus = Number(configMap['ktv_shift_1_bonus'] || 20);
+    const s2Bonus = Number(configMap['ktv_shift_2_bonus'] || 20);
+    const s3Bonus = Number(configMap['ktv_shift_3_bonus'] || 40);
+    const suddenOffPenalty = Number(configMap['ktv_sudden_off_penalty'] || 50000);
 
     // 2. Fetch KTVs
     const { data: ktvs } = await supabase
@@ -58,12 +68,22 @@ async function processLedgerSync(targetDateStr: string) {
     
     if (!ktvs || ktvs.length === 0) return NextResponse.json({ success: true, message: 'No KTVs found' });
 
+    // 2.5 Fetch Shifts
+    const { data: shiftsData } = await supabase
+        .from('KTVShifts')
+        .select('ktvId, shiftType')
+        .eq('date', targetDateStr)
+        .eq('status', 'ACTIVE');
+        
+    const ktvShiftMap = new Map<string, string>();
+    (shiftsData || []).forEach(s => ktvShiftMap.set(s.ktvId, s.shiftType));
+
     // 3. Fetch Bookings for the target date
     const { data: bookings } = await supabase
         .from('Bookings')
         .select(`
-            id, timeStart, timeEnd, status, technicianCode,
-            BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
+            id, timeStart, timeEnd, status, technicianCode, rating,
+            BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip, itemRating )
         `)
         .gte('timeStart', startTimeStr)
         .lte('timeStart', endTimeStr)
@@ -87,6 +107,18 @@ async function processLedgerSync(targetDateStr: string) {
         .gte('request_date', startTimeStr)
         .lte('request_date', endTimeStr);
 
+    // 4.5 Fetch Sudden Offs
+    const { data: suddenOffs } = await supabase
+        .from('KTVLeaveRequests')
+        .select('employeeId')
+        .eq('date', targetDateStr)
+        .eq('is_sudden_off', true);
+
+    const suddenOffCountMap: Record<string, number> = {};
+    (suddenOffs || []).forEach(l => {
+        suddenOffCountMap[l.employeeId] = (suddenOffCountMap[l.employeeId] || 0) + 1;
+    });
+
     const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
     const upsertRows = [];
@@ -96,6 +128,13 @@ async function processLedgerSync(targetDateStr: string) {
         const techCode = ktv.id;
         let total_commission = 0;
         let total_tip = 0;
+        let total_bonus = 0;
+        let total_penalty = (suddenOffCountMap[techCode] || 0) * suddenOffPenalty;
+        
+        const shiftType = ktvShiftMap.get(techCode) || 'SHIFT_1';
+        let basePoints = s1Bonus;
+        if (shiftType === 'SHIFT_2') basePoints = s2Bonus;
+        else if (shiftType === 'SHIFT_3') basePoints = s3Bonus;
 
         for (const b of validBookings) {
             const relevantItems = (b.BookingItems || []).filter((i: any) =>
@@ -106,7 +145,13 @@ async function processLedgerSync(targetDateStr: string) {
             if (relevantItems.length === 0) continue;
 
             let totalDuration = 0;
+            let bookingBonusPoints = 0;
+            
+            // Lấy itemRating cao nhất hoặc booking rating
+            const bRating = Number(b.rating) || 0;
+
             for (const item of relevantItems) {
+                // Tính duration
                 let segs: any[] = [];
                 try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch { }
 
@@ -121,10 +166,23 @@ async function processLedgerSync(targetDateStr: string) {
                 } else {
                     totalDuration += svcDurationMap[String(item.serviceId)] || 60;
                 }
+                
+                // Tính bonus per item
+                const iRating = Number(item.itemRating) || bRating || 0;
+                if (iRating >= 4) {
+                    let numTechs = 1;
+                    if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
+                        numTechs = item.technicianCodes.length;
+                    }
+                    bookingBonusPoints += numTechs > 0 ? (basePoints / numTechs) : 0;
+                }
             }
 
             total_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
             total_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
+            
+            if (bookingBonusPoints > basePoints) bookingBonusPoints = basePoints;
+            total_bonus += Math.round(bookingBonusPoints);
         }
 
         const ktvAdjustments = (adjustments || []).filter(a => a.staff_id === techCode);
@@ -138,6 +196,8 @@ async function processLedgerSync(targetDateStr: string) {
             staff_id: techCode,
             total_commission,
             total_tip,
+            total_bonus,
+            total_penalty,
             total_adjustment,
             total_withdrawn,
             updated_at: new Date().toISOString()

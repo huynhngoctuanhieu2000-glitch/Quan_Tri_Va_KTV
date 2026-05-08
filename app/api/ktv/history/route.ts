@@ -43,11 +43,10 @@ export async function GET(request: Request) {
     if (!supabase) return NextResponse.json({ success: false, error: 'Supabase not init' }, { status: 500 });
 
     try {
-        // ─── Fetch SystemConfigs for commission settings ─────────────────
         const { data: configs } = await supabase
             .from('SystemConfigs')
             .select('key, value')
-            .in('key', ['ktv_commission_per_60min', 'ktv_commission_milestones']);
+            .in('key', ['ktv_commission_per_60min', 'ktv_commission_milestones', 'ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus']);
 
         const configMap: Record<string, any> = {};
         (configs || []).forEach((c: any) => { configMap[c.key] = c.value; });
@@ -59,6 +58,11 @@ export async function GET(request: Request) {
                 : configMap['ktv_commission_milestones'];
             } catch { /* use default */ }
         }
+        
+        // Cấu hình Bonus theo ca
+        const s1Bonus = Number(configMap['ktv_shift_1_bonus'] || 20);
+        const s2Bonus = Number(configMap['ktv_shift_2_bonus'] || 20);
+        const s3Bonus = Number(configMap['ktv_shift_3_bonus'] || 40);
 
         // ─── Build date range ────────────────────────────────────────────
         const nowVn = new Date(Date.now() + VN_OFFSET_MS);
@@ -70,6 +74,20 @@ export async function GET(request: Request) {
         // Dùng VN midnight trực tiếp — PostgreSQL sẽ cast chính xác cho cả 2 kiểu
         const fromFilter = `${fromDate}T00:00:00`;
         const toFilter = `${toDate}T23:59:59`;
+
+        // ─── Fetch KTVShifts ─────────────────────────────────────────────
+        const { data: shiftsData } = await supabase
+            .from('KTVShifts')
+            .select('date, shiftType')
+            .eq('ktvId', techCode)
+            .gte('date', fromDate)
+            .lte('date', toDate)
+            .eq('status', 'ACTIVE');
+            
+        const shiftMap = new Map<string, string>();
+        (shiftsData || []).forEach((s: any) => {
+            shiftMap.set(s.date, s.shiftType);
+        });
 
         // ─── Fetch Bookings ──────────────────────────────────────────────
         const { data: bookings, error: bErr } = await supabase
@@ -190,11 +208,35 @@ export async function GET(request: Request) {
                 return r > best ? r : best;
             }, 0) || null;
 
-            // ─── Bonus points: 25đ ÷ số KTV khi rating ≥ 4 ─────────────
+            // ─── Bonus points: Tính điểm thưởng theo ca và tỷ lệ chia ─────────────
             let bonusPoints = 0;
-            if (itemRating && itemRating >= 4 && b.technicianCode) {
-                const numTechs = b.technicianCode.split(',').filter((t: string) => t.trim()).length;
-                bonusPoints = numTechs > 0 ? Math.round(25 / numTechs) : 0;
+            if (itemRating && itemRating >= 4) {
+                // Xác định ngày của booking (YYYY-MM-DD theo VN)
+                const bDateStr = new Date(new Date(b.createdAt).getTime() + VN_OFFSET_MS).toISOString().split('T')[0];
+                const shiftType = shiftMap.get(bDateStr) || 'SHIFT_1'; // fallback mặc định ca 1
+                
+                let basePoints = s1Bonus;
+                if (shiftType === 'SHIFT_2') basePoints = s2Bonus;
+                else if (shiftType === 'SHIFT_3') basePoints = s3Bonus;
+                
+                let bookingBonusPoints = 0;
+                
+                // Xét từng Dịch vụ mà KTV này phục vụ
+                for (const item of relevantItems) {
+                    const iRating = Number(item.itemRating) || Number(b.rating) || 0; // fallback booking rating
+                    if (iRating >= 4) {
+                        let numTechs = 1;
+                        if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
+                            numTechs = item.technicianCodes.length;
+                        }
+                        const ptsForThisItem = numTechs > 0 ? (basePoints / numTechs) : 0;
+                        bookingBonusPoints += ptsForThisItem;
+                    }
+                }
+                
+                // Max points for this booking is basePoints
+                if (bookingBonusPoints > basePoints) bookingBonusPoints = basePoints;
+                bonusPoints = Math.round(bookingBonusPoints);
             }
 
             // ─── Tip: sum from this KTV's items ────────────────────────
