@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Phone, Sparkles, Loader2, Plus, Search, Clock, Tag, Image as ImageIcon, Globe } from 'lucide-react';
+import { searchCustomers } from '../actions';
 
 interface ServiceOption {
   id: string;
@@ -46,6 +47,60 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState('Tất cả');
+
+  // Autocomplete states
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSuggestions]);
+
+  // Debounce search
+  useEffect(() => {
+    // Chỉ search nếu đang mở dropdown và có text
+    const query = customerName;
+    if (!query || query.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      const res = await searchCustomers(query);
+      if (res?.success && res.data) {
+        setSuggestions(res.data);
+      } else {
+        setSuggestions([]);
+      }
+      setIsSearching(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [customerName]);
+
+  const handleSelectCustomer = (customer: any) => {
+    setCustomerName(customer.fullName || '');
+    if (customer.phone) {
+      setContactType('phone');
+      setContactValue(customer.phone);
+    } else if (customer.email) {
+      setContactType('email');
+      setContactValue(customer.email);
+    }
+    setShowSuggestions(false);
+  };
 
   const categories = useMemo(() => {
     const cats = ['Tất cả', ...Array.from(new Set(services.map(s => s.category).filter(Boolean)))];
@@ -130,7 +185,7 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
 
             <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col p-8 gap-5">
               {/* Row 1: Customer Name */}
-              <div className="space-y-1.5 shrink-0">
+              <div className="space-y-1.5 shrink-0" ref={dropdownRef}>
                 <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider ml-1">Tên khách hàng *</label>
                 <div className="relative">
                   <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -138,11 +193,50 @@ export const AddOrderModal = ({ isOpen, onClose, services, onConfirm, selectedDa
                     autoFocus
                     type="text"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => {
+                      if (customerName.length >= 2) setShowSuggestions(true);
+                    }}
                     placeholder="Nhập tên khách..."
-                    className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
+                    className="w-full pl-11 pr-10 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none font-bold text-gray-700 placeholder:text-gray-300"
                     required
                   />
+                  {isSearching && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 size={16} className="text-gray-400 animate-spin" />
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {showSuggestions && suggestions.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="absolute z-10 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden"
+                      >
+                        <div className="max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                          {suggestions.map((cust) => (
+                            <button
+                              key={cust.id}
+                              type="button"
+                              onClick={() => handleSelectCustomer(cust)}
+                              className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-rose-50 transition-colors flex flex-col gap-0.5"
+                            >
+                              <span className="text-sm font-bold text-gray-900">{cust.fullName}</span>
+                              <div className="flex items-center gap-3 text-[11px] font-medium text-gray-500">
+                                {cust.phone && <span className="flex items-center gap-1"><Phone size={10} /> {cust.phone}</span>}
+                                {cust.email && <span className="flex items-center gap-1"><Tag size={10} /> {cust.email}</span>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 

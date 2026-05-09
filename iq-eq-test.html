@@ -709,18 +709,18 @@
         <div class="stats-grid">
           <article class="info-card">
             <h3>Câu hỏi IQ</h3>
-            <span class="info-value">8</span>
+            <span class="info-value">20</span>
             <p>Dãy số, suy luận, quan hệ logic và phân tích quy luật.</p>
           </article>
           <article class="info-card">
             <h3>Tình huống EQ</h3>
-            <span class="info-value">8</span>
+            <span class="info-value">20</span>
             <p>Nhận biết cảm xúc, tự kiểm soát, đồng cảm và giao tiếp.</p>
           </article>
           <article class="info-card">
             <h3>Thời gian gợi ý</h3>
-            <span class="info-value">12'</span>
-            <p>Mỗi phần chỉ vài phút, phù hợp làm nhanh trên laptop hoặc điện thoại.</p>
+            <span class="info-value">25'</span>
+            <p>Mỗi phần khoảng 10 đến 12 phút, phù hợp làm nghiêm túc hơn trên laptop hoặc điện thoại.</p>
           </article>
         </div>
 
@@ -767,7 +767,7 @@
         label: "IQ Logic",
         heroLabel: "Mini test suy luận",
         title: "Đo tốc độ nhận ra quy luật và suy luận logic",
-        description: "Phần IQ gồm 8 câu về dãy số, ngôn ngữ và suy luận điều kiện. Chọn đáp án đúng nhất cho mỗi câu.",
+        description: "Phần IQ gồm 20 câu về dãy số, ngôn ngữ, phép tương tự và suy luận điều kiện. Chọn đáp án đúng nhất cho mỗi câu.",
         questionHint: "Không cần tính quá sâu. Hãy ưu tiên nhận diện quy luật trước rồi mới loại trừ đáp án.",
         questions: [
           {
@@ -849,6 +849,126 @@
               { title: "42", detail: "Sẽ đúng nếu bước tiếp theo là +15 ngay." }
             ],
             answer: 2
+          },
+          {
+            prompt: "Dãy số nào điền đúng vào chỗ trống: 1, 1, 2, 3, 5, 8, ?",
+            options: [
+              { title: "11", detail: "Nhầm nếu chỉ cộng tăng đều." },
+              { title: "12", detail: "Thiếu một nhịp cộng trước đó." },
+              { title: "13", detail: "Mỗi số bằng tổng của hai số trước." },
+              { title: "15", detail: "Dễ nhầm với cộng chéo." }
+            ],
+            answer: 2
+          },
+          {
+            prompt: "Số tiếp theo của dãy 64, 32, 16, 8, ? là gì?",
+            options: [
+              { title: "2", detail: "Giảm nhanh hơn một nửa." },
+              { title: "4", detail: "Mỗi bước chia đôi." },
+              { title: "6", detail: "Giữ khoảng cách số chẵn." },
+              { title: "12", detail: "Đảo chiều quy luật." }
+            ],
+            answer: 1
+          },
+          {
+            prompt: "Quan hệ nào giống nhất với 'bánh xe : ô tô'?",
+            options: [
+              { title: "Trang : sách", detail: "Một phần tạo nên một chỉnh thể lớn hơn." },
+              { title: "Chim : tổ", detail: "Quan hệ giữa vật và nơi ở." },
+              { title: "Mưa : mây", detail: "Quan hệ nguồn gốc tạo thành." },
+              { title: "Khóa : chìa", detail: "Quan hệ tác động qua lại." }
+            ],
+            answer: 0
+          },
+          {
+            prompt: "Nếu hôm nay là Thứ Ba, thì 10 ngày nữa sẽ là ngày nào?",
+            options: [
+              { title: "Thứ Năm", detail: "Mới cộng thêm 9 ngày." },
+              { title: "Thứ Sáu", detail: "10 ngày tương đương thêm 3 ngày trong tuần." },
+              { title: "Thứ Bảy", detail: "Dễ nhầm nếu cộng thêm 4 ngày." },
+              { title: "Chủ Nhật", detail: "Sai lệch một nhịp chu kỳ." }
+            ],
+            answer: 1
+          },
+          {
+            prompt: "Từ nào khác nhóm với ba từ còn lại?",
+            options: [
+              { title: "Tam giác", detail: "Là một hình học phẳng." },
+              { title: "Hình vuông", detail: "Là một hình học phẳng." },
+              { title: "Hình tròn", detail: "Là một hình học phẳng." },
+              { title: "Thước kẻ", detail: "Là công cụ, không phải hình." }
+            ],
+            answer: 3
+          },
+          {
+            prompt: "Số còn thiếu trong dãy 4, 9, 16, 25, ?, 49 là gì?",
+            options: [
+              { title: "30", detail: "Không khớp với quy luật bình phương." },
+              { title: "36", detail: "Dãy bình phương của 2, 3, 4, 5, 6, 7." },
+              { title: "42", detail: "Là số chẵn gần đúng nhưng không đúng quy luật." },
+              { title: "45", detail: "Dễ nhầm nếu nhìn theo mức tăng." }
+            ],
+            answer: 1
+          },
+          {
+            prompt: "Điền số còn thiếu trong mẫu: (2, 6, 18), (3, 9, 27), (4, 12, ?)",
+            options: [
+              { title: "24", detail: "Mới nhân 2 lần đầu." },
+              { title: "30", detail: "Không giữ được cùng tỷ lệ." },
+              { title: "36", detail: "Số thứ hai gấp 3 số đầu, số thứ ba gấp 3 số thứ hai." },
+              { title: "48", detail: "Nhân quá tay ở bước cuối." }
+            ],
+            answer: 2
+          },
+          {
+            prompt: "Nếu mọi xe đạp đều không dùng xăng và vật X dùng xăng, kết luận nào chắc chắn đúng?",
+            options: [
+              { title: "X là xe đạp", detail: "Mâu thuẫn với giả thiết." },
+              { title: "X không phải là xe đạp", detail: "Đây là kết luận chắc chắn đúng." },
+              { title: "X không có bánh", detail: "Không được nêu trong đề." },
+              { title: "X là ô tô", detail: "Không đủ dữ kiện để kết luận." }
+            ],
+            answer: 1
+          },
+          {
+            prompt: "Nếu mã hóa bằng tổng vị trí chữ cái trong bảng chữ cái tiếng Anh, DOG bằng bao nhiêu?",
+            options: [
+              { title: "24", detail: "Thiếu mất một bậc ở chữ giữa." },
+              { title: "25", detail: "Dễ nhầm khi tính G." },
+              { title: "26", detail: "D = 4, O = 15, G = 7, tổng bằng 26." },
+              { title: "27", detail: "Cộng dư thêm 1." }
+            ],
+            answer: 2
+          },
+          {
+            prompt: "Một chiếc áo giá 200.000 đồng giảm 10% rồi giảm tiếp 10%. Giá cuối cùng là bao nhiêu?",
+            options: [
+              { title: "160.000 đồng", detail: "Dễ nhầm thành giảm thẳng 20% trên giá gốc nhiều hơn thực tế." },
+              { title: "162.000 đồng", detail: "Giảm 10% còn 180.000, giảm tiếp 10% còn 162.000." },
+              { title: "180.000 đồng", detail: "Mới tính một lần giảm." },
+              { title: "181.000 đồng", detail: "Sai ở bước tính 10% thứ hai." }
+            ],
+            answer: 1
+          },
+          {
+            prompt: "Số tiếp theo của dãy 30, 27, 23, 18, ? là gì?",
+            options: [
+              { title: "12", detail: "Hiệu lần lượt là -3, -4, -5, nên tiếp theo là -6." },
+              { title: "13", detail: "Dễ nhầm nếu giảm đều." },
+              { title: "14", detail: "Thiếu một đơn vị giảm." },
+              { title: "15", detail: "Đúng nếu chỉ giảm 3 mỗi bước." }
+            ],
+            answer: 0
+          },
+          {
+            prompt: "Nếu tất cả A là B và mọi B là C, kết luận nào chắc chắn đúng?",
+            options: [
+              { title: "Một số C là A", detail: "Không chắc nếu chưa giả định A tồn tại." },
+              { title: "Tất cả A là C", detail: "Đây là phép suy luận bắc cầu chắc chắn đúng." },
+              { title: "Tất cả C là A", detail: "Không thể đảo chiều." },
+              { title: "Không A nào là C", detail: "Trái hẳn với giả thiết." }
+            ],
+            answer: 1
           }
         ]
       },
@@ -857,7 +977,7 @@
         label: "EQ Tình huống",
         heroLabel: "Mini test cảm xúc",
         title: "Đo khả năng nhận diện, điều tiết và phản hồi cảm xúc",
-        description: "Phần EQ gồm 8 tình huống thực tế. Hãy chọn cách phản ứng gần nhất với bản thân bạn.",
+        description: "Phần EQ gồm 20 tình huống thực tế. Hãy chọn cách phản ứng gần nhất với bản thân bạn.",
         questionHint: "Không có đáp án tuyệt đối. Điểm cao hơn thường đến từ phản hồi bình tĩnh, rõ ràng và có đồng cảm.",
         questions: [
           {
@@ -939,6 +1059,126 @@
               { title: "Nói thay luôn ý của họ cho nhanh", detail: "Có ý tốt nhưng dễ lấy mất tiếng nói của họ.", score: 2 },
               { title: "Cho rằng họ im lặng là do không có gì để nói", detail: "Kết luận nhanh mà thiếu quan sát.", score: 1 }
             ]
+          },
+          {
+            trait: "selfAwareness",
+            prompt: "Khi bạn thấy mình bắt đầu ghen tị với thành công của người khác, phản ứng nào gần bạn nhất?",
+            options: [
+              { title: "Phủ nhận hoàn toàn cảm giác đó", detail: "Tránh nhìn thẳng vào cảm xúc thật.", score: 1 },
+              { title: "Thừa nhận cảm giác ấy rồi biến nó thành động lực học hỏi", detail: "Biết gọi tên cảm xúc và chuyển hướng nó.", score: 4 },
+              { title: "Tỏ ra lạnh nhạt với họ để bớt khó chịu", detail: "Có nhận cảm xúc nhưng xử lý chưa lành mạnh.", score: 2 },
+              { title: "Đi nói xấu để cân bằng tâm lý", detail: "Đẩy cảm xúc tiêu cực ra ngoài theo hướng hại quan hệ.", score: 1 }
+            ]
+          },
+          {
+            trait: "selfControl",
+            prompt: "Cuối ngày bạn nhận một tin nhắn khiến mình rất khó chịu. Bạn thường sẽ:",
+            options: [
+              { title: "Trả lời ngay khi đang nóng", detail: "Dễ làm cảm xúc dẫn dắt nội dung.", score: 1 },
+              { title: "Để mình dịu lại rồi trả lời ngắn gọn, đúng trọng tâm", detail: "Biết trì hoãn phản ứng để giữ chất lượng đối thoại.", score: 4 },
+              { title: "Bỏ mặc luôn tin nhắn đó thật lâu", detail: "Tránh xung đột nhưng bỏ ngỏ vấn đề.", score: 2 },
+              { title: "Chụp màn hình kể với người khác trước", detail: "Xả cảm xúc theo hướng vòng vo và dễ làm việc tệ hơn.", score: 1 }
+            ]
+          },
+          {
+            trait: "empathy",
+            prompt: "Một khách hàng nói khá cáu vì phải chờ lâu. Cách bạn phản hồi tốt nhất thường là:",
+            options: [
+              { title: "Đổ lỗi cho quy trình hoặc người khác", detail: "Không giải tỏa được cảm xúc của họ.", score: 1 },
+              { title: "Lắng nghe, nhắc lại điều họ đang khó chịu rồi đưa hướng xử lý rõ ràng", detail: "Vừa công nhận cảm xúc vừa dẫn về giải pháp.", score: 4 },
+              { title: "Hứa cho xong để họ dịu xuống trước", detail: "Giảm áp lực tức thì nhưng có thể thiếu trung thực.", score: 2 },
+              { title: "Tỏ vẻ khó chịu vì họ nói quá lớn", detail: "Đẩy xung đột lên cao hơn.", score: 1 }
+            ]
+          },
+          {
+            trait: "socialSkill",
+            prompt: "Trong buổi brainstorm, hai người liên tục chen lời nhau. Bạn thường:",
+            options: [
+              { title: "Để mặc vì không muốn xen vào", detail: "Tránh va chạm nhưng nhóm mất nhịp.", score: 2 },
+              { title: "Đề xuất nói lần lượt và ghi lại ý chính để cả nhóm theo kịp", detail: "Giữ an toàn giao tiếp mà vẫn giữ tiến độ.", score: 4 },
+              { title: "Chuyển chủ đề sang phần khác cho đỡ căng", detail: "Giảm nhiệt tạm thời nhưng không xử lý gốc.", score: 2 },
+              { title: "Đùa cợt để phá không khí căng thẳng", detail: "Có thể làm nhẹ bề mặt nhưng không giúp rõ việc.", score: 1 }
+            ]
+          },
+          {
+            trait: "selfAwareness",
+            prompt: "Sau một ngày làm việc rất tệ, bạn thường làm gì với trạng thái của mình?",
+            options: [
+              { title: "Kết luận rằng mình quá kém", detail: "Đồng nhất bản thân với một ngày tệ.", score: 1 },
+              { title: "Nhìn lại điều gì khiến năng lượng mình xuống và tên cảm xúc nổi bật nhất", detail: "Biết quan sát nội tâm thay vì chỉ phản ứng.", score: 4 },
+              { title: "Trốn vào giải trí và né mọi suy nghĩ", detail: "Tạm xả nhưng chưa hiểu gốc vấn đề.", score: 2 },
+              { title: "Đổ hết cho hoàn cảnh hoặc người khác", detail: "Thiếu phần tự soi cần thiết.", score: 1 }
+            ]
+          },
+          {
+            trait: "selfControl",
+            prompt: "Khi nhận email phê bình có phần hiểu lầm về mình, bạn sẽ:",
+            options: [
+              { title: "Viết trả lời dài ngay để bảo vệ mình", detail: "Dễ làm phản hồi bị cảm xúc kéo đi.", score: 1 },
+              { title: "Soạn nháp, kiểm tra lại dữ kiện rồi gửi phản hồi ngắn gọn, rõ ý", detail: "Biết giữ nhịp và chọn chiến lược hiệu quả hơn.", score: 4 },
+              { title: "CC thêm nhiều người để tạo thế an toàn", detail: "Tăng áp lực thay vì làm rõ hiểu lầm.", score: 2 },
+              { title: "Bỏ qua luôn không phản hồi", detail: "Giảm đối đầu trước mắt nhưng để lại nút thắt.", score: 2 }
+            ]
+          },
+          {
+            trait: "empathy",
+            prompt: "Người thân nói 'không sao' nhưng nét mặt cho thấy họ đang buồn. Bạn thường:",
+            options: [
+              { title: "Tin đúng câu chữ và chuyển chủ đề", detail: "Tôn trọng bề mặt nhưng bỏ lỡ tín hiệu cảm xúc.", score: 2 },
+              { title: "Hỏi nhẹ xem họ có muốn chia sẻ không và để họ chọn thời điểm", detail: "Đồng cảm mà vẫn tôn trọng ranh giới.", score: 4 },
+              { title: "Ép họ kể ngay cho rõ", detail: "Thiện ý nhưng có thể gây áp lực.", score: 2 },
+              { title: "Bắt đầu kể chuyện mình để lấp khoảng trống", detail: "Làm lệch trọng tâm khỏi cảm xúc của họ.", score: 1 }
+            ]
+          },
+          {
+            trait: "socialSkill",
+            prompt: "Bạn phải từ chối một lời nhờ vả gấp khi bản thân cũng đang quá tải. Cách nào tốt nhất?",
+            options: [
+              { title: "Nói cộc 'không làm được' rồi thôi", detail: "Rõ ràng nhưng dễ làm quan hệ sượng lại.", score: 2 },
+              { title: "Nói rõ giới hạn hiện tại và đề xuất mốc thời gian hoặc nguồn hỗ trợ khác", detail: "Giữ được ranh giới mà vẫn tôn trọng người kia.", score: 4 },
+              { title: "Miễn cưỡng nhận hết để khỏi ngại", detail: "Hy sinh quá mức và dễ sinh bực bội sau đó.", score: 1 },
+              { title: "Né không trả lời vì khó nói", detail: "Tránh khó chịu nhưng làm mất tin cậy.", score: 1 }
+            ]
+          },
+          {
+            trait: "selfAwareness",
+            prompt: "Trước một buổi thuyết trình quan trọng, bạn thấy tim đập nhanh và tay lạnh. Bạn thường:",
+            options: [
+              { title: "Cho rằng mình yếu nên mới như vậy", detail: "Đánh giá bản thân thay vì đọc trạng thái." , score: 1 },
+              { title: "Nhận ra mình đang lo và dùng nhịp thở hoặc rà lại ý chính để ổn định", detail: "Nhận diện tín hiệu cơ thể và gọi đúng trạng thái.", score: 4 },
+              { title: "Mặc kệ cảm giác vì rồi cũng qua", detail: "Có thể vượt qua nhưng thiếu tự hiểu mình.", score: 2 },
+              { title: "Cáu với người xung quanh cho bớt áp lực", detail: "Trút cảm xúc ra ngoài thay vì nhận biết nó.", score: 1 }
+            ]
+          },
+          {
+            trait: "empathy",
+            prompt: "Một bạn mới liên tục hỏi những điều rất cơ bản. Phản ứng gần bạn nhất là:",
+            options: [
+              { title: "Khó chịu vì nghĩ họ nên tự biết", detail: "Thiếu đặt mình vào vị trí người mới.", score: 1 },
+              { title: "Nhớ lại lúc mình mới bắt đầu rồi hướng dẫn ngắn, rõ và dễ theo", detail: "Đồng cảm đi kèm hỗ trợ thực tế.", score: 4 },
+              { title: "Mặc kệ để họ tự xoay", detail: "Giữ thời gian cho mình nhưng thiếu hỗ trợ tối thiểu.", score: 2 },
+              { title: "Chê họ trước nhóm để lần sau tự chuẩn bị", detail: "Làm tổn thương hơn là giúp tiến bộ.", score: 1 }
+            ]
+          },
+          {
+            trait: "selfControl",
+            prompt: "Khi kế hoạch đổ bể vào phút chót, bạn thường làm gì đầu tiên?",
+            options: [
+              { title: "Đổ lỗi ngay cho người gây ra sự cố", detail: "Xả cảm xúc nhanh nhưng không giúp xử lý khẩn cấp.", score: 1 },
+              { title: "Tách việc khẩn cấp cần cứu trước rồi trấn tĩnh nhóm", detail: "Đưa hệ thần kinh cả nhóm về trạng thái có thể hành động.", score: 4 },
+              { title: "Bỏ đi một lúc thật lâu để đỡ stress", detail: "Tự xả là cần nhưng thời điểm có thể khiến việc trượt thêm.", score: 2 },
+              { title: "Làm đại cho xong", detail: "Giảm áp lực nhất thời nhưng tăng rủi ro dài hơn.", score: 1 }
+            ]
+          },
+          {
+            trait: "socialSkill",
+            prompt: "Trong cuộc trao đổi 1-1, người đối diện hiểu sai ý bạn. Bạn sẽ:",
+            options: [
+              { title: "Lặp lại y nguyên câu cũ với giọng mạnh hơn", detail: "Nhấn lực nhưng chưa chắc tăng hiểu.", score: 1 },
+              { title: "Đổi cách diễn đạt và hỏi lại họ đang hiểu điều gì", detail: "Chủ động sửa kênh giao tiếp chứ không chỉ nhấn nội dung.", score: 4 },
+              { title: "Kết thúc sớm vì thấy giải thích mệt", detail: "Cắt đối thoại trước khi gỡ nút thắt.", score: 2 },
+              { title: "Cho rằng họ thiếu chú ý nên không cần nói thêm", detail: "Đẩy trách nhiệm hoàn toàn sang phía kia.", score: 1 }
+            ]
           }
         ]
       }
@@ -963,7 +1203,7 @@
       }
     };
 
-    const storageKey = "mini-iq-eq-test-state";
+    const storageKey = "mini-iq-eq-test-state-v2";
     const appRoot = document.getElementById("appRoot");
     const summaryRoot = document.getElementById("summaryRoot");
     const sideNote = document.getElementById("sideNote");
@@ -1049,13 +1289,13 @@
       let band = "Khởi động logic";
       let summary = "Bạn nhận ra được một phần quy luật cơ bản, nhưng nên luyện thêm các dạng suy luận chuỗi và điều kiện.";
 
-      if (correct >= 3 && correct <= 5) {
+      if (correct >= 8 && correct <= 13) {
         band = "Nền tảng khá";
         summary = "Bạn có nền tảng suy luận ổn, nhất là ở các câu nhận diện quy luật rõ ràng. Phần còn thiếu nằm ở tốc độ loại trừ đáp án.";
-      } else if (correct >= 6 && correct <= 7) {
+      } else if (correct >= 14 && correct <= 17) {
         band = "Suy luận tốt";
         summary = "Bạn nhận mẫu nhanh và giữ được logic khá chắc. Chỉ cần luyện thêm vài bài nâng độ khó là sẽ lên rất nhanh.";
-      } else if (correct === 8) {
+      } else if (correct >= 18) {
         band = "Rất sắc với quy luật";
         summary = "Bạn xử lý tốt cả chuỗi số, suy luận điều kiện và mẫu ngôn ngữ. Đây là tín hiệu rất tốt về tư duy logic thực dụng.";
       }
@@ -1078,6 +1318,12 @@
         empathy: 0,
         socialSkill: 0
       };
+      const traitQuestionCounts = {
+        selfAwareness: 0,
+        selfControl: 0,
+        empathy: 0,
+        socialSkill: 0
+      };
 
       let score = 0;
 
@@ -1087,6 +1333,7 @@
         const value = selected ? selected.score : 0;
         score += value;
         totals[question.trait] += value;
+        traitQuestionCounts[question.trait] += 1;
       });
 
       const maxScore = tests.eq.questions.length * 4;
@@ -1095,25 +1342,26 @@
       let band = "EQ đang hình thành";
       let summary = "Bạn có thiện chí nhưng phản ứng cảm xúc đôi lúc vẫn đi trước chiến lược xử lý. Tập trung vào dừng lại, gọi tên cảm xúc và hỏi lại vấn đề sẽ giúp bạn tiến nhanh.";
 
-      if (score >= 21 && score <= 27) {
+      if (percentage >= 56 && percentage < 74) {
         band = "EQ khá ổn";
         summary = "Bạn đã có nền tảng biết giữ nhịp và quan tâm đến cảm xúc người khác. Cần cải thiện thêm ở sự nhất quán khi chịu áp lực.";
-      } else if (score >= 28 && score <= 31) {
+      } else if (percentage >= 74 && percentage < 90) {
         band = "EQ tốt";
         summary = "Bạn thường chọn phản hồi chín chắn và có cân nhắc bối cảnh. Điểm mạnh nổi bật là phối hợp giữa bình tĩnh và đồng cảm.";
-      } else if (score >= 32) {
+      } else if (percentage >= 90) {
         band = "EQ rất tốt";
         summary = "Bạn có xu hướng nhận diện cảm xúc rõ, giữ được nhịp trong xung đột và hỗ trợ người khác mà không làm mất cân bằng mục tiêu.";
       }
 
       const traitScores = Object.entries(totals).map(([key, value]) => {
+        const max = traitQuestionCounts[key] * 4;
         return {
           key,
           label: traitMeta[key].label,
           description: traitMeta[key].description,
           score: value,
-          max: 8,
-          percentage: Math.round((value / 8) * 100)
+          max,
+          percentage: Math.round((value / max) * 100)
         };
       });
 
@@ -1160,13 +1408,13 @@
     }
 
     function getIqRecommendation(result) {
-      if (result.score <= 2) return "Gợi ý: luyện thêm bài dãy số, phép tương tự và câu suy luận điều kiện ngắn để tăng tốc độ nhận mẫu.";
-      if (result.score <= 5) return "Gợi ý: thử tăng độ khó bằng bài logic có nhiều điều kiện và ép thời gian ngắn hơn một chút.";
+      if (result.score <= 7) return "Gợi ý: luyện thêm dãy số, phép tương tự, suy luận điều kiện ngắn và làm chậm để nhìn ra quy luật thật chắc.";
+      if (result.score <= 14) return "Gợi ý: thử tăng độ khó bằng bài logic nhiều lớp, giới hạn thời gian vừa phải và tập lý do loại trừ từng đáp án.";
       return "Gợi ý: bạn có nền logic tốt, hãy thử các bài pattern phức hợp hoặc mini GMAT/LSAT để nâng trần.";
     }
 
     function getEqRecommendation(result) {
-      const lowTraits = result.traitScores.filter((trait) => trait.percentage < 60);
+      const lowTraits = result.traitScores.filter((trait) => trait.percentage < 65);
       if (!lowTraits.length) {
         return "Gợi ý: tiếp tục giữ thói quen hỏi rõ, nói chậm lại khi căng thẳng và tạo không gian cho người khác tham gia.";
       }

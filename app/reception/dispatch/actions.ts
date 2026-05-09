@@ -1729,3 +1729,25 @@ export async function syncOrderTimelineToDb(bookingId: string) {
         console.error('❌ [Server] syncOrderTimelineToDb error:', err);
     }
 }
+
+export async function searchCustomers(query: string) {
+    try {
+        await requirePermission('dispatch_board');
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase admin not initialized');
+
+        const safeQuery = query.trim().replace(/%/g, '\\%').replace(/_/g, '\\_');
+
+        const { data, error } = await supabase
+            .from('Customers')
+            .select('id, fullName, phone, email')
+            .or(`fullName.ilike.%${safeQuery}%,phone.ilike.%${safeQuery}%`)
+            .limit(10);
+
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err: any) {
+        console.error('❌ [Server] searchCustomers error:', err.message);
+        return { success: false, error: err.message };
+    }
+}
