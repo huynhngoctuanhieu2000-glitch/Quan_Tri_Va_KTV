@@ -290,15 +290,19 @@ export async function GET(request: Request) {
             if (!isoString.endsWith('Z') && !isoString.includes('+')) parseString = isoString.replace(' ', 'T') + 'Z';
             const d = new Date(parseString);
             if (isNaN(d.getTime())) return isoString;
-            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            const dVn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+            return `${String(dVn.getUTCHours()).padStart(2, '0')}:${String(dVn.getUTCMinutes()).padStart(2, '0')}`;
         };
         const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
             if (!startStr) return '--:--';
             const formatted = formatToHourMinute(startStr);
             if (formatted === '--:--') return '--:--';
-            const [h, m] = formatted.split(':').map(Number);
-            const d = new Date(); d.setHours(h, m + durationMins, 0, 0);
-            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            let [h, m] = formatted.split(':').map(Number);
+            m += durationMins;
+            h += Math.floor(m / 60);
+            m = m % 60;
+            h = h % 24;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         };
 
         const allSegments: any[] = [];
