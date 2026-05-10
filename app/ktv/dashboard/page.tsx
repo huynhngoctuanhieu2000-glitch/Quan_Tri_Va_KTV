@@ -630,17 +630,15 @@ function ScreenTimer({ logic }: { logic: any }) {
             ) : null;
           })()}
         </div>
-        {!isTimerRunning && (
-          <button 
+        <button 
             onClick={() => logic.setShowProcedure(true)}
-            className="flex flex-col items-center gap-1 text-emerald-600 active:scale-90 transition-all"
+            className="flex flex-col items-center gap-1 text-emerald-600 active:scale-90 transition-all shrink-0"
           >
             <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100 shadow-sm">
               <BookOpen size={22} />
             </div>
             <span className="text-[10px] font-black uppercase tracking-tighter">Quy trình</span>
           </button>
-        )}
       </div>
 
       {/* Main Timer Display */}

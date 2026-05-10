@@ -1178,32 +1178,90 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const handleFinishTimer = async () => {
         if (!booking || !ktvId) return;
 
-        // 🏁 Hết giờ DV → chuyển sang CLEANING (KTV vẫn chưa được giải phóng)
-        setIsLoading(true);
-        const response = await fetch('/api/ktv/booking', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                bookingId: booking.id, 
-                status: 'CLEANING',
-                techCode: ktvId
-                // KHÔNG gọi RELEASE_KTV — KTV phải dọn phòng xong mới được giải phóng
-            })
-        });
-        const res = await response.json();
-        if (res.success) {
-            setIsTimerRunning(false);
-            postServiceBookingIdRef.current = booking.id;
-            try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, booking.id); } catch (e) {}
-            
-            // Always go to REVIEW — KTV must submit their own review.
-            // Never auto-skip based on booking.rating (belongs to booking level, may be from teammate).
-            setScreen('REVIEW');
-        } else {
-            console.error('❌ [KTV Logic] Finish error:', res.error);
-            alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
+        // 🔎 Kiểm tra: còn chặng nào phía sau không?
+        const allItemIds: string[] = booking.assignedItemIds?.length > 0
+            ? booking.assignedItemIds
+            : (booking.assignedItemId ? [booking.assignedItemId] : []);
+        const allItems = allItemIds.length > 0
+            ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+            : [booking.BookingItems?.[0]].filter(Boolean);
+
+        let allMySegs: any[] = [];
+        for (const ai of allItems) {
+            let segs: any[] = [];
+            try {
+                segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
+            } catch { segs = []; }
+            const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
+            allMySegs.push(...mySegs);
         }
-        setIsLoading(false);
+        allMySegs.sort((a, b) => (a.startTime || '23:59').localeCompare(b.startTime || '23:59'));
+
+        const currentIdx = activeSegmentIndex;
+        const hasNextSegment = currentIdx < allMySegs.length - 1;
+
+        if (hasNextSegment) {
+            // 🔄 AUTO-ADVANCE: Còn chặng tiếp → chuyển sang chặng kế, KHÔNG finish
+            console.log(`🔄 [AutoAdvance] Segment ${currentIdx} done, advancing to ${currentIdx + 1}/${allMySegs.length - 1}`);
+            setIsLoading(true);
+
+            const nextIdx = currentIdx + 1;
+            const response = await fetch('/api/ktv/booking', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bookingId: booking.id,
+                    status: 'IN_PROGRESS',
+                    techCode: ktvId,
+                    action: 'NEXT_SEGMENT',
+                    activeSegmentIndex: nextIdx
+                })
+            });
+            const res = await response.json();
+            if (res.success) {
+                setActiveSegmentIndex(nextIdx);
+                activeSegmentIndexRef.current = nextIdx;
+                manualSegmentOverrideRef.current = true;
+
+                // Reset timer cho chặng mới
+                const nextSeg = allMySegs[nextIdx];
+                const nextDuration = Number(nextSeg?.duration) || 60;
+                setTimeRemaining(nextDuration * 60);
+                console.log(`⏱️ [AutoAdvance] Timer reset to ${nextDuration} minutes for segment ${nextIdx}`);
+
+                // Fetch lại booking để cập nhật segments mới (actualStartTime/EndTime)
+                if (fetchBookingRef.current) fetchBookingRef.current();
+            } else {
+                console.error('❌ [AutoAdvance] Error:', res.error);
+                alert('Lỗi chuyển chặng: ' + (res.error || 'Unknown error'));
+            }
+            setIsLoading(false);
+        } else {
+            // 🏁 Chặng cuối cùng done → chuyển sang CLEANING
+            console.log(`🏁 [FinishAll] All ${allMySegs.length} segments done, transitioning to CLEANING`);
+            setIsLoading(true);
+            const response = await fetch('/api/ktv/booking', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    bookingId: booking.id, 
+                    status: 'CLEANING',
+                    techCode: ktvId
+                })
+            });
+            const res = await response.json();
+            if (res.success) {
+                setIsTimerRunning(false);
+                postServiceBookingIdRef.current = booking.id;
+                try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, booking.id); } catch (e) {}
+                
+                setScreen('REVIEW');
+            } else {
+                console.error('❌ [KTV Logic] Finish error:', res.error);
+                alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
+            }
+            setIsLoading(false);
+        }
     };
 
     // Keep ref up-to-date so timer callback always calls latest version
