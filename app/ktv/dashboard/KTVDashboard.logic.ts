@@ -893,7 +893,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 return;
             }
             fetchBooking();
-        }, 5000);
+        }, 60000); // Tăng từ 5s lên 60s để ngăn nghẽn CPU Vercel
 
         return () => {
             supabase.removeChannel(channel);
@@ -928,7 +928,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             } catch (e) {}
         };
 
-        const tid = setInterval(checkNextOrder, 5000);
+        const tid = setInterval(checkNextOrder, 30000); // Tăng từ 5s lên 30s để tiết kiệm CPU
         checkNextOrder(); // Initial check
         return () => clearInterval(tid);
     }, [ktvId, screen]);
