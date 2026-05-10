@@ -354,11 +354,13 @@ export async function GET(request: Request) {
         }
 
         let nextBookingId = null;
+        let nextServiceName = null;
+        let nextStartTime = null;
         if (technicianCode) {
             const today = getBusinessDate();
             const { data: nextAssign } = await supabase
                 .from('KtvAssignments')
-                .select('booking_id')
+                .select('booking_id, planned_start_time')
                 .eq('employee_id', technicianCode)
                 .eq('business_date', today)
                 .in('status', ['QUEUED', 'READY'])
@@ -372,6 +374,43 @@ export async function GET(request: Request) {
             
             if (nextAssign) {
                 nextBookingId = nextAssign.booking_id;
+
+                // Format planned_start_time to HH:mm VN
+                if (nextAssign.planned_start_time) {
+                    const pst = new Date(nextAssign.planned_start_time);
+                    const vnPst = new Date(pst.getTime() + 7 * 60 * 60 * 1000);
+                    nextStartTime = `${String(vnPst.getUTCHours()).padStart(2, '0')}:${String(vnPst.getUTCMinutes()).padStart(2, '0')}`;
+                }
+
+                // Fetch service name from the next booking's items assigned to this KTV
+                const { data: nextItems } = await supabase
+                    .from('BookingItems')
+                    .select('serviceId, options, duration')
+                    .eq('bookingId', nextAssign.booking_id)
+                    .contains('technicianCodes', [technicianCode]);
+
+                if (nextItems && nextItems.length > 0) {
+                    const svcIds = nextItems.map((ni: any) => String(ni.serviceId || '').trim().toLowerCase()).filter(Boolean);
+                    if (svcIds.length > 0) {
+                        const { data: svcs } = await supabase
+                            .from('Services')
+                            .select('id, code, nameVN')
+                            .limit(500);
+                        const svcMap = new Map();
+                        if (svcs) svcs.forEach((s: any) => {
+                            if (s.id) svcMap.set(String(s.id).trim().toLowerCase(), s);
+                            if (s.code) svcMap.set(String(s.code).trim().toLowerCase(), s);
+                        });
+                        const names = nextItems.map((ni: any) => {
+                            const displayName = ni.options?.displayName;
+                            if (displayName) return displayName;
+                            const svc = svcMap.get(String(ni.serviceId || '').trim().toLowerCase());
+                            const nameVN = svc?.nameVN;
+                            return typeof nameVN === 'object' ? (nameVN?.vn || nameVN?.en || `DV`) : (nameVN || `DV`);
+                        });
+                        nextServiceName = names.join(' + ');
+                    }
+                }
             }
         }
 
@@ -391,7 +430,9 @@ export async function GET(request: Request) {
                 assignedBedId: turnInfo?.bed_id,
                 roomPrepProcedure: roomProcedures.prep_procedure,
                 roomCleanProcedure: roomProcedures.clean_procedure,
-                nextBookingId: nextBookingId
+                nextBookingId: nextBookingId,
+                nextServiceName: nextServiceName,
+                nextStartTime: nextStartTime
             },
             serverTime: new Date().toISOString()
         });

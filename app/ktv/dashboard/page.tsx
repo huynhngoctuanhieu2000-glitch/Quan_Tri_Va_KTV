@@ -390,7 +390,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                   </div>
                   <div>
                     <p className="font-black text-sm uppercase tracking-tight">Đơn mới đã sẵn sàng!</p>
-                    <p className="text-[10px] font-bold opacity-70">Mã đơn: {logic.booking.nextBookingId}</p>
+                    <p className="text-[11px] font-bold opacity-80">{logic.booking.nextServiceName || 'Dịch vụ'}{logic.booking.nextStartTime ? ` • ${logic.booking.nextStartTime}` : ''}</p>
                   </div>
                 </div>
                 <button
@@ -516,7 +516,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                   </div>
                   <div>
                     <p className="font-black text-sm uppercase tracking-tight">Đơn tiếp theo đã có!</p>
-                    <p className="text-[10px] font-bold opacity-70">Mã đơn: {logic.booking.nextBookingId.substring(0, 8).toUpperCase()}</p>
+                    <p className="text-[11px] font-bold opacity-80">{logic.booking.nextServiceName || 'Dịch vụ'}{logic.booking.nextStartTime ? ` • ${logic.booking.nextStartTime}` : ''}</p>
                   </div>
                 </div>
                 <p className="text-[11px] text-amber-800/80 font-bold leading-relaxed">
@@ -718,8 +718,8 @@ function ScreenTimer({ logic }: { logic: any }) {
             {logic.booking?.nextBookingId && (
               <div className="flex items-center justify-center gap-2 py-2 w-full mt-2 bg-amber-50 rounded-xl border border-amber-200 shadow-sm">
                 <BellRing size={14} className="text-amber-600 animate-bounce" />
-                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-widest">
-                  Tiếp theo: {logic.booking.nextBookingId}
+                <span className="text-[11px] font-bold text-amber-700">
+                  Tiếp: {logic.booking.nextServiceName || 'Đơn mới'}{logic.booking.nextStartTime ? ` • ${logic.booking.nextStartTime}` : ''}
                 </span>
               </div>
             )}
@@ -887,7 +887,7 @@ function ScreenReview({ logic }: { logic: any }) {
           </div>
           <div className="flex-1">
              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Sắp tới</p>
-             <p className="text-xs font-bold text-amber-800">Đơn mới đang chờ: <span className="font-black underline">{logic.booking.nextBookingId}</span></p>
+             <p className="text-xs font-bold text-amber-800">{logic.booking.nextServiceName || 'Đơn mới'}{logic.booking.nextStartTime ? <span className="ml-1 text-amber-600">• {logic.booking.nextStartTime}</span> : ''}</p>
           </div>
         </div>
       )}
