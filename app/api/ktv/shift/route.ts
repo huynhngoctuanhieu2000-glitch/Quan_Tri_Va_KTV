@@ -104,19 +104,24 @@ export async function GET(request: NextRequest) {
                 const isTempShift = shift.reason === 'Tự chọn ca lúc điểm danh' || shift.shiftType === 'FREE' || shift.shiftType === 'REQUEST';
                 
                 if (shift.status === 'ACTIVE' && isTempShift && shift.effectiveFrom < businessDateStr) {
-                    supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', shift.id).then(() => {
-                        supabase.from('KTVShifts').insert({
-                            employeeId: shift.employeeId,
-                            employeeName: shift.employeeName,
-                            shiftType: shift.previousShift || 'SHIFT_1',
-                            effectiveFrom: businessDateStr,
-                            previousShift: shift.shiftType,
-                            reason: 'Khôi phục ca gốc sau điểm danh',
-                            status: 'ACTIVE',
-                            reviewedBy: 'SYSTEM',
-                            reviewedAt: new Date().toISOString()
-                        }).then(() => console.log(`✅ [Shift] Auto-reverted expired temp shift for ${shift.employeeId}`));
+                    await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', shift.id);
+                    await supabase.from('KTVShifts').insert({
+                        employeeId: shift.employeeId,
+                        employeeName: shift.employeeName,
+                        shiftType: shift.previousShift || 'SHIFT_1',
+                        effectiveFrom: businessDateStr,
+                        previousShift: shift.shiftType,
+                        reason: 'Khôi phục ca gốc sau điểm danh',
+                        status: 'ACTIVE',
+                        reviewedBy: 'SYSTEM',
+                        reviewedAt: new Date().toISOString()
                     });
+                    console.log(`✅ [Shift] Auto-reverted expired temp shift for ${shift.employeeId}`);
+                    
+                    // Cập nhật virtual state để hiển thị ngay
+                    shift.shiftType = shift.previousShift || 'SHIFT_1';
+                    shift.reason = 'Khôi phục ca gốc sau điểm danh';
+                    shift.effectiveFrom = businessDateStr;
                 }
 
                 // Nếu chưa có trong map, đây là bản ghi mới nhất trước hoặc bằng fetchDate
@@ -162,7 +167,7 @@ export async function GET(request: NextRequest) {
 
         if (employeeId) {
             // Fetch current active shift + history for a specific KTV
-            const { data: activeShift, error: activeError } = await supabase
+            let { data: activeShift, error: activeError } = await supabase
                 .from('KTVShifts')
                 .select('*')
                 .eq('employeeId', employeeId)
@@ -171,6 +176,31 @@ export async function GET(request: NextRequest) {
 
             if (activeError) {
                 console.error('❌ [Shift GET] Active shift query error:', activeError);
+            }
+
+            // Tự động dọn dẹp (revert) ca tạm thời trong DB nếu nó đang ACTIVE và đã qua ngày hôm nay
+            if (activeShift) {
+                const isTempShift = activeShift.reason === 'Tự chọn ca lúc điểm danh' || activeShift.shiftType === 'FREE' || activeShift.shiftType === 'REQUEST';
+                if (isTempShift && activeShift.effectiveFrom < businessDateStr) {
+                    await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', activeShift.id);
+                    
+                    const { data: newShift } = await supabase.from('KTVShifts').insert({
+                        employeeId: activeShift.employeeId,
+                        employeeName: activeShift.employeeName,
+                        shiftType: activeShift.previousShift || 'SHIFT_1',
+                        effectiveFrom: businessDateStr,
+                        previousShift: activeShift.shiftType,
+                        reason: 'Khôi phục ca gốc sau điểm danh',
+                        status: 'ACTIVE',
+                        reviewedBy: 'SYSTEM',
+                        reviewedAt: new Date().toISOString()
+                    }).select().single();
+
+                    if (newShift) {
+                        activeShift = newShift;
+                        console.log(`✅ [Shift] Auto-reverted expired temp shift for ${employeeId} on personal fetch`);
+                    }
+                }
             }
 
             // Also fetch pending request if any
@@ -203,17 +233,7 @@ export async function GET(request: NextRequest) {
                 };
             }
 
-            // ─── Lấy cấu hình Cut-off Time ───
-            const { data: configCutoff } = await supabase
-                .from('SystemConfigs')
-                .select('value')
-                .eq('key', 'spa_day_cutoff_hours')
-                .maybeSingle();
-            const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
-
-            const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
-            const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
-            const businessDateStr = businessNow.toISOString().slice(0, 10);
+            // Cut-off time is already calculated at the top as businessDateStr
 
             // Fetch OFF status for today
             const { data: offData } = await supabase
@@ -348,6 +368,10 @@ export async function POST(request: Request) {
             );
         }
 
+        const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+        const tomorrow = new Date(vnNow.getTime() + 24 * 60 * 60 * 1000);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
         // 1. Mark old ACTIVE shift as REPLACED
         if (currentActive) {
             await supabase
@@ -364,9 +388,9 @@ export async function POST(request: Request) {
                 employeeId,
                 employeeName: employeeName || employeeId,
                 shiftType,
-                effectiveFrom: new Date().toISOString().split('T')[0],
+                effectiveFrom: tomorrowStr,
                 previousShift: currentActive?.shiftType || null,
-                reason: reason || '',
+                reason: reason || 'Đổi ca từ ngày mai',
                 status: 'ACTIVE',
                 reviewedAt: new Date().toISOString(),
             })

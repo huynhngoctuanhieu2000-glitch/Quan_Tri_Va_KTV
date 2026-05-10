@@ -460,7 +460,7 @@ const ShiftTab = ({ currentShift, shiftHistory, isLoadingShift, newShiftType, is
                     <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
                         <ArrowRightLeft size={20} className="text-indigo-500" />{t.shiftFormTitle}
                     </h3>
-                    <p className="text-xs text-gray-400 mt-1">Đổi ca sẽ có hiệu lực ngay lập tức.</p>
+                    <p className="text-xs text-gray-400 mt-1">Đổi ca sẽ có hiệu lực từ ngày hôm sau (yêu cầu trước 19h00).</p>
                 </div>
                 <form onSubmit={handleSubmitShift} className="px-6 pb-6 space-y-5">
                     <div>

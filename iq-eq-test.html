@@ -1778,20 +1778,20 @@
       if (preview === "iq-result") {
         state = createInitialState();
         state.activeTest = "iq";
-        state.answers.iq = [2, 1, 0, 2, 1, 1, 1, 2];
+        state.answers.iq = [2, 1, 0, 2, 1, 1, 1, 2, 2, 1, 0, 1, 3, 1, 2, 1, 2, 1, 0, 1];
         state.completed.iq = calculateIqResult(state.answers.iq);
         state.view = "result";
       } else if (preview === "eq-result") {
         state = createInitialState();
         state.activeTest = "eq";
-        state.answers.eq = [2, 1, 1, 2, 1, 1, 0, 1];
+        state.answers.eq = [2, 1, 1, 2, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
         state.completed.eq = calculateEqResult(state.answers.eq);
         state.view = "result";
       } else if (preview === "dashboard") {
         state = createInitialState();
         state.activeTest = "iq";
-        state.answers.iq = [2, 1, 0, 2, 1, 1, 1, 2];
-        state.answers.eq = [2, 1, 1, 2, 1, 1, 0, 1];
+        state.answers.iq = [2, 1, 0, 2, 1, 1, 1, 2, 2, 1, 0, 1, 3, 1, 2, 1, 2, 1, 0, 1];
+        state.answers.eq = [2, 1, 1, 2, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
         state.completed.iq = calculateIqResult(state.answers.iq);
         state.completed.eq = calculateEqResult(state.answers.eq);
         state.view = "result";
