@@ -23,7 +23,7 @@ export async function GET() {
         // Link via customerId instead of phone
         const { data: allBookings, error: bError } = await supabase
             .from('Bookings')
-            .select('id, customerId, customerEmail, status, bookingDate, totalAmount, createdAt')
+            .select('id, customerId, customerEmail, status, bookingDate, totalAmount, createdAt, notes')
             .in('status', ['COMPLETED', 'DONE', 'FEEDBACK']);
 
         if (bError) {
@@ -70,6 +70,22 @@ export async function GET() {
             const visitCount = combinedBookings.length;
             const totalSpent = combinedBookings.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
             
+            // Extract KTV reviews
+            const ktvReviews: string[] = [];
+            combinedBookings.forEach(b => {
+                if (b.notes && b.notes.includes('[Đánh giá KTV:')) {
+                    const matches = b.notes.match(/\[Đánh giá KTV: (.*?)\]/g);
+                    if (matches) {
+                        matches.forEach((m: string) => {
+                            const raw = m.replace('[Đánh giá KTV: ', '').replace(']', '');
+                            raw.split(',').forEach(tag => ktvReviews.push(tag.trim()));
+                        });
+                    }
+                }
+            });
+            // Get unique tags
+            const uniqueKtvReviews = Array.from(new Set(ktvReviews)).filter(Boolean);
+            
             // Find most recent visit
             const lastBooking = combinedBookings.sort((a, b) => {
                 const dateA = new Date(a.bookingDate || a.createdAt).getTime();
@@ -81,6 +97,7 @@ export async function GET() {
                 ...customer,
                 visitCount,
                 totalSpent,
+                ktvReviews: uniqueKtvReviews,
                 lastVisited: lastBooking ? (lastBooking.bookingDate || lastBooking.createdAt) : customer.lastVisited
             };
         });
@@ -88,6 +105,34 @@ export async function GET() {
         return NextResponse.json({ success: true, data: enrichedCustomers });
     } catch (error: any) {
         console.error('API Error (Customers):', error);
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: Request) {
+    try {
+        const body = await request.json();
+        const { id, notes } = body;
+
+        if (!id) {
+            return NextResponse.json({ success: false, error: 'Thiếu ID khách hàng' }, { status: 400 });
+        }
+
+        const supabase = getSupabaseAdmin();
+        if (!supabase) throw new Error('Supabase not initialized');
+
+        const { data, error } = await supabase
+            .from('Customers')
+            .update({ notes, updatedAt: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return NextResponse.json({ success: true, data });
+    } catch (error: any) {
+        console.error('API Error (Customers PATCH):', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

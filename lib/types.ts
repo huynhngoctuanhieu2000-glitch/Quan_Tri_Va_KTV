@@ -111,6 +111,7 @@ export interface Customer {
   // Aggregated fields
   totalSpent?: number;
   visitCount?: number;
+  ktvReviews?: string[];
 }
 
 export interface Room {
