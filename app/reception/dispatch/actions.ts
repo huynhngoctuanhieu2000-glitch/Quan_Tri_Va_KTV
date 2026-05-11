@@ -1002,7 +1002,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
         const detailedItems = items.map(item => {
             const serviceDef = allServices?.find(s => s.id === item.serviceId);
             const price = serviceDef?.priceVND || 0;
-            const duration = serviceDef?.duration || 60;
+            const duration = serviceDef?.duration ?? 60;
             const name = (typeof serviceDef?.nameVN === 'object' && serviceDef?.nameVN !== null) ? (serviceDef?.nameVN.vn || serviceDef?.nameVN.en || serviceDef?.nameVN) : (serviceDef?.nameVN || serviceDef?.nameEN || `Dịch vụ ${item.serviceId}`);
             
             totalVND += price * item.qty;
@@ -1030,6 +1030,10 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
             : [];
 
         const itemsToInsert = detailedItems.map((item, index) => {
+            // Phòng riêng (NHS0900) là phụ phí, không cần gán KTV
+            const isPrivateRoom = item.serviceId === 'NHS0900' || 
+                String(item.name || '').toLowerCase().includes('phòng riêng') ||
+                String(item.name || '').toLowerCase().includes('phong rieng');
             return {
                 id: `${bookingId}-addon-${timestamp}-${index}`,
                 bookingId: bookingId,
@@ -1037,7 +1041,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                 quantity: item.qty,
                 price: item.priceOriginal,
                 status: 'WAITING',
-                technicianCodes: techIds,
+                technicianCodes: isPrivateRoom ? [] : techIds,
                 options: { isAddon: true, isPaid: false }
             };
         });
@@ -1321,7 +1325,7 @@ export async function editBookingService(bookingId: string, itemId: string, newS
         
         // Thời lượng cũ có thể lưu trong bảng khác hoặc mặc định
         // Chúng ta tạm dùng duration của newService để thay thế
-        const newDuration = newService.duration || 60;
+        const newDuration = newService.duration ?? 60;
         // Thực tế không có duration trong BookingItems, nó được map khi load UI. 
         // Ta cần tự trừ durationDiff cho TurnQueue nếu nó đang active. Nhưng ta cần biết duration cũ.
         // Tốt nhất là fetch từ Services theo oldItem.serviceId
@@ -1331,7 +1335,7 @@ export async function editBookingService(bookingId: string, itemId: string, newS
             .eq('id', oldItem.serviceId)
             .single();
             
-        const oldDuration = oldService?.duration || 60;
+        const oldDuration = oldService?.duration ?? 60;
         const durationDiff = newDuration - oldDuration;
 
         const oldServiceName = typeof oldService?.nameVN === 'object' ? oldService?.nameVN?.vn || oldService?.nameVN?.en : oldService?.nameVN || 'Dịch vụ cũ';

@@ -1876,18 +1876,22 @@ if (!hasPermission('dispatch_board')) {
                   })
                   .map((svc: any) => {
                     const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || svc.nameVN) : (svc.nameVN || svc.nameEN || `Dịch vụ ${svc.code || svc.id}`);
-                    const dur = svc.duration || 60;
+                    const dur = svc.duration ?? 60;
                     const price = svc.priceVND || 0;
+                    const isUtilitySvc = svc.id === 'NHS0900' || String(name).toLowerCase().includes('phòng riêng') || String(name).toLowerCase().includes('phong rieng');
                     return (
                       <button 
                         key={svc.id} 
                         onClick={() => editingSvc ? handleEditService(svc.id, name, dur) : addServiceBlock(svc.id, name, dur)} 
-                        className="group p-5 text-left border-2 border-gray-100 rounded-2xl hover:border-indigo-500 hover:bg-indigo-50/30 transition-all flex items-center justify-between active:scale-[0.98]"
+                        className={`group p-5 text-left border-2 rounded-2xl transition-all flex items-center justify-between active:scale-[0.98] ${isUtilitySvc ? 'border-amber-200 hover:border-amber-400 hover:bg-amber-50/30' : 'border-gray-100 hover:border-indigo-500 hover:bg-indigo-50/30'}`}
                       >
                         <div>
-                          <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{name}</p>
+                          <p className={`font-black transition-colors ${isUtilitySvc ? 'text-amber-700 group-hover:text-amber-800' : 'text-gray-900 group-hover:text-indigo-600'}`}>{name}</p>
                           <div className="flex items-center gap-3 mt-1">
-                            <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">{dur} PHÚT</span>
+                            {isUtilitySvc 
+                              ? <span className="text-[10px] text-amber-600 font-black bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 uppercase tracking-wider">Tiện ích</span>
+                              : <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">{dur} PHÚT</span>
+                            }
                             {price > 0 && <span className="text-xs text-emerald-600 font-black">{price.toLocaleString()}đ</span>}
                           </div>
                         </div>

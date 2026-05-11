@@ -48,11 +48,13 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
     orders.forEach(order => {
         // Nếu là order pending chưa phân KTV
         if (order.dispatchStatus === 'pending') {
-            const pendingServices = order.services.filter(svc => 
-                svc.serviceId !== 'NHS0900' &&
-                !svc.serviceName?.toLowerCase().includes('phòng riêng') && 
-                !svc.serviceName?.toLowerCase().includes('phong rieng')
-            );
+            // Giữ lại phòng riêng để Lễ tân kiểm tra, đánh dấu isUtility để ẩn KTV picker
+            const pendingServices = order.services.map(svc => {
+                const isPrivateRoom = svc.serviceId === 'NHS0900' ||
+                    svc.serviceName?.toLowerCase().includes('phòng riêng') ||
+                    svc.serviceName?.toLowerCase().includes('phong rieng');
+                return isPrivateRoom ? { ...svc, isUtility: true } : svc;
+            });
             
             if (pendingServices.length > 0) {
                 // Tự suy diễn status của pending order (thường là NEW hoặc PREPARING)

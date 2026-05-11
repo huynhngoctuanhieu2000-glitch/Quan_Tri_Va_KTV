@@ -45,21 +45,24 @@ export const DispatchServiceBlock = ({
     isExpanded = true, onToggleExpand, onDispatchSvc, reminders = []
 }: DispatchServiceBlockProps) => {
 
+    const isUtility = !!(svc as any).isUtility;
+
     return (
-        <div className="border border-gray-100 rounded-3xl overflow-hidden bg-white shadow-sm transition-all hover:shadow-md hover:border-indigo-100">
+        <div className={`border rounded-3xl overflow-hidden shadow-sm transition-all ${isUtility ? 'border-amber-200 bg-amber-50/30' : 'border-gray-100 bg-white hover:shadow-md hover:border-indigo-100'}`}>
             {/* Service Header */}
             <div 
-                className="bg-gray-50/80 px-4 py-4 lg:px-6 flex items-center justify-between border-b border-gray-100 backdrop-blur-sm cursor-pointer"
-                onClick={onToggleExpand}
+                className={`px-4 py-4 lg:px-6 flex items-center justify-between backdrop-blur-sm ${isUtility ? 'bg-amber-50/50 cursor-default' : 'bg-gray-50/80 border-b border-gray-100 cursor-pointer'}`}
+                onClick={isUtility ? undefined : onToggleExpand}
             >
                 <div className="flex items-center gap-3">
-                    <span className="bg-indigo-600 text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-100">
-                        {svcIndex + 1}
+                    <span className={`text-white text-[10px] font-black px-3 py-1.5 rounded-xl uppercase tracking-widest shadow-lg ${isUtility ? 'bg-amber-500 shadow-amber-100' : 'bg-indigo-600 shadow-indigo-100'}`}>
+                        {isUtility ? '₫' : svcIndex + 1}
                     </span>
                     <div className="flex flex-col w-full">
                         <div className="flex flex-wrap items-center gap-3">
                             <h3 className="font-black text-gray-900 text-base leading-tight">{svc.options?.displayName || svc.serviceName}</h3>
-                            <span className="inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>
+                            {!isUtility && <span className="inline-block text-xs text-gray-400 font-bold bg-white px-2 py-1 rounded-lg border border-gray-100">{svc.duration}p</span>}
+                            {isUtility && <span className="inline-block text-[10px] text-amber-600 font-black bg-amber-100 px-2 py-1 rounded-lg border border-amber-200 uppercase tracking-wider">Tiện ích</span>}
                             
                             {/* Quick View: Assigned KTV & Room */}
                             <div className="flex flex-wrap items-center gap-2">
@@ -96,7 +99,7 @@ export const DispatchServiceBlock = ({
                 </div>
 
                 <div className="flex items-center gap-2 lg:gap-3">
-                    {onEditSvc && (
+                    {!isUtility && onEditSvc && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -120,13 +123,15 @@ export const DispatchServiceBlock = ({
                             <Trash2 size={18} strokeWidth={2.5} />
                         </button>
                     )}
-                    <button className="p-2 text-gray-400 hover:text-gray-600 transition-transform duration-300" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                    </button>
+                    {!isUtility && (
+                        <button className="p-2 text-gray-400 hover:text-gray-600 transition-transform duration-300" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {isExpanded && (
+            {isExpanded && !isUtility && (
                 <div className="p-4 lg:p-6 space-y-6 animate-in slide-in-from-top-2 duration-200">
                     {/* Customer Requirements */}
                     {(svc.genderReq || svc.strength || svc.focus || svc.avoid || svc.customerNote) && (
@@ -176,8 +181,8 @@ export const DispatchServiceBlock = ({
                         />
                     </div>
 
-                    {/* Staff Selection Area */}
-                    {svc.duration > 0 && (
+                    {/* Staff Selection Area — ẩn cho dịch vụ phụ phí (phòng riêng) */}
+                    {svc.duration > 0 && !(svc as any).isUtility && (
                         <div className="space-y-4">
                             <div className="flex items-center justify-between px-1">
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
