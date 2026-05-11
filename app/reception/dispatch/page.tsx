@@ -1878,7 +1878,7 @@ if (!hasPermission('dispatch_board')) {
                     const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || svc.nameVN) : (svc.nameVN || svc.nameEN || `Dịch vụ ${svc.code || svc.id}`);
                     const dur = svc.duration ?? 60;
                     const price = svc.priceVND || 0;
-                    const isUtilitySvc = svc.id === 'NHS0900' || String(name).toLowerCase().includes('phòng riêng') || String(name).toLowerCase().includes('phong rieng');
+                    const isUtilitySvc = svc.is_utility === true || svc.id === 'NHS0900' || String(name).toLowerCase().includes('phòng riêng') || String(name).toLowerCase().includes('phong rieng'); // Legacy fallback
                     return (
                       <button 
                         key={svc.id} 

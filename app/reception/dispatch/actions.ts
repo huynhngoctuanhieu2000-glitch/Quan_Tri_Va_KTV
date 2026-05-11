@@ -44,7 +44,7 @@ export async function getDispatchData(date: string) {
         // 4. Fetch Services FIRST to build map (safer than complex filtering)
         const { data: allServices, error: svcError } = await supabase
             .from('Services')
-            .select('id, code, nameVN, nameEN, duration, description, category, priceVND, imageUrl')
+            .select('id, code, nameVN, nameEN, duration, description, category, priceVND, imageUrl, is_utility')
             .limit(1000);
 
         if (svcError) {
@@ -52,7 +52,7 @@ export async function getDispatchData(date: string) {
         }
         console.log(`📡 [Server] Fetched: ${allServices?.length || 0} services for mapping`);
 
-        let servicesMap: Record<string, { name: string; duration: number; description: string }> = {};
+        let servicesMap: Record<string, { name: string; duration: number; description: string; is_utility: boolean }> = {};
         if (allServices) {
             allServices.forEach((s: any) => {
                 const info = {
@@ -60,7 +60,8 @@ export async function getDispatchData(date: string) {
                     duration: s.duration ?? 60,
                     description: (typeof s.description === 'object' && s.description !== null) 
                         ? (s.description.vn || s.description.en || '') 
-                        : (s.description || '')
+                        : (s.description || ''),
+                    is_utility: s.is_utility ?? false  // ✅ is_utility từ DB
                 };
                 
                 // Trình dọn dẹp cuối cùng: Đảm bảo không còn object nào lọt vào UI
@@ -137,6 +138,7 @@ export async function getDispatchData(date: string) {
                             serviceName: svcInfo?.name || `DV ${sId.toUpperCase()}`, // Thêm camelCase cho đồng bộ
                             service_description: svcInfo?.description || '',
                             duration: finalDuration,
+                            is_utility: svcInfo?.is_utility ?? (sId === 'nhs0900'), // ✅ is_utility, fallback legacy
                             timeStart: i.timeStart || null,
                             timeEnd: i.timeEnd || null,
                             status: i.status || 'NEW',
@@ -849,7 +851,10 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         if (allItems && allItems.length > 0) {
             const validItems = allItems.filter((i: any) => {
                 const name = i.Services?.nameVN || '';
-                return i.serviceId !== 'NHS0900' && !name.toLowerCase().includes('phòng riêng') && !name.toLowerCase().includes('phong rieng');
+                return i.Services?.is_utility !== true 
+                    && i.serviceId !== 'NHS0900' // Legacy fallback
+                    && !name.toLowerCase().includes('phòng riêng') 
+                    && !name.toLowerCase().includes('phong rieng');
             });
             const finalItems = validItems.length > 0 ? validItems : allItems;
             const statuses = finalItems.map(i => i.status);
@@ -1030,10 +1035,11 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
             : [];
 
         const itemsToInsert = detailedItems.map((item, index) => {
-            // Phòng riêng (NHS0900) là phụ phí, không cần gán KTV
-            const isPrivateRoom = item.serviceId === 'NHS0900' || 
-                String(item.name || '').toLowerCase().includes('phòng riêng') ||
-                String(item.name || '').toLowerCase().includes('phong rieng');
+            // Dịch vụ tiện ích (is_utility) không cần gán KTV
+            const isUtility = (item as any).is_utility === true
+                || item.serviceId === 'NHS0900' // Legacy fallback
+                || String(item.name || '').toLowerCase().includes('phòng riêng')
+                || String(item.name || '').toLowerCase().includes('phong rieng');
             return {
                 id: `${bookingId}-addon-${timestamp}-${index}`,
                 bookingId: bookingId,
@@ -1041,7 +1047,7 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                 quantity: item.qty,
                 price: item.priceOriginal,
                 status: 'WAITING',
-                technicianCodes: isPrivateRoom ? [] : techIds,
+                technicianCodes: isUtility ? [] : techIds,
                 options: { isAddon: true, isPaid: false }
             };
         });
@@ -1652,7 +1658,7 @@ export async function syncOrderTimelineToDb(bookingId: string) {
         const allSegments: any[] = [];
         items.forEach(item => {
             // Bỏ qua phòng riêng
-            if (item.serviceId === 'NHS0900' || item.serviceName?.toLowerCase().includes('phòng riêng') || item.serviceName?.toLowerCase().includes('phong rieng')) return;
+            if ((item as any).is_utility === true || item.serviceId === 'NHS0900' || item.serviceName?.toLowerCase().includes('phòng riêng') || item.serviceName?.toLowerCase().includes('phong rieng')) return; // Legacy fallback
             
             let segs = [];
             try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}

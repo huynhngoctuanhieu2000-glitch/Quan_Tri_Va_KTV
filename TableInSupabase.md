@@ -102,6 +102,7 @@
 | `focusConfig` | jsonb | Tùy chọn tập trung các vùng cơ thể |
 | `tags` | jsonb | Danh sách các Tag đa ngôn ngữ (VD: Mang thai) |
 | `comboTags` | jsonb | Mảng các combo tags (VD: ["body"]) |
+| `is_utility` | boolean | ✅ **Cờ dịch vụ tiện ích** — Không gán KTV, không tính hoa hồng, không hiện timer KTV. Default: `false`. Set `true` cho Phòng riêng (`NHS0900`) và các DV phụ trợ khác. |
 
 ---
 

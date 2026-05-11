@@ -307,7 +307,7 @@ export async function GET(request: Request) {
 
         const allSegments: any[] = [];
         itemsWithService.forEach((item: any) => {
-            if (item.serviceId === 'NHS0900' || item.service_name?.toLowerCase().includes('phòng riêng') || item.service_name?.toLowerCase().includes('phong rieng')) return;
+            if (item.is_utility === true || item.serviceId === 'NHS0900' || item.service_name?.toLowerCase().includes('phòng riêng') || item.service_name?.toLowerCase().includes('phong rieng')) return; // Legacy fallback
             let segs = [];
             try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
             segs.forEach((s: any) => {
@@ -674,11 +674,17 @@ export async function PATCH(request: Request) {
             }
             
             // 🔄 ĐỒNG BỘ TRẠNG THÁI BOOKING & GIẢI PHÓNG PHÒNG
-            const { data: allItems } = await supabase.from('BookingItems').select('status, serviceId, Services!BookingItems_serviceId_fkey(nameVN)').eq('bookingId', bookingId);
+            const { data: allItems } = await supabase
+                .from('BookingItems')
+                .select('status, serviceId, Services!BookingItems_serviceId_fkey(nameVN, is_utility)')
+                .eq('bookingId', bookingId);
             if (allItems && allItems.length > 0) {
                 const validItems = allItems.filter((i: any) => {
                     const name = i.Services?.nameVN || '';
-                    return i.serviceId !== 'NHS0900' && !name.toLowerCase().includes('phòng riêng') && !name.toLowerCase().includes('phong rieng');
+                    return i.Services?.is_utility !== true 
+                        && i.serviceId !== 'NHS0900'  // Legacy fallback
+                        && !name.toLowerCase().includes('phòng riêng')
+                        && !name.toLowerCase().includes('phong rieng');
                 });
                 const finalItems = validItems.length > 0 ? validItems : allItems;
                 const statuses = finalItems.map(i => i.status);

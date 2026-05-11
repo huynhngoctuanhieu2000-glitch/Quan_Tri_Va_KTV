@@ -50,9 +50,9 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         if (order.dispatchStatus === 'pending') {
             // Giữ lại phòng riêng để Lễ tân kiểm tra, đánh dấu isUtility để ẩn KTV picker
             const pendingServices = order.services.map(svc => {
-                const isPrivateRoom = svc.serviceId === 'NHS0900' ||
+                const isPrivateRoom = svc.is_utility === true || svc.serviceId === 'NHS0900' ||
                     svc.serviceName?.toLowerCase().includes('phòng riêng') ||
-                    svc.serviceName?.toLowerCase().includes('phong rieng');
+                    svc.serviceName?.toLowerCase().includes('phong rieng'); // Legacy fallback
                 return isPrivateRoom ? { ...svc, isUtility: true } : svc;
             });
             
@@ -88,7 +88,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         const allStaffs: Array<{ st: any, svcId: string, svcDuration: number, svcTimeStart: string, origStart: string }> = [];
         
         order.services.forEach(svc => {
-            if (svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return;
+            if (svc.is_utility === true || svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return; // Legacy fallback
             if (!svc.staffList) return;
             
             svc.staffList.forEach(st => {
@@ -152,7 +152,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         const groupCalculatedStarts = new Map<string, string>();
 
         order.services.forEach(svc => {
-            if (svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return;
+            if (svc.is_utility === true || svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')) return; // Legacy fallback
             
             if (svc.staffList && svc.staffList.length > 0) {
                 const timeGroups = new Map<string, { calculatedStart: string, staffs: any[] }>();
@@ -241,7 +241,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         });
 
         // 🌟 Inject Utilities (Phòng Riêng) back into UI 🌟
-        const privateRooms = order.services.filter(svc => svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng'));
+        const privateRooms = order.services.filter(svc => svc.is_utility === true || svc.serviceId === 'NHS0900' || svc.serviceName?.toLowerCase().includes('phòng riêng') || svc.serviceName?.toLowerCase().includes('phong rieng')); // Legacy fallback
         if (privateRooms.length > 0) {
             const utilityServices = privateRooms.map(pr => ({ ...pr, isUtility: true }));
             if (resultForOrder.length > 0) {

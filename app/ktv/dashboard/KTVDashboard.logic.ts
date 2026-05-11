@@ -1399,13 +1399,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 ? booking.BookingItems?.filter((i: any) => itemIds.includes(i.id)) || []
                 : [booking.BookingItems?.[0]].filter(Boolean);
             
-            // Filter bỏ phòng riêng (NHS0900) — không tính vào tiền tua
+            // Filter bỏ dịch vụ tiện ích (is_utility) — không tính vào tiền tua
             const serviceItems = assignedItems.filter((item: any) => {
                 const sId = String(item.serviceId || '').toUpperCase();
                 const sName = String(item.service_name || '').toLowerCase();
-                return sId !== 'NHS0900' && 
-                       !sName.includes('phòng riêng') && 
-                       !sName.includes('phong rieng');
+                return item.is_utility !== true
+                       && sId !== 'NHS0900'  // Legacy fallback
+                       && !sName.includes('phòng riêng') 
+                       && !sName.includes('phong rieng');
             });
 
             // Tổng tất cả segment duration của KTV này across all assigned items
