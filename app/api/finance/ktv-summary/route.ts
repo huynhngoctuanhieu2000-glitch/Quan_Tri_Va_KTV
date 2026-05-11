@@ -34,10 +34,11 @@ export async function GET() {
         const GLOBAL_START_DATE_ISO = '2026-05-04T00:00:00.000Z';
 
         // 1. Get configs
-        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }] = await Promise.all([
+        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }, { data: penaltyConf }] = await Promise.all([
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single(),
-            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single()
+            supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single(),
+            supabase.from('SystemConfigs').select('value').eq('key', 'enable_penalty_deduction').single()
         ]);
         
         let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
@@ -53,6 +54,8 @@ export async function GET() {
             const rawDeposit = String(depositConf.value).replace(/[^0-9]/g, '');
             if (rawDeposit) global_min_deposit = Number(rawDeposit);
         }
+        
+        const isPenaltyEnabled = penaltyConf?.value === 'true';
 
         // 2. Fetch KTVs
         const { data: ktvs } = await supabase
@@ -173,11 +176,11 @@ export async function GET() {
             const ledger = ledgerMap[techCode];
             const total_commission = ledger.comm + rt_commission;
             const total_tip = ledger.tip + rt_tip;
-            const total_bonus = ledger.bonus; // Realtime bonus not yet implemented in summary (cron only)
-            const total_penalty = ledger.penalty;
+            const total_bonus = ledger.bonus; // Thưởng rating tự động từ cron (nghiệp vụ đánh giá sao)
+            const total_penalty = isPenaltyEnabled ? ledger.penalty : 0; // ⚠️ Feature flag bật/tắt phạt đột xuất
 
-            // ⚠️ Bonus KHÔNG cộng vào ví rút tiền — chỉ hiển thị riêng
-            const gross_income = total_commission + rt_adjustment - total_penalty;
+            // ✅ Cộng cả bonus (cron) + adjustment (admin) vào gross_income — 2 nguồn độc lập, không double-count
+            const gross_income = total_commission + total_bonus + rt_adjustment - total_penalty;
             const min_deposit = global_min_deposit;
             const net_balance = gross_income - rt_withdrawn - total_pending;
             const available_balance = Math.max(0, net_balance - min_deposit);

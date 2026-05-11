@@ -205,7 +205,24 @@ export default function FinanceKTVPage() {
                                                 </td>
                                                 <td className="px-6 py-4 text-right text-slate-600">{Number(ktv.total_commission || 0).toLocaleString()}đ</td>
                                                 <td className="px-6 py-4 text-right text-slate-600">{Number(ktv.total_tip || 0).toLocaleString()}đ</td>
-                                                <td className="px-6 py-4 text-right text-slate-600">{Number(ktv.total_adjustment || 0).toLocaleString()}đ</td>
+                                                <td className="px-6 py-4 text-right text-slate-600">
+                                                    {(Number(ktv.total_bonus || 0) + Number(ktv.total_adjustment || 0) - Number(ktv.total_penalty || 0)).toLocaleString()}đ
+                                                    {Number(ktv.total_bonus || 0) > 0 && (
+                                                        <span className="block text-[9px] text-indigo-400 font-bold mt-0.5">
+                                                            ★ {Number(ktv.total_bonus).toLocaleString()}đ
+                                                        </span>
+                                                    )}
+                                                    {Number(ktv.total_adjustment || 0) !== 0 && (
+                                                        <span className={`block text-[9px] font-bold mt-0.5 ${Number(ktv.total_adjustment) > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                            {Number(ktv.total_adjustment) > 0 ? '+' : ''}{Number(ktv.total_adjustment).toLocaleString()}đ
+                                                        </span>
+                                                    )}
+                                                    {Number(ktv.total_penalty || 0) > 0 && (
+                                                        <span className="block text-[9px] font-bold mt-0.5 text-rose-600">
+                                                            - Phạt {Number(ktv.total_penalty).toLocaleString()}đ
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4 text-right font-black text-slate-800">{Number(ktv.gross_income || 0).toLocaleString()}đ</td>
                                                 <td className="px-6 py-4 text-right text-rose-600">
                                                     <span className="font-bold">{Number(ktv.total_withdrawn || 0).toLocaleString()}đ</span>

@@ -41,11 +41,12 @@ export async function GET(request: Request) {
         const GLOBAL_START_DATE_ISO = '2026-05-04T00:00:00.000Z';
 
         // 1. Fetch configs
-        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }, { data: bonusConfigs }] = await Promise.all([
+        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }, { data: bonusConfigs }, { data: penaltyConf }] = await Promise.all([
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single(),
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single(),
-            supabase.from('SystemConfigs').select('key, value').in('key', ['ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus'])
+            supabase.from('SystemConfigs').select('key, value').in('key', ['ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus']),
+            supabase.from('SystemConfigs').select('value').eq('key', 'enable_penalty_deduction').single()
         ]);
         
         let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
@@ -68,6 +69,8 @@ export async function GET(request: Request) {
             const rawDeposit = String(depositConf.value).replace(/[^0-9]/g, '');
             if (rawDeposit) min_deposit = Number(rawDeposit);
         }
+        
+        const isPenaltyEnabled = penaltyConf?.value === 'true';
 
         // --- CƠ CHẾ DYNAMIC BRIDGE (Đã fix lỗi trùng lặp dữ liệu) ---
         // Lấy ngày hiện tại ở Việt Nam (YYYY-MM-DD)
@@ -79,12 +82,12 @@ export async function GET(request: Request) {
         // 2. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
         const { data: ledgers } = await supabase
             .from('KTVDailyLedger')
-            .select('date, total_commission, total_tip, total_bonus')
+            .select('date, total_commission, total_tip, total_bonus, total_penalty')
             .eq('staff_id', techCode)
             .gte('date', GLOBAL_START_DATE_STR);
 
         let realtimeStartStr = `${GLOBAL_START_DATE_STR}T00:00:00+07:00`;
-        const ledgerSummary = { comm: 0, tip: 0, bonus: 0 };
+        const ledgerSummary = { comm: 0, tip: 0, bonus: 0, penalty: 0 };
 
         if (ledgers && ledgers.length > 0) {
             // LOẠI BỎ Sổ cái của ngày hôm nay (nếu có) do Cron hoặc Admin chạy tay sinh ra
@@ -97,6 +100,7 @@ export async function GET(request: Request) {
                     ledgerSummary.comm += Number(l.total_commission);
                     ledgerSummary.tip += Number(l.total_tip);
                     ledgerSummary.bonus += Number(l.total_bonus || 0);
+                    ledgerSummary.penalty += Number(l.total_penalty || 0);
                 });
 
                 // Tính toán chính xác ngày tiếp theo mà không bị lệch múi giờ
@@ -212,9 +216,10 @@ export async function GET(request: Request) {
         const total_commission = ledgerSummary.comm + rt_commission;
         const total_tip = ledgerSummary.tip + rt_tip;
         const total_bonus = ledgerSummary.bonus + rt_bonus;
+        const total_penalty = isPenaltyEnabled ? ledgerSummary.penalty : 0; // ⚠️ Feature flag bật/tắt phạt đột xuất
 
         // ⚠️ Bonus KHÔNG cộng vào ví rút tiền — chỉ hiển thị ở lịch sử
-        const gross_income = total_commission + total_adjustment;
+        const gross_income = total_commission + total_adjustment - total_penalty;
         const net_balance = gross_income - total_withdrawn - total_pending;
         const available_balance = Math.max(0, net_balance - min_deposit);
         const effective_balance = Math.max(0, net_balance);
@@ -225,6 +230,7 @@ export async function GET(request: Request) {
                 total_commission,
                 total_tip,
                 total_bonus,
+                total_penalty,
                 total_adjustment,
                 total_withdrawn,
                 total_pending,
