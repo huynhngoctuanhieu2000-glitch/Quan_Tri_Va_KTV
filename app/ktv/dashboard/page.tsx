@@ -571,18 +571,24 @@ function ScreenTimer({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase());
+    return segs
+      .filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase())
+      .map((s: any) => ({ ...s, _itemId: i.id }));
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
       return timeA.localeCompare(timeB);
   });
+  
+  const uniqueItemIds = new Set(ktvSegments.map((s: any) => s._itemId));
+  const shouldMerge = ktvSegments.length > 1 && uniqueItemIds.size === ktvSegments.length;
+
   const totalAssignedMins = ktvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
-  const nextSeg = ktvSegments.length > (activeSegmentIndex + 1) ? ktvSegments[activeSegmentIndex + 1] : null;
+  const nextSeg = ktvSegments.length > (activeSegmentIndex + 1) && !shouldMerge ? ktvSegments[activeSegmentIndex + 1] : null;
 
-  // 🕒 CHỈ HIỂN THỊ THỜI GIAN CỦA CHẶNG HIỆN TẠI thay vì tổng
-  const displayDuration = currentSeg ? (Number(currentSeg.duration) || 60) : (item.duration || 60);
+  // 🕒 CHỈ HIỂN THỊ THỜI GIAN CỦA CHẶNG HIỆN TẠI (trừ phi được gộp)
+  const displayDuration = shouldMerge ? totalAssignedMins : (currentSeg ? (Number(currentSeg.duration) || 60) : (item.duration || 60));
 
   const parsedSetup = Number(logic.settings?.ktv_setup_duration_minutes);
   const setupMins = !isNaN(parsedSetup) ? parsedSetup : 0;
@@ -606,7 +612,7 @@ function ScreenTimer({ logic }: { logic: any }) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-slate-800 font-black">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest">
-                {ktvSegments.length > 1 ? `Chặng ${activeSegmentIndex + 1}` : 'Phòng'}
+                {ktvSegments.length > 1 && !shouldMerge ? `Chặng ${activeSegmentIndex + 1}` : 'Phòng'}
               </span>
               <span className="text-lg">
                 {currentSeg?.roomId || booking?.assignedRoomId || item.roomName || booking?.roomName}

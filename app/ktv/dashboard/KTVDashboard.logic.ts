@@ -653,8 +653,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             const mySegs = segs.filter((seg: any) => 
                                 seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase()
                             );
-                            allMySegs.push(...mySegs);
+                            
+                            // 🔧 Gắn _itemId để phục vụ rule MERGE
+                            const mySegsWithId = mySegs.map((seg: any) => ({ ...seg, _itemId: ai.id }));
+                            allMySegs.push(...mySegsWithId);
                         }
+
+                        // Kiểm tra Rule Merge Timer
+                        const uniqueItemIds = new Set(allMySegs.map((s: any) => s._itemId));
+                        const shouldMerge = allMySegs.length > 1 && uniqueItemIds.size === allMySegs.length;
 
                         // 🚀 Status item-level ưu tiên tuyệt đối + co-working forward-only sync
                         let currentStatus = assignedItem?.status || res.data.status;
@@ -744,9 +751,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             
                             // [Sửa đổi]: Đếm lùi theo từng chặng (current segment only)
                             const currentSeg = allMySegs[calculatedSegIdx] || allMySegs[0] || {};
-                            const currentSegDuration = Number(currentSeg.duration) || assignedItem?.duration || 60;
+                            let currentSegDuration = Number(currentSeg.duration) || assignedItem?.duration || 60;
                             
-                            console.log("⏱️ [Timer] calculatedSegIdx:", calculatedSegIdx, "currentSegDuration:", currentSegDuration, "totalSegs:", allMySegs.length);
+                            if (shouldMerge) {
+                                currentSegDuration = allMySegs.reduce((sum: number, s: any) => sum + (Number(s.duration) || 60), 0);
+                            }
+                            
+                            console.log("⏱️ [Timer] calculatedSegIdx:", calculatedSegIdx, "currentSegDuration:", currentSegDuration, "totalSegs:", allMySegs.length, "shouldMerge:", shouldMerge);
 
                             // Cập nhật thời gian dựa trên chặng hiện tại
                             const currentSecs = currentSegDuration * 60;
@@ -1154,6 +1165,29 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     const handleStartTimer = async () => {
         if (!booking || !ktvId) return;
+
+        // Tính toán shouldMerge để gửi lên API START_TIMER
+        const allItemIds: string[] = booking.assignedItemIds?.length > 0
+            ? booking.assignedItemIds
+            : (booking.assignedItemId ? [booking.assignedItemId] : []);
+        const allItems = allItemIds.length > 0
+            ? booking.BookingItems?.filter((i: any) => allItemIds.includes(i.id)) || []
+            : [booking.BookingItems?.[0]].filter(Boolean);
+
+        let allMySegs: any[] = [];
+        for (const ai of allItems) {
+            let segs: any[] = [];
+            try {
+                segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
+            } catch { segs = []; }
+            const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
+            const mySegsWithId = mySegs.map((seg: any) => ({ ...seg, _itemId: ai.id }));
+            allMySegs.push(...mySegsWithId);
+        }
+        
+        const uniqueItemIds = new Set(allMySegs.map((s: any) => s._itemId));
+        const shouldMerge = allMySegs.length > 1 && uniqueItemIds.size === allMySegs.length;
+
         setIsLoading(true);
         const response = await fetch('/api/ktv/booking', {
             method: 'PATCH',
@@ -1162,7 +1196,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 bookingId: booking.id, 
                 status: 'IN_PROGRESS',
                 techCode: ktvId,
-                action: 'START_TIMER'
+                action: 'START_TIMER',
+                shouldMerge: shouldMerge
             })
         });
         const res = await response.json();
@@ -1193,12 +1228,17 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
             } catch { segs = []; }
             const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
-            allMySegs.push(...mySegs);
+            const mySegsWithId = mySegs.map((seg: any) => ({ ...seg, _itemId: ai.id }));
+            allMySegs.push(...mySegsWithId);
         }
         allMySegs.sort((a, b) => (a.startTime || '23:59').localeCompare(b.startTime || '23:59'));
 
+        const uniqueItemIds = new Set(allMySegs.map((s: any) => s._itemId));
+        const shouldMerge = allMySegs.length > 1 && uniqueItemIds.size === allMySegs.length;
+
         const currentIdx = activeSegmentIndex;
-        const hasNextSegment = currentIdx < allMySegs.length - 1;
+        // Nếu shouldMerge = true, bỏ qua advance và coi như đã làm xong chặng cuối
+        const hasNextSegment = currentIdx < allMySegs.length - 1 && !shouldMerge;
 
         if (hasNextSegment) {
             // 🔄 AUTO-ADVANCE: Còn chặng tiếp → chuyển sang chặng kế, KHÔNG finish
