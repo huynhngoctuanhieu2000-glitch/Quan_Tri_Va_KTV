@@ -550,8 +550,6 @@ export async function PATCH(request: Request) {
                         }
 
                         // 🤝 PARALLEL START SYNC: Co-start co-workers with SAME startTime (song song)
-                        // Lấy target ban đầu để không phá vỡ logic cũ
-                        const target = allGlobalSegs[startIdx];
 
                         if (action === 'START_TIMER' && myStartTime) {
                             const targetItemId = target.item.id;
@@ -596,25 +594,36 @@ export async function PATCH(request: Request) {
             const uniqueItemIds = new Set(allGlobalSegs.map((s: any) => s._itemId));
             const isMerged = allGlobalSegs.length > 1 && uniqueItemIds.size === allGlobalSegs.length;
 
-            if (isMerged && status === 'CLEANING') {
-                // Backwards padding for actualEndTime và actualStartTime
-                let currentEndTime = new Date(nowISO);
-                for (let i = allGlobalSegs.length - 1; i >= 0; i--) {
+            if (isMerged && (status === 'CLEANING' || isFeedback)) {
+                // Forwards padding to prevent negative duration if KTV finishes early
+                const firstStartTime = allGlobalSegs[0].seg.actualStartTime || nowISO;
+                let actualTimeSpentMs = new Date(nowISO).getTime() - new Date(firstStartTime).getTime();
+                if (actualTimeSpentMs < 0) actualTimeSpentMs = 0; // Guard against negative time
+
+                let currentStartTimeMs = new Date(firstStartTime).getTime();
+
+                for (let i = 0; i < allGlobalSegs.length; i++) {
                     const target = allGlobalSegs[i];
+                    const maxDurationMs = (Number(target.seg.duration) || 60) * 60000;
                     
-                    target.seg.actualEndTime = currentEndTime.toISOString();
+                    target.seg.actualStartTime = new Date(currentStartTimeMs).toISOString();
+                    
+                    // Allocate time to this segment
+                    const allocatedMs = Math.min(actualTimeSpentMs, maxDurationMs);
+                    actualTimeSpentMs -= allocatedMs;
+                    currentStartTimeMs += allocatedMs;
+                    
+                    target.seg.actualEndTime = new Date(currentStartTimeMs).toISOString();
                     if (isFeedback) target.seg.feedbackTime = nowISO;
-                    
-                    const durationMins = Number(target.seg.duration) || 60;
-                    currentEndTime = new Date(currentEndTime.getTime() - durationMins * 60000);
-                    
-                    // Nếu KHÔNG phải chặng đầu tiên, ta tự điền luôn actualStartTime (vì START_TIMER đã bỏ qua)
-                    if (i > 0) {
-                        target.seg.actualStartTime = currentEndTime.toISOString();
-                    }
                     
                     originalItemsData[target.item.id][target.idx] = target.seg;
                 }
+                
+                // Đảm bảo chặng cuối cùng gánh hết thời gian dư (nếu finish trễ)
+                const lastTarget = allGlobalSegs[allGlobalSegs.length - 1];
+                lastTarget.seg.actualEndTime = nowISO;
+                originalItemsData[lastTarget.item.id][lastTarget.idx] = lastTarget.seg;
+                
             } else {
                 // Logic cũ
                 allGlobalSegs.forEach((target) => {

@@ -1146,12 +1146,23 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 return timeA.localeCompare(timeB);
             });
 
-            // Dùng duration của chặng đầu tiên (không phải tổng duration)
-            const firstSegDuration = allMySegs.length > 0
-                ? (Number(allMySegs[0].duration) || 60)
-                : (assignedItem?.duration || 60);
+            // Tính shouldMerge để set timer đúng tổng nếu cần
+            const segItemIds = new Set(allMySegs.map((s: any) => {
+                // Tìm _itemId từ allItems
+                for (const ai of allItems) {
+                    let aiSegs: any[] = [];
+                    try { aiSegs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []); } catch { aiSegs = []; }
+                    if (aiSegs.some((seg: any) => seg.ktvId?.toLowerCase() === ktvId?.toLowerCase() && seg.startTime === s.startTime && seg.duration === s.duration)) return ai.id;
+                }
+                return null;
+            }).filter(Boolean));
+            const isMerge = allMySegs.length > 1 && segItemIds.size === allMySegs.length;
+
+            const initDuration = isMerge
+                ? allMySegs.reduce((sum: number, s: any) => sum + (Number(s.duration) || 60), 0)
+                : (allMySegs.length > 0 ? (Number(allMySegs[0].duration) || 60) : (assignedItem?.duration || 60));
             
-            setTimeRemaining(firstSegDuration * 60);
+            setTimeRemaining(initDuration * 60);
             const parsed = Number(settings.ktv_setup_duration_minutes);
             const setupMs = !isNaN(parsed) ? parsed : 0;
             setPrepTimeRemaining(setupMs * 60);
