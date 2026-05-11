@@ -151,7 +151,7 @@ export async function GET(request: Request) {
         if (items && items.length > 0) {
             const { data: svcs, error: svcError } = await supabase
                 .from('Services')
-                .select('id, code, nameVN, nameEN, duration, focusConfig, description, procedure, service_description')
+                .select('id, code, nameVN, nameEN, duration, focusConfig, description, procedure, service_description, is_utility')
                 .limit(1000);
 
             const svcMap = new Map();
@@ -189,6 +189,7 @@ export async function GET(request: Request) {
                     procedure: svc?.procedure || null,
                     focusConfig: svc?.focusConfig || null,
                     duration: i.duration || svc?.duration || (sId.includes('nhs0000') ? 1 : 60),
+                    is_utility: svc?.is_utility ?? (sId === 'nhs0900'), // ✅ Truyền is_utility xuống KTVDashboard
                     customerNote: customerNote,
                     noteForKtv: noteForKtv,
                     focus: focusAreas,

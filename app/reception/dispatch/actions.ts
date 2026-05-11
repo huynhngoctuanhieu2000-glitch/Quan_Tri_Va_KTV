@@ -847,7 +847,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         }
         
         // Auto-update Booking status based on remaining items
-        const { data: allItems } = await supabase.from('BookingItems').select('status, serviceId, Services!BookingItems_serviceId_fkey(nameVN)').eq('bookingId', bookingId);
+        const { data: allItems } = await supabase.from('BookingItems').select('status, serviceId, Services!BookingItems_serviceId_fkey(nameVN, is_utility)').eq('bookingId', bookingId);
         if (allItems && allItems.length > 0) {
             const validItems = allItems.filter((i: any) => {
                 const name = i.Services?.nameVN || '';
