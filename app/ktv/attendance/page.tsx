@@ -33,12 +33,30 @@ const KTVAttendancePage = () => {
 
     // 🔧 UI CONFIGURATION
     const MAX_PHOTOS = 5;
+    const WATERMARK_FONT_SIZE = 18;
+    const WATERMARK_PADDING = 12;
+    const WATERMARK_BG_OPACITY = 0.55;
 
     const [isFormOpen, setIsFormOpen] = React.useState(false);
     const [formType, setFormType] = React.useState<'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN'>('CHECK_IN');
     const [photos, setPhotos] = React.useState<string[]>([]);
     const [reason, setReason] = React.useState<string>('');
     const [selectedShiftType, setSelectedShiftType] = React.useState<string>('');
+    const [deviceIP, setDeviceIP] = React.useState<string>('');
+
+    // Fetch public IP on mount
+    React.useEffect(() => {
+        const fetchIP = async () => {
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                if (data.ip) setDeviceIP(data.ip);
+            } catch {
+                setDeviceIP('N/A');
+            }
+        };
+        fetchIP();
+    }, []);
 
     if (!mounted) return null;
 
@@ -69,7 +87,7 @@ const KTVAttendancePage = () => {
         setIsFormOpen(true);
     };
 
-    // Compress image to reduce base64 size before upload
+    // Compress image and draw watermark (timestamp + IP) onto photo
     const compressImage = (file: File, maxWidth = 800, quality = 0.6): Promise<string> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -87,6 +105,50 @@ const KTVAttendancePage = () => {
                 const ctx = canvas.getContext('2d');
                 if (!ctx) { reject(new Error('Canvas not supported')); return; }
                 ctx.drawImage(img, 0, 0, width, height);
+
+                // === WATERMARK: Timestamp + IP ===
+                const now = new Date();
+                const vnTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const timeStr = `${pad(vnTime.getHours())}:${pad(vnTime.getMinutes())}:${pad(vnTime.getSeconds())}`;
+                const dateStr = `${pad(vnTime.getDate())}/${pad(vnTime.getMonth() + 1)}/${vnTime.getFullYear()}`;
+                const line1 = `${timeStr}  ${dateStr}`;
+                const line2 = `IP: ${deviceIP || 'N/A'}`;
+
+                const fontSize = WATERMARK_FONT_SIZE;
+                const padding = WATERMARK_PADDING;
+                ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+                ctx.textBaseline = 'top';
+
+                const line1Width = ctx.measureText(line1).width;
+                const line2Width = ctx.measureText(line2).width;
+                const boxWidth = Math.max(line1Width, line2Width) + padding * 2;
+                const lineHeight = fontSize + 4;
+                const boxHeight = lineHeight * 2 + padding * 2;
+                const boxX = 8;
+                const boxY = 8;
+
+                // Semi-transparent black background (compatible fallback for roundRect)
+                ctx.fillStyle = `rgba(0, 0, 0, ${WATERMARK_BG_OPACITY})`;
+                ctx.beginPath();
+                const r = 8;
+                ctx.moveTo(boxX + r, boxY);
+                ctx.lineTo(boxX + boxWidth - r, boxY);
+                ctx.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + r);
+                ctx.lineTo(boxX + boxWidth, boxY + boxHeight - r);
+                ctx.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - r, boxY + boxHeight);
+                ctx.lineTo(boxX + r, boxY + boxHeight);
+                ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - r);
+                ctx.lineTo(boxX, boxY + r);
+                ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
+                ctx.closePath();
+                ctx.fill();
+
+                // White text
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillText(line1, boxX + padding, boxY + padding);
+                ctx.fillText(line2, boxX + padding, boxY + padding + lineHeight);
+
                 resolve(canvas.toDataURL('image/jpeg', quality));
             };
             img.onerror = () => reject(new Error('Failed to load image'));

@@ -5,50 +5,7 @@ import sharp from 'sharp';
 // 🔧 CONFIG
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
-/**
- * Tạo SVG Watermark cho ảnh (Theo yêu cầu mẫu 2: To, rõ, góc trên phải)
- */
-async function createWatermarkSvg(width: number, height: number, dateStr: string, timeStr: string, locationText: string) {
-    // Tỉ lệ font size khoảng 3% chiều rộng ảnh, tối thiểu 24px
-    const fontSize = Math.max(24, Math.floor(width * 0.035));
-    const padding = Math.max(20, Math.floor(width * 0.02));
-    const lineHeight = fontSize * 1.3;
-    
-    // Xử lý xuống dòng cho địa chỉ nếu quá dài (chia khoảng 25 ký tự/dòng)
-    const maxChars = 25;
-    const addrLines: string[] = [];
-    if (locationText) {
-        let current = '';
-        locationText.split(' ').forEach(word => {
-            if ((current + word).length > maxChars) {
-                addrLines.push(current.trim());
-                current = word + ' ';
-            } else {
-                current += word + ' ';
-            }
-        });
-        if (current) addrLines.push(current.trim());
-    }
 
-    const lines = [`${dateStr} at ${timeStr}`, ...addrLines];
-    const panelWidth = Math.floor(width * 0.45); // Tối đa 45% chiều rộng
-    const panelHeight = lines.length * lineHeight + padding * 2;
-
-    const textElements = lines.map((line, i) => {
-        // Shadow effect bằng cách vẽ 2 lần (offset 1px) hoặc dùng filter
-        return `
-            <text x="${panelWidth - padding + 1}" y="${padding + fontSize + (i * lineHeight) + 1}" font-family="sans-serif" font-size="${fontSize}px" fill="rgba(0,0,0,0.5)" text-anchor="end" font-weight="900">${line}</text>
-            <text x="${panelWidth - padding}" y="${padding + fontSize + (i * lineHeight)}" font-family="sans-serif" font-size="${fontSize}px" fill="white" text-anchor="end" font-weight="900">${line}</text>
-        `;
-    }).join('');
-
-    return `
-        <svg width="${panelWidth}" height="${panelHeight}">
-            <rect x="0" y="0" width="${panelWidth}" height="${panelHeight}" fill="rgba(0,0,0,0.3)" rx="10" />
-            ${textElements}
-        </svg>
-    `;
-}
 
 export async function POST(request: Request) {
     try {
@@ -151,23 +108,7 @@ export async function POST(request: Request) {
                     const fileExt = base64Str.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
                     const fileName = `${staffCode || 'UNKNOWN'}_${Date.now()}${index !== undefined ? `_${index}` : ''}.${fileExt}`;
 
-                    // 🛠️ APPLY WATERMARK using sharp
-                    try {
-                        const image = sharp(buffer);
-                        const metadata = await image.metadata();
-                        if (metadata.width && metadata.height) {
-                            const svg = await createWatermarkSvg(metadata.width, metadata.height, dateStr, timeStr, locationText || '');
-                            buffer = (await image
-                                .composite([{
-                                    input: Buffer.from(svg),
-                                    gravity: 'northeast', 
-                                    blend: 'over'
-                                }])
-                                .toBuffer()) as any;
-                        }
-                    } catch (sharpError) {
-                        console.error('❌ [Attendance] Sharp watermark error:', sharpError);
-                    }
+
                     
                     const { data: uploadData, error: uploadError } = await supabase.storage
                         .from('attendance')
