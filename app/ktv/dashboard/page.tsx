@@ -1071,11 +1071,7 @@ function CollapsibleRequirements({ booking }: { booking: any }) {
               <div className="flex flex-col gap-3">
                 <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest px-1">Từ phía khách hàng</span>
                 <div className="flex flex-wrap gap-2">
-                  {item.therapistGender && item.therapistGender !== 'Ngẫu nhiên' && (
-                    <div className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-xl text-[10px] font-black border border-purple-100 flex items-center gap-1.5">
-                      <User size={12} /> {item.therapistGender}
-                    </div>
-                  )}
+                  {/* Giới tính KTV: ẩn vì KTV không cần xem thông tin này */}
                   {item.strength && (
                     <div className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-xl text-[10px] font-black border border-orange-100 flex items-center gap-1.5">
                       <Dumbbell size={12} /> {item.strength}

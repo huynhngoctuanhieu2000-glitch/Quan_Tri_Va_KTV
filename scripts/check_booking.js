@@ -9,41 +9,34 @@ envContent.split('\n').forEach(line => {
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 (async () => {
-  const { data: booking } = await supabase.from('Bookings').select('*').eq('billCode', '004-13052026').single();
+  const { data: booking } = await supabase.from('Bookings').select('id, billCode, status, notes').eq('billCode', '010-13052026').single();
   if (!booking) { console.log('NOT FOUND'); return; }
+  console.log('=== BOOKING ===');
+  console.log('ID:', booking.id, '| Status:', booking.status);
+  console.log('Notes:', booking.notes);
   
-  // Check segments in detail (actualStartTime vs planned startTime)
-  const { data: items } = await supabase.from('BookingItems').select('id, serviceId, technicianCodes, segments, status, timeStart').eq('bookingId', booking.id).order('id');
-  console.log('=== SEGMENT DETAIL (planned vs actual) ===');
+  const { data: items } = await supabase.from('BookingItems').select('id, serviceId, technicianCodes, segments, options, status, customerNote').eq('bookingId', booking.id).order('id');
+  console.log('');
+  console.log('=== BOOKING ITEMS (Custom fields) ===');
   (items || []).forEach((item, i) => {
+    const opts = item.options || {};
+    console.log('');
+    console.log('Item ' + (i+1) + ': ' + item.serviceId);
+    console.log('  displayName:', opts.displayName || 'N/A');
+    console.log('  therapist (gender):', opts.therapist || 'N/A');
+    console.log('  strength:', opts.strength || 'N/A');
+    console.log('  focus:', JSON.stringify(opts.focus) || 'N/A');
+    console.log('  avoid:', JSON.stringify(opts.avoid) || 'N/A');
+    console.log('  note:', opts.note || 'N/A');
+    console.log('  noteForKtv:', opts.noteForKtv || 'N/A');
+    console.log('  notesForKtvs:', JSON.stringify(opts.notesForKtvs) || 'N/A');
+    console.log('  customerNote:', item.customerNote || 'N/A');
+    console.log('  KTVs:', JSON.stringify(item.technicianCodes));
+    
     let segs = [];
     try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
-    console.log('');
-    console.log('Item ' + (i+1) + ': ' + item.serviceId + ' | KTV: ' + JSON.stringify(item.technicianCodes));
     segs.forEach((s, si) => {
-      console.log('  Planned:  start=' + s.startTime + ' end=' + s.endTime + ' dur=' + s.duration);
-      console.log('  Actual:   actualStart=' + (s.actualStartTime || 'N/A') + ' actualEnd=' + (s.actualEndTime || 'N/A'));
+      console.log('  Seg' + si + ': ktvId=' + s.ktvId + ' start=' + s.startTime + ' end=' + s.endTime);
     });
-  });
-
-  // Check notifications sent for this booking
-  console.log('');
-  console.log('=== NOTIFICATIONS ===');
-  const { data: notifs } = await supabase.from('StaffNotifications')
-    .select('employeeId, message, createdAt')
-    .eq('bookingId', booking.id)
-    .eq('type', 'NEW_ORDER')
-    .order('createdAt');
-  (notifs || []).forEach(n => {
-    console.log('  ' + n.employeeId + ': ' + n.message);
-  });
-
-  // Check TurnQueue history for this booking
-  console.log('');
-  console.log('=== TURN QUEUE (current) ===');
-  const ktvIds = [...new Set((items || []).flatMap(i => i.technicianCodes || []))];
-  const { data: turns } = await supabase.from('TurnQueue').select('employee_id, status, start_time, estimated_end_time, current_order_id').eq('date', '2026-05-13').in('employee_id', ktvIds);
-  (turns || []).forEach(t => {
-    console.log('  ' + t.employee_id + ': status=' + t.status + ' start=' + t.start_time + ' end=' + t.estimated_end_time + ' order=' + t.current_order_id);
   });
 })();
