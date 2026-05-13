@@ -72,6 +72,8 @@ const SERVICE_TO_SKILL: Record<string, string> = {
 };
 
 const genId = () => Math.random().toString(36).substring(2, 9);
+// Format "15:19:00" → "15:19"
+const fmtTime = (t?: string | null) => t ? t.replace(/^(\d{1,2}:\d{2})(:\d{2})?$/, '$1') : '--:--';
 
 const calcEndTime = (start: string, duration: number): string => {
     if (!start || duration == null) return '';
@@ -293,9 +295,9 @@ export const DispatchStaffRow = ({
                                                             {isUsedInOtherSvc 
                                                                 ? <span className="text-indigo-500">🔄 Cùng đơn này</span> 
                                                                 : (turn.status === 'working' 
-                                                                    ? <span className="text-amber-500">⌛ Đang làm đến {turn.estimated_end_time || '--:--'}</span> 
+                                                                    ? <span className="text-amber-500">⌛ Đang làm đến {fmtTime(turn.estimated_end_time)}</span> 
                                                                     : turn.status === 'assigned'
-                                                                        ? <span className="text-indigo-500">🔒 Đã xếp lịch</span>
+                                                                        ? <span className="text-indigo-500">🔒 Đã xếp lịch {turn.estimated_end_time ? `• Rảnh lúc ${fmtTime(turn.estimated_end_time)}` : ''}</span>
                                                                         : <span className="text-emerald-500">✅ Sẵn sàng</span>
                                                                 )
                                                             }
