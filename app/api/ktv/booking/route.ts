@@ -279,8 +279,8 @@ export async function GET(request: Request) {
         }
 
         // 🔄 ON-THE-FLY TIMELINE SHIFT CALCULATION
-        // Tính toán giờ gối đầu động bằng cách duyệt qua tất cả segments của booking
-        // giống hệt thuật toán KanbanBoard. 
+        // CHỈ tính nối tiếp cho segments CỦA CÙNG 1 KTV (gối đầu).
+        // KTV khác nhau → giữ nguyên giờ gốc (song song).
         let finalDispatchStartTime = turnInfo?.start_time;
         
         // Helpers for math
@@ -306,49 +306,43 @@ export async function GET(request: Request) {
             return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         };
 
-        const allSegments: any[] = [];
+        // Collect only THIS KTV's segments (not all KTVs)
+        const mySegments: { origStart: string; duration: number; actualStartTime?: string; actualEndTime?: string }[] = [];
         itemsWithService.forEach((item: any) => {
-            if (item.is_utility === true || item.serviceId === 'NHS0900' || item.service_name?.toLowerCase().includes('phòng riêng') || item.service_name?.toLowerCase().includes('phong rieng')) return; // Legacy fallback
-            let segs = [];
+            if (item.is_utility === true || item.serviceId === 'NHS0900' || item.service_name?.toLowerCase().includes('phòng riêng') || item.service_name?.toLowerCase().includes('phong rieng')) return;
+            let segs: any[] = [];
             try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
             segs.forEach((s: any) => {
-                allSegments.push({
-                    ktvId: s.ktvId,
-                    origStart: s.startTime || item.timeStart || '',
-                    duration: Number(s.duration) || Number(item.duration) || 60,
-                    actualStartTime: s.actualStartTime,
-                    actualEndTime: s.actualEndTime
-                });
+                if (s.ktvId && technicianCode && s.ktvId.trim().toUpperCase() === technicianCode.trim().toUpperCase()) {
+                    mySegments.push({
+                        origStart: s.startTime || item.timeStart || '',
+                        duration: Number(s.duration) || Number(item.duration) || 60,
+                        actualStartTime: s.actualStartTime,
+                        actualEndTime: s.actualEndTime
+                    });
+                }
             });
         });
 
-        allSegments.sort((a, b) => a.origStart.localeCompare(b.origStart));
+        mySegments.sort((a, b) => a.origStart.localeCompare(b.origStart));
 
-        let currentMaxEndStr = '';
-        let lastGroupStartTime = '';
-        let lastGroupCalculatedStart = '';
         let myCalculatedStart = '';
+        if (mySegments.length > 0) {
+            // Chặng đầu: luôn dùng giờ gốc từ lễ tân
+            myCalculatedStart = mySegments[0].origStart;
 
-        allSegments.forEach((seg, idx) => {
-            let calculatedStart = seg.origStart;
-            if (idx > 0) {
-                if (seg.origStart === lastGroupStartTime) calculatedStart = lastGroupCalculatedStart;
-                else if (currentMaxEndStr) calculatedStart = currentMaxEndStr;
+            // Chặng 2+: nối tiếp nếu cùng KTV (gối đầu)
+            let prevEndStr = mySegments[0].actualEndTime || getDynamicEndTime(mySegments[0].actualStartTime || mySegments[0].origStart, mySegments[0].duration);
+            for (let i = 1; i < mySegments.length; i++) {
+                let calcStart = mySegments[i].origStart;
+                // Chỉ shift nếu chặng trước kết thúc SAU giờ bắt đầu chặng này
+                if (prevEndStr > calcStart) {
+                    calcStart = prevEndStr;
+                }
+                const runtimeAnchor = mySegments[i].actualStartTime || calcStart;
+                prevEndStr = mySegments[i].actualEndTime || getDynamicEndTime(runtimeAnchor, mySegments[i].duration);
             }
-
-            if (seg.ktvId && technicianCode && seg.ktvId.trim().toUpperCase() === technicianCode.trim().toUpperCase()) {
-                if (!myCalculatedStart) myCalculatedStart = calculatedStart; // Lưu lại giờ đã shift của chặng ĐẦU TIÊN của mình
-            }
-
-            const runtimeAnchor = seg.actualStartTime || calculatedStart;
-            const ktvEnd = seg.actualEndTime || getDynamicEndTime(runtimeAnchor, seg.duration);
-
-            if (seg.origStart !== lastGroupStartTime) currentMaxEndStr = ktvEnd;
-            else if (ktvEnd > currentMaxEndStr) currentMaxEndStr = ktvEnd;
-
-            lastGroupStartTime = seg.origStart;
-            lastGroupCalculatedStart = calculatedStart;
-        });
+        }
 
         if (myCalculatedStart) {
             finalDispatchStartTime = myCalculatedStart;
