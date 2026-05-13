@@ -231,7 +231,32 @@
 
 ---
 
+### 6.3. KTVBonusLedger ✅ CHỦ LỰC (VÍ ĐIỂM BONUS)
+**Nhiệm vụ**: Ghi nhận lịch sử điểm bonus KTV — mỗi booking được rating >= 4★ sẽ sinh 1 record. Chia đều theo unique KTVs trong booking.
+**Feature Flag**: `enable_bonus_wallet` (SystemConfigs) — `false` = không ghi DB, `true` = ghi vào bảng này.
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `staff_id` | text | Mã KTV nhận bonus |
+| `booking_id` | text | Mã booking được thưởng (nullable cho DEDUCT/REDEEM) |
+| `points` | integer | Số điểm (dương: cộng, âm: trừ) |
+| `type` | text | Loại: `EARN` / `DEDUCT` / `REDEEM` |
+| `description` | text | Mô tả chi tiết (VD: "Bonus 10đ (20/2 KTV) - Rating 4★") |
+| `date` | date | Ngày kinh doanh |
+| `created_at` | timestamptz | Thời điểm tạo |
+
+**Constraint**: `UNIQUE(staff_id, booking_id) WHERE type = 'EARN'` — Mỗi KTV chỉ nhận bonus 1 lần per booking
+
+**Công thức Bonus**:
+- `basePoints` theo ca: Ca1=20, Ca2=20, Ca3=40 (từ SystemConfigs)
+- `bonus_per_ktv = Math.floor(basePoints_CA_MÌNH / totalUniqueKTVs)`
+- Điều kiện: booking rating >= 4★
+
+---
+
 ## NHÓM 3: THÔNG BÁO & CẤU HÌNH (Notification & Config)
+
 
 ### 7. StaffNotifications ✅ CHỦ LỰC
 **Nhiệm vụ**: Thông báo nội bộ real-time.

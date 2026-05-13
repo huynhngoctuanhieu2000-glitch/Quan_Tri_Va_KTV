@@ -40,7 +40,7 @@ async function processLedgerSync(targetDateStr: string) {
     const { data: configs } = await supabase
         .from('SystemConfigs')
         .select('key, value')
-        .in('key', ['ktv_commission_milestones', 'ktv_commission_per_60min', 'ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus', 'ktv_sudden_off_penalty']);
+        .in('key', ['ktv_commission_milestones', 'ktv_commission_per_60min', 'ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus', 'ktv_sudden_off_penalty', 'enable_bonus_wallet']);
         
     const configMap: Record<string, any> = {};
     (configs || []).forEach((c: any) => { configMap[c.key] = c.value; });
@@ -58,6 +58,7 @@ async function processLedgerSync(targetDateStr: string) {
     const s2Bonus = Number(configMap['ktv_shift_2_bonus'] || 20);
     const s3Bonus = Number(configMap['ktv_shift_3_bonus'] || 40);
     const suddenOffPenalty = Number(configMap['ktv_sudden_off_penalty'] || 50000);
+    const isBonusWalletEnabled = String(configMap['enable_bonus_wallet'] || '').replace(/"/g, '') === 'true';
 
     // 2. Fetch KTVs
     const { data: ktvs } = await supabase
@@ -138,6 +139,7 @@ async function processLedgerSync(targetDateStr: string) {
     const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
     const upsertRows = [];
+    const bonusRecords: any[] = [];
 
     // 5. Calculate per KTV
     for (const ktv of ktvs) {
@@ -161,10 +163,6 @@ async function processLedgerSync(targetDateStr: string) {
             if (relevantItems.length === 0) continue;
 
             let totalDuration = 0;
-            let bookingBonusPoints = 0;
-            
-            // Lấy itemRating cao nhất hoặc booking rating
-            const bRating = Number(b.rating) || 0;
 
             for (const item of relevantItems) {
                 // Tính duration
@@ -182,23 +180,39 @@ async function processLedgerSync(targetDateStr: string) {
                 } else {
                     totalDuration += svcDurationMap[String(item.serviceId)] || 60;
                 }
-                
-                // Tính bonus per item
-                const iRating = Number(item.itemRating) || bRating || 0;
-                if (iRating >= 4) {
-                    let numTechs = 1;
-                    if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
-                        numTechs = item.technicianCodes.length;
-                    }
-                    bookingBonusPoints += numTechs > 0 ? (basePoints / numTechs) : 0;
-                }
             }
 
             total_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
             total_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
             
-            if (bookingBonusPoints > basePoints) bookingBonusPoints = basePoints;
-            total_bonus += Math.round(bookingBonusPoints);
+            // Bonus: per booking, chia đều unique KTVs, Math.floor
+            const bRating = Number(b.rating) || 0;
+            const maxItemRating = Math.max(...(b.BookingItems || []).map((i: any) => Number(i.itemRating) || 0), 0);
+            const bookingRating = Math.max(bRating, maxItemRating);
+
+            if (bookingRating >= 4) {
+                const allKtvCodes = new Set<string>();
+                for (const item of (b.BookingItems || [])) {
+                    if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
+                        item.technicianCodes.forEach((tc: string) => allKtvCodes.add(tc.toLowerCase()));
+                    }
+                }
+                const totalUniqueKTVs = allKtvCodes.size || 1;
+                const bonusPts = Math.floor(basePoints / totalUniqueKTVs);
+                total_bonus += bonusPts;
+
+                // Record for KTVBonusLedger (only when feature is ON)
+                if (isBonusWalletEnabled && bonusPts > 0) {
+                    bonusRecords.push({
+                        staff_id: techCode,
+                        booking_id: b.id,
+                        points: bonusPts,
+                        type: 'EARN',
+                        description: `Bonus ${bonusPts}đ (${basePoints}/${totalUniqueKTVs} KTV) - Rating ${bookingRating}★`,
+                        date: targetDateStr
+                    });
+                }
+            }
         }
 
         const ktvAdjustments = (adjustments || []).filter(a => a.staff_id === techCode);
@@ -220,7 +234,7 @@ async function processLedgerSync(targetDateStr: string) {
         });
     }
 
-    // 6. Bulk UPSERT
+    // 6. Bulk UPSERT KTVDailyLedger
     if (upsertRows.length > 0) {
         const { error: upsertErr } = await supabase
             .from('KTVDailyLedger')
@@ -231,6 +245,23 @@ async function processLedgerSync(targetDateStr: string) {
         if (upsertErr) {
             console.error('Upsert Error:', upsertErr);
             throw upsertErr;
+        }
+    }
+
+    // 7. Bulk UPSERT KTVBonusLedger (only when feature is ON)
+    if (isBonusWalletEnabled && bonusRecords.length > 0) {
+        const { error: bonusErr } = await supabase
+            .from('KTVBonusLedger')
+            .upsert(bonusRecords, {
+                onConflict: 'staff_id, booking_id',
+                ignoreDuplicates: true
+            });
+
+        if (bonusErr) {
+            console.error('Bonus Ledger Upsert Error:', bonusErr);
+            // Non-blocking: log but don't throw
+        } else {
+            console.log(`[Cron] Inserted ${bonusRecords.length} bonus records into KTVBonusLedger`);
         }
     }
 

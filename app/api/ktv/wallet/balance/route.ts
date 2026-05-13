@@ -41,12 +41,13 @@ export async function GET(request: Request) {
         const GLOBAL_START_DATE_ISO = '2026-05-04T00:00:00.000Z';
 
         // 1. Fetch configs
-        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }, { data: bonusConfigs }, { data: penaltyConf }] = await Promise.all([
+        const [{ data: milestoneConf }, { data: rateConf }, { data: depositConf }, { data: bonusConfigs }, { data: penaltyConf }, { data: bonusWalletConf }] = await Promise.all([
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_milestones').single(),
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_commission_per_60min').single(),
             supabase.from('SystemConfigs').select('value').eq('key', 'ktv_min_deposit').single(),
             supabase.from('SystemConfigs').select('key, value').in('key', ['ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus']),
-            supabase.from('SystemConfigs').select('value').eq('key', 'enable_penalty_deduction').single()
+            supabase.from('SystemConfigs').select('value').eq('key', 'enable_penalty_deduction').single(),
+            supabase.from('SystemConfigs').select('value').eq('key', 'enable_bonus_wallet').single()
         ]);
         
         let milestones = { "1": 2000, "30": 50000, "45": 75000, "60": 100000, "70": 115000, "90": 150000, "100": 165000, "120": 200000, "180": 300000, "300": 500000 };
@@ -71,6 +72,7 @@ export async function GET(request: Request) {
         }
         
         const isPenaltyEnabled = penaltyConf?.value === 'true';
+        const isBonusWalletEnabled = String(bonusWalletConf?.value || '').replace(/"/g, '') === 'true';
 
         // --- CƠ CHẾ DYNAMIC BRIDGE (Đã fix lỗi trùng lặp dữ liệu) ---
         // Lấy ngày hiện tại ở Việt Nam (YYYY-MM-DD)
@@ -174,21 +176,22 @@ export async function GET(request: Request) {
             rt_commission += calcCommission(totalDuration || 60, milestones, ratePer60);
             rt_tip += relevantItems.reduce((sum: number, i: any) => sum + (Number(i.tip) || 0), 0);
 
-            // Bonus: tính điểm thưởng theo rating >= 4
+            // Bonus: tính điểm thưởng per booking (chia đều unique KTVs, Math.floor)
             const bRating = Number(b.rating) || 0;
-            let bookingBonusPoints = 0;
-            for (const item of relevantItems) {
-                const iRating = Number(item.itemRating) || bRating || 0;
-                if (iRating >= 4) {
-                    let numTechs = 1;
+            const maxItemRating = Math.max(...(b.BookingItems || []).map((i: any) => Number(i.itemRating) || 0), 0);
+            const bookingRating = Math.max(bRating, maxItemRating);
+
+            if (bookingRating >= 4) {
+                // Collect ALL unique KTVs across ALL items in this booking
+                const allKtvCodes = new Set<string>();
+                for (const item of (b.BookingItems || [])) {
                     if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
-                        numTechs = item.technicianCodes.length;
+                        item.technicianCodes.forEach((tc: string) => allKtvCodes.add(tc.toLowerCase()));
                     }
-                    bookingBonusPoints += numTechs > 0 ? (basePoints / numTechs) : 0;
                 }
+                const totalUniqueKTVs = allKtvCodes.size || 1;
+                rt_bonus += Math.floor(basePoints / totalUniqueKTVs);
             }
-            if (bookingBonusPoints > basePoints) bookingBonusPoints = basePoints;
-            rt_bonus += Math.round(bookingBonusPoints);
         }
 
         // 4. Fetch Adjustments (Luôn lấy từ GLOBAL_START_DATE_ISO để khớp Timeline, KHÔNG dùng ledger)
@@ -238,7 +241,9 @@ export async function GET(request: Request) {
                 min_deposit,
                 net_balance,
                 available_balance,
-                effective_balance
+                effective_balance,
+                bonus_wallet_total: total_bonus,
+                bonus_wallet_enabled: isBonusWalletEnabled
             }
         });
 

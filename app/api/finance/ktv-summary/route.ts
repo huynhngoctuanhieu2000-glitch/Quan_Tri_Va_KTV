@@ -176,11 +176,11 @@ export async function GET() {
             const ledger = ledgerMap[techCode];
             const total_commission = ledger.comm + rt_commission;
             const total_tip = ledger.tip + rt_tip;
-            const total_bonus = ledger.bonus; // Thưởng rating tự động từ cron (nghiệp vụ đánh giá sao)
+            const total_bonus = ledger.bonus; // Thưởng rating — hiển thị riêng (ví điểm bonus)
             const total_penalty = isPenaltyEnabled ? ledger.penalty : 0; // ⚠️ Feature flag bật/tắt phạt đột xuất
 
-            // ✅ Cộng cả bonus (cron) + adjustment (admin) vào gross_income — 2 nguồn độc lập, không double-count
-            const gross_income = total_commission + total_bonus + rt_adjustment - total_penalty;
+            // ✅ Bonus KHÔNG cộng vào gross_income — tách sang ví điểm bonus riêng
+            const gross_income = total_commission + rt_adjustment - total_penalty;
             const min_deposit = global_min_deposit;
             const net_balance = gross_income - rt_withdrawn - total_pending;
             const available_balance = Math.max(0, net_balance - min_deposit);

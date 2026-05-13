@@ -238,35 +238,31 @@ export async function GET(request: Request) {
                 return r > best ? r : best;
             }, 0) || null;
 
-            // ─── Bonus points: Tính điểm thưởng theo ca và tỷ lệ chia ─────────────
+            // ─── Bonus points: Per booking, chia đều unique KTVs, Math.floor ─────────────
             let bonusPoints = 0;
-            if (itemRating && itemRating >= 4) {
+            const bRating = Number(b.rating) || 0;
+            const maxItemRating = itemRating || 0;
+            const bookingRating = Math.max(bRating, maxItemRating);
+
+            if (bookingRating >= 4) {
                 // Xác định ngày của booking (YYYY-MM-DD theo VN)
                 const bDateStr = new Date(new Date(b.createdAt).getTime() + VN_OFFSET_MS).toISOString().split('T')[0];
-                const shiftType = shiftMap.get(bDateStr) || 'SHIFT_1'; // fallback mặc định ca 1
+                const shiftType = shiftMap.get(bDateStr) || 'SHIFT_1';
                 
                 let basePoints = s1Bonus;
                 if (shiftType === 'SHIFT_2') basePoints = s2Bonus;
                 else if (shiftType === 'SHIFT_3') basePoints = s3Bonus;
                 
-                let bookingBonusPoints = 0;
-                
-                // Xét từng Dịch vụ mà KTV này phục vụ
-                for (const item of relevantItems) {
-                    const iRating = Number(item.itemRating) || Number(b.rating) || 0; // fallback booking rating
-                    if (iRating >= 4) {
-                        let numTechs = 1;
-                        if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
-                            numTechs = item.technicianCodes.length;
-                        }
-                        const ptsForThisItem = numTechs > 0 ? (basePoints / numTechs) : 0;
-                        bookingBonusPoints += ptsForThisItem;
+                // Collect ALL unique KTVs across ALL items in this booking
+                const allKtvCodes = new Set<string>();
+                const allItems = (items || []).filter((i: any) => i.bookingId === b.id);
+                for (const item of allItems) {
+                    if (item.technicianCodes && Array.isArray(item.technicianCodes)) {
+                        item.technicianCodes.forEach((tc: string) => allKtvCodes.add(tc.toLowerCase()));
                     }
                 }
-                
-                // Max points for this booking is basePoints
-                if (bookingBonusPoints > basePoints) bookingBonusPoints = basePoints;
-                bonusPoints = Math.round(bookingBonusPoints);
+                const totalUniqueKTVs = allKtvCodes.size || 1;
+                bonusPoints = Math.floor(basePoints / totalUniqueKTVs);
             }
 
             // ─── Tip: sum from this KTV's items ────────────────────────
