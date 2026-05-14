@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, User, Phone, Mail, CreditCard, Calendar, Ruler, Weight, Award, CheckCircle2, Briefcase, Edit2, Save, GraduationCap, Zap, BookOpen, Key } from 'lucide-react';
+import { X, User, Phone, Mail, CreditCard, Calendar, Ruler, Weight, Award, CheckCircle2, Briefcase, Edit2, Save, GraduationCap, Zap, BookOpen, Key, Loader2 } from 'lucide-react';
 import { Employee, SkillLevel } from '@/lib/types';
+import { updateStaffMember } from '@/app/admin/employees/actions';
 
 interface EmployeeDetailModalProps {
   employee: Employee | null;
@@ -14,6 +15,7 @@ interface EmployeeDetailModalProps {
 
 export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: EmployeeDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState<Employee | null>(employee);
 
   React.useEffect(() => {
@@ -38,12 +40,25 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
     });
   };
 
-  const handleSave = () => {
-    if (onUpdate && editedEmployee) {
-      onUpdate(editedEmployee);
+  const handleSave = async () => {
+    if (!editedEmployee) return;
+    setIsSaving(true);
+    try {
+      // Call server action to persist to DB
+      const result = await updateStaffMember(editedEmployee.id, editedEmployee);
+      if (result.success) {
+        // Update local state in parent
+        if (onUpdate) onUpdate(editedEmployee);
+        setIsEditing(false);
+        alert('✅ Đã lưu thành công!');
+      } else {
+        alert(`❌ Lỗi khi lưu: ${result.error}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Lỗi hệ thống: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
-    setIsEditing(false);
-    alert('Đã cập nhật thông tin nhân viên thành công!');
   };
 
   const updateField = (field: keyof Employee, value: any) => {
@@ -90,10 +105,11 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
               {isEditing ? (
                 <button
                   onClick={handleSave}
-                  className="p-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full transition-colors shadow-lg flex items-center gap-2 px-4"
+                  disabled={isSaving}
+                  className={`p-2 text-white rounded-full transition-colors shadow-lg flex items-center gap-2 px-4 ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                 >
-                  <Save size={18} />
-                  <span className="text-sm font-bold">Lưu</span>
+                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                  <span className="text-sm font-bold">{isSaving ? 'Đang lưu...' : 'Lưu'}</span>
                 </button>
               ) : (
                 <button
