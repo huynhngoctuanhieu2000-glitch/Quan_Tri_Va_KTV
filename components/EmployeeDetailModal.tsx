@@ -43,9 +43,11 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
   const handleSave = async () => {
     if (!editedEmployee) return;
     setIsSaving(true);
+    console.log('[EmployeeDetailModal] Saving...', editedEmployee.id, { skills: editedEmployee.skills });
     try {
       // Call server action to persist to DB
       const result = await updateStaffMember(editedEmployee.id, editedEmployee);
+      console.log('[EmployeeDetailModal] Save result:', result);
       if (result.success) {
         // Update local state in parent
         if (onUpdate) onUpdate(editedEmployee);
@@ -55,6 +57,7 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
         alert(`❌ Lỗi khi lưu: ${result.error}`);
       }
     } catch (err: any) {
+      console.error('[EmployeeDetailModal] Save error:', err);
       alert(`❌ Lỗi hệ thống: ${err.message}`);
     } finally {
       setIsSaving(false);
