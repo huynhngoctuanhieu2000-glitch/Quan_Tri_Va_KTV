@@ -3,7 +3,7 @@
 // 🔧 UI CONFIGURATION
 const ANIMATION_DURATION = 0.2;
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -11,7 +11,7 @@ import {
     MapPin, RotateCcw, ArrowDown, ArrowUp, ChevronRight, ChevronLeft, ChevronDown,
     UserCheck, Star, Moon, CalendarOff, Briefcase, ArrowRightLeft,
     UserPlus, AlertTriangle, Award, Camera, Plus,
-    Check, X, Loader2, History,
+    Check, X, Loader2, History, Save,
     Trash2, CalendarDays, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -438,6 +438,13 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     const [suddenOffs, setSuddenOffs] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
 
+    // 🔧 LOCAL REORDER STATE
+    const [localOrder, setLocalOrder] = useState<(TurnQueueData & { staff?: StaffData })[]>([]);
+    const [hasChanges, setHasChanges] = useState(false);
+    const [isSavingOrder, setIsSavingOrder] = useState(false);
+    const [editingKtvId, setEditingKtvId] = useState<string | null>(null);
+    const hasChangesRef = useRef(false);
+
     useEffect(() => {
         if (staffs.length > 0) {
             fetchTurns();
@@ -469,27 +476,27 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             // Bảng BookingItems: Gán KTV, đổi KTV, thêm dịch vụ add-on
             .on('postgres_changes', { event: '*', schema: 'public', table: 'BookingItems' }, () => {
                 console.log('🔄 [Realtime] BookingItems changed → syncing turns...');
-                fetchTurns();
+                if (!hasChangesRef.current) fetchTurns();
             })
             // Bảng Bookings: Cập nhật trạng thái đơn (DONE, CANCELLED, NEW...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, () => {
                 console.log('🔄 [Realtime] Bookings changed → syncing turns...');
-                fetchTurns();
+                if (!hasChangesRef.current) fetchTurns();
             })
             // Bảng TurnQueue: Thay đổi tua trực tiếp (swap vị trí, reset, tan ca...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
                 console.log('🔄 [Realtime] TurnQueue changed → refreshing...');
-                fetchTurnsFromDB();
+                if (!hasChangesRef.current) fetchTurnsFromDB();
             })
             // Bảng DailyAttendance: Điểm danh, đổi trạng thái (on_duty, off_duty, absent...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'DailyAttendance' }, () => {
                 console.log('🔄 [Realtime] DailyAttendance changed → syncing turns...');
-                fetchTurnsFromDB();
+                if (!hasChangesRef.current) fetchTurnsFromDB();
             })
             // Bảng KTVAttendance: KTV bấm điểm danh / tan ca trên app
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVAttendance' }, () => {
                 console.log('🔄 [Realtime] KTVAttendance changed → syncing turns...');
-                fetchTurnsFromDB();
+                if (!hasChangesRef.current) fetchTurnsFromDB();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVLeaveRequests' }, () => {
                 fetchExtras();
@@ -542,74 +549,88 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
         }
     };
 
-    const updatePosition = async (turnId: string, newPos: number) => {
-        await supabase.from('TurnQueue').update({ queue_position: newPos }).eq('id', turnId);
+    // Sắp xếp gốc: off cuối → theo tua → theo queue_position
+    const buildSorted = useCallback((source: (TurnQueueData & { staff?: StaffData })[]) => {
+        return [...source].sort((a, b) => {
+            const isAOff = a.status === 'off' || suddenOffs.has(a.employee_id);
+            const isBOff = b.status === 'off' || suddenOffs.has(b.employee_id);
+            if (isAOff && !isBOff) return 1;
+            if (!isAOff && isBOff) return -1;
+            if (a.turns_completed !== b.turns_completed) return a.turns_completed - b.turns_completed;
+            return a.queue_position - b.queue_position;
+        });
+    }, [suddenOffs]);
+
+    // Sync localOrder khi turns thay đổi VÀ không có thay đổi chưa lưu
+    useEffect(() => {
+        if (!hasChanges) {
+            setLocalOrder(buildSorted(turns));
+        }
+    }, [turns, buildSorted, hasChanges]);
+
+    // ─── BATCH SAVE: Ghi check_in_order + queue_position vào DB ───
+    const saveOrder = async () => {
+        setIsSavingOrder(true);
+        try {
+            const updates = localOrder.map((turn) => {
+                return supabase.from('TurnQueue')
+                    .update({ check_in_order: turn.check_in_order, queue_position: turn.check_in_order })
+                    .eq('id', turn.id!);
+            });
+            await Promise.all(updates);
+            setHasChanges(false);
+            hasChangesRef.current = false;
+            fetchTurns();
+        } catch (err) {
+            console.error('Save order error:', err);
+            alert('❌ Lỗi khi lưu thứ tự!');
+        }
+        setIsSavingOrder(false);
     };
 
-    const moveUp = async (ktvId: string) => {
-        const idx = turns.findIndex(t => t.employee_id === ktvId);
-        if (idx <= 0) return;
-
-        const currentTurn = turns[idx];
-        const prevTurn = turns[idx - 1];
-
-        // Swap positions optimistically
-        const next = [...turns];
-        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-        setTurns(next);
-
-        // Update DB
-        await Promise.all([
-            updatePosition(currentTurn.id!, prevTurn.queue_position),
-            updatePosition(prevTurn.id!, currentTurn.queue_position)
-        ]);
-        fetchTurns(); // Refresh to ensure sync
+    // ─── CANCEL: Huỷ thay đổi ───
+    const cancelOrder = () => {
+        setLocalOrder(buildSorted(turns));
+        setHasChanges(false);
+        hasChangesRef.current = false;
+        setEditingKtvId(null);
     };
 
-    const moveDown = async (ktvId: string) => {
-        const idx = turns.findIndex(t => t.employee_id === ktvId);
-        if (idx >= turns.length - 1 || idx === -1) return;
-
-        const currentTurn = turns[idx];
-        const nextTurn = turns[idx + 1];
-
-        // Swap positions optimistically
-        const next = [...turns];
-        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-        setTurns(next);
-
-        // Update DB
-        await Promise.all([
-            updatePosition(currentTurn.id!, nextTurn.queue_position),
-            updatePosition(nextTurn.id!, currentTurn.queue_position)
-        ]);
-        fetchTurns(); // Refresh to ensure sync
+    // ─── INLINE EDIT: Thay đổi check_in_order trực tiếp ───
+    const handleOrderChange = (ktvId: string, newOrder: number) => {
+        if (isNaN(newOrder) || newOrder < 1) return;
+        const next = localOrder.map(t => ({ ...t }));
+        const target = next.find(t => t.employee_id === ktvId);
+        if (!target) return;
+        const oldOrder = target.check_in_order;
+        // Nếu trùng → swap: KTV cũ nhận số cũ của target
+        const conflict = next.find(t => t.check_in_order === newOrder && t.employee_id !== ktvId);
+        if (conflict) {
+            conflict.check_in_order = oldOrder;
+        }
+        target.check_in_order = newOrder;
+        setLocalOrder(next);
+        setHasChanges(true);
+        hasChangesRef.current = true;
+        setEditingKtvId(null);
     };
 
     const resetTurns = async () => {
-        // Reset queue_position to match check_in_order
         const next = [...turns].sort((a, b) => a.check_in_order - b.check_in_order);
-
-        // DB batch update
-        for (let i = 0; i < next.length; i++) {
+        const updates = next.map((turn, i) => {
             const pos = i + 1;
-            await updatePosition(next[i].id!, pos);
-        }
+            return supabase.from('TurnQueue')
+                .update({ queue_position: pos })
+                .eq('id', turn.id!);
+        });
+        await Promise.all(updates);
+        setHasChanges(false);
+        hasChangesRef.current = false;
         fetchTurns();
     };
 
-    // Sắp xếp: waiting/working lên trước, off xuống cuối, sau đó theo số tua, sau đó theo queue_position (mặc định = check_in_order)
-    const sortedTurns = [...turns].sort((a, b) => {
-        const isAOff = a.status === 'off' || suddenOffs.has(a.employee_id);
-        const isBOff = b.status === 'off' || suddenOffs.has(b.employee_id);
-        if (isAOff && !isBOff) return 1;
-        if (!isAOff && isBOff) return -1;
-        
-        if (a.turns_completed !== b.turns_completed) {
-            return a.turns_completed - b.turns_completed;
-        }
-        return a.queue_position - b.queue_position;
-    });
+    // Dùng localOrder cho hiển thị
+    const sortedTurns = localOrder;
 
     const readyCount = turns.filter(t => t.status === 'waiting' && !suddenOffs.has(t.employee_id)).length;
     const workingCount = turns.filter(t => t.status === 'working' && !suddenOffs.has(t.employee_id)).length;
@@ -648,12 +669,31 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                             className="text-xs font-medium border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 text-gray-700 bg-gray-50"
                         />
                     </div>
-                    <button
-                        onClick={resetTurns}
-                        className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 font-semibold transition-colors"
-                    >
-                        <RotateCcw size={12} /> Đặt lại theo chấm công
-                    </button>
+                    {hasChanges ? (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={cancelOrder}
+                                disabled={isSavingOrder}
+                                className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 font-semibold transition-colors px-2 py-1 rounded-lg border border-gray-200 hover:border-red-200"
+                            >
+                                <X size={12} /> Huỷ
+                            </button>
+                            <button
+                                onClick={saveOrder}
+                                disabled={isSavingOrder}
+                                className="flex items-center gap-1 text-xs text-white font-bold transition-colors px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm disabled:opacity-50"
+                            >
+                                {isSavingOrder ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Lưu thứ tự
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={resetTurns}
+                            className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 font-semibold transition-colors"
+                        >
+                            <RotateCcw size={12} /> Đặt lại theo chấm công
+                        </button>
+                    )}
                 </div>
 
                 <div className="divide-y divide-gray-50 min-h-[100px]">
@@ -668,14 +708,31 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                             key={turn.employee_id}
                             className={`flex items-center gap-3 px-4 py-3 transition-colors ${suddenOffs.has(turn.employee_id) || turn.status === 'off' ? 'opacity-40 bg-gray-50/80' : 'hover:bg-gray-50/50'}`}
                         >
-                            {/* Position badge */}
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm ${suddenOffs.has(turn.employee_id) ? 'bg-red-100 text-red-500 border border-red-200' : turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                                turn.status === 'working' ? 'bg-rose-100 text-rose-600 border border-rose-200' :
-                                turn.status === 'assigned' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
-                                    'bg-gray-100 text-gray-500 border border-gray-200'
-                                }`}>
-                                {turn.check_in_order}
-                            </div>
+                            {/* Position badge - Editable */}
+                            {editingKtvId === turn.employee_id ? (
+                                <input
+                                    type="number"
+                                    min={1}
+                                    defaultValue={turn.check_in_order}
+                                    autoFocus
+                                    className="w-8 h-8 rounded-xl text-center text-sm font-black shrink-0 shadow-sm border-2 border-indigo-500 bg-indigo-50 text-indigo-700 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    onBlur={(e) => handleOrderChange(turn.employee_id, parseInt(e.target.value))}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleOrderChange(turn.employee_id, parseInt((e.target as HTMLInputElement).value));
+                                        if (e.key === 'Escape') setEditingKtvId(null);
+                                    }}
+                                />
+                            ) : (
+                                <div
+                                    onClick={(e) => { e.stopPropagation(); setEditingKtvId(turn.employee_id); }}
+                                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all ${suddenOffs.has(turn.employee_id) ? 'bg-red-100 text-red-500 border border-red-200' : turn.status === 'waiting' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                        turn.status === 'working' ? 'bg-rose-100 text-rose-600 border border-rose-200' :
+                                        turn.status === 'assigned' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
+                                            'bg-gray-100 text-gray-500 border border-gray-200'
+                                    }`}>
+                                    {turn.check_in_order}
+                                </div>
+                            )}
 
                             {/* Name */}
                             <div className="flex-1 min-w-0">
@@ -707,25 +764,6 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                                 </span>
                             </div>
 
-                            {/* Move buttons - ẩn khi tan ca */}
-                            {turn.status !== 'off' && (
-                            <div className="flex flex-col gap-0.5 shrink-0 ml-2">
-                                <button
-                                    onClick={() => moveUp(turn.employee_id)}
-                                    disabled={idx === 0}
-                                    className="p-1 hover:bg-indigo-50 rounded-md text-gray-400 hover:text-indigo-600 disabled:opacity-25 transition-colors border border-transparent hover:border-indigo-100"
-                                >
-                                    <ArrowUp size={12} strokeWidth={3} />
-                                </button>
-                                <button
-                                    onClick={() => moveDown(turn.employee_id)}
-                                    disabled={idx === sortedTurns.length - 1}
-                                    className="p-1 hover:bg-indigo-50 rounded-md text-gray-400 hover:text-indigo-600 disabled:opacity-25 transition-colors border border-transparent hover:border-indigo-100"
-                                >
-                                    <ArrowDown size={12} strokeWidth={3} />
-                                </button>
-                            </div>
-                            )}
                         </motion.div>
                     ))}
                 </div>
