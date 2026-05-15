@@ -10,7 +10,7 @@ const DEFAULT_SKILLS = {
     hairCut: false, shampoo: false, hairExtensionShampoo: false, earCombo: false, earChuyen: false,
     machineShave: false, razorShave: false, facial: false, thaiBody: false,
     shiatsuBody: false, oilBody: false, hotStoneBody: false, scrubBody: false,
-    oilFoot: false, hotStoneFoot: false, acupressureFoot: false, heelScrub: false, nailCombo: false, nailChuyen: false
+    foot: false, heelScrub: false, nailCombo: false, nailChuyen: false
 };
 
 const skillLabels: Record<string, string> = {
@@ -18,7 +18,7 @@ const skillLabels: Record<string, string> = {
     earCombo: 'Ráy Combo', earChuyen: 'Ráy Chuyên', machineShave: 'Cạo Máy', razorShave: 'Cạo Dao',
     facial: 'Facial', thaiBody: 'Body Thái', shiatsuBody: 'Shiatsu',
     oilBody: 'Body Dầu', hotStoneBody: 'Body Đá Nóng', scrubBody: 'Scrub Body',
-    oilFoot: 'Foot Dầu', hotStoneFoot: 'Foot Đá Nóng', acupressureFoot: 'Foot ấn huyệt',
+    foot: 'Foot',
     heelScrub: 'Bào Gót', nailCombo: 'Nail Combo', nailChuyen: 'Nail Chuyên',
 };
 

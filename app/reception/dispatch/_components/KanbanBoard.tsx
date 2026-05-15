@@ -376,7 +376,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                 const lastSeg = lastSt?.segments?.[0];
                                                                 if (lastSeg) {
                                                                     const kStart = lastSeg.actualStartTime || lastSeg.startTime || displayStart;
-                                                                    displayEnd = lastSeg.actualEndTime ? lastSeg.actualEndTime : (lastSeg.endTime || getDynamicEndTime(kStart, Number(lastSeg.duration) || 60));
+                                                                    // 🔥 FIX: Luôn tính dynamic từ kStart thay vì dùng endTime cũ (stale từ lúc dispatch)
+                                                                    displayEnd = lastSeg.actualEndTime ? lastSeg.actualEndTime : getDynamicEndTime(kStart, Number(lastSeg.duration) || 60);
                                                                 }
                                                             }
                                                             currentCumulativeStr = displayEnd;
@@ -411,7 +412,8 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                         {s.staffList.map((st: any, stIdx: number) => {
                                                                             const seg = st?.segments?.[0];
                                                                             const ktvStart = seg?.actualStartTime || subOrder.calculatedStart || seg?.startTime || displayStart;
-                                                                            const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : (seg?.endTime || getDynamicEndTime(ktvStart, Number(seg?.duration) || duration));
+                                                                            // 🔥 FIX: Luôn tính dynamic end time từ ktvStart thực tế, không dùng seg.endTime cũ
+                                                                            const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : getDynamicEndTime(ktvStart, Number(seg?.duration) || duration);
                                                                             return (
                                                                                 <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
                                                                                     <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
