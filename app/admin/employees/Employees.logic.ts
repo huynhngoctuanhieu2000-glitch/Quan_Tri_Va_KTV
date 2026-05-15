@@ -10,8 +10,11 @@ const DEFAULT_SKILLS = {
     hairCut: false, shampoo: true, hairExtensionShampoo: false, earCombo: false, earChuyen: false,
     machineShave: false, razorShave: false, facial: false, thaiBody: false,
     shiatsuBody: false, oilBody: true, hotStoneBody: false, scrubBody: false,
-    oilFoot: false, hotStoneFoot: false, acupressureFoot: false, heelScrub: false, nailCombo: false, nailChuyen: false
+    foot: false, heelScrub: false, nailCombo: false, nailChuyen: false
 };
+
+// Legacy foot skill keys to merge into unified 'foot'
+const LEGACY_FOOT_KEYS = ['oilFoot', 'hotStoneFoot', 'acupressureFoot'];
 
 /**
  * Custom hook for Employee Management page logic.
@@ -62,6 +65,13 @@ export const useEmployeeManagement = () => {
                         const val = dbSkills[key];
                         // Nếu DB cũ chứa 'basic', 'expert', 'training' hoặc `true` -> true
                         parsedSkills[key] = val === true || val === 'basic' || val === 'expert' || val === 'training';
+                    }
+                    // Backward compat: merge legacy foot skills (oilFoot, hotStoneFoot, acupressureFoot) → foot
+                    if (!parsedSkills.foot) {
+                        parsedSkills.foot = LEGACY_FOOT_KEYS.some(k => {
+                            const v = dbSkills[k];
+                            return v === true || v === 'basic' || v === 'expert' || v === 'training';
+                        });
                     }
                     return parsedSkills;
                 })()

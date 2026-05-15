@@ -1026,7 +1026,7 @@ const KTVListTab = ({ staffs, onEdit }: { staffs: any[], onEdit: (staff: any) =>
 
     const SKILL_LABELS: Record<string, string> = {
         shampoo: 'Gội đầu', thaiBody: 'Massage Thái', oilBody: 'Massage Dầu',
-        hotStoneBody: 'Đá Nóng', oilFoot: 'Foot Dầu', acupressureFoot: 'Foot Bấm Huyệt',
+        hotStoneBody: 'Đá Nóng', foot: 'Foot',
         facial: 'Chăm Sóc Da', hairCut: 'Cắt Tóc', earCleaning: 'Ráy Tai',
     };
 
@@ -1761,7 +1761,7 @@ export default function KTVHubPage() {
                 hairCut: 'none', hairExtensionShampoo: 'none', earCleaning: 'none',
                 machineShave: 'none', razorShave: 'none', facial: 'none', thaiBody: 'none',
                 shiatsuBody: 'none', oilBody: 'basic', hotStoneBody: 'none', scrubBody: 'none',
-                oilFoot: 'none', hotStoneFoot: 'none', acupressureFoot: 'none', heelScrub: 'none', maniPedi: 'none',
+                foot: 'none', heelScrub: 'none', maniPedi: 'none',
                 shampoo: 'basic'
             }
         };

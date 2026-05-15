@@ -63,12 +63,13 @@ const SERVICE_TO_SKILL: Record<string, string> = {
     'Massage Dầu': 'oilBody',
     'Đá Nóng': 'hotStoneBody',
     'Massage Body': 'thaiBody',
-    'Foot Dầu': 'oilFoot',
+    'Foot Dầu': 'foot',
     'Ráy tai': 'earCombo', // fallback for old data
     'Ráy Combo': 'earCombo',
     'Ráy Chuyên': 'earChuyen',
     'Chăm sóc da': 'facial',
-    'Massage Chân': 'oilFoot',
+    'Massage Chân': 'foot',
+    'Foot': 'foot',
 };
 
 const genId = () => Math.random().toString(36).substring(2, 9);

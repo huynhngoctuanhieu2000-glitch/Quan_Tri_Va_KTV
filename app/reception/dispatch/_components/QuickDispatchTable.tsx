@@ -41,9 +41,9 @@ interface QuickDispatchTableProps {
 
 const SERVICE_TO_SKILL: Record<string, string> = {
   'Gội đầu': 'shampoo', 'Massage Thái': 'thaiBody', 'Massage Dầu': 'oilBody',
-  'Đá Nóng': 'hotStoneBody', 'Massage Body': 'thaiBody', 'Foot Dầu': 'oilFoot',
+  'Đá Nóng': 'hotStoneBody', 'Massage Body': 'thaiBody', 'Foot Dầu': 'foot',
   'Ráy Combo': 'earCombo', 'Ráy Chuyên': 'earChuyen', 'Chăm sóc da': 'facial',
-  'Tinh dầu': 'oilBody', 'Chăm sóc': 'thaiBody',
+  'Tinh dầu': 'oilBody', 'Chăm sóc': 'thaiBody', 'Massage Chân': 'foot', 'Foot': 'foot',
 };
 
 const calcEndTime = (start: string, duration: number): string => {
