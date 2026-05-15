@@ -565,6 +565,38 @@ export async function PATCH(request: Request) {
                     await supabase.from('BookingItems').update({ segments: JSON.stringify(originalItemsData[item.id]) }).eq('id', item.id);
                 }
             }
+
+            // 🔥 CRITICAL: Recalculate TurnQueue.estimated_end_time when KTV actually starts
+            if (action === 'START_TIMER' && technicianCode && turnForSync) {
+                const nowVN = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+                const turnUpdatePayload: any = { status: 'working', start_time: nowVN };
+
+                if (turnForSync.start_time) {
+                    // Calculate original duration from dispatch times
+                    const { data: freshTurn } = await supabase
+                        .from('TurnQueue')
+                        .select('estimated_end_time')
+                        .eq('id', turnForSync.id)
+                        .single();
+                    
+                    const estEnd = freshTurn?.estimated_end_time;
+                    if (estEnd) {
+                        const [sh, sm] = String(turnForSync.start_time).split(':').map(Number);
+                        const [eh, em] = String(estEnd).split(':').map(Number);
+                        let durationMins = (eh * 60 + em) - (sh * 60 + sm);
+                        if (durationMins <= 0) durationMins += 24 * 60; // cross midnight
+
+                        const [nh, nm] = nowVN.split(':').map(Number);
+                        let endMins = nh * 60 + nm + durationMins;
+                        const endH = Math.floor(endMins / 60) % 24;
+                        const endM = endMins % 60;
+                        turnUpdatePayload.estimated_end_time = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
+                        console.log(`🔄 [KTV API] ${technicianCode}: Recalculated end ${estEnd} → ${turnUpdatePayload.estimated_end_time} (actual start: ${nowVN}, dur: ${durationMins}m)`);
+                    }
+                }
+
+                await supabase.from('TurnQueue').update(turnUpdatePayload).eq('id', turnForSync.id);
+            }
         }
 
         if (status === 'CLEANING' || status === 'DONE' || status === 'FEEDBACK') {
