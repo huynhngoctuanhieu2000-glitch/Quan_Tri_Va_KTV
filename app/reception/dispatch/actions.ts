@@ -784,7 +784,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
             // Cập nhật TurnQueue thành working
             let query = supabase
                 .from('TurnQueue')
-                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false }) })
+                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }) })
                 .eq('current_order_id', bookingId)
                 .overlaps('booking_item_ids', itemIds)
                 .eq('date', date)
@@ -922,7 +922,7 @@ export async function createQuickBooking(data: {
                 billCode,
                 status: 'NEW',
                 customerLang: data.customerLang || 'vi',
-                bookingDate: `${data.bookingDate} ${new Date().toLocaleTimeString('en-GB')}`,
+                bookingDate: `${data.bookingDate} ${new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' })}`,
                 totalAmount: totalAmount,
                 paymentMethod: 'Tiền mặt', // Mặc định
                 createdAt: new Date().toISOString(),
