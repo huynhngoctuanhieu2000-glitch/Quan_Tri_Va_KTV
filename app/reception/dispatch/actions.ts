@@ -578,14 +578,36 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
                 .in('status', ['COMPLETED', 'CLEANING'])
                 .not('timeStart', 'is', null);
 
-            // Cập nhật TurnQueue thành working cho các KTV liên quan
-            const { error: tError } = await supabase
+            // Cập nhật TurnQueue thành working + recalculate estimated_end_time
+            const nowVN = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+            const { data: turnsToUpdate } = await supabase
                 .from('TurnQueue')
-                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }) })
+                .select('id, employee_id, start_time, estimated_end_time')
                 .eq('current_order_id', bookingId)
                 .eq('date', date)
                 .in('status', ['waiting', 'assigned', 'working']);
-            if (tError) console.error('❌ [Server] TurnQueue start error:', tError);
+
+            for (const turn of turnsToUpdate || []) {
+                const updatePayload: any = { status: 'working', start_time: nowVN };
+
+                // 🔥 Recalculate estimated_end_time based on actual start time
+                if (turn.start_time && turn.estimated_end_time) {
+                    const [sh, sm] = turn.start_time.split(':').map(Number);
+                    const [eh, em] = turn.estimated_end_time.split(':').map(Number);
+                    let durationMins = (eh * 60 + em) - (sh * 60 + sm);
+                    if (durationMins <= 0) durationMins += 24 * 60; // cross midnight
+                    
+                    const [nh, nm] = nowVN.split(':').map(Number);
+                    let endMins = nh * 60 + nm + durationMins;
+                    const endH = Math.floor(endMins / 60) % 24;
+                    const endM = endMins % 60;
+                    updatePayload.estimated_end_time = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
+                    console.log(`🔄 [TurnQueue] ${turn.employee_id}: Recalculated end ${turn.estimated_end_time} → ${updatePayload.estimated_end_time} (actual start: ${nowVN}, dur: ${durationMins}m)`);
+                }
+
+                const { error: tError } = await supabase.from('TurnQueue').update(updatePayload).eq('id', turn.id);
+                if (tError) console.error('❌ [Server] TurnQueue start error:', tError);
+            }
         }
 
         // 🔧 CHỈ release KTV khi DONE hoặc CANCELLED. CLEANING/FEEDBACK = KTV vẫn bận!
@@ -781,19 +803,42 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
                     .in('id', itemsAlreadyStarted);
             }
 
-            // Cập nhật TurnQueue thành working
-            let query = supabase
+            // Cập nhật TurnQueue thành working + recalculate estimated_end_time
+            const nowVN2 = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+            let fetchQuery = supabase
                 .from('TurnQueue')
-                .update({ status: 'working', start_time: new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }) })
+                .select('id, employee_id, start_time, estimated_end_time')
                 .eq('current_order_id', bookingId)
                 .overlaps('booking_item_ids', itemIds)
                 .eq('date', date)
                 .in('status', ['waiting', 'working']);
-                
+
             if (targetKtvIds && targetKtvIds.length > 0) {
-                query = query.in('employee_id', targetKtvIds);
+                fetchQuery = fetchQuery.in('employee_id', targetKtvIds);
             }
-            await query;
+            const { data: turnsToUpdate2 } = await fetchQuery;
+
+            for (const turn of turnsToUpdate2 || []) {
+                const updatePayload: any = { status: 'working', start_time: nowVN2 };
+
+                // 🔥 Recalculate estimated_end_time based on actual start time
+                if (turn.start_time && turn.estimated_end_time) {
+                    const [sh, sm] = turn.start_time.split(':').map(Number);
+                    const [eh, em] = turn.estimated_end_time.split(':').map(Number);
+                    let durationMins = (eh * 60 + em) - (sh * 60 + sm);
+                    if (durationMins <= 0) durationMins += 24 * 60;
+                    
+                    const [nh, nm] = nowVN2.split(':').map(Number);
+                    let endMins = nh * 60 + nm + durationMins;
+                    const endH = Math.floor(endMins / 60) % 24;
+                    const endM = endMins % 60;
+                    updatePayload.estimated_end_time = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
+                    console.log(`🔄 [TurnQueue] ${turn.employee_id}: Recalculated end ${turn.estimated_end_time} → ${updatePayload.estimated_end_time} (actual start: ${nowVN2}, dur: ${durationMins}m)`);
+                }
+
+                const { error: tErr } = await supabase.from('TurnQueue').update(updatePayload).eq('id', turn.id);
+                if (tErr) console.error('❌ [Server] TurnQueue start error:', tErr);
+            }
         }
 
         if (newStatus === 'CLEANING' || newStatus === 'COMPLETED' || newStatus === 'DONE' || newStatus === 'CANCELLED' || newStatus === 'FEEDBACK') {
