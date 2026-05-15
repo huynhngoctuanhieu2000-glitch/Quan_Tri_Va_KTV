@@ -666,28 +666,7 @@ export async function PATCH(request: Request) {
                 let segs = originalItemsData[item.id];
                 
                 // 1. Mark this KTV's segments as done
-                const myDoneStartTimes: string[] = [];
-                segs.forEach((seg: any) => {
-                    if (seg.ktvId?.toLowerCase() === technicianCode?.toLowerCase() && seg.startTime) {
-                        myDoneStartTimes.push(seg.startTime);
-                    }
-                });
-
-                myDoneStartTimes.forEach(st => {
-                    segs.forEach((seg: any) => {
-                        if (seg.ktvId
-                            && seg.ktvId.toLowerCase() !== technicianCode?.toLowerCase()
-                            && seg.startTime === st) {
-                            if (!seg.actualEndTime) {
-                                seg.actualEndTime = nowISO;
-                                console.log(`🤝 [Parallel Sync] Co-finished ${seg.ktvId}'s segment at ${st}`);
-                            }
-                            if (isFeedback && !seg.feedbackTime) {
-                                seg.feedbackTime = nowISO;
-                            }
-                        }
-                    });
-                });
+                // (Removed Parallel Sync for actualEndTime so KTVs finish independently)
 
                 // 3. 🧠 SMART STATUS: Only set CLEANING when ALL segments in item have actualEndTime
                 //    Prevents sequential bug (KTV1 done but KTV2 not started yet)

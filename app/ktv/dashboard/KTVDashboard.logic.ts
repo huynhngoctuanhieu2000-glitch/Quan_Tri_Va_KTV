@@ -120,6 +120,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const timeOffsetRef = useRef<number>(0);
     const fetchBookingRef = useRef<(() => Promise<void>) | null>(null);
     const targetBookingIdRef = useRef<string | null>(config?.targetBookingId || null);
+    const isTransitioningRef = useRef<boolean>(false);
 
     // Auto-skip Review ONLY if THIS KTV has already submitted review for THIS specific booking.
     // Source of truth: per-KTV per-booking localStorage flag, NOT booking.rating (booking-level, too coarse).
@@ -594,6 +595,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const res = await response.json();
                 
                 if (res.success && res.data) {
+                    if (isTransitioningRef.current) {
+                        console.log("🛡️ [KTV] Skipping fetch update due to manual transition");
+                        return;
+                    }
                     const currentIsPostService = ['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current);
                     const currentLockedBookingId = postServiceBookingIdRef.current || bookingRef.current?.id || prevBookingIdRef.current;
                     if (currentIsPostService && currentLockedBookingId && res.data.id !== currentLockedBookingId) {
@@ -1005,14 +1010,39 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 return timeA.localeCompare(timeB);
             });
 
-            // [Sửa đổi]: Gộp theo chặng hiện tại
+            // [Sửa đổi]: Detect merge (1 KTV, 2 DV) → dùng tổng duration
             const calculatedSegIdx = activeSegmentIndexRef.current;
-            const currentSeg = allMySegs[calculatedSegIdx] || allMySegs[0] || {};
-            const currentSegDuration = Number(currentSeg.duration) || assignedItem?.duration || 60;
+
+            // Tính isMerge tương tự handleStartTimer
+            const segItemIdSet = new Set<string>();
+            for (const seg of allMySegs) {
+                for (const ai of allItems) {
+                    let aiSegs: any[] = [];
+                    try { aiSegs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []); } catch { aiSegs = []; }
+                    if (aiSegs.some((s: any) => s.ktvId?.toLowerCase() === ktvId?.toLowerCase() && s.startTime === seg.startTime && s.duration === seg.duration)) {
+                        segItemIdSet.add(ai.id);
+                        break;
+                    }
+                }
+            }
+            const isMergeSync = allMySegs.length > 1 && segItemIdSet.size === allMySegs.length;
+
+            let currentSegDuration: number;
+            let activeSegStartTime: string | null = null;
+
+            if (isMergeSync) {
+                // 🔥 Merged: tổng duration tất cả segments
+                currentSegDuration = allMySegs.reduce((sum: number, s: any) => sum + (Number(s.duration) || 60), 0);
+                activeSegStartTime = allMySegs[0].actualStartTime || tStart;
+            } else {
+                // Normal: duration chặng hiện tại
+                const currentSeg = allMySegs[calculatedSegIdx] || allMySegs[0] || {};
+                currentSegDuration = Number(currentSeg.duration) || assignedItem?.duration || 60;
+                activeSegStartTime = currentSeg.actualStartTime || tStart;
+            }
 
             const currentSecs = currentSegDuration * 60;
             
-            let activeSegStartTime = currentSeg.actualStartTime || tStart;
             if (activeSegStartTime && typeof activeSegStartTime === 'string' && /^\d{1,2}:\d{2}/.test(activeSegStartTime)) {
                 const [h, m] = activeSegStartTime.split(':').map(Number);
                 const d = new Date(); d.setHours(h, m, 0, 0);
@@ -1027,7 +1057,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const elapsed = Math.floor((now - start) / 1000);
 
                 const newRemaining = Math.max(0, currentSecs - elapsed);
-                console.log(`📱 [Timer Sync] Recalculated timer: ${newRemaining}s remaining (duration: ${currentSegDuration}m)`);
+                console.log(`📱 [Timer Sync] Recalculated timer: ${newRemaining}s remaining (duration: ${currentSegDuration}m, merged: ${isMergeSync})`);
                 setTimeRemaining(newRemaining);
             }
         };
@@ -1137,6 +1167,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     segs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []);
                 } catch { segs = []; }
                 const mySegs = segs.filter((seg: any) => seg.ktvId && ktvId && seg.ktvId.toLowerCase() === ktvId.toLowerCase());
+                
+                mySegs.forEach((seg: any) => seg._itemId = ai.id); // 🔥 Explicitly inject _itemId
                 allMySegs.push(...mySegs);
             }
 
@@ -1147,15 +1179,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             });
 
             // Tính shouldMerge để set timer đúng tổng nếu cần
-            const segItemIds = new Set(allMySegs.map((s: any) => {
-                // Tìm _itemId từ allItems
-                for (const ai of allItems) {
-                    let aiSegs: any[] = [];
-                    try { aiSegs = typeof ai?.segments === 'string' ? JSON.parse(ai.segments) : (Array.isArray(ai?.segments) ? ai.segments : []); } catch { aiSegs = []; }
-                    if (aiSegs.some((seg: any) => seg.ktvId?.toLowerCase() === ktvId?.toLowerCase() && seg.startTime === s.startTime && seg.duration === s.duration)) return ai.id;
-                }
-                return null;
-            }).filter(Boolean));
+            const segItemIds = new Set(allMySegs.map((s: any) => s._itemId).filter(Boolean));
             const isMerge = allMySegs.length > 1 && segItemIds.size === allMySegs.length;
 
             const initDuration = isMerge
@@ -1306,7 +1330,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 postServiceBookingIdRef.current = booking.id;
                 try { localStorage.setItem(POST_SERVICE_BOOKING_KEY, booking.id); } catch (e) {}
                 
+                isTransitioningRef.current = true;
                 setScreen('REVIEW');
+                setTimeout(() => isTransitioningRef.current = false, 1000);
             } else {
                 console.error('❌ [KTV Logic] Finish error:', res.error);
                 alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
@@ -1365,7 +1391,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
             } catch(e) {}
             
             // Always go to HANDOVER — commission is calculated in handleFinishHandover()
+            isTransitioningRef.current = true;
             setScreen('HANDOVER');
+            setTimeout(() => isTransitioningRef.current = false, 1000);
         } catch (err) {
             console.error('❌ [KTV Logic] Network error submitting review:', err);
             alert('Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!');
@@ -1479,10 +1507,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setPrepTimeRemaining(0);
             
             // Luôn chuyển sang REWARD để KTV thấy thành quả công việc
+            isTransitioningRef.current = true;
             setScreen('REWARD');
+            setTimeout(() => isTransitioningRef.current = false, 1000);
         } catch (err) {
             console.error('Error in finish handover:', err);
+            isTransitioningRef.current = true;
             setScreen('REWARD');
+            setTimeout(() => isTransitioningRef.current = false, 1000);
         } finally {
             setIsLoading(false);
         }
