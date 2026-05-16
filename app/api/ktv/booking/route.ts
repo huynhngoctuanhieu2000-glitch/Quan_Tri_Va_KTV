@@ -544,20 +544,7 @@ export async function PATCH(request: Request) {
                             originalItemsData[prevTarget.item.id][prevTarget.idx] = prevTarget.seg;
                         }
 
-                        // 🤝 PARALLEL START SYNC: Co-start co-workers with SAME startTime (song song)
-
-                        if (action === 'START_TIMER' && myStartTime) {
-                            const targetItemId = target.item.id;
-                            originalItemsData[targetItemId].forEach((seg: any) => {
-                                if (seg.ktvId
-                                    && seg.ktvId.toLowerCase() !== technicianCode?.toLowerCase()
-                                    && seg.startTime === myStartTime
-                                    && !seg.actualStartTime) {
-                                    seg.actualStartTime = sharedTimeStart;
-                                    console.log(`🤝 [Parallel Sync] Co-started ${seg.ktvId}'s segment at ${myStartTime}`);
-                                }
-                            });
-                        }
+                        // 🤝 PARALLEL START SYNC: Removed to allow independent starts for KTVs entering at different times
                     }
                 }
 

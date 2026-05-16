@@ -19,10 +19,7 @@ INSERT INTO "SystemConfigs" (key, value, description)
 VALUES ('ktv_shift_3_bonus', '40', 'Điểm thưởng bonus cho KTV ca 3 - ca đêm (mỗi đơn rating ≥ 4★)')
 ON CONFLICT (key) DO NOTHING;
 
--- 4. Tỷ lệ quy đổi điểm → VNĐ (1 điểm = 1000 VNĐ)
+-- 3. Tỷ lệ quy đổi điểm → VNĐ (1 điểm = 1000 VNĐ)
 INSERT INTO "SystemConfigs" (key, value, description)
 VALUES ('ktv_bonus_rate', '1000', 'Tỷ lệ quy đổi 1 điểm bonus = bao nhiêu VNĐ')
 ON CONFLICT (key) DO NOTHING;
-
--- Verify: Kiểm tra kết quả
--- SELECT key, value, description FROM "SystemConfigs" WHERE key LIKE 'ktv_%bonus%' OR key = 'enable_bonus_wallet';
