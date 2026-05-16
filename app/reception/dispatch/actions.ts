@@ -214,10 +214,10 @@ export async function processDispatch(bookingId: string, dispatchData: {
             p_booking_id: bookingId,
             p_date: dispatchData.date,
             p_status: dispatchData.status || 'PREPARING',
-            p_technician_code: dispatchData.technicianCode,
-            p_bed_id: dispatchData.bedId,
-            p_room_name: dispatchData.roomName,
-            p_notes: dispatchData.notes,
+            p_technician_code: dispatchData.technicianCode ?? null,
+            p_bed_id: dispatchData.bedId ?? null,
+            p_room_name: dispatchData.roomName ?? null,
+            p_notes: dispatchData.notes ?? null,
             p_staff_assignments: dispatchData.staffAssignments || [],
             p_item_updates: dispatchData.itemUpdates || []
         });
