@@ -1072,7 +1072,11 @@ if (!hasPermission('dispatch_board')) {
     const orderToDispatch = overrideOrderId ? orders.find(o => o.id === overrideOrderId) : selectedOrder;
     if (!orderToDispatch) return;
     if (!skipValidation) {
-      const missing = getMissingInfo(orderToDispatch);
+      // ⚠️ Khi dispatch lẻ (specificSvcId), chỉ validate DV đang dispatch, không check toàn bộ đơn
+      const orderToValidate = specificSvcId 
+        ? { ...orderToDispatch, services: orderToDispatch.services.filter(s => s.id === specificSvcId) }
+        : orderToDispatch;
+      const missing = getMissingInfo(orderToValidate);
       if (missing.length > 0) {
         alert(`⚠️ Vui lòng điền đầy đủ thông tin:\n\n${missing.map(m => `• ${m}`).join('\n')}`);
         return;
@@ -1178,10 +1182,15 @@ if (!hasPermission('dispatch_board')) {
       });
 
       const isPartial = !!specificSvcId;
+      // ⚠️ Khi dispatch lẻ: KHÔNG gửi status để tránh lỗi backward transition
+      // VD: Booking đang IN_PROGRESS (DV1 xong), dispatch lẻ DV3 → gửi PREPARING sẽ bị RPC block
+      const bookingStatus = isPartial 
+        ? null  // null → RPC giữ nguyên booking status hiện tại (COALESCE)
+        : ((clonedOrder.rawStatus && !['NEW', 'pending', 'WAITING'].includes(clonedOrder.rawStatus)) 
+            ? clonedOrder.rawStatus 
+            : 'PREPARING');
       const res = await processDispatch(clonedOrder.id, {
-        status: (clonedOrder.rawStatus && !['NEW', 'pending', 'WAITING'].includes(clonedOrder.rawStatus)) 
-          ? clonedOrder.rawStatus 
-          : 'PREPARING',
+        status: bookingStatus as any,
         technicianCode: isPartial ? undefined : combinedTechCodes,
         bedId: isPartial ? undefined : (primarySeg?.bedId || null),
         roomName: isPartial ? undefined : (primarySeg?.roomId || null),
