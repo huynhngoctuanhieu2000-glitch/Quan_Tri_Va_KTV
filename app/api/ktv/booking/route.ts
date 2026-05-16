@@ -590,7 +590,7 @@ export async function PATCH(request: Request) {
             const isFeedback = status === 'FEEDBACK';
             itemUpdatePayload.timeEnd = new Date().toISOString();
             const nowISO = new Date().toISOString();
-            const { data: items } = await supabase.from('BookingItems').select('id, segments, status').in('id', allItemIdsForThisKTV);
+            const { data: items } = await supabase.from('BookingItems').select('id, segments, status, itemRating').in('id', allItemIdsForThisKTV);
             
             // 🌟 1. Gom tất cả segments của KTV này trên toàn bộ BookingItems để tính isMerged
             let allGlobalSegs: any[] = [];
@@ -658,12 +658,21 @@ export async function PATCH(request: Request) {
                 // 3. 🧠 SMART STATUS: Only set CLEANING when ALL segments in item have actualEndTime
                 //    Prevents sequential bug (KTV1 done but KTV2 not started yet)
                 const allSegsDone = segs.every((s: any) => !!s.actualEndTime);
-                const newItemStatus = allSegsDone
-                    ? (isFeedback ? 'FEEDBACK' : 'CLEANING')
-                    : 'IN_PROGRESS';
+                const alreadyRated = (item as any).itemRating !== null && (item as any).itemRating !== undefined;
+
+                // 🧠 DUAL-CONDITION COMPLETION:
+                // Booking chỉ DONE khi CẢ HAI điều kiện: KTV xong + Khách đã rate
+                // Xử lý cả 2 thứ tự: KTV xong trước hoặc Khách rate trước
+                const newItemStatus = (item.status === 'DONE')
+                    ? 'DONE'                          // 🛡️ Đã DONE → không lùi
+                    : (alreadyRated && allSegsDone)
+                        ? 'DONE'                      // 🧠 Khách đã rate + KTV xong → hoàn tất
+                        : allSegsDone
+                            ? (isFeedback ? 'FEEDBACK' : 'CLEANING')
+                            : 'IN_PROGRESS';
                 
                 await supabase.from('BookingItems').update({ segments: JSON.stringify(segs), status: newItemStatus }).eq('id', item.id);
-                console.log(`🧠 [Smart Status] Item ${item.id}: allSegsDone=${allSegsDone} → ${newItemStatus}`);
+                console.log(`🧠 [Smart Status] Item ${item.id}: allSegsDone=${allSegsDone}, alreadyRated=${alreadyRated} → ${newItemStatus}`);
             }
             
             // 🔄 ĐỒNG BỘ TRẠNG THÁI BOOKING & GIẢI PHÓNG PHÒNG
