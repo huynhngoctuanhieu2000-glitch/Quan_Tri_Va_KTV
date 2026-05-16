@@ -1137,6 +1137,32 @@ if (!hasPermission('dispatch_board')) {
         }
       }
 
+      // ⚠️ DO NOT REMOVE — Fix 16/05/2026: Dispatch lẻ bảo vệ KTV đang làm
+      // Khi dispatch lẻ DV3, RPC cleanup step 0.5 sẽ XÓA KTV1/KTV2 đang ACTIVE cho DV1/DV2
+      // vì họ không nằm trong p_staff_assignments. Fix: thêm "keepalive" entries cho KTV các DV khác.
+      if (specificSvcId) {
+        const otherServices = clonedOrder.services.filter(s => s.id !== specificSvcId);
+        for (const svc of otherServices) {
+          for (const row of svc.staffList) {
+            if (!row.ktvId) continue;
+            // Chỉ thêm nếu KTV này chưa có trong danh sách (tránh trùng)
+            if (allStaffAssignments.some(a => a.ktvId === row.ktvId && a.bookingItemId === svc.id)) continue;
+            const firstSeg = row.segments[0];
+            const lastSeg = row.segments[row.segments.length - 1];
+            allStaffAssignments.push({
+              ktvId: row.ktvId,
+              bookingItemId: svc.id,
+              roomId: firstSeg?.roomId || null,
+              bedId: firstSeg?.bedId || null,
+              turnsCompleted: 0,
+              queuePos: 0,
+              startTime: firstSeg?.startTime || '',
+              endTime: lastSeg?.endTime || ''
+            });
+          }
+        }
+      }
+
       // ✅ KHÔNG GỘP assignments cùng KTV nữa. Giữ nguyên 1 item = 1 row để tuân thủ kiến trúc chuẩn!
       const mergedAssignments = allStaffAssignments;
 
