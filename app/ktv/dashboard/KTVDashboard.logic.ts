@@ -121,6 +121,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const fetchBookingRef = useRef<(() => Promise<void>) | null>(null);
     const targetBookingIdRef = useRef<string | null>(config?.targetBookingId || null);
     const isTransitioningRef = useRef<boolean>(false);
+    // ⚠️ DO NOT REMOVE — Fix timer drift 16/05/2026
+    // Refs cho absolute timer: mỗi tick tính từ Date.now() thay vì prev-1
+    // Chống lệch thời gian khi KTV tắt/mở màn hình
+    const timerStartMsRef = useRef<number>(0);
+    const timerTotalSecsRef = useRef<number>(0);
 
     // Auto-skip Review ONLY if THIS KTV has already submitted review for THIS specific booking.
     // Source of truth: per-KTV per-booking localStorage flag, NOT booking.rating (booking-level, too coarse).
@@ -957,7 +962,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         return () => clearInterval(tid);
     }, [ktvId, screen]);
 
-    // ⏱️ Timer countdown only — NO side effects inside setState
+    // ⏱️ Timer countdown — ABSOLUTE TIME (chống drift khi tắt màn hình)
+    // ⚠️ DO NOT REVERT to prev-1 — xem simulation scripts/sim_2ktv_bug.js
     useEffect(() => {
         let timer: NodeJS.Timeout;
         if (isPrepping && prepTimeRemaining > 0) {
@@ -970,9 +976,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     return prev - 1;
                 });
             }, 1000);
-        } else if (isTimerRunning && timeRemaining > 0) {
+        } else if (isTimerRunning && timerStartMsRef.current > 0 && timerTotalSecsRef.current > 0) {
+            // 🔥 Absolute time: mỗi tick tính elapsed từ Date.now() thay vì prev-1
+            // Khi tắt màn hình, interval bị pause nhưng Date.now() vẫn đúng khi mở lại
             timer = setInterval(() => {
-                setTimeRemaining(prev => (prev <= 1 ? 0 : prev - 1));
+                const now = Date.now() + timeOffsetRef.current;
+                const elapsed = Math.floor((now - timerStartMsRef.current) / 1000);
+                const remaining = Math.max(0, timerTotalSecsRef.current - elapsed);
+                setTimeRemaining(remaining);
             }, 1000);
         }
         return () => clearInterval(timer);
@@ -1063,6 +1074,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const start = new Date(activeSegStartTime).getTime();
                 const now = new Date().getTime() + timeOffsetRef.current;
                 const elapsed = Math.floor((now - start) / 1000);
+
+                // 🔥 Lưu vào ref để countdown interval dùng absolute time
+                timerStartMsRef.current = start;
+                timerTotalSecsRef.current = currentSecs;
 
                 const newRemaining = Math.max(0, currentSecs - elapsed);
                 console.log(`📱 [Timer Sync] Recalculated timer: ${newRemaining}s remaining (duration: ${currentSegDuration}m, merged: ${isMergeSync})`);
