@@ -416,6 +416,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
             if (allFeedback) currentStatus = 'FEEDBACK';
             else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'CLEANING';
             else if (isAnyStarted && !['DONE', 'CLEANING', 'FEEDBACK', 'IN_PROGRESS'].includes(currentStatus)) currentStatus = 'IN_PROGRESS';
+
+            // ⚠️ DO NOT REMOVE — Fix commit a37440d + simulation 16/05/2026
+            // FIX: KTV chưa bắt đầu (chưa có actualStartTime) nhưng item bị CLEANING/FEEDBACK/DONE
+            // do đồng nghiệp xong trước hoặc do điều phối lẻ sau → ép về IN_PROGRESS để KTV còn bấm BẮT ĐẦU
+            if (!isAnyStarted && !allDone && ['CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {
+                console.log(`🔧 [ScreenEngine] KTV ${ktvId} chưa bắt đầu nhưng item=${currentStatus} → ép IN_PROGRESS`);
+                currentStatus = 'IN_PROGRESS';
+            }
         }
         
         // Co-working sync: CHỈ cho tiến (PREPARING/READY → IN_PROGRESS), KHÔNG cho lùi
