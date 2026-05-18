@@ -438,7 +438,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 // (do đồng nghiệp làm trước trong ca nối tiếp, hoặc do ép status), 
                 // thì BẮT BUỘC ép KTV này về lại PREPARING để họ còn thấy nút "Xác nhận chuẩn bị" / "Bắt đầu".
                 // Tuyệt đối KHÔNG ép lên IN_PROGRESS, vì sẽ làm Timer tự chạy sai giờ.
-                if (['IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {
+                // 🔒 NGOẠI LỆ: Nếu client đã set isTimerRunning = true (KTV vừa bấm Bắt đầu)
+                //    → giữ IN_PROGRESS, không ép về PREPARING (Realtime race condition)
+                if (isTimerRunningRef.current) {
+                    // Client confirmed start, server just hasn't written actualStartTime yet
+                    currentStatus = 'IN_PROGRESS';
+                } else if (['IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {
                     console.log(`🔧 [ScreenEngine] KTV ${ktvId} chưa bắt đầu nhưng item=${currentStatus} → ép về PREPARING/READY`);
                     if (isPreppingRef.current && screenRef.current === 'TIMER') {
                         currentStatus = 'READY';
@@ -447,10 +452,28 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     }
                 }
             }
+            
+            // 🔒 ABSOLUTE GUARD: Nếu timer đang chạy (isTimerRunning = true) → KHÔNG được chuyển sang CLEANING/FEEDBACK/DONE
+            // Ngăn chặn ghost completion do race condition (allDone = true khi actualEndTime từ session cũ còn trong DB)
+            if (isTimerRunningRef.current && ['CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {
+                console.warn(`🛡️ [ScreenEngine] Timer đang chạy nhưng status=${currentStatus} → ép giữ IN_PROGRESS`);
+                currentStatus = 'IN_PROGRESS';
+            }
+        }
+
+        // 🔒 UNIVERSAL TIMER GUARD (ngoài allMySegsForStatus block):
+        // Khi isTimerRunning = true (KTV đã bấm Bắt đầu), KHÔNG được để status về PREPARING/READY
+        // Fix: segments có ktvId rỗng → allMySegsForStatus = [] → guard bên trong không chạy
+        //      → currentStatus = assignedItem.status = 'PREPARING' (chưa được update bởi API)
+        //      → ScreenEngine gọi PREPARING path → setTimeRemaining(reset) → timer bị reset mỗi Realtime event
+        if (isTimerRunningRef.current && ['PREPARING', 'READY', 'PENDING', 'CONFIRMED'].includes(currentStatus)) {
+            console.warn(`🛡️ [ScreenEngine] Timer đang chạy nhưng currentStatus=${currentStatus} → ép về IN_PROGRESS`);
+            currentStatus = 'IN_PROGRESS';
         }
 
         const currentScreen = screenRef.current;
         const statusLevel = STATUS_ORDER[currentStatus] ?? -1;
+
 
         console.log("📟 [ScreenEngine] Final Check:", { currentStatus, itemStatus: assignedItem?.status, bookingStatus: booking.status, currentScreen, statusLevel });
 
@@ -986,8 +1009,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         return () => clearInterval(tid);
     }, [ktvId, screen]);
 
-    // ⏱️ Timer countdown — ABSOLUTE TIME (chống drift khi tắt màn hình)
-    // ⚠️ DO NOT REVERT to prev-1 — xem simulation scripts/sim_2ktv_bug.js
+    // ⏱️ Timer countdown — PREV-1 (đơn giản, ổn định, không phụ thuộc refs)
+    // recalcTimerFromServer sẽ sync giá trị đúng từ server khi cần (wake-from-sleep, Realtime)
     useEffect(() => {
         let timer: NodeJS.Timeout;
         if (isPrepping && prepTimeRemaining > 0) {
@@ -1000,14 +1023,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     return prev - 1;
                 });
             }, 1000);
-        } else if (isTimerRunning && timerStartMsRef.current > 0 && timerTotalSecsRef.current > 0) {
-            // 🔥 Absolute time: mỗi tick tính elapsed từ Date.now() thay vì prev-1
-            // Khi tắt màn hình, interval bị pause nhưng Date.now() vẫn đúng khi mở lại
+        } else if (isTimerRunning && !isPrepping) {
+            // ✅ Simple prev-1: không cần refs, luôn đếm ngược
+            // recalcTimerFromServer sẽ correct giá trị nếu drift quá > 2 giây
             timer = setInterval(() => {
-                const now = Date.now() + timeOffsetRef.current;
-                const elapsed = Math.floor((now - timerStartMsRef.current) / 1000);
-                const remaining = Math.max(0, timerTotalSecsRef.current - elapsed);
-                setTimeRemaining(remaining);
+                setTimeRemaining(prev => Math.max(0, prev - 1));
             }, 1000);
         }
         return () => clearInterval(timer);
@@ -1017,7 +1037,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
     useEffect(() => {
         const recalcTimerFromServer = () => {
             const currentBooking = bookingRef.current;
-            if (!currentBooking || !isTimerRunningRef.current) return;
+            if (!currentBooking) return;
 
             const assignedItem = currentBooking.assignedItemId 
                 ? currentBooking.BookingItems?.find((i: any) => i.id === currentBooking.assignedItemId)
@@ -1109,26 +1129,30 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const elapsed = Math.floor((now - start) / 1000);
 
                 // 🔥 Lưu vào ref để countdown interval dùng absolute time
+                // ⚠️ LUÔN set refs, kể cả khi isTimerRunning=false
+                // → Để khi ScreenEngine set isTimerRunning=true (cho KTV 2 trong shared segment),
+                //   countdown interval có thể dùng ngay timerStartMsRef đúng
                 timerStartMsRef.current = start;
                 timerTotalSecsRef.current = currentSecs;
 
                 const newRemaining = Math.max(0, currentSecs - elapsed);
                 console.log(`📱 [Timer Sync] Recalculated timer: ${newRemaining}s remaining (duration: ${currentSegDuration}m, merged: ${isMergeSync})`);
                 
-                // 🔥 Smooth Timer Override: 
-                // Chỉ set nếu chênh lệch > 2 giây để tránh làm khựng đồng hồ do độ trễ mạng lúc mới bắt đầu
-                // 🔒 HARD GUARD: KHÔNG cho override về 0 nếu timer mới chạy < 10 giây
-                const timerRunningForMs = now - timerStartMsRef.current;
-                setTimeRemaining(prev => {
-                    if (newRemaining === 0 && timerRunningForMs < 10000) {
-                        console.warn(`🛡️ [Timer Sync] Blocked override to 0 — timer just started (${timerRunningForMs}ms ago)`);
+                // Chỉ cập nhật display khi timer đang thực sự chạy
+                if (isTimerRunningRef.current) {
+                    // 🔒 HARD GUARD: KHÔNG cho override về 0 nếu timer mới chạy < 10 giây
+                    const timerRunningForMs = now - timerStartMsRef.current;
+                    setTimeRemaining(prev => {
+                        if (newRemaining === 0 && timerRunningForMs < 10000) {
+                            console.warn(`🛡️ [Timer Sync] Blocked override to 0 — timer just started (${timerRunningForMs}ms ago)`);
+                            return prev;
+                        }
+                        if (Math.abs(prev - newRemaining) > 2) {
+                            return newRemaining;
+                        }
                         return prev;
-                    }
-                    if (Math.abs(prev - newRemaining) > 2) {
-                        return newRemaining;
-                    }
-                    return prev;
-                });
+                    });
+                }
             }
         };
 
@@ -1348,6 +1372,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 : (allMySegs.length > 0 ? (Number(allMySegs[0].duration) || 60) : (booking?.assignedItem?.duration || 60));
             timerStartMsRef.current = Date.now() + timeOffsetRef.current;
             timerTotalSecsRef.current = initDuration * 60;
+            // ✅ Set timeRemaining ngay để timer hiển thị đúng duration (nhất là merged 2-DV = 10 phút)
+            setTimeRemaining(initDuration * 60);
             setIsTimerRunning(true);
         } else {
             console.error('❌ [KTV Logic] Start error:', res.error);

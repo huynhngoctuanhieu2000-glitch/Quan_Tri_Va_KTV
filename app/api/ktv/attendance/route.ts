@@ -52,10 +52,14 @@ export async function POST(request: Request) {
         // Nếu có cấu hình dải IP (dạng array) thì mới kiểm tra
         if (!configError && configData?.value && Array.isArray(configData.value) && configData.value.length > 0) {
             const allowedIps: string[] = configData.value.map((item: any) => typeof item === 'string' ? item : item.ip).filter(Boolean);
-            // Cho phép localhost (cho môi trường dev) hoặc IP phải nằm trong mảng cấu hình
+            // Compare by first 2 octets only (e.g. "14.191") to tolerate dynamic IP changes within the same network
+            const getIpPrefix = (ip: string) => ip.split('.').slice(0, 2).join('.');
+            const clientPrefix = getIpPrefix(clientIp);
+            const allowedPrefixes = [...new Set(allowedIps.map(getIpPrefix))];
+            // Cho phép localhost (cho môi trường dev) hoặc IP prefix phải nằm trong dải cấu hình
             if (clientIp !== '::1' && clientIp !== '127.0.0.1' && clientIp !== 'unknown') {
-                if (checkType !== 'SUDDEN_OFF' && !allowedIps.includes(clientIp)) {
-                    console.error(`❌ [Attendance] IP mismatch: clientIp=${clientIp}, allowedIps=${allowedIps}`);
+                if (checkType !== 'SUDDEN_OFF' && !allowedPrefixes.includes(clientPrefix)) {
+                    console.error(`❌ [Attendance] IP prefix mismatch: clientIp=${clientIp} (prefix=${clientPrefix}), allowedPrefixes=${allowedPrefixes}`);
                     
                     // SAVE REJECTED IP TO SYSTEM CONFIGS
                     const rejectedInfo = {

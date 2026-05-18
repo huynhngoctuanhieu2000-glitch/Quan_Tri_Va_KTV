@@ -67,12 +67,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         else if (rawRole === 'RECEPTIONIST' || rawRole === 'LEAD_RECEPTIONIST') roleId = 'reception';
         else if (rawRole === 'TECHNICIAN' || rawRole === 'KTV') roleId = 'ktv';
 
+        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(dbUser.fullName || dbUser.username)}`;
         const finalUser = {
           id: dbUser.id,
           password: dbUser.password,
           name: dbUser.fullName || dbUser.username,
           roleId: roleId,
-          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(dbUser.fullName || dbUser.username)}`
+          avatarUrl: dbUser.staffAvatarUrl || fallbackAvatar
         };
 
         setUser(finalUser);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { createClient } from '@/lib/supabase';
 
 /**
  * Custom hook for Settings page logic.
@@ -23,6 +24,27 @@ export const useSettings = () => {
     const [isChangingPassword, setIsChangingPassword] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
+
+    // Fetch latest avatar from Staff table on mount
+    useEffect(() => {
+        if (!user?.id) return;
+        const fetchStaffAvatar = async () => {
+            try {
+                const supabase = createClient();
+                const { data } = await supabase
+                    .from('Staff')
+                    .select('avatar_url')
+                    .eq('id', user.id)
+                    .maybeSingle();
+                if (data?.avatar_url) {
+                    setAvatarUrl(data.avatar_url);
+                }
+            } catch (e) {
+                // Non-critical: keep cached value
+            }
+        };
+        fetchStaffAvatar();
+    }, [user?.id]);
 
     // --- Handlers ---
     const handleUpdateProfile = (e: React.FormEvent) => {
