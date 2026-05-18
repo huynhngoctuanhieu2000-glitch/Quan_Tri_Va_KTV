@@ -187,8 +187,18 @@ export default function KTVDashboardPage() {
 
 // ─── WORKING TIMELINE ────────────────────────────────────────────────────────
 
-function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments: any[], activeIndex?: number, actualStartTime?: string | null }) {
+function WorkingTimeline({ segments, activeIndex, actualStartTime, shouldMerge }: { segments: any[], activeIndex?: number, actualStartTime?: string | null, shouldMerge?: boolean }) {
   if (!segments || segments.length === 0) return null;
+
+  let displaySegments = segments;
+  if (shouldMerge && segments.length > 0) {
+    const totalDuration = segments.reduce((sum, seg) => sum + (Number(seg.duration) || 0), 0);
+    displaySegments = [{
+      ...segments[0],
+      id: 'merged-' + segments[0].id,
+      duration: totalDuration
+    }];
+  }
 
   // Helper để tính giờ tịnh tiến
   const getShiftedTime = (offsetMins: number) => {
@@ -219,9 +229,9 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments:
         {activeIndex !== undefined && <span className="text-emerald-600">Chặng {activeIndex + 1}</span>}
       </h3>
       <div className="space-y-2">
-        {segments.map((seg, idx) => {
-          const isActive = idx === activeIndex;
-          const isPast = activeIndex !== undefined && idx < activeIndex;
+        {displaySegments.map((seg, idx) => {
+          const isActive = shouldMerge ? activeIndex !== undefined : idx === activeIndex;
+          const isPast = shouldMerge ? false : (activeIndex !== undefined && idx < activeIndex);
           
           const displayStartTime = actualStartTime ? getShiftedTime(cumulativeMins) : seg.startTime;
           cumulativeMins += seg.duration;
@@ -251,7 +261,7 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime }: { segments:
                   {isActive && <span className="ml-2 text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-md animate-pulse">ĐANG LÀM</span>}
                 </p>
                 <p className={`text-[10px] font-bold uppercase tracking-tighter ${isActive ? 'text-emerald-600/70' : 'text-slate-400'}`}>
-                  Giường {seg.bedId?.split('-').pop()} • {seg.duration} phút
+                  Giường {seg.bedId?.split('-').pop()} • {seg.duration} phút {shouldMerge && '(Gộp)'}
                 </p>
               </div>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs transition-colors ${
@@ -295,7 +305,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase());
+    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase()).map((s: any) => ({ ...s, _itemId: i.id }));
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
@@ -303,6 +313,9 @@ function ScreenDashboard({ logic }: { logic: any }) {
   });
   const totalAssignedMins = allKtvSegments.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
   const ktvSegments = allKtvSegments;
+  
+  const uniqueItemIds = new Set(ktvSegments.map((s: any) => s._itemId));
+  const shouldMerge = ktvSegments.length > 1 && uniqueItemIds.size === ktvSegments.length;
   
   // Xác định vị trí chặng hiện tại
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
@@ -455,6 +468,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                     segments={ktvSegments} 
                     activeIndex={booking.status === 'IN_PROGRESS' ? activeSegmentIndex : undefined}
                     actualStartTime={ktvSegments[0]?.actualStartTime || booking?.dispatchStartTime || booking?.timeStart || null}
+                    shouldMerge={shouldMerge}
                   />
                 </div>
               )}
@@ -600,6 +614,34 @@ function ScreenTimer({ logic }: { logic: any }) {
   // 🔄 Reverse progress: Start full (100) and move to 0 as time runs out
   const progress = totalDuration > 0 ? (currentSecs / totalDuration) * 100 : 0;
 
+  // Xử lý hiển thị giờ bắt đầu / kết thúc
+  const startTimeRaw = currentSeg?.actualStartTime || booking?.dispatchStartTime || booking?.timeStart || null;
+  const getFormattedTime = (dateString: string | null) => {
+    if (!dateString) return '--:--';
+    if (typeof dateString === 'string' && /^\d{1,2}:\d{2}/.test(dateString)) return dateString.substring(0, 5);
+    const d = new Date(dateString.includes('Z') || dateString.includes('+') ? dateString : dateString.replace(' ', 'T') + 'Z');
+    if (isNaN(d.getTime())) return '--:--';
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  };
+  const getEndTime = (dateString: string | null, durationMins: number) => {
+    if (!dateString) return '--:--';
+    let d = new Date(dateString.includes('Z') || dateString.includes('+') ? dateString : dateString.replace(' ', 'T') + 'Z');
+    if (isNaN(d.getTime())) {
+      if (typeof dateString === 'string' && /^\d{1,2}:\d{2}/.test(dateString)) {
+        const [h, m] = dateString.split(':').map(Number);
+        d = new Date();
+        d.setHours(h, m + durationMins, 0, 0);
+        return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      }
+      return '--:--';
+    }
+    d.setMinutes(d.getMinutes() + durationMins);
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const displayStartTime = getFormattedTime(startTimeRaw);
+  const displayEndTime = getEndTime(startTimeRaw, displayDuration);
+
 
   return (
     <div className="p-4 h-full flex flex-col pt-8">
@@ -683,6 +725,7 @@ function ScreenTimer({ logic }: { logic: any }) {
             segments={ktvSegments} 
             activeIndex={activeSegmentIndex} 
             actualStartTime={ktvSegments[0]?.actualStartTime || booking?.dispatchStartTime || booking?.timeStart || null}
+            shouldMerge={shouldMerge}
           />
         </div>
       )}

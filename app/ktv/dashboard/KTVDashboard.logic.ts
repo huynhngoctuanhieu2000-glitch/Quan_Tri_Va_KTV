@@ -1024,10 +1024,16 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 });
             }, 1000);
         } else if (isTimerRunning && !isPrepping) {
-            // ✅ Simple prev-1: không cần refs, luôn đếm ngược
-            // recalcTimerFromServer sẽ correct giá trị nếu drift quá > 2 giây
+            // ✅ Dùng Absolute Time thay vì prev-1 để chống drift khi treo tab/background
             timer = setInterval(() => {
-                setTimeRemaining(prev => Math.max(0, prev - 1));
+                if (!timerStartMsRef.current || !timerTotalSecsRef.current) {
+                    setTimeRemaining(prev => Math.max(0, prev - 1));
+                    return;
+                }
+                const now = new Date().getTime() + timeOffsetRef.current;
+                const elapsed = Math.floor((now - timerStartMsRef.current) / 1000);
+                const newRemaining = Math.max(0, timerTotalSecsRef.current - elapsed);
+                setTimeRemaining(newRemaining);
             }, 1000);
         }
         return () => clearInterval(timer);
