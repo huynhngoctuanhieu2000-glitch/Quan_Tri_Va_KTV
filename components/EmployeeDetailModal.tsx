@@ -31,7 +31,7 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
       if (!prev) return null;
 
       const rawLevel = prev.skills?.[skillKey];
-      const isCurrentlySkilled = rawLevel === true || rawLevel === 'basic' || rawLevel === 'expert' || rawLevel === 'training';
+      const isCurrentlySkilled = rawLevel === true || (rawLevel as any) === 'basic' || (rawLevel as any) === 'expert' || (rawLevel as any) === 'training';
 
       return {
         ...prev,
@@ -226,7 +226,7 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {(Object.keys(skillLabels) as (keyof Employee['skills'])[]).map((key) => {
                   const rawLevel = editedEmployee.skills?.[key];
-                  const isSkilled = rawLevel === true || rawLevel === 'basic' || rawLevel === 'expert' || rawLevel === 'training';
+                  const isSkilled = rawLevel === true || (rawLevel as any) === 'basic' || (rawLevel as any) === 'expert' || (rawLevel as any) === 'training';
                   const info = levelInfo[String(isSkilled)];
                   return (
                     <button
