@@ -41,6 +41,7 @@ export interface ShiftRecord {
     reviewedBy: string | null;
     reviewedAt: string | null;
     createdAt: string;
+    estimatedEndTime?: string | null;
 }
 
 /**

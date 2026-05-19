@@ -160,6 +160,7 @@
 | `id` | uuid | Khóa chính (Primary Key). |
 | `employeeId` | uuid | Mã KTV yêu cầu điểm danh (FK -> Users.id). |
 | `employeeName` | varchar | Tên KTV (đẻ hiển thị nhanh trên Admin). |
+| `date` | date | Ngày business date điểm danh (hỗ trợ sort, lọc dễ dàng) |
 | `checkType` | enum | Loại yêu cầu: `CHECK_IN`, `CHECK_OUT`, `LATE_CHECKIN`, `OFF_REQUEST`. |
 | `status` | enum | `PENDING`, `CONFIRMED`, `REJECTED`. |
 | `latitude` | float8 | Tọa độ GPS vĩ độ (lúc gửi yêu cầu). |
@@ -171,6 +172,7 @@
 | `confirmedBy` | uuid | ID của admin/lễ tân duyệt yêu cầu. |
 | `confirmedAt` | timestamp | Thời gian duyệt yêu cầu. |
 | `checkOutTime` | timestamptz | Thời điểm tan ca |
+| `estimatedEndTime` | text | Giờ về dự kiến (lúc điểm danh, dành cho ca tự do) |
 
 ---
 
@@ -216,6 +218,7 @@
 | `reviewed_by` | text | Admin duyệt |
 | `reviewed_at` | timestamptz | Thời điểm duyệt |
 | `created_at` | timestamptz | Thời điểm tạo |
+| `estimatedEndTime` | text | Giờ về dự kiến (dành riêng cho ca tự do) |
 
 ---
 

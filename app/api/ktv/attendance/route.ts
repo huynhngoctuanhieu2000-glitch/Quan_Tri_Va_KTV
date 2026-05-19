@@ -151,11 +151,25 @@ export async function POST(request: Request) {
         const isAutoApprove = true;
         const finalStatus = 'CONFIRMED';
 
+        // Fetch day cutoff to determine the exact Business Date
+        const { data: cutoffConfig } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', 'spa_day_cutoff_hours')
+            .maybeSingle();
+        
+        const cutoffHours = (cutoffConfig?.value != null) ? Number(cutoffConfig.value) : 6;
+        
+        // Calculate Business Date based on cutoff
+        const businessNow = new Date(nowVn.getTime() - cutoffHours * 60 * 60 * 1000);
+        const today = businessNow.toISOString().split('T')[0];
+
         const { data: record, error: insertError } = await supabase
             .from('KTVAttendance')
             .insert({
                 employeeId,
                 employeeName: displayName, // Chống dùng Tên => Dùng Mã NV
+                date: today,
                 checkType,
                 latitude: latitude ?? null,
                 longitude: longitude ?? null,
@@ -176,19 +190,6 @@ export async function POST(request: Request) {
 
         // ─── Step 4: TurnQueue & User Shift Update (if auto-approved) ─────
         if (isAutoApprove) {
-            // Fetch day cutoff to determine the exact Business Date
-            const { data: cutoffConfig } = await supabase
-                .from('SystemConfigs')
-                .select('value')
-                .eq('key', 'spa_day_cutoff_hours')
-                .maybeSingle();
-            
-            const cutoffHours = (cutoffConfig?.value != null) ? Number(cutoffConfig.value) : 6;
-            
-            // Calculate Business Date based on cutoff
-            const businessNow = new Date(nowVn.getTime() - cutoffHours * 60 * 60 * 1000);
-            const today = businessNow.toISOString().split('T')[0];
-
             if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
                 // 🔹 Active shift for User
                 await supabase.from('Users').update({ isOnShift: true }).eq('id', employeeId);

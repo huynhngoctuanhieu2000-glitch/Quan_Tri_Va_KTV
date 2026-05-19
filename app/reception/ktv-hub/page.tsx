@@ -1498,15 +1498,22 @@ const LeaveOffTab = () => {
                                                         {activeShifts.map(shift => {
                                                             const isOff = selectedLeaves.some(l => l.employeeId === shift.employeeId);
                                                             return (
-                                                                <div key={shift.id} className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl border bg-white shadow-sm ${c.border}`}>
-                                                                    <div className="flex items-center gap-1">
-                                                                        <p className={`font-bold text-[12px] ${c.text} truncate`}>{shift.employeeId}</p>
-                                                                        {isOff && (
-                                                                            <span 
-                                                                                className={`text-[8px] font-black px-1 py-0.5 rounded uppercase ${selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'}`} 
-                                                                                title={selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? "KTV nghỉ đột xuất nhưng vẫn đi làm" : "Có đăng ký OFF nhưng vẫn đi làm"}
-                                                                            >
-                                                                                {selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? 'Đột xuất' : 'OFF'}
+                                                                <div key={shift.id} className={`flex flex-col items-center justify-center py-2 px-2 rounded-xl border bg-white shadow-sm ${c.border}`}>
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <p className={`font-bold text-[12px] ${c.text} truncate`}>{shift.employeeId}</p>
+                                                                            {isOff && (
+                                                                                <span 
+                                                                                    className={`text-[8px] font-black px-1 py-0.5 rounded uppercase ${selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? 'bg-red-100 text-red-600' : 'bg-rose-100 text-rose-600'}`} 
+                                                                                    title={selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? "KTV nghỉ đột xuất nhưng vẫn đi làm" : "Có đăng ký OFF nhưng vẫn đi làm"}
+                                                                                >
+                                                                                    {selectedLeaves.find(l => l.employeeId === shift.employeeId)?.is_sudden_off ? 'Đột xuất' : 'OFF'}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {shiftType === 'FREE' && shift.estimatedEndTime && (
+                                                                            <span className="text-[9px] font-bold text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded shadow-sm w-full text-center">
+                                                                                Về: {shift.estimatedEndTime}
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -1603,8 +1610,8 @@ const LeaveOffTab = () => {
                                                         <span className="text-[10px] font-black leading-tight">
                                                             {SHIFT_LABELS_HUB[shift.shiftType]?.split(' (')[0] || shift.shiftType}
                                                         </span>
-                                                        <span className="text-[8px] font-bold opacity-70 leading-none mt-0.5">
-                                                            {SHIFT_LABELS_HUB[shift.shiftType]?.match(/\((.*)\)/)?.[1] || ''}
+                                                        <span className="text-[8px] font-bold opacity-70 leading-none mt-0.5 whitespace-nowrap">
+                                                            {shift.shiftType === 'FREE' && shift.estimatedEndTime ? `Về: ${shift.estimatedEndTime}` : SHIFT_LABELS_HUB[shift.shiftType]?.match(/\((.*)\)/)?.[1] || ''}
                                                         </span>
                                                     </div>
                                                     <button onClick={() => openAssignModal(shift.employeeId, shift.employeeName)}
