@@ -10,7 +10,7 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName: empNameInput, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason, selectedShiftType } = body;
+        const { employeeId, employeeName: empNameInput, checkType = 'CHECK_IN', latitude, longitude, locationText, photoBase64, reason, selectedShiftType, estimatedEndTime } = body;
 
         if (!employeeId) {
             return NextResponse.json({ success: false, error: 'Missing employeeId' }, { status: 400 });
@@ -162,6 +162,7 @@ export async function POST(request: Request) {
                 locationText: locationText ?? null,
                 photoUrl: photoUrl,
                 reason: reason ?? null,
+                estimatedEndTime: estimatedEndTime ?? null,
                 status: finalStatus,
                 confirmedBy: isAutoApprove ? 'SYSTEM' : null,
                 confirmedAt: isAutoApprove ? nowUtc.toISOString() : null,
@@ -219,6 +220,7 @@ export async function POST(request: Request) {
                                 effectiveFrom: today,
                                 previousShift: currentActive?.shiftType || null,
                                 reason: 'Tự chọn ca lúc điểm danh',
+                                estimatedEndTime: estimatedEndTime ?? null,
                                 status: 'ACTIVE',
                                 reviewedBy: 'SYSTEM',
                                 reviewedAt: nowUtc.toISOString(),

@@ -177,6 +177,12 @@ export const useKTVAttendance = () => {
             return false;
         }
 
+        // Bỏ qua check đi muộn cho các ca linh hoạt
+        if (activeShiftType === 'FREE' || activeShiftType === 'REQUEST') {
+            setIsLate(false);
+            return false;
+        }
+
         const startTimeStr = SHIFT_START_TIMES[activeShiftType];
         if (!startTimeStr) {
             setIsLate(false);
@@ -210,7 +216,8 @@ export const useKTVAttendance = () => {
         checkType: 'CHECK_IN' | 'CHECK_OUT' | 'LATE_CHECKIN' | 'SUDDEN_OFF',
         photosBase64?: string[] | null,
         reason?: string | null,
-        selectedShiftType?: string | null
+        selectedShiftType?: string | null,
+        estimatedEndTime?: string | null
     ) => {
         setErrorMsg(null);
         setCheckStatus('LOADING_GPS'); // Will rename this state eventually, keeping string for now to avoid breaking UI
@@ -229,6 +236,7 @@ export const useKTVAttendance = () => {
                     longitude: null,
                     locationText: null,
                     selectedShiftType: selectedShiftType || null,
+                    estimatedEndTime: estimatedEndTime || null,
                 }),
             });
 
@@ -295,6 +303,11 @@ export const useKTVAttendance = () => {
      */
     const { canCheckOut, checkoutBlockedUntil } = (() => {
         if (!activeShiftType || isLoadingShift) return { canCheckOut: true, checkoutBlockedUntil: null };
+
+        // Ca tự do và Khách yêu cầu thì luôn cho phép về
+        if (activeShiftType === 'FREE' || activeShiftType === 'REQUEST') {
+            return { canCheckOut: true, checkoutBlockedUntil: null };
+        }
 
         const endTimeStr = SHIFT_END_TIMES[activeShiftType];
         if (!endTimeStr) return { canCheckOut: true, checkoutBlockedUntil: null };

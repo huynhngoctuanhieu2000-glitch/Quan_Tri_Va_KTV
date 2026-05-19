@@ -434,7 +434,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     };
     const [selectedDate, setSelectedDate] = useState<string>(getVietnamDateString());
     const [turns, setTurns] = useState<(TurnQueueData & { staff?: StaffData })[]>([]);
-    const [shifts, setShifts] = useState<Record<string, string>>({});
+    const [shifts, setShifts] = useState<Record<string, { type: string, end: string | null }>>({});
     const [suddenOffs, setSuddenOffs] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
 
@@ -455,12 +455,12 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
     const fetchExtras = async () => {
         const today = selectedDate;
         const [shiftRes, leaveRes] = await Promise.all([
-            supabase.from('KTVShiftRecords').select('employee_id, shift_type').eq('status', 'ACTIVE'),
+            supabase.from('KTVShifts').select('employeeId, shiftType, estimatedEndTime').eq('status', 'ACTIVE'),
             supabase.from('KTVLeaveRequests').select('employeeId').eq('date', today).eq('is_sudden_off', true)
         ]);
         if (shiftRes.data) {
-            const shiftMap: Record<string, string> = {};
-            shiftRes.data.forEach((s: any) => shiftMap[s.employee_id] = s.shift_type);
+            const shiftMap: Record<string, { type: string, end: string | null }> = {};
+            shiftRes.data.forEach((s: any) => shiftMap[s.employeeId] = { type: s.shiftType, end: s.estimatedEndTime });
             setShifts(shiftMap);
         }
         if (leaveRes.data) {
@@ -501,7 +501,7 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVLeaveRequests' }, () => {
                 fetchExtras();
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVShiftRecords' }, () => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVShifts' }, () => {
                 fetchExtras();
             })
             .subscribe();
@@ -744,6 +744,11 @@ const TurnTab = ({ staffs }: { staffs: StaffData[] }) => {
                                     {turn.turns_completed > 0 && (
                                         <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold border border-indigo-100">
                                             Đã làm {turn.turns_completed} tua
+                                        </span>
+                                    )}
+                                    {shifts[turn.employee_id]?.type === 'FREE' && shifts[turn.employee_id]?.end && (
+                                        <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-bold border border-orange-100 flex items-center gap-1">
+                                            <Clock size={10} /> Tự do (Về: {shifts[turn.employee_id].end})
                                         </span>
                                     )}
                                 </div>

@@ -272,7 +272,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { employeeId, employeeName, shiftType, reason, assignedByAdmin, adminId } = body;
+        const { employeeId, employeeName, shiftType, reason, assignedByAdmin, adminId, estimatedEndTime } = body;
 
         if (!employeeId || !shiftType) {
             return NextResponse.json(
@@ -335,6 +335,7 @@ export async function POST(request: Request) {
                     effectiveFrom: new Date().toISOString().split('T')[0],
                     previousShift: currentActive?.shiftType || null,
                     reason: reason || 'Admin gán ca',
+                    estimatedEndTime: estimatedEndTime || null,
                     status: 'ACTIVE',
                     reviewedBy: adminId || null,
                     reviewedAt: new Date().toISOString(),
@@ -391,6 +392,7 @@ export async function POST(request: Request) {
                 effectiveFrom: tomorrowStr,
                 previousShift: currentActive?.shiftType || null,
                 reason: reason || 'Đổi ca từ ngày mai',
+                estimatedEndTime: estimatedEndTime || null,
                 status: 'ACTIVE',
                 reviewedAt: new Date().toISOString(),
             })
