@@ -13,7 +13,7 @@ export async function getDispatchData(date: string) {
         if (!supabase) throw new Error('Supabase admin not initialized');
 
         // 1. Fetch Staff — 🔧 EGRESS FIX: Only select needed columns
-        const { data: staffs, error: sError } = await supabase.from('Staff').select('id, full_name, code, avatar_url, gender, is_active');
+        const { data: staffs, error: sError } = await supabase.from('Staff').select('id, full_name, avatar_url, gender, status, skills, phone, position, experience');
         if (sError) throw sError;
 
         // 🔧 EGRESS FIX: Only select needed columns for TurnQueue
@@ -159,9 +159,9 @@ export async function getDispatchData(date: string) {
         });
 
         // 6. Fetch Rooms, Beds, and Reminders — 🔧 EGRESS FIX: select specific columns
-        const { data: rooms } = await supabase.from('Rooms').select('id, name, floor, status, capacity');
-        const { data: beds } = await supabase.from('Beds').select('id, name, roomId, status');
-        const { data: reminders } = await supabase.from('Reminders').select('id, text, order_index, is_active').eq('is_active', true).order('order_index', { ascending: true });
+        const { data: rooms } = await supabase.from('Rooms').select('id, name, capacity, type');
+        const { data: beds } = await supabase.from('Beds').select('id, name, roomId');
+        const { data: reminders } = await supabase.from('Reminders').select('id, content, order_index, is_active').eq('is_active', true).order('order_index', { ascending: true });
         const { data: configs } = await supabase.from('SystemConfigs').select('key, value');
 
         const transitionConfig = configs?.find((c: any) => c.key === 'room_transition_time' || c.key === 'thoi_gian_doi_phong');
