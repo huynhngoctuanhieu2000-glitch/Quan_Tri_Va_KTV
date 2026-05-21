@@ -366,7 +366,7 @@ export default function DispatchBoardPage() {
 
       // 1. Set Staffs
       if (sData) {
-        setStaffs(sData as StaffData[]);
+        setStaffs(sData as unknown as StaffData[]);
       }
 
       // 2. Set Turns
