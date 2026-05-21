@@ -46,10 +46,12 @@ export const usePayrollLogic = () => {
 
       const [staffRes, attRes, shiftRes, leaveRes] = await Promise.all([
         supabase.from('Staff').select('id, full_name').eq('status', 'ĐANG LÀM'),
-        supabase.from('DailyAttendance')
-          .select('*')
+        // ✅ Dùng KTVAttendance thay cho DailyAttendance (đã ngưng sử dụng)
+        supabase.from('KTVAttendance')
+          .select('id, employeeId, date, checkType, status, checkedAt, checkOutTime')
           .gte('date', startDateISO)
-          .lte('date', endDateISO),
+          .lte('date', endDateISO)
+          .eq('status', 'CONFIRMED'),
         supabase.from('KTVShifts')
           .select('*')
           .eq('status', 'ACTIVE'),
@@ -61,7 +63,49 @@ export const usePayrollLogic = () => {
       ]);
 
       if (staffRes.data) setStaffList(staffRes.data);
-      if (attRes.data) setAttendance(attRes.data);
+      
+      // Chuyển đổi KTVAttendance (event-based) → daily summary
+      // Gom CHECK_IN + CHECK_OUT cùng ngày/KTV thành 1 record
+      if (attRes.data) {
+        const dailyMap = new Map<string, { employee_id: string; date: string; check_in_time: string | null; check_out_time: string | null; status: string }>();
+        
+        for (const record of attRes.data) {
+          const key = `${record.employeeId}_${record.date}`;
+          if (!dailyMap.has(key)) {
+            dailyMap.set(key, {
+              employee_id: record.employeeId,
+              date: record.date,
+              check_in_time: null,
+              check_out_time: null,
+              status: 'on_duty'
+            });
+          }
+          const entry = dailyMap.get(key)!;
+          
+          if (record.checkType === 'CHECK_IN' || record.checkType === 'LATE_CHECKIN') {
+            // Lấy giờ từ checkedAt → convert sang HH:mm
+            if (record.checkedAt) {
+              const d = new Date(record.checkedAt);
+              const vnDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+              entry.check_in_time = `${String(vnDate.getUTCHours()).padStart(2, '0')}:${String(vnDate.getUTCMinutes()).padStart(2, '0')}`;
+            }
+            if (record.checkType === 'LATE_CHECKIN') {
+              entry.status = 'on_duty'; // Vẫn tính có mặt, lateMins sẽ tính riêng
+            }
+          } else if (record.checkType === 'CHECK_OUT') {
+            if (record.checkOutTime || record.checkedAt) {
+              const raw = record.checkOutTime || record.checkedAt;
+              const d = new Date(raw);
+              const vnDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+              entry.check_out_time = `${String(vnDate.getUTCHours()).padStart(2, '0')}:${String(vnDate.getUTCMinutes()).padStart(2, '0')}`;
+              entry.status = 'off_duty';
+            }
+          }
+        }
+        
+        setAttendance(Array.from(dailyMap.values()));
+      }
+      
       if (shiftRes.data) setShifts(shiftRes.data);
       if (leaveRes.data) setLeaves(leaveRes.data);
     } catch (error) {

@@ -929,19 +929,27 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const currentBooking = bookingRef.current;
                 if (!currentBooking) return;
                 
-                // Chỉ xử lý event cho item được gán cho KTV này
-                // Co-working: 2 KTV cùng gán 1 BookingItem → cả 2 nhận event
-                // Khác DV: mỗi KTV chỉ nhận event của item mình
-                const myItemId = currentBooking.assignedItemId || currentBooking.BookingItems?.[0]?.id;
-                if (payload.new.id !== myItemId) return;
+                const myBookingId = currentBooking.id;
+                const payloadBookingId = payload.new?.bookingId || payload.old?.bookingId;
                 
-                console.log("🔄 [KTV] Realtime BookingItem Sync:", payload.new.id, payload.new.status);
-                setBooking((prev: any) => {
-                    if (!prev) return prev;
-                    const items = prev.BookingItems?.map((i: any) => i.id === payload.new.id ? { ...i, ...payload.new } : i) || [];
-                    return { ...prev, BookingItems: items };
-                });
+                // 1. Kiểm tra xem event này có thuộc về Booking hiện tại không
+                const isMyBooking = payloadBookingId === myBookingId;
+                const isMyItem = currentBooking.BookingItems?.some((i: any) => i.id === (payload.new?.id || payload.old?.id));
                 
+                if (!isMyBooking && !isMyItem) return;
+                
+                console.log("🔄 [KTV] Realtime BookingItem Sync:", payload.eventType, payload.new?.id, payload.new?.status);
+                
+                // Nếu là UPDATE một item đã có sẵn thì partial update state trước để UI nhanh, sau đó fetch
+                if (payload.eventType === 'UPDATE' && isMyItem) {
+                    setBooking((prev: any) => {
+                        if (!prev) return prev;
+                        const items = prev.BookingItems?.map((i: any) => i.id === payload.new.id ? { ...i, ...payload.new } : i) || [];
+                        return { ...prev, BookingItems: items };
+                    });
+                }
+                
+                // Luôn fetchBooking để lấy danh sách items hoàn chỉnh (xử lý case INSERT Add-on)
                 fetchBooking();
             })
             .on('postgres_changes', { 

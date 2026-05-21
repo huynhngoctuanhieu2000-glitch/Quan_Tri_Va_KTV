@@ -1069,17 +1069,18 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
         });
 
         // 3. Chuẩn bị data cho BookingItems
-        const { count: currentItemCount } = await supabase
+        const { data: existingItems } = await supabase
             .from('BookingItems')
-            .select('*', { count: 'exact', head: true })
-            .eq('bookingId', bookingId);
-
-        const nextIndex = (currentItemCount || 0) + 1;
+            .select('id, segments, status, technicianCodes, roomName, bedId, serviceId')
+            .eq('bookingId', bookingId)
+            .neq('status', 'CANCELLED');
+            
+        let sourceItem = existingItems?.find((i: any) => {
+            const isUtility = i.serviceId === 'NHS0900' || false; // đơn giản hóa
+            return !isUtility && (i.status === 'IN_PROGRESS' || i.status === 'PREPARING');
+        }) || existingItems?.[0];
 
         const timestamp = Date.now();
-        const techIds = booking.technicianCode 
-            ? booking.technicianCode.split(',').map((id: string) => id.trim()).filter(Boolean)
-            : [];
 
         const itemsToInsert = detailedItems.map((item, index) => {
             // Dịch vụ tiện ích (is_utility) không cần gán KTV
@@ -1087,14 +1088,57 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
                 || item.serviceId === 'NHS0900' // Legacy fallback
                 || String(item.name || '').toLowerCase().includes('phòng riêng')
                 || String(item.name || '').toLowerCase().includes('phong rieng');
+
+            let itemStatus = 'WAITING';
+            let itemTechCodes: string[] = [];
+            let newSegments: any[] = [];
+            
+            if (!isUtility && sourceItem) {
+                // Lấy KTV từ sourceItem
+                itemTechCodes = Array.isArray(sourceItem.technicianCodes) 
+                    ? sourceItem.technicianCodes 
+                    : (typeof sourceItem.technicianCodes === 'string' ? sourceItem.technicianCodes.split(',').filter(Boolean) : []);
+                    
+                if (sourceItem.status === 'IN_PROGRESS' || sourceItem.status === 'PREPARING') {
+                     itemStatus = sourceItem.status;
+                }
+                
+                try {
+                    const sourceSegs = typeof sourceItem.segments === 'string' ? JSON.parse(sourceItem.segments) : (sourceItem.segments || []);
+                    if (sourceSegs.length > 0) {
+                        newSegments = sourceSegs.map((seg: any) => ({
+                            ...seg,
+                            id: `seg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                            duration: item.duration,
+                            actualStartTime: itemStatus === 'IN_PROGRESS' ? new Date().toISOString() : undefined,
+                            actualEndTime: undefined,
+                            feedbackTime: undefined,
+                            reviewTime: undefined
+                        }));
+                    } else if (itemTechCodes.length > 0) {
+                         newSegments = itemTechCodes.map((ktvId: string) => ({
+                             id: `seg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                             ktvId: ktvId,
+                             roomId: sourceItem.roomName || null,
+                             bedId: sourceItem.bedId || null,
+                             startTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                             duration: item.duration
+                         }));
+                    }
+                } catch (e) {}
+            }
+
             return {
                 id: `${bookingId}-addon-${timestamp}-${index}`,
                 bookingId: bookingId,
                 serviceId: item.serviceId,
                 quantity: item.qty,
                 price: item.priceOriginal,
-                status: 'WAITING',
-                technicianCodes: isUtility ? [] : techIds,
+                status: itemStatus,
+                technicianCodes: itemTechCodes,
+                roomName: sourceItem?.roomName || null,
+                bedId: sourceItem?.bedId || null,
+                segments: JSON.stringify(newSegments),
                 options: { isAddon: true, isPaid: false }
             };
         });
@@ -1119,12 +1163,17 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
         // ⚠️ KHÔNG tăng turns_completed — vì add-on chung 1 bill = chung 1 tua
         const newItemIds = itemsToInsert.map(i => i.id);
         
-        if (booking.technicianCode) {
-            // Lấy tất cả ktv được gán cho đơn hàng này
-            const ktvIds = booking.technicianCode.split(',').map((id: string) => id.trim());
-            
-            for (const ktvId of ktvIds) {
-                const { data: turn, error: turnError } = await supabase
+        // Thu thập danh sách các KTV bị ảnh hưởng bởi đợt thêm dịch vụ này
+        const affectedKtvIds = new Set<string>();
+        itemsToInsert.forEach(i => {
+            if (i.technicianCodes && Array.isArray(i.technicianCodes)) {
+                i.technicianCodes.forEach((ktvId: string) => affectedKtvIds.add(ktvId));
+            }
+        });
+        
+        if (affectedKtvIds.size > 0) {
+            for (const ktvId of Array.from(affectedKtvIds)) {
+                const { data: turn } = await supabase
                     .from('TurnQueue')
                     .select('*')
                     .eq('current_order_id', bookingId)
@@ -1133,13 +1182,21 @@ export async function addAddonServices(bookingId: string, items: { serviceId: st
 
                 if (turn) {
                     const updateData: any = {};
+                    
+                    // Tính tổng duration các addon mà KTV này phải làm
+                    let addedDurationForThisKtv = 0;
+                    itemsToInsert.forEach((item, idx) => {
+                         if (item.technicianCodes && item.technicianCodes.includes(ktvId)) {
+                              addedDurationForThisKtv += detailedItems[idx].duration;
+                         }
+                    });
 
                     // 6a. Tăng estimated_end_time
-                    if (turn.estimated_end_time) {
+                    if (turn.estimated_end_time && addedDurationForThisKtv > 0) {
                         const [h, m, s] = turn.estimated_end_time.split(':').map(Number);
                         const d = new Date();
                         d.setHours(h, m, s || 0);
-                        d.setMinutes(d.getMinutes() + addedDuration);
+                        d.setMinutes(d.getMinutes() + addedDurationForThisKtv);
                         
                         updateData.estimated_end_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
                     }
