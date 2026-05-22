@@ -25,6 +25,15 @@ const LANG_FLAG: Record<string, string> = {
   vi: '🇻🇳', en: '🇺🇸', cn: '🇨🇳', jp: '🇯🇵', kr: '🇰🇷',
 };
 
+const SOURCE_MAP: Record<string, { label: string; color: string; bg: string }> = {
+  WEB_BOOKING: { label: 'Web Booking', color: 'text-blue-600', bg: 'bg-blue-50' },
+  HOME_BOOKING: { label: 'Đặt tại nhà', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+  VIP_BOOKING: { label: 'App VIP', color: 'text-amber-600', bg: 'bg-amber-50' },
+  VIP_WALK_IN: { label: 'App VIP (Walk-in)', color: 'text-orange-600', bg: 'bg-orange-50' },
+  STANDARD_BOOKING: { label: 'App Standard', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+  STANDARD_WALK_IN: { label: 'Tại quầy', color: 'text-gray-600', bg: 'bg-gray-100' },
+};
+
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 
 const formatDate = (dateStr: string) => {
@@ -53,6 +62,23 @@ const WebBookingCard = ({ booking, onConfirm, onReject, onViewDetail, isLoading 
   const isNew = booking.status === 'NEW';
   const flag = LANG_FLAG[booking.customerLang ?? 'vi'] ?? '🌐';
   const totalDuration = booking.items.reduce((sum, i) => sum + i.duration * i.quantity, 0);
+
+  let parsedNotes: any = null;
+  let finalNote = booking.notes || '';
+  if (booking.notes && typeof booking.notes === 'string' && booking.notes.trim().startsWith('{')) {
+      try {
+          parsedNotes = JSON.parse(booking.notes);
+          if (parsedNotes.type === 'VIP_APPOINTMENT') {
+              finalNote = 'Ghi chú VIP: Khách đặt trước.';
+              if (parsedNotes.warnings && parsedNotes.warnings.length > 0) {
+                  finalNote += ` Cảnh báo: ${parsedNotes.warnings.join(', ')}`;
+              }
+          }
+      } catch(e) {}
+  }
+
+  const displayTime = parsedNotes?.timeSlot || booking.timeBooking;
+  const sourceCfg = SOURCE_MAP[booking.source] ?? { label: booking.source || 'N/A', color: 'text-gray-600', bg: 'bg-gray-100' };
 
   return (
     <motion.div
@@ -104,12 +130,16 @@ const WebBookingCard = ({ booking, onConfirm, onReject, onViewDetail, isLoading 
             <CalendarDays size={10} className="text-indigo-400" />
             {formatDate(booking.bookingDate)}
           </span>
-          {booking.timeBooking && (
+          {displayTime && (
             <span className="flex items-center gap-1 text-[11px] text-gray-500 bg-gray-50 px-2 py-1 rounded-lg font-medium">
               <Clock size={10} className="text-indigo-400" />
-              {booking.timeBooking}
+              {displayTime}
             </span>
           )}
+          <span className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg ${sourceCfg.color} ${sourceCfg.bg}`}>
+            <Globe size={10} />
+            {sourceCfg.label}
+          </span>
           {totalDuration > 0 && (
             <span className="flex items-center gap-1 text-[11px] text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg font-bold">
               ~{totalDuration}p
@@ -133,10 +163,10 @@ const WebBookingCard = ({ booking, onConfirm, onReject, onViewDetail, isLoading 
         )}
 
         {/* Note preview */}
-        {booking.notes && (
+        {finalNote && (
           <div className="flex items-start gap-1.5 mb-3 text-[11px] text-amber-700 bg-amber-50 px-2.5 py-2 rounded-lg">
             <MessageSquare size={10} className="mt-0.5 shrink-0" />
-            <span className="line-clamp-1">{booking.notes}</span>
+            <span className="line-clamp-2">{finalNote}</span>
           </div>
         )}
 

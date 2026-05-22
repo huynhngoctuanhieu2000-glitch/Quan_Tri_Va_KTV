@@ -34,6 +34,7 @@ export async function getDispatchData(date: string) {
         const { data: bData, error: bError } = await supabase
             .from('Bookings')
             .select('id, billCode, customerName, customerLang, customerPhone, timeBooking, bookingDate, createdAt, updatedAt, status, totalAmount, paymentMethod, technicianCode, bedId, roomName, notes, accessToken, rating, feedbackNote, focusAreaNote, timeStart, timeEnd')
+            .in('source', ['STANDARD_WALK_IN', 'VIP_WALK_IN', 'STANDARD_MENU', 'VIP_MENU'])
             .gte('bookingDate', startOfDay)
             .lte('bookingDate', endOfDay)
             .neq('status', 'CANCELLED')
@@ -134,10 +135,23 @@ export async function getDispatchData(date: string) {
                             console.warn(`⚠️ [Dispatch] Service lookup failed for sId: "${sId}". Defaulting to 60p.`);
                         }
 
+                        // 🔥 VIP FIX: Lấy vipDuration/duration nếu có trong options
+                        let parsedOptions: any = {};
+                        try {
+                            parsedOptions = typeof i.options === 'string' ? JSON.parse(i.options) : (i.options || {});
+                        } catch(e) {}
+
+                        if (parsedOptions?.vipDuration) {
+                            finalDuration = Number(parsedOptions.vipDuration);
+                        } else if (parsedOptions?.duration) {
+                            finalDuration = Number(parsedOptions.duration);
+                        }
+
                         return {
                             ...i,
-                            service_name: svcInfo?.name || `DV ${sId.toUpperCase()}`,
-                            serviceName: svcInfo?.name || `DV ${sId.toUpperCase()}`, // Thêm camelCase cho đồng bộ
+                            options: parsedOptions,
+                            service_name: parsedOptions?.displayName || svcInfo?.name || `DV ${sId.toUpperCase()}`,
+                            serviceName: parsedOptions?.displayName || svcInfo?.name || `DV ${sId.toUpperCase()}`, // Thêm camelCase cho đồng bộ
                             service_description: svcInfo?.description || '',
                             duration: finalDuration,
                             is_utility: svcInfo?.is_utility ?? (sId === 'nhs0900'), // ✅ is_utility, fallback legacy
@@ -969,6 +983,7 @@ export async function createQuickBooking(data: {
                 billCode,
                 status: 'NEW',
                 customerLang: data.customerLang || 'vi',
+                source: 'STANDARD_WALK_IN', // Default source cho đơn vãng lai
                 bookingDate: `${data.bookingDate} ${new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' })}`,
                 totalAmount: totalAmount,
                 paymentMethod: 'Tiền mặt', // Mặc định

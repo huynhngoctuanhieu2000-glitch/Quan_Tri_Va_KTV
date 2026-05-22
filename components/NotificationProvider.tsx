@@ -376,7 +376,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             {/* TOAST UI */}
             {role?.id === 'ktv' ? (
                 // GIAO DIỆN TIN NHẮN CHO KTV (Trên đầu)
-                <div className="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+                <div suppressHydrationWarning className="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
                     <AnimatePresence>
                         {sortedToasts.filter(n => !n.isRead).length >= 2 && (
                             <motion.div
@@ -423,7 +423,7 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 </div>
             ) : (
                 // GIAO DIỆN TOAST CHO QUẦY (Dưới góc)
-                <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
+                <div suppressHydrationWarning className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
                     {/* Nút đóng tất cả — chỉ xuất hiện khi có >= 2 thông báo */}
                     <AnimatePresence>
                         {sortedToasts.length >= 2 && (

@@ -32,7 +32,7 @@
 | `totalAmount` | numeric | Tổng tiền đơn hàng |
 | `paymentMethod` | text | Phương thức thanh toán |
 | `status` | BookingStatus | Trạng thái: NEW → PREPARING → READY → IN_PROGRESS → COMPLETED → FEEDBACK → CLEANING → DONE |
-| `source` | text | Phân loại nguồn đơn hàng: `STANDARD_MENU`, `VIP_MENU`, `WEB_BOOKING` (default: `STANDARD_MENU`) |
+| `source` | text | Phân loại nguồn đơn hàng: `STANDARD_WALK_IN`, `VIP_MENU`, `WEB_BOOKING` (default: `STANDARD_WALK_IN`) |
 | `rating` | numeric | Rating tổng đơn hàng (legacy — ít dùng) |
 | `tipAmount` | numeric | Tiền tip khách gửi |
 | `violations` | jsonb | Danh sách vi phạm khách phản hồi |

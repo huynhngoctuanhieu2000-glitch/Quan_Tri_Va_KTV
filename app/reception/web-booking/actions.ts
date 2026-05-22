@@ -38,6 +38,7 @@ export interface WebBooking {
   createdAt: string;
   updatedAt: string;
   accessToken: string | null;
+  source: string;
   items: WebBookingItem[];
 }
 
@@ -55,14 +56,14 @@ export async function getWebBookings(startDate: string, endDate: string) {
     const startOfRange = `${startDate} 00:00:00`;
     const endOfRange = `${endDate} 23:59:59`;
 
-    // Fetch bookings with billCode starting with 'WB' (web bookings only), excluding cancelled
+    // Fetch bookings by source, excluding cancelled
     const { data: bookings, error: bError } = await supabase
       .from('Bookings')
       .select('*')
       .gte('bookingDate', startOfRange)
       .lte('bookingDate', endOfRange)
       .neq('status', 'CANCELLED')
-      .like('billCode', 'WB%') // Only web bookings
+      .in('source', ['WEB_BOOKING', 'HOME_BOOKING', 'VIP_BOOKING', 'STANDARD_BOOKING'])
       .order('createdAt', { ascending: false });
 
     if (bError) throw bError;
@@ -101,14 +102,27 @@ export async function getWebBookings(startDate: string, endDate: string) {
         .map((i: any) => {
           const svcKey = String(i.serviceId || '').toLowerCase();
           const svcInfo = servicesMap[svcKey];
+          
+          let parsedOptions = i.options ?? {};
+          if (typeof i.options === 'string') {
+              try { parsedOptions = JSON.parse(i.options); } catch(e) {}
+          }
+
+          let finalDuration = svcInfo?.duration ?? i.duration ?? 60;
+          if (parsedOptions?.vipDuration) {
+              finalDuration = Number(parsedOptions.vipDuration);
+          } else if (parsedOptions?.duration) {
+              finalDuration = Number(parsedOptions.duration);
+          }
+
           return {
             id: i.id,
             serviceId: i.serviceId || '',
-            serviceName: svcInfo?.name || `Dịch vụ ${i.serviceId}`,
-            duration: svcInfo?.duration ?? i.duration ?? 60,
+            serviceName: parsedOptions?.displayName || svcInfo?.name || `Dịch vụ ${i.serviceId}`,
+            duration: finalDuration,
             price: i.price ?? svcInfo?.price ?? 0,
             quantity: i.quantity ?? 1,
-            options: i.options ?? {},
+            options: parsedOptions,
           };
         });
 
@@ -128,6 +142,7 @@ export async function getWebBookings(startDate: string, endDate: string) {
         createdAt: b.createdAt || '',
         updatedAt: b.updatedAt || '',
         accessToken: b.accessToken || null,
+        source: b.source || 'WEB_BOOKING',
         items: bookingItems,
       };
     });
@@ -149,9 +164,15 @@ export async function confirmWebBooking(bookingId: string) {
     const supabase = getSupabaseAdmin();
     if (!supabase) throw new Error('Supabase admin not initialized');
 
+    // Lấy thông tin source hiện tại để map sang loại tương ứng
+    const { data: bData } = await supabase.from('Bookings').select('source').eq('id', bookingId).single();
+    let newSource = 'STANDARD_WALK_IN';
+    if (bData?.source === 'VIP_BOOKING') newSource = 'VIP_WALK_IN';
+
     const { error } = await supabase
       .from('Bookings')
       .update({
+        source: newSource,
         updatedAt: new Date().toISOString(),
       })
       .eq('id', bookingId)

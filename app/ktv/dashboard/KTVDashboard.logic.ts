@@ -1791,6 +1791,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
         settings,
         walletBalance,
         walletTimeline,
+        forceRefresh: () => {
+            if (fetchBookingRef.current) fetchBookingRef.current();
+        },
         fetchWalletBalance: async () => {
             if (!ktvId) return;
             try {

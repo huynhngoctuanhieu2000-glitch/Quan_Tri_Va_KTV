@@ -9,7 +9,7 @@ import {
   ClipboardList, Coffee, LogOut, Sparkles, User, Users,
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
   Dumbbell, Quote, BookOpen, BellRing, QrCode,
-  ChevronDown, ChevronUp, Heart, MicOff, Banknote, TrendingDown, TrendingUp
+  ChevronDown, ChevronUp, Heart, MicOff, Banknote, TrendingDown, TrendingUp, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'next/navigation';
@@ -678,7 +678,19 @@ function ScreenTimer({ logic }: { logic: any }) {
             ) : null;
           })()}
         </div>
-        <button 
+        <div className="flex gap-2">
+          {isTimerRunning && (
+            <button 
+              onClick={() => logic.forceRefresh?.()}
+              className="flex flex-col items-center gap-1 text-slate-400 active:scale-90 transition-all shrink-0"
+            >
+              <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200 shadow-sm">
+                <RefreshCw size={22} />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-tighter">Đồng bộ</span>
+            </button>
+          )}
+          <button 
             onClick={() => logic.setShowProcedure(true)}
             className="flex flex-col items-center gap-1 text-emerald-600 active:scale-90 transition-all shrink-0"
           >
@@ -687,6 +699,7 @@ function ScreenTimer({ logic }: { logic: any }) {
             </div>
             <span className="text-[10px] font-black uppercase tracking-tighter">Quy trình</span>
           </button>
+        </div>
       </div>
 
       {/* Main Timer Display */}

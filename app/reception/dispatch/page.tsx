@@ -190,7 +190,10 @@ export default function DispatchBoardPage() {
     const channel = supabase
       .channel('dispatch_board_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Bookings' }, (payload) => {
-        console.log("🔔 [Dispatch] New Booking detected!", payload.new.id);
+        const newBooking = payload.new;
+        if (!['STANDARD_WALK_IN', 'VIP_WALK_IN', 'STANDARD_MENU', 'VIP_MENU'].includes(newBooking?.source)) return;
+        
+        console.log("🔔 [Dispatch] New Booking detected!", newBooking.id);
         
         // NotificationProvider will handle the sound via StaffNotifications trigger
         // Always refetch on INSERT to get related BookingItems & mapping
@@ -404,23 +407,25 @@ export default function DispatchBoardPage() {
           else if (b.status === 'DONE' || b.status === 'CANCELLED') dStatus = 'DONE';
           else if (hasAssignedKtv) dStatus = 'PREPARING'; // Fallback for transition state
           
-          return {
-            id: b.id,
-            billCode: b.billCode || 'N/A',
-            customerName: b.customerName || 'Khách vãng lai',
-            customerLang: b.customerLang || 'vi',
-            phone: b.customerPhone || '',
-            time: b.timeBooking || (b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'),
-            dispatchStatus: dStatus,
-            createdAt: b.createdAt || new Date().toISOString(),
-            updatedAt: b.updatedAt,
-            totalAmount: b.totalAmount || 0,
-            paymentMethod: b.paymentMethod || 'Chưa rõ',
-            rawStatus: b.status,
-            hasAssignedKtv,
-            accessToken: b.accessToken || null,
-            rating: b.rating || null,
-            feedbackNote: b.feedbackNote || null,
+            const calculatedRating = b.rating || (b.BookingItems || []).find((i: any) => i.itemRating != null)?.itemRating || null;
+            
+            return {
+              id: b.id,
+              billCode: b.billCode || 'N/A',
+              customerName: b.customerName || 'Khách vãng lai',
+              customerLang: b.customerLang || 'vi',
+              phone: b.customerPhone || '',
+              time: b.timeBooking || (b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'),
+              dispatchStatus: dStatus,
+              createdAt: b.createdAt || new Date().toISOString(),
+              updatedAt: b.updatedAt,
+              totalAmount: b.totalAmount || 0,
+              paymentMethod: b.paymentMethod || 'Chưa rõ',
+              rawStatus: b.status,
+              hasAssignedKtv,
+              accessToken: b.accessToken || null,
+              rating: calculatedRating,
+              feedbackNote: b.feedbackNote || null,
             timeStart: b.timeStart || null,
             timeEnd: b.timeEnd || null,
             services: (b.BookingItems || []).map((bi: any) => {
@@ -436,6 +441,35 @@ export default function DispatchBoardPage() {
                   parsedSegments = typeof bi.segments === 'string' ? JSON.parse(bi.segments) : (Array.isArray(bi.segments) ? bi.segments : []);
               } catch(e) { parsedSegments = []; }
 
+              const parsedOptions = typeof bi.options === 'string' ? JSON.parse(bi.options) : (bi.options || {});
+
+              let parsedNotes: any = null;
+              let finalAdminNote = '';
+              if (b.notes) {
+                  if (typeof b.notes === 'string' && b.notes.trim().startsWith('{')) {
+                      try { parsedNotes = JSON.parse(b.notes); } catch(e) {}
+                  } else if (typeof b.notes === 'object') {
+                      parsedNotes = b.notes;
+                  } else {
+                      finalAdminNote = String(b.notes);
+                  }
+                  
+                  if (parsedNotes) {
+                      if (parsedNotes.type === 'VIP_APPOINTMENT') {
+                          finalAdminNote = `Gói VIP (${parsedNotes.duration} phút).`;
+                          if (parsedNotes.timeSlot) finalAdminNote += ` Giờ hẹn: ${parsedNotes.timeSlot}.`;
+                          if (parsedNotes.confidence !== 'CONFIRMED') finalAdminNote += ` (Cần xác nhận).`;
+                          if (parsedNotes.warnings && parsedNotes.warnings.length > 0) {
+                              finalAdminNote += `\n⚠️ Cảnh báo: ${parsedNotes.warnings.join(', ')}`;
+                          }
+                      } else {
+                          finalAdminNote = typeof b.notes === 'string' ? b.notes : JSON.stringify(b.notes);
+                      }
+                  }
+              }
+
+              const forcedStartTime = parsedOptions?.timeSlot || parsedNotes?.timeSlot;
+
               const techCodes: string[] = Array.isArray(bi.technicianCodes) ? bi.technicianCodes : (bi.technicianCodes ? [bi.technicianCodes] : []);
               let staffList: any[] = [];
 
@@ -447,9 +481,9 @@ export default function DispatchBoardPage() {
                       let segments: WorkSegment[] = parsedSegments.filter((s: any) => s.ktvId === tCode);
                       
                       if (segments.length === 0) {
-                          const st = formatTime(turn?.start_time) || b.timeBooking || getCurrentTime();
+                          const st = formatTime(turn?.start_time) || forcedStartTime || b.timeBooking || getCurrentTime();
                           // Chia đều duration cho từng KTV khi có nhiều KTV cùng 1 dịch vụ
-                          const totalDur = bi.duration ?? 0;
+                          const totalDur = parsedOptions?.vipDuration || bi.duration || 0;
                           const dur = techCodes.length > 1 ? Math.ceil(totalDur / techCodes.length) : totalDur;
                           segments = [{
                               id: `seg-${genId()}`,
@@ -475,8 +509,8 @@ export default function DispatchBoardPage() {
                       let segments: WorkSegment[] = parsedSegments.filter((s: any) => s.ktvId === t.employee_id);
                       
                       if (segments.length === 0) {
-                          const st = formatTime(t.start_time) || b.timeBooking || getCurrentTime();
-                          const dur = bi.duration ?? 0;
+                          const st = formatTime(t.start_time) || forcedStartTime || b.timeBooking || getCurrentTime();
+                          const dur = parsedOptions?.vipDuration || bi.duration || 0;
                           segments = [{
                               id: `seg-${genId()}`,
                               roomId: t.room_id || bi.roomName || b.roomName,
@@ -498,8 +532,8 @@ export default function DispatchBoardPage() {
               } else {
                   // Chưa có KTV gán — ưu tiên dùng segments từ DB (VD: từ splitBookingItem)
                   const dbSeg = parsedSegments.length > 0 ? parsedSegments[0] : null;
-                  const fallbackStart = dbSeg?.startTime || getCurrentTime();
-                  const fallbackDur = dbSeg?.duration || Number(bi.duration) || 0;
+                  const fallbackStart = dbSeg?.startTime || forcedStartTime || getCurrentTime();
+                  const fallbackDur = dbSeg?.duration || parsedOptions?.vipDuration || Number(bi.duration) || 0;
                   staffList = [{
                       id: `st-${bi.id}`,
                       ktvId: '',
@@ -516,18 +550,18 @@ export default function DispatchBoardPage() {
                   }];
               }
 
-              const parsedOptions = typeof bi.options === 'string' ? JSON.parse(bi.options) : (bi.options || {});
+
 
               return {
                 id: bi.id,
                 serviceId: bi.serviceId,
                 serviceName: bi.serviceName || bi.service_name || 'Dịch vụ',
                 serviceDescription: bi.serviceDescription || bi.service_description || '',
-                duration: Number(bi.duration) || 0,
+                duration: parsedOptions?.vipDuration || Number(bi.duration) || 0,
                 selectedRoomId: bi.roomName || b.roomName || null,
                 bedId: bi.bedId || b.bedId || null,
                 staffList: staffList,
-                adminNote: b.notes || '',
+                adminNote: finalAdminNote,
                 genderReq: parsedOptions?.therapist || 'Ngẫu nhiên',
                 strength: parsedOptions?.strength || '',
                 focus: Array.isArray(parsedOptions?.focus) ? parsedOptions.focus.join(', ') : (parsedOptions?.focus || b.focusAreaNote || ''),

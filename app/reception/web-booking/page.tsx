@@ -126,8 +126,9 @@ export default function WebBookingPage() {
         { event: 'INSERT', schema: 'public', table: 'Bookings' },
         (payload: any) => {
           const newBooking = payload.new;
-          // Only handle web bookings (billCode starting with WB)
-          if (newBooking?.status === 'NEW' && String(newBooking?.billCode || '').startsWith('WB')) {
+          // Only handle specific sources
+          const targetSources = ['WEB_BOOKING', 'HOME_BOOKING', 'VIP_BOOKING', 'STANDARD_BOOKING'];
+          if (newBooking?.status === 'NEW' && targetSources.includes(newBooking?.source)) {
             console.log('📩 [WebBooking] New booking received:', newBooking.billCode);
             playSound?.('new_booking');
             showToast(`📩 Đơn mới: ${newBooking.billCode} — ${newBooking.customerName}!`, 'success');
