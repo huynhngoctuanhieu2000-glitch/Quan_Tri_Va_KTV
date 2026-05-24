@@ -159,6 +159,8 @@ export async function updateStaffMember(id: string, updates: any) {
         if (updates.height !== undefined) staffPayload.height = updates.height || null;
         if (updates.weight !== undefined) staffPayload.weight = updates.weight || null;
         if (updates.skills !== undefined) staffPayload.skills = updates.skills;
+        if (updates.isActiveVipMenu !== undefined) staffPayload.is_active_vip_menu = updates.isActiveVipMenu;
+        if (updates.isHomeSpa !== undefined) staffPayload.is_home_spa = updates.isHomeSpa;
 
         const { error: staffError } = await supabase
             .from('Staff')

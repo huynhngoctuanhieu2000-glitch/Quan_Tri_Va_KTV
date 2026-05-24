@@ -261,6 +261,8 @@
 | `join_date` | date | Ngày vào làm |
 | `height` | integer | Chiều cao (cm) |
 | `weight` | integer | Cân nặng (kg) |
+  | is_active_vip_menu | boolean | Hiển thị lên VIP Menu (true/false) |
+  | is_home_spa | boolean | Đi được Home Spa (true/false) |
 | `skills` | jsonb | Kỹ năng chuyên môn |
 | `created_at` | timestamptz | Thời điểm tạo |
 

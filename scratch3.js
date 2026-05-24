@@ -1,67 +1,39 @@
-const { loadEnvConfig } = require('@next/env');
-loadEnvConfig(process.cwd());
-const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const fs = require('fs');
+const file = 'components/EmployeeDetailModal.tsx';
+let content = fs.readFileSync(file, 'utf8');
 
-(async () => {
-    const techCode = 'NH007'; // Let's guess it's NH007 based on the data
+const checkboxHtml = `
+                  {isEditing ? (
+                    <div className="space-y-3 mt-4 pt-4 border-t border-gray-100">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={editedEmployee.isActiveVipMenu || false} onChange={(e) => updateField('isActiveVipMenu', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
+                        <span className="text-sm font-medium text-gray-700">Hiển thị trên VIP Menu</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={editedEmployee.isHomeSpa || false} onChange={(e) => updateField('isHomeSpa', e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
+                        <span className="text-sm font-medium text-gray-700">Đi Home Spa</span>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-500">VIP Menu:</span>
+                        <span className="text-sm font-medium text-gray-900">{editedEmployee.isActiveVipMenu ? 'Có' : 'Không'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-500">Home Spa:</span>
+                        <span className="text-sm font-medium text-gray-900">{editedEmployee.isHomeSpa ? 'Có' : 'Không'}</span>
+                      </div>
+                    </div>
+                  )}`;
 
-    const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-    const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-    const todayStr = nowVn.toISOString().split('T')[0];
-    const todayStartStr = `${todayStr}T00:00:00+07:00`;
+const target = "isEditing={isEditing} onChange={(val) => updateField('weight', val)} />";
+const parts = content.split(target);
 
-    // 2. Fetch Historical Ledger Totals (Snapshot)
-    const { data: ledgerData } = await supabase
-        .from('KTVDailyLedger')
-        .select('total_commission, total_tip, total_adjustment, total_withdrawn')
-        .eq('staff_id', techCode);
-
-    let sum_commission = 0;
-    let sum_tip = 0;
-    let sum_adjustment = 0;
-    let sum_withdrawn = 0;
-
-    (ledgerData || []).forEach(row => {
-        sum_commission += Number(row.total_commission || 0);
-        sum_tip += Number(row.total_tip || 0);
-        sum_adjustment += Number(row.total_adjustment || 0);
-        sum_withdrawn += Number(row.total_withdrawn || 0);
-    });
-
-    // 3. Fetch TODAY's Real-time Data
-    const { data: bookings } = await supabase
-        .from('Bookings')
-        .select(`
-            id, timeStart, timeEnd, status, technicianCode,
-            BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
-        `)
-        .gte('timeStart', todayStartStr)
-        .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
-
-    console.log('Bookings today:', bookings);
-    
-    let today_commission = 0;
-
-    // Today's adjustments and withdrawals (Approved)
-    const { data: todayAdjustments } = await supabase
-        .from('WalletAdjustments')
-        .select('amount')
-        .eq('staff_id', techCode)
-        .gte('created_at', todayStartStr);
-    const today_adjustment = (todayAdjustments || []).reduce((sum, a) => sum + Number(a.amount), 0);
-
-    const total_commission = sum_commission + today_commission;
-    const total_adjustment = sum_adjustment + today_adjustment;
-
-    const gross_income = total_commission + total_adjustment;
-    
-    console.log('Balance/route.ts Gross Income:', gross_income);
-    console.log('sum_commission:', sum_commission);
-    console.log('sum_adjustment:', sum_adjustment);
-    console.log('today_commission:', today_commission);
-    console.log('today_adjustment:', today_adjustment);
-    
-    const { data: tlAdj } = await supabase.from('WalletAdjustments').select('*').eq('staff_id', techCode);
-    console.log('All Adjustments for NH007:', tlAdj);
-})();
+if (parts.length > 1) {
+  content = parts[0] + target + '\n' + checkboxHtml + parts[1];
+  fs.writeFileSync(file, content, 'utf8');
+  console.log('Success for ' + file);
+} else {
+  console.log('Target not found');
+}

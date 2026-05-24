@@ -81,6 +81,8 @@ export interface Employee {
   baseSalary: number;
   commissionRate: number;
   rating: number;
+  isActiveVipMenu?: boolean;
+  isHomeSpa?: boolean;
 }
 
 export interface Role {

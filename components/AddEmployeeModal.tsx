@@ -54,6 +54,8 @@ export function AddEmployeeModal({ isOpen, onClose, onSuccess }: AddEmployeeModa
         join_date: new Date().toISOString().split('T')[0],
         height: '',
         weight: '',
+        isActiveVipMenu: false,
+        isHomeSpa: false,
         skills: { ...DEFAULT_SKILLS } as Record<string, SkillLevel>,
     });
 
@@ -87,6 +89,8 @@ export function AddEmployeeModal({ isOpen, onClose, onSuccess }: AddEmployeeModa
                 gender: 'Nữ', birthday: '', id_card: '', bank_account: '', bank_name: '',
                 avatar_url: '', position: 'Kỹ Thuật Viên', experience: '0 năm',
                 join_date: new Date().toISOString().split('T')[0], height: '', weight: '',
+        isActiveVipMenu: false,
+        isHomeSpa: false,
                 skills: { ...DEFAULT_SKILLS } as Record<string, SkillLevel>,
             });
         } else {
@@ -171,6 +175,16 @@ export function AddEmployeeModal({ isOpen, onClose, onSuccess }: AddEmployeeModa
                                         <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Cân nặng (kg)</label>
                                         <input type="number" name="weight" value={formData.weight} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" />
                                     </div>
+                                  <div className="flex flex-col justify-end space-y-2">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input type="checkbox" name="isActiveVipMenu" checked={formData.isActiveVipMenu} onChange={(e) => setFormData(prev => ({ ...prev, isActiveVipMenu: e.target.checked }))} className="w-4 h-4 text-indigo-600 rounded" />
+                                          <span className="text-sm font-medium text-gray-700">VIP Menu</span>
+                                      </label>
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                          <input type="checkbox" name="isHomeSpa" checked={formData.isHomeSpa} onChange={(e) => setFormData(prev => ({ ...prev, isHomeSpa: e.target.checked }))} className="w-4 h-4 text-indigo-600 rounded" />
+                                          <span className="text-sm font-medium text-gray-700">Home Spa</span>
+                                      </label>
+                                  </div>
                                 </div>
                             </div>
 

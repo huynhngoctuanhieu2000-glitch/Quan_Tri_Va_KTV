@@ -137,7 +137,11 @@ export default function EmployeeManagementPage() {
                                             </div>
                                         </td>
                                         <td className="p-4">
-                                            <div className="text-sm text-gray-900 font-medium">{emp.position}</div>
+                                            <div className="text-sm text-gray-900 font-medium flex items-center gap-2">
+                                                {emp.position}
+                                                {emp.isActiveVipMenu && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200">VIP</span>}
+                                                {emp.isHomeSpa && <span className="px-2 py-0.5 bg-sky-100 text-sky-700 text-[10px] font-bold rounded-full border border-sky-200">Home Spa</span>}
+                                            </div>
                                             <div className="text-xs text-gray-500">{emp.experience} {t.experienceSuffix}</div>
                                         </td>
                                         <td className="p-4">

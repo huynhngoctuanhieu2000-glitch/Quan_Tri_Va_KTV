@@ -58,6 +58,8 @@ export const useEmployeeManagement = () => {
                 baseSalary: 0,
                 commissionRate: 0,
                 rating: 5.0,
+                isActiveVipMenu: s.is_active_vip_menu || false,
+                isHomeSpa: s.is_home_spa || false,
                 skills: (() => {
                     const dbSkills = s.skills && Object.keys(s.skills).length > 0 ? s.skills : DEFAULT_SKILLS;
                     const parsedSkills: any = {};
