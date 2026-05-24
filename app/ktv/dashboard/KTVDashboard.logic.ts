@@ -1235,6 +1235,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
 
             if (hasStarted) {
+                const timerRunningForMs = Date.now() - timerStartMsRef.current;
+                if (timerStartMsRef.current && timerRunningForMs < 10000) {
+                    console.warn(`🛡️ [AutoFinish] Blocked! Timer reached 0 but it only started ${timerRunningForMs}ms ago. This is likely a state race condition.`);
+                    return;
+                }
                 console.log('🏁 [AutoFinish] Timer reached 0, calling handleFinishTimer...');
                 handleFinishTimerRef.current();
             } else {
