@@ -227,12 +227,34 @@ export async function processDispatch(bookingId: string, dispatchData: {
 
         // 🔥 PRE-PROCESSOR: Chống ghi đè mất thời gian đã chạy (Stale Data Overwrite)
         if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
-            const { data: currentItems } = await supabase.from('BookingItems').select('id, segments').eq('bookingId', bookingId);
+            const { data: currentItems } = await supabase.from('BookingItems').select('id, segments, status, technicianCodes').eq('bookingId', bookingId);
             if (currentItems) {
                 dispatchData.itemUpdates = dispatchData.itemUpdates.map(updateItem => {
                     const dbItem = currentItems.find(i => i.id === updateItem.id);
                     if (!dbItem) return updateItem;
                     
+                    // 1. NGĂN LÙI TRẠNG THÁI CA ĐANG LÀM / ĐÃ XONG
+                    if (updateItem.status && dbItem.status) {
+                        const STATUS_WEIGHT: Record<string, number> = { 'NEW': 0, 'WAITING': 1, 'PREPARING': 2, 'READY': 3, 'IN_PROGRESS': 4, 'CLEANING': 5, 'FEEDBACK': 6, 'DONE': 7 };
+                        const dbWeight = STATUS_WEIGHT[dbItem.status] || 0;
+                        let incomingWeight = STATUS_WEIGHT[updateItem.status] || 0;
+                        
+                        // 2. ÉP TRẠNG THÁI VỀ WAITING NẾU CHƯA CÓ KTV NHƯNG LẠI BỊ GÁN PREPARING
+                        if (updateItem.status === 'PREPARING') {
+                            const hasKtv = (updateItem.technicianCodes && updateItem.technicianCodes.length > 0) || (dbItem.technicianCodes && dbItem.technicianCodes.length > 0);
+                            if (!hasKtv && dbWeight < 2) {
+                                // Nếu chưa gán KTV và ở DB đang là NEW/WAITING -> Giữ nguyên WAITING
+                                updateItem.status = 'WAITING';
+                                incomingWeight = STATUS_WEIGHT[updateItem.status];
+                            }
+                        }
+
+                        // Nếu DB đang ở trạng thái lớn hơn, không cho phép lùi
+                        if (dbWeight > incomingWeight) {
+                            updateItem.status = dbItem.status;
+                        }
+                    }
+
                     let dbSegs: any[] = [];
                     try { dbSegs = typeof dbItem.segments === 'string' ? JSON.parse(dbItem.segments) : (dbItem.segments || []); } catch {}
                     
@@ -382,6 +404,7 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
         bedId?: string | null, 
         technicianCodes?: string[] | string | null, 
         segments?: any[],
+        status?: string,
         options: any 
     }[];
 }) {
@@ -392,12 +415,32 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
 
         // 🔥 PRE-PROCESSOR: Chống ghi đè mất thời gian đã chạy (Stale Data Overwrite)
         if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
-            const { data: currentItems } = await supabase.from('BookingItems').select('id, segments').eq('bookingId', bookingId);
+            const { data: currentItems } = await supabase.from('BookingItems').select('id, segments, status, technicianCodes').eq('bookingId', bookingId);
             if (currentItems) {
                 dispatchData.itemUpdates = dispatchData.itemUpdates.map(updateItem => {
                     const dbItem = currentItems.find(i => i.id === updateItem.id);
                     if (!dbItem) return updateItem;
                     
+                    // 1. NGĂN LÙI TRẠNG THÁI CA ĐANG LÀM / ĐÃ XONG
+                    if (updateItem.status && dbItem.status) {
+                        const STATUS_WEIGHT: Record<string, number> = { 'NEW': 0, 'WAITING': 1, 'PREPARING': 2, 'READY': 3, 'IN_PROGRESS': 4, 'CLEANING': 5, 'FEEDBACK': 6, 'DONE': 7 };
+                        const dbWeight = STATUS_WEIGHT[dbItem.status] || 0;
+                        let incomingWeight = STATUS_WEIGHT[updateItem.status] || 0;
+                        
+                        // 2. ÉP TRẠNG THÁI VỀ WAITING NẾU CHƯA CÓ KTV NHƯNG LẠI BỊ GÁN PREPARING
+                        if (updateItem.status === 'PREPARING') {
+                            const hasKtv = (updateItem.technicianCodes && updateItem.technicianCodes.length > 0) || (dbItem.technicianCodes && dbItem.technicianCodes.length > 0);
+                            if (!hasKtv && dbWeight < 2) {
+                                updateItem.status = 'WAITING';
+                                incomingWeight = STATUS_WEIGHT[updateItem.status];
+                            }
+                        }
+
+                        if (dbWeight > incomingWeight) {
+                            updateItem.status = dbItem.status;
+                        }
+                    }
+
                     let dbSegs: any[] = [];
                     try { dbSegs = typeof dbItem.segments === 'string' ? JSON.parse(dbItem.segments) : (dbItem.segments || []); } catch {}
                     
