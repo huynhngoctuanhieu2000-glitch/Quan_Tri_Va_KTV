@@ -143,6 +143,7 @@ export default function KTVWalletPage() {
                                                                         {isPositive ? '+' : ''}{Number(item.amount).toLocaleString()}đ
                                                                     </span>
                                                                 </div>
+                                                                {item.note && <div className={`mt-1.5 text-[10px] p-2 rounded-lg ${isRejected ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500'}`}>{item.note}</div>}
                                                                 <div className="flex items-center justify-between mt-2">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-[10px] text-slate-400 font-medium">
@@ -166,7 +167,6 @@ export default function KTVWalletPage() {
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                {item.note && <div className={`mt-2 text-[10px] p-2 rounded-lg ${isRejected ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500'}`}>{item.note}</div>}
                                                             </div>
                                                         </div>
                                                     );

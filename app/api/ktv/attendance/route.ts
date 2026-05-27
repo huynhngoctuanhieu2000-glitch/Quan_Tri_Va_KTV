@@ -299,6 +299,84 @@ export async function POST(request: Request) {
             }
         }
 
+        // ─── Step 4.5: Feature-Flagged Deductions (Giặt đồ & Phạt nghỉ ĐX) ────
+        if (isAutoApprove && staffCode) {
+            try {
+                // Fetch feature_flags for this KTV
+                const { data: staffRow } = await supabase
+                    .from('Staff')
+                    .select('feature_flags')
+                    .eq('id', staffCode)
+                    .maybeSingle();
+
+                const featureFlags = (staffRow?.feature_flags || {}) as Record<string, boolean>;
+
+                // 🧦 Laundry Deduction: on CHECK_IN / LATE_CHECKIN, once per day
+                if ((checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') && featureFlags.laundry_deduction === true) {
+                    // Fetch laundry_fee from SystemConfigs
+                    const { data: laundryConf } = await supabase
+                        .from('SystemConfigs')
+                        .select('value')
+                        .eq('key', 'laundry_fee')
+                        .maybeSingle();
+                    const laundryFee = Number(String(laundryConf?.value || '20000').replace(/"/g, ''));
+
+                    // Check idempotent: already deducted today?
+                    const dayStart = `${today}T00:00:00+07:00`;
+                    const dayEnd = `${today}T23:59:59+07:00`;
+                    const { data: existingLaundry } = await supabase
+                        .from('WalletAdjustments')
+                        .select('id')
+                        .eq('staff_id', staffCode)
+                        .eq('type', 'PENALTY')
+                        .ilike('reason', 'Trừ tiền giặt đồ%')
+                        .gte('created_at', dayStart)
+                        .lte('created_at', dayEnd)
+                        .maybeSingle();
+
+                    if (!existingLaundry) {
+                        const { error: laundryErr } = await supabase
+                            .from('WalletAdjustments')
+                            .insert({
+                                staff_id: staffCode,
+                                amount: -Math.abs(laundryFee),
+                                type: 'PENALTY',
+                                reason: `Giặt đồ ngày ${today.split('-').reverse().join('/')}`,
+                                created_by: 'SYSTEM',
+                            });
+                        if (laundryErr) console.error('❌ [Laundry Deduction] Insert Error:', laundryErr);
+                        else console.log(`🧦 [Laundry] Trừ ${laundryFee}đ cho ${staffCode} ngày ${today}`);
+                    }
+                }
+
+                // ⚠️ Sudden Leave Penalty: on SUDDEN_OFF or SUDDEN_OFF_CHECKOUT
+                if ((checkType === 'SUDDEN_OFF' || selectedShiftType === 'SUDDEN_OFF_CHECKOUT') && featureFlags.sudden_leave_penalty === true) {
+                    // Fetch penalty amount from SystemConfigs
+                    const { data: penaltyConf } = await supabase
+                        .from('SystemConfigs')
+                        .select('value')
+                        .eq('key', 'ktv_sudden_off_penalty')
+                        .maybeSingle();
+                    const penaltyAmount = Number(String(penaltyConf?.value || '500000').replace(/"/g, ''));
+
+                    const { error: penaltyErr } = await supabase
+                        .from('WalletAdjustments')
+                        .insert({
+                            staff_id: staffCode,
+                            amount: -Math.abs(penaltyAmount),
+                            type: 'PENALTY',
+                            reason: `Phạt nghỉ đột xuất ngày ${today.split('-').reverse().join('/')}`,
+                            created_by: 'SYSTEM',
+                        });
+                    if (penaltyErr) console.error('❌ [Sudden Off Penalty] Insert Error:', penaltyErr);
+                    else console.log(`⚠️ [Penalty] Trừ ${penaltyAmount}đ cho ${staffCode} ngày ${today}`);
+                }
+            } catch (deductionErr) {
+                // Non-blocking: log error but don't fail the attendance request
+                console.error('❌ [Feature Deductions] Error:', deductionErr);
+            }
+        }
+
         // ─── Step 5: Notifications ──────────────────────
         const mapsLink = latitude && longitude
             ? ` — https://maps.google.com/?q=${latitude},${longitude}`

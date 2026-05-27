@@ -124,17 +124,8 @@ async function processLedgerSync(targetDateStr: string) {
         .gte('request_date', startTimeStr)
         .lte('request_date', endTimeStr);
 
-    // 4.5 Fetch Sudden Offs
-    const { data: suddenOffs } = await supabase
-        .from('KTVLeaveRequests')
-        .select('employeeId')
-        .eq('date', targetDateStr)
-        .eq('is_sudden_off', true);
-
-    const suddenOffCountMap: Record<string, number> = {};
-    (suddenOffs || []).forEach(l => {
-        suddenOffCountMap[l.employeeId] = (suddenOffCountMap[l.employeeId] || 0) + 1;
-    });
+    // 4.5 [DEPRECATED] Sudden Off penalty now handled directly in attendance API via WalletAdjustments
+    // Kept as comment for audit trail. Penalty is deducted per-staff with feature_flags check.
 
     const validBookings = (bookings || []).filter(b => b.BookingItems && b.BookingItems.length > 0);
 
@@ -147,7 +138,7 @@ async function processLedgerSync(targetDateStr: string) {
         let total_commission = 0;
         let total_tip = 0;
         let total_bonus = 0;
-        let total_penalty = (suddenOffCountMap[techCode] || 0) * suddenOffPenalty;
+        let total_penalty = 0; // Penalty now handled via WalletAdjustments (attendance API)
         
         const shiftType = ktvShiftMap.get(techCode) || 'SHIFT_1';
         let basePoints = s1Bonus;

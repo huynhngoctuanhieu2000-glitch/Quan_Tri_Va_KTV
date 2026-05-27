@@ -26,6 +26,7 @@ export type ModuleId =
   | 'staff_notifications'
   | 'device_management'
   | 'room_management'
+  | 'staff_features'
   | 'settings';
 
 export interface ModuleDefinition {

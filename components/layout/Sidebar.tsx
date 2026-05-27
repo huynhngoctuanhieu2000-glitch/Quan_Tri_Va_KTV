@@ -36,7 +36,8 @@ import {
   Tablet,
   LogOut,
   DoorOpen,
-  MessageSquare
+  MessageSquare,
+  ToggleLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -68,6 +69,7 @@ const ICONS: Record<string, React.ReactNode> = {
   device_management: <Tablet size={20} />,
   room_management: <DoorOpen size={20} />,
   staff_notifications: <Bell size={20} />,
+  staff_features: <ToggleLeft size={20} />,
   settings: <Settings size={20} />,
 };
 
@@ -99,6 +101,7 @@ const PATHS: Record<string, string> = {
   device_management: '/admin/devices',
   room_management: '/reception/rooms',
   staff_notifications: '/admin/notifications',
+  staff_features: '/admin/settings/features',
   settings: '/settings',
 };
 

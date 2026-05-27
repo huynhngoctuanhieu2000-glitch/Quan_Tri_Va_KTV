@@ -140,10 +140,16 @@ export async function GET(request: Request) {
             .gte('created_at', START_DATE);
         
         (adjustments || []).forEach(a => {
+            // Smart title based on reason content
+            let title = Number(a.amount) >= 0 ? 'Thưởng hệ thống' : 'Trừ tiền hệ thống';
+            const reason = (a.reason || '').toLowerCase();
+            if (reason.includes('giặt đồ')) title = '🧦 Giặt đồ hàng ngày';
+            else if (reason.includes('nghỉ đột xuất')) title = '⚠️ Phạt nghỉ đột xuất';
+
             timeline.push({
                 id: a.id,
                 type: Number(a.amount) >= 0 ? 'GIFT' : 'ADJUSTMENT',
-                title: Number(a.amount) >= 0 ? 'Thưởng hệ thống' : 'Trừ tiền hệ thống',
+                title,
                 amount: a.amount,
                 note: a.reason || '',
                 created_at: a.created_at,

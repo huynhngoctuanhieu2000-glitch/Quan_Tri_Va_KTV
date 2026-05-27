@@ -224,10 +224,10 @@ export async function GET(request: Request) {
         const total_commission = ledgerSummary.comm + rt_commission;
         const total_tip = ledgerSummary.tip + rt_tip;
         const total_bonus = ledgerSummary.bonus + rt_bonus;
-        const total_penalty = isPenaltyEnabled ? ledgerSummary.penalty : 0; // ⚠️ Feature flag bật/tắt phạt đột xuất
+        const total_penalty = 0; // Penalty now included in WalletAdjustments (total_adjustment)
 
         // ⚠️ Bonus KHÔNG cộng vào ví rút tiền — chỉ hiển thị ở lịch sử
-        const gross_income = total_commission + total_adjustment - total_penalty;
+        const gross_income = total_commission + total_adjustment;
         const net_balance = gross_income - total_withdrawn - total_pending;
         const available_balance = Math.max(0, net_balance - min_deposit);
         const effective_balance = Math.max(0, net_balance);
