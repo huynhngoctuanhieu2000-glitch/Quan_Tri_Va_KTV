@@ -27,7 +27,8 @@ export interface AttendanceRecord {
 
 export const usePayrollLogic = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('ALL');
   const [staffList, setStaffList] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [shifts, setShifts] = useState<any[]>([]);
@@ -44,11 +45,11 @@ export const usePayrollLogic = () => {
       const startDateISO = format(startDate, 'yyyy-MM-dd');
       const endDateISO = format(endDate, 'yyyy-MM-dd');
 
-      const [staffRes, attRes, shiftRes, leaveRes] = await Promise.all([
+      const [staffRes, attRes, shiftRes, leaveRes, usersRes] = await Promise.all([
         supabase.from('Staff').select('id, full_name').eq('status', 'ĐANG LÀM'),
         // ✅ Dùng KTVAttendance thay cho DailyAttendance (đã ngưng sử dụng)
         supabase.from('KTVAttendance')
-          .select('id, employeeId, date, checkType, status, checkedAt, checkOutTime')
+          .select('id, employeeId, date, checkType, status, checkedAt')
           .gte('date', startDateISO)
           .lte('date', endDateISO)
           .eq('status', 'CONFIRMED'),
@@ -60,6 +61,7 @@ export const usePayrollLogic = () => {
           .gte('date', startDateISO)
           .lte('date', endDateISO)
           .eq('status', 'APPROVED'),
+        supabase.from('Users').select('id, code'),
       ]);
 
       if (staffRes.data) setStaffList(staffRes.data);
@@ -68,12 +70,16 @@ export const usePayrollLogic = () => {
       // Gom CHECK_IN + CHECK_OUT cùng ngày/KTV thành 1 record
       if (attRes.data) {
         const dailyMap = new Map<string, { employee_id: string; date: string; check_in_time: string | null; check_out_time: string | null; status: string }>();
+        const userMap = new Map((usersRes.data || []).map((u: any) => [u.id, u.code]));
         
         for (const record of attRes.data) {
-          const key = `${record.employeeId}_${record.date}`;
+          // Map UUID -> Mã NV (NH0xx). Nếu không có, dùng nguyên UUID.
+          const staffCode = userMap.get(record.employeeId) || record.employeeId;
+          const key = `${staffCode}_${record.date}`;
+
           if (!dailyMap.has(key)) {
             dailyMap.set(key, {
-              employee_id: record.employeeId,
+              employee_id: staffCode,
               date: record.date,
               check_in_time: null,
               check_out_time: null,
@@ -83,11 +89,9 @@ export const usePayrollLogic = () => {
           const entry = dailyMap.get(key)!;
           
           if (record.checkType === 'CHECK_IN' || record.checkType === 'LATE_CHECKIN') {
-            // Lấy giờ từ checkedAt → convert sang HH:mm
             if (record.checkedAt) {
               const d = new Date(record.checkedAt);
-              const vnDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
-              entry.check_in_time = `${String(vnDate.getUTCHours()).padStart(2, '0')}:${String(vnDate.getUTCMinutes()).padStart(2, '0')}`;
+              entry.check_in_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             }
             if (record.checkType === 'LATE_CHECKIN') {
               entry.status = 'on_duty'; // Vẫn tính có mặt, lateMins sẽ tính riêng
@@ -96,8 +100,7 @@ export const usePayrollLogic = () => {
             if (record.checkOutTime || record.checkedAt) {
               const raw = record.checkOutTime || record.checkedAt;
               const d = new Date(raw);
-              const vnDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
-              entry.check_out_time = `${String(vnDate.getUTCHours()).padStart(2, '0')}:${String(vnDate.getUTCMinutes()).padStart(2, '0')}`;
+              entry.check_out_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
               entry.status = 'off_duty';
             }
           }
@@ -186,8 +189,16 @@ export const usePayrollLogic = () => {
       });
     });
 
-    return records.filter(r => !selectedDate || r.date === selectedDate);
-  }, [staffList, attendance, shifts, leaves, startDate, endDate, selectedDate]);
+    let filteredRecords = records;
+    if (dateRange && dateRange.start && dateRange.end) {
+        filteredRecords = filteredRecords.filter(r => r.date >= dateRange.start && r.date <= dateRange.end);
+    }
+    if (selectedStaffId && selectedStaffId !== 'ALL') {
+        filteredRecords = filteredRecords.filter(r => r.employeeId === selectedStaffId);
+    }
+
+    return filteredRecords;
+  }, [staffList, attendance, shifts, leaves, startDate, endDate, dateRange, selectedStaffId]);
 
   const summary = useMemo(() => {
     return {
@@ -201,8 +212,11 @@ export const usePayrollLogic = () => {
   return {
     selectedMonth,
     setSelectedMonth,
-    selectedDate,
-    setSelectedDate,
+    dateRange,
+    setDateRange,
+    selectedStaffId,
+    setSelectedStaffId,
+    staffList,
     processedData,
     summary,
     loading,

@@ -18,7 +18,7 @@ const STATUS_COLORS = {
 };
 
 export const Payroll = () => {
-  const { selectedMonth, setSelectedMonth, selectedDate, setSelectedDate, processedData, summary, loading, refresh } = usePayrollLogic();
+  const { selectedMonth, setSelectedMonth, dateRange, setDateRange, selectedStaffId, setSelectedStaffId, staffList, processedData, summary, loading, refresh } = usePayrollLogic();
   const lang = 'vi'; // Default to Vietnamese for now
 
   const nextMonth = () => setSelectedMonth(addMonths(selectedMonth, 1));
@@ -58,22 +58,54 @@ export const Payroll = () => {
           
           <div className="w-px h-8 bg-slate-100 hidden md:block" />
 
-          {/* Day Picker */}
+          {/* Staff Filter */}
+          <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-xl border border-slate-100">
+            <Users size={14} className="text-slate-400" />
+            <div className="flex flex-col">
+              <span className="text-[9px] font-black text-slate-400 uppercase leading-none">Nhân viên</span>
+              <select 
+                value={selectedStaffId}
+                onChange={(e) => setSelectedStaffId(e.target.value)}
+                className="bg-transparent text-sm font-bold text-slate-900 focus:outline-none cursor-pointer w-[120px] truncate"
+              >
+                <option value="ALL">Tất cả nhân sự</option>
+                {staffList.map(staff => (
+                  <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="w-px h-8 bg-slate-100 hidden md:block" />
+
+          {/* Date Range Picker */}
           <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-xl border border-slate-100">
             <Calendar size={14} className="text-slate-400" />
-            <div className="flex flex-col">
-              <span className="text-[9px] font-black text-slate-400 uppercase leading-none">{t[lang].filters.day}</span>
-              <input 
-                type="date" 
-                value={selectedDate || ''}
-                onChange={(e) => setSelectedDate(e.target.value || null)}
-                className="bg-transparent text-sm font-bold text-slate-900 focus:outline-none cursor-pointer"
-              />
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-400 uppercase leading-none">Từ ngày</span>
+                <input 
+                  type="date" 
+                  value={dateRange?.start || ''}
+                  onChange={(e) => setDateRange(prev => ({ start: e.target.value, end: prev?.end || e.target.value }))}
+                  className="bg-transparent text-sm font-bold text-slate-900 focus:outline-none cursor-pointer w-28"
+                />
+              </div>
+              <span className="text-slate-300">-</span>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-400 uppercase leading-none">Đến ngày</span>
+                <input 
+                  type="date" 
+                  value={dateRange?.end || ''}
+                  onChange={(e) => setDateRange(prev => ({ start: prev?.start || e.target.value, end: e.target.value }))}
+                  className="bg-transparent text-sm font-bold text-slate-900 focus:outline-none cursor-pointer w-28"
+                />
+              </div>
             </div>
-            {selectedDate && (
+            {dateRange && (
               <button 
-                onClick={() => setSelectedDate(null)}
-                className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-rose-500 transition-colors"
+                onClick={() => setDateRange(null)}
+                className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-rose-500 transition-colors ml-1"
               >
                 <X size={12} />
               </button>
