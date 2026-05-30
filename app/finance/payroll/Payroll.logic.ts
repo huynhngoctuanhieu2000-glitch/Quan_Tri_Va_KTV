@@ -49,7 +49,7 @@ export const usePayrollLogic = () => {
         supabase.from('Staff').select('id, full_name').eq('status', 'ĐANG LÀM'),
         // ✅ Dùng KTVAttendance thay cho DailyAttendance (đã ngưng sử dụng)
         supabase.from('KTVAttendance')
-          .select('id, employeeId, date, checkType, status, checkedAt')
+          .select('id, employeeId, date, checkType, status, checkedAt, checkOutTime')
           .gte('date', startDateISO)
           .lte('date', endDateISO)
           .eq('status', 'CONFIRMED'),

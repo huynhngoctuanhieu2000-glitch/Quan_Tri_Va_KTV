@@ -158,8 +158,8 @@ export async function GET(request: Request) {
         let bookingQuery = supabase
             .from('Bookings')
             .select(`
-                id, timeStart, timeEnd, status, technicianCode,
-                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip )
+                id, timeStart, timeEnd, status, technicianCode, rating,
+                BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip, duration, itemRating )
             `)
             .gte('timeStart', realtimeStartStr)
             .in('status', ['IN_PROGRESS', 'DONE', 'FEEDBACK', 'CLEANING']);
