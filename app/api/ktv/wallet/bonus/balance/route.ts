@@ -42,8 +42,8 @@ export async function GET(request: Request) {
         if (wthErr) throw wthErr;
 
         // 3.5 Fetch Realtime Bookings for today
-        const nowVn = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-        const todayStr = new Date(nowVn.getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const todayStr = new Date(Date.now() + VN_OFFSET_MS).toISOString().split('T')[0];
         
         const { data: bookings } = await supabase
             .from('Bookings')

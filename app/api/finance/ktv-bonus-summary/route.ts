@@ -73,10 +73,8 @@ export async function GET(request: Request) {
         if (ledgerError) throw ledgerError;
 
         // 2.5 Fetch Realtime Bookings to calculate today's bonus
-        const nowVn = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-        const tzOffsetVn = 7 * 60;
-        const localTimeVn = new Date(nowVn.getTime() + tzOffsetVn * 60 * 1000);
-        const todayStr = localTimeVn.toISOString().split('T')[0];
+        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const todayStr = new Date(Date.now() + VN_OFFSET_MS).toISOString().split('T')[0];
         
         let shouldFetchRealtime = true;
         if (toDate && toDate < todayStr) {

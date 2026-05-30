@@ -75,11 +75,10 @@ export async function GET(request: Request) {
         const isBonusWalletEnabled = String(bonusWalletConf?.value || '').replace(/"/g, '') === 'true';
 
         // --- CƠ CHẾ DYNAMIC BRIDGE (Đã fix lỗi trùng lặp dữ liệu) ---
-        // Lấy ngày hiện tại ở Việt Nam (YYYY-MM-DD)
-        const nowVn = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-        const tzOffsetVn = 7 * 60;
-        const localTimeVn = new Date(nowVn.getTime() + tzOffsetVn * 60 * 1000);
-        const todayStr = localTimeVn.toISOString().split('T')[0];
+        // Lấy ngày hiện tại ở Việt Nam (YYYY-MM-DD) — dùng cách tính giống cron job
+        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+        const nowVnDate = new Date(Date.now() + VN_OFFSET_MS);
+        const todayStr = nowVnDate.toISOString().split('T')[0];
 
         // 2. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
         const { data: ledgers } = await supabase
@@ -106,10 +105,9 @@ export async function GET(request: Request) {
                 });
 
                 // Tính toán chính xác ngày tiếp theo mà không bị lệch múi giờ
-                const lastDate = new Date(`${maxDateStr}T00:00:00+07:00`);
-                const nextDate = new Date(lastDate.getTime() + 24 * 60 * 60 * 1000);
-                const localNextDate = new Date(nextDate.getTime() + tzOffsetVn * 60 * 1000);
-                const nextDateStr = localNextDate.toISOString().split('T')[0];
+                const lastDateMs = new Date(`${maxDateStr}T00:00:00+07:00`).getTime();
+                const nextDateVn = new Date(lastDateMs + 24 * 60 * 60 * 1000 + VN_OFFSET_MS);
+                const nextDateStr = nextDateVn.toISOString().split('T')[0];
                 
                 realtimeStartStr = `${nextDateStr}T00:00:00+07:00`;
             }
