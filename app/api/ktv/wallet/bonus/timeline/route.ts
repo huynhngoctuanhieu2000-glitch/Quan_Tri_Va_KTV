@@ -44,12 +44,48 @@ export async function GET(request: Request) {
             .eq('wallet_type', 'BONUS')
             .gte('request_date', `${START_DATE}T00:00:00+07:00`);
 
-        if (wthErr) throw wthErr;
+        const nowVn = new Date(Date.now() + 7 * 60 * 60 * 1000);
+        const todayStr = nowVn.toISOString().split('T')[0];
+        const fromDate = `${todayStr}T00:00:00+07:00`;
 
-        // 3.5 Fetch Realtime Bookings for today
-        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-        const todayStr = new Date(Date.now() + VN_OFFSET_MS).toISOString().split('T')[0];
+        // 4. Determine Shift and Configs for Realtime Bonus
+        const { data: configs } = await supabase
+            .from('SystemConfigs')
+            .select('key, value')
+            .in('key', ['ktv_shift_1_bonus', 'ktv_shift_2_bonus', 'ktv_shift_3_bonus', 'holiday_shift2_dates']);
+
+        const configMap: Record<string, any> = {};
+        (configs || []).forEach((c: any) => { configMap[c.key] = c.value; });
         
+        const s1Bonus = Number(configMap['ktv_shift_1_bonus'] || 20);
+        const s2Bonus = Number(configMap['ktv_shift_2_bonus'] || 20);
+        const s3Bonus = Number(configMap['ktv_shift_3_bonus'] || 40);
+
+        const { data: shiftsData } = await supabase
+            .from('KTVShifts')
+            .select('effectiveFrom, shiftType')
+            .eq('employeeId', techCode)
+            .lte('effectiveFrom', todayStr)
+            .in('status', ['ACTIVE', 'REPLACED'])
+            .order('effectiveFrom', { ascending: true })
+            .order('createdAt', { ascending: true });
+
+        let currentShift = 'SHIFT_1';
+        for (const s of (shiftsData || [])) {
+            if (s.effectiveFrom <= todayStr) currentShift = s.shiftType;
+        }
+
+        const targetMonthDay = todayStr.slice(5, 10);
+        let isHoliday = false;
+        const holidayDates = configMap['holiday_shift2_dates'] || ['04-30', '09-02', '12-31'];
+        if (Array.isArray(holidayDates) && holidayDates.includes(targetMonthDay)) isHoliday = true;
+
+        const shiftType = isHoliday ? 'SHIFT_2' : currentShift;
+        let basePointsForShift = s1Bonus;
+        if (shiftType === 'SHIFT_2') basePointsForShift = s2Bonus;
+        else if (shiftType === 'SHIFT_3') basePointsForShift = s3Bonus;
+
+        // 5. Fetch Realtime Bookings for today
         const { data: bookings } = await supabase
             .from('Bookings')
             .select(`
@@ -84,12 +120,19 @@ export async function GET(request: Request) {
                     for (const item of (b.BookingItems || [])) {
                         let segs: any[] = [];
                         try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch { }
-                        if (segs.length > 0) totalDuration += segs.reduce((sum: number, seg: any) => sum + (Number(seg.duration) || 0), 0);
-                        else totalDuration += 60;
+                        
+                        const mySegs = segs.filter((seg: any) => seg.ktvId && seg.ktvId.toLowerCase().includes(techCode.toLowerCase()));
+                        if (mySegs.length > 0) {
+                            totalDuration += mySegs.reduce((sum: number, seg: any) => {
+                                return sum + (Number(seg.duration) || 0);
+                            }, 0);
+                        } else if (item.technicianCodes && item.technicianCodes.some((tc: string) => tc.toLowerCase() === techCode.toLowerCase())) {
+                            totalDuration += 60;
+                        }
                     }
 
-                    let adjustedBasePoints = 20;
-                    if (totalDuration < 60) adjustedBasePoints = 10;
+                    let adjustedBasePoints = basePointsForShift;
+                    if (totalDuration < 60) adjustedBasePoints = adjustedBasePoints / 2;
                     const bonusPts = Math.floor(adjustedBasePoints / (allKtvCodes.size || 1));
                     
                     if (bonusPts > 0) {
