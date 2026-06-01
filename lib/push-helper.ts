@@ -42,25 +42,57 @@ export async function sendPushNotification(payload: PushPayload) {
 
         const { title, message, url, targetStaffIds, targetRoles } = payload;
         
-        let query = supabase.from('StaffPushSubscriptions').select(`
-            subscription,
-            Users:staff_id (
-                role
-            )
-        `);
-        
-        if (targetStaffIds && targetStaffIds.length > 0) {
-            query = query.in('staff_id', targetStaffIds);
-        } else if (targetRoles && targetRoles.length > 0) {
-            // Target specific roles
-            const rolesFilter = targetRoles.map((r: string) => `role.eq.${r.toUpperCase()}`).join(',');
-            query = query.or(rolesFilter, { foreignTable: 'Users' });
-        } else {
-            // Default: Send to all ADMIN and RECEPTIONIST roles
-            query = query.or('role.eq.ADMIN,role.eq.RECEPTIONIST', { foreignTable: 'Users' });
+        let finalStaffIds = new Set<string>(targetStaffIds || []);
+
+        if (targetRoles && targetRoles.length > 0) {
+            // 🔧 Role Mapping: Translate settings UI IDs to DB enum values
+            const roleMapping: Record<string, string> = {
+                'KTV': 'TECHNICIAN',
+                'RECEPTION': 'RECEPTIONIST',
+                'ADMIN': 'ADMIN'
+            };
+            const mappedRoles = targetRoles.map((r: string) => roleMapping[r.toUpperCase()] || r.toUpperCase());
+            
+            // Lấy danh sách nhân viên có role tương ứng
+            const { data: usersData, error: usersErr } = await supabase
+                .from('Users')
+                .select('code')
+                .in('role', mappedRoles);
+                
+            if (!usersErr && usersData) {
+                usersData.forEach(u => {
+                    if (u.code) finalStaffIds.add(u.code);
+                });
+            } else {
+                console.warn('⚠️ [Push Helper] Error fetching users by roles:', usersErr);
+            }
         }
 
-        const { data: subs, error } = await query;
+        // Nếu không có targetStaffIds và targetRoles (fallback cho các push tự động mặc định cũ)
+        if (!targetStaffIds && !targetRoles) {
+            const { data: defaultUsers } = await supabase
+                .from('Users')
+                .select('code')
+                .in('role', ['ADMIN', 'RECEPTIONIST']);
+            if (defaultUsers) {
+                defaultUsers.forEach(u => {
+                    if (u.code) finalStaffIds.add(u.code);
+                });
+            }
+        }
+
+        const idsArray = Array.from(finalStaffIds);
+        if (idsArray.length === 0) {
+            console.log('📡 [Push Helper] No staff targets found to push.');
+            return { success: true, count: 0 };
+        }
+
+        // Truy vấn subscriptions dựa trên list staff_id (không JOIN bảng Users trực tiếp vì lỗi)
+        const { data: subs, error } = await supabase
+            .from('StaffPushSubscriptions')
+            .select('subscription, staff_id')
+            .in('staff_id', idsArray);
+
         if (error) throw error;
 
         if (!subs || subs.length === 0) {

@@ -88,7 +88,8 @@ export default function KTVWalletPage() {
         if (!sourceData) return [];
         const groups: Record<string, any[]> = {};
         sourceData.forEach((item: any) => {
-            const dateStr = new Date(item.created_at).toLocaleDateString('vi-VN', {
+            const itemDate = item.created_at || item.date;
+            const dateStr = new Date(itemDate).toLocaleDateString('vi-VN', {
                 weekday: 'long',
                 day: '2-digit',
                 month: '2-digit',
@@ -203,16 +204,16 @@ export default function KTVWalletPage() {
                                         <Star size={16} className="fill-amber-100" />
                                         Điểm Thưởng Tích Luỹ
                                     </h3>
-                                    <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold">VNĐ</span>
+                                    <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold">ĐIỂM</span>
                                 </div>
                                 <div className="mb-5 flex flex-col gap-1">
                                     <div className="flex items-end gap-2">
-                                        <p className="text-4xl font-black tracking-tight drop-shadow-sm">
-                                            {Number(bonusBalance.vnd_value || 0).toLocaleString()}đ
+                                        <p className="text-4xl font-black tracking-tight drop-shadow-sm flex items-baseline gap-1">
+                                            {Number(bonusBalance.points || 0).toLocaleString()} <span className="text-xl font-bold">điểm</span>
                                         </p>
                                     </div>
                                     <p className="text-xs text-amber-100/90 font-medium">
-                                        (Tương đương <span className="font-bold text-white">{Number(bonusBalance.points || 0).toLocaleString()}</span> điểm)
+                                        (Tương đương <span className="font-bold text-white">{Number(bonusBalance.vnd_value || 0).toLocaleString()}đ</span>)
                                     </p>
                                 </div>
                                 
@@ -270,9 +271,9 @@ export default function KTVWalletPage() {
                                                         iconColor = item.type === 'TIP' ? 'text-emerald-500' : (item.type === 'COMMISSION' ? 'text-indigo-500' : (item.type === 'WITHDRAWAL' ? 'text-rose-500' : (item.type === 'GIFT' ? 'text-amber-500' : 'text-slate-500')));
                                                     }
 
-                                                    const titleText = activeTab === 'BONUS' ? (item.description || item.type) : item.title;
+                                                    const titleText = activeTab === 'BONUS' ? (item.desc || item.type) : item.title;
                                                     const noteText = activeTab === 'BONUS' ? null : item.note;
-                                                    const displayAmount = activeTab === 'BONUS' ? Math.abs(Number(item.points) * 1000) : Number(item.amount);
+                                                    const displayAmount = activeTab === 'BONUS' ? Math.abs(Number(item.points)) : Number(item.amount);
 
                                                     return (
                                                         <div key={item.id || idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
@@ -283,14 +284,14 @@ export default function KTVWalletPage() {
                                                                 <div className="flex items-center justify-between mb-1">
                                                                     <span className={`font-bold text-xs line-clamp-2 pr-2 ${isRejected ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{titleText}</span>
                                                                     <span className={`font-black text-sm whitespace-nowrap ${isRejected ? 'text-slate-400 line-through' : isWithdrawal ? 'text-rose-600' : isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                                        {isPositive ? '+' : '-'}{displayAmount.toLocaleString()}đ
+                                                                        {isPositive ? '+' : '-'}{displayAmount.toLocaleString()}{activeTab === 'BONUS' ? ' điểm' : 'đ'}
                                                                     </span>
                                                                 </div>
                                                                 {noteText && <div className={`mt-1.5 text-[10px] p-2 rounded-lg ${isRejected ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500'}`}>{noteText}</div>}
                                                                 <div className="flex items-center justify-between mt-2">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-[10px] text-slate-400 font-medium">
-                                                                            {new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                                                            {new Date(item.created_at || item.date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                                                                         </span>
                                                                         {activeTab === 'TUA' && item.type !== 'TIP' && !isRejected && (
                                                                             <span className="text-[10px] text-slate-400 font-medium border-l border-slate-200 pl-2">
