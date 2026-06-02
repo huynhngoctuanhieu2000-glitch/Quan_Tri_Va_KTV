@@ -4,7 +4,7 @@ import React from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
     ShieldAlert, MapPin, Clock, CheckCircle2,
-    ExternalLink, Loader2, XCircle, LogOut, LogIn, Camera, AlertCircle
+    ExternalLink, Loader2, XCircle, LogOut, LogIn, Camera, AlertCircle, SwitchCamera
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useKTVAttendance } from './Attendance.logic';
@@ -48,18 +48,28 @@ const KTVAttendancePage = () => {
     // WebRTC Camera States
     const [isCameraOpen, setIsCameraOpen] = React.useState(false);
     const [stream, setStream] = React.useState<MediaStream | null>(null);
+    const [facingMode, setFacingMode] = React.useState<'environment' | 'user'>('environment');
     const videoRef = React.useRef<HTMLVideoElement>(null);
 
-    const openWebRTCCamera = async () => {
+    const openWebRTCCamera = async (mode: 'environment' | 'user' = 'environment') => {
         try {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
             const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'environment' } 
+                video: { facingMode: mode } 
             });
             setStream(mediaStream);
+            setFacingMode(mode);
             setIsCameraOpen(true);
         } catch (err) {
             alert('Không thể truy cập Camera. Vui lòng kiểm tra quyền hoặc dùng nút "Tải từ máy".');
         }
+    };
+
+    const toggleCameraMode = () => {
+        const newMode = facingMode === 'environment' ? 'user' : 'environment';
+        openWebRTCCamera(newMode);
     };
 
     const closeWebRTCCamera = () => {
@@ -642,7 +652,7 @@ const KTVAttendancePage = () => {
                                         {photos.length < MAX_PHOTOS && (
                                             <div className="flex gap-3">
                                                 <button 
-                                                    onClick={openWebRTCCamera}
+                                                    onClick={() => openWebRTCCamera(facingMode)}
                                                     className="flex-1 flex flex-col items-center justify-center h-24 border-2 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 transition-all rounded-xl cursor-pointer"
                                                 >
                                                     <Camera size={24} className="text-emerald-500 mb-1" />
@@ -705,6 +715,12 @@ const KTVAttendancePage = () => {
                                 className="absolute top-4 left-4 bg-black/50 text-white p-2 rounded-full backdrop-blur z-10"
                             >
                                 <XCircle size={24} />
+                            </button>
+                            <button 
+                                onClick={toggleCameraMode}
+                                className="absolute top-4 left-16 bg-black/50 text-white p-2 rounded-full backdrop-blur z-10 hover:bg-black/70 transition-colors"
+                            >
+                                <SwitchCamera size={24} />
                             </button>
                             <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1.5 rounded-full text-sm font-bold backdrop-blur flex items-center gap-2 z-10">
                                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
