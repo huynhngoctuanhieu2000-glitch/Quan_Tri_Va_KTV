@@ -142,10 +142,12 @@ export async function GET(request: Request) {
         // Fetch KTV shift for bonus calculation
         const { data: shiftsData } = await supabase
             .from('KTVShifts')
-            .select('shiftType')
+            .select('shiftType, effectiveFrom')
             .eq('employeeId', techCode)
-            .eq('status', 'ACTIVE')
+            .lte('effectiveFrom', todayStr)
+            .in('status', ['ACTIVE', 'REPLACED'])
             .order('effectiveFrom', { ascending: false })
+            .order('createdAt', { ascending: false })
             .limit(1);
         const shiftType = shiftsData?.[0]?.shiftType || 'SHIFT_1';
         let basePoints = s1Bonus;

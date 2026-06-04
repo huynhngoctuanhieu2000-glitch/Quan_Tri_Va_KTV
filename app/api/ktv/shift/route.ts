@@ -168,19 +168,26 @@ export async function GET(request: NextRequest) {
 
         if (employeeId) {
             // Fetch current active shift + history for a specific KTV
-            let { data: activeShift, error: activeError } = await supabase
+            let { data: shifts, error: activeError } = await supabase
                 .from('KTVShifts')
                 .select('*')
                 .eq('employeeId', employeeId)
-                .eq('status', 'ACTIVE')
-                .maybeSingle();
+                .lte('effectiveFrom', businessDateStr)
+                .in('status', ['ACTIVE', 'REPLACED'])
+                .order('effectiveFrom', { ascending: false })
+                .order('createdAt', { ascending: false });
 
             if (activeError) {
                 console.error('❌ [Shift GET] Active shift query error:', activeError);
             }
 
+            let activeShift = null;
+            if (shifts && shifts.length > 0) {
+                activeShift = shifts[0];
+            }
+
             // Tự động dọn dẹp (revert) ca tạm thời trong DB nếu nó đang ACTIVE và đã qua ngày hôm nay
-            if (activeShift) {
+            if (activeShift && activeShift.status === 'ACTIVE') {
                 const isTempShift = activeShift.reason === 'Tự chọn ca lúc điểm danh' || activeShift.shiftType === 'FREE' || activeShift.shiftType === 'REQUEST';
                 if (isTempShift && activeShift.effectiveFrom < businessDateStr) {
                     await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', activeShift.id);
