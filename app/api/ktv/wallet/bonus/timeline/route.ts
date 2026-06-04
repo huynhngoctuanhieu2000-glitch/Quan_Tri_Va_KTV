@@ -119,7 +119,7 @@ export async function GET(request: Request) {
                     
                     if (isTechInvolved) {
                         let ktvRating = 0;
-                        let parsedKtvRatings = item.ktvRatings;
+                        let parsedKtvRatings = (item as any).ktvRatings;
                         if (typeof parsedKtvRatings === 'string') {
                             try { parsedKtvRatings = JSON.parse(parsedKtvRatings); } catch { parsedKtvRatings = {}; }
                         }

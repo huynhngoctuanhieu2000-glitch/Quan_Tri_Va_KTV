@@ -228,6 +228,50 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             else if (statuses.includes('FEEDBACK')) dispatchStatus = 'FEEDBACK';
             else dispatchStatus = 'DONE';
 
+            const subKtvIds = groupKtvIds.get(ktvSignature) || [];
+            let subOrderRating: number | null = null;
+            if (subKtvIds.length > 0) {
+                let maxRating: number | null = null;
+                services.forEach(svc => {
+                    subKtvIds.forEach(ktvId => {
+                        let r = 0;
+                        const ktvRatings = (svc as any).ktvRatings || {};
+                        const key = Object.keys(ktvRatings).find(k => k.toLowerCase() === ktvId.toLowerCase());
+                        if (key) {
+                            r = Number(ktvRatings[key]) || 0;
+                        }
+                        if (r === 0) {
+                            r = Number((svc as any).itemRating) || 0;
+                        }
+                        if (r > 0) {
+                            if (maxRating === null || r > maxRating) maxRating = r;
+                        }
+                    });
+                });
+                subOrderRating = maxRating;
+            } else {
+                let maxRating: number | null = null;
+                services.forEach(svc => {
+                    const r = Number((svc as any).itemRating) || 0;
+                    if (r > 0) {
+                        if (maxRating === null || r > maxRating) maxRating = r;
+                    }
+                });
+                subOrderRating = maxRating;
+            }
+
+            if (subOrderRating === null) {
+                // Kiểm tra xem đơn có bất kỳ đánh giá chi tiết cho dịch vụ/KTV nào không
+                const hasDetailedRating = order.services.some((svc: any) => 
+                    svc.itemRating != null || 
+                    (svc.ktvRatings && Object.keys(svc.ktvRatings).length > 0)
+                );
+                // Nếu KHÔNG có đánh giá chi tiết nào, ta mới fallback về rating chung của đơn hàng
+                if (!hasDetailedRating) {
+                    subOrderRating = order.rating ?? null;
+                }
+            }
+
             resultForOrder.push({
                 id: `${order.id}_${ktvSignature}`,
                 bookingId: order.id,
@@ -235,9 +279,9 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 services,
                 dispatchStatus,
                 ktvSignature, // Legacy
-                ktvIds: groupKtvIds.get(ktvSignature) || [],
+                ktvIds: subKtvIds,
                 calculatedStart: groupCalculatedStarts.get(ktvSignature) || '',
-                rating: order.rating ?? null
+                rating: subOrderRating
             });
         });
 
@@ -258,6 +302,23 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dStatus = 'DONE';
                 else if (statuses.includes('PREPARING')) dStatus = 'PREPARING';
 
+                let utilityRating: number | null = null;
+                utilityServices.forEach(svc => {
+                    const r = Number((svc as any).itemRating) || 0;
+                    if (r > 0) {
+                        if (utilityRating === null || r > utilityRating) utilityRating = r;
+                    }
+                });
+                if (utilityRating === null) {
+                    const hasDetailedRating = order.services.some((svc: any) => 
+                        svc.itemRating != null || 
+                        (svc.ktvRatings && Object.keys(svc.ktvRatings).length > 0)
+                    );
+                    if (!hasDetailedRating) {
+                        utilityRating = order.rating ?? null;
+                    }
+                }
+
                 resultForOrder.push({
                     id: `${order.id}_utility`,
                     bookingId: order.id,
@@ -267,7 +328,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     ktvSignature: 'utility',
                     ktvIds: [],
                     calculatedStart: order.timeStart || '',
-                    rating: order.rating ?? null
+                    rating: utilityRating
                 });
             }
         }

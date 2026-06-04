@@ -660,7 +660,9 @@ export default function DispatchBoardPage() {
                 options: parsedOptions,
                 status: bi.status || 'NEW',
                 timeStart: bi.timeStart || null,
-                timeEnd: bi.timeEnd || null
+                timeEnd: bi.timeEnd || null,
+                itemRating: bi.itemRating || null,
+                ktvRatings: bi.ktvRatings || {}
               };
             })
           };
