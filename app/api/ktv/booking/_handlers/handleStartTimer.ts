@@ -92,6 +92,35 @@ export async function handleStartTimer(ctx: HandlerContext): Promise<HandlerResu
         }
         allGlobalSegs.sort((a: any, b: any) => (a.seg.startTime || '23:59').localeCompare(b.seg.startTime || '23:59'));
 
+        // 📸 UPLOAD SELFIE BEFORE START (action: START_TIMER)
+        let startPhotoUrl: string | null = null;
+        if (action === 'START_TIMER' && body.photoBase64 && technicianCode) {
+            try {
+                const base64Str = body.photoBase64;
+                const base64Data = base64Str.replace(/^data:image\/\w+;base64,/, "");
+                const buffer = Buffer.from(base64Data, 'base64');
+                const fileExt = base64Str.match(/^data:image\/(\w+);base64,/)?.[1] || 'jpg';
+                const fileName = `selfie_${bookingId}_${technicianCode}_${Date.now()}.${fileExt}`;
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('attendance')
+                    .upload(fileName, buffer, {
+                        contentType: `image/${fileExt}`,
+                        upsert: false
+                    });
+                
+                if (uploadError) {
+                    console.error('❌ [KTV API] Selfie upload error:', uploadError);
+                } else if (uploadData?.path) {
+                    const { data: publicUrlData } = supabase.storage.from('attendance').getPublicUrl(uploadData.path);
+                    startPhotoUrl = publicUrlData.publicUrl;
+                    console.log(`📸 [KTV API] Uploaded start photo for ${technicianCode}:`, startPhotoUrl);
+                }
+            } catch (err) {
+                console.error('❌ [KTV API] Failed to upload start photo:', err);
+            }
+        }
+
         if (action === 'START_TIMER' || action === 'NEXT_SEGMENT') {
             const startIdx = action === 'START_TIMER' ? 0 : activeSegmentIndex;
             if (allGlobalSegs[startIdx]) {
@@ -99,6 +128,16 @@ export async function handleStartTimer(ctx: HandlerContext): Promise<HandlerResu
                 if (action === 'NEXT_SEGMENT' && startIdx > 0) allGlobalSegs[startIdx - 1].seg.actualEndTime = sharedTimeStart;
                 
                 allGlobalSegs[startIdx].seg.actualStartTime = sharedTimeStart;
+                
+                // Đồng bộ startPhotoUrl vào tất cả segment của KTV này trong đơn hàng này
+                if (startPhotoUrl) {
+                    allGlobalSegs.forEach((itemSeg: any) => {
+                        if (itemSeg.seg.ktvId === technicianCode) {
+                            itemSeg.seg.startPhotoUrl = startPhotoUrl;
+                        }
+                    });
+                }
+                
                 const target = allGlobalSegs[startIdx];
                 originalItemsData[target.item.id][target.idx] = target.seg;
                 

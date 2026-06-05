@@ -4,7 +4,7 @@ import React, { useState, Suspense } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   Clock, ShieldAlert, Calendar, AlertTriangle,
-  CheckCircle, CheckCircle2, Play, StopCircle, Lock,
+  CheckCircle, CheckCircle2, Play, StopCircle, Lock, Camera,
   Smile, Frown, Meh, Star, Gift, ArrowRight, X,
   ClipboardList, Coffee, LogOut, Sparkles, User, Users,
   PlusSquare, HelpCircle, Zap, Target, Ban, AlertCircle,
@@ -593,6 +593,151 @@ function ScreenTimer({ logic }: { logic: any }) {
     activeSegmentIndex
   } = logic;
 
+  // 📸 CAMERA WEBRTC STATE & LOGIC FOR START TIMER
+  const [isCameraOpen, setIsCameraOpen] = React.useState(false);
+  const [stream, setStream] = React.useState<MediaStream | null>(null);
+  const [facingMode, setFacingMode] = React.useState<'user' | 'environment'>('environment');
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const openWebRTCCamera = async (mode: 'user' | 'environment' = 'environment') => {
+      try {
+          if (stream) {
+              stream.getTracks().forEach(track => track.stop());
+          }
+          const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: mode } 
+          });
+          setStream(mediaStream);
+          setFacingMode(mode);
+          setIsCameraOpen(true);
+      } catch (err) {
+          alert('Không thể truy cập Camera. Vui lòng cấp quyền hoặc chọn "Tải ảnh"');
+      }
+  };
+
+  const closeWebRTCCamera = () => {
+      if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          setStream(null);
+      }
+      setIsCameraOpen(false);
+  };
+
+  const captureFromVideo = () => {
+      if (!videoRef.current) return;
+      const video = videoRef.current;
+      let { videoWidth: width, videoHeight: height } = video;
+      
+      const maxWidth = 600;
+      if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      ctx.drawImage(video, 0, 0, width, height);
+
+      // Watermark
+      const now = new Date();
+      const vnTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const timeStr = `${pad(vnTime.getHours())}:${pad(vnTime.getMinutes())}:${pad(vnTime.getSeconds())}`;
+      const dateStr = `${pad(vnTime.getDate())}/${pad(vnTime.getMonth() + 1)}/${vnTime.getFullYear()}`;
+      const watermarkText = `${timeStr}  ${dateStr}  Room ${booking?.assignedRoomId || booking?.roomName || ''}`;
+
+      const fontSize = Math.max(12, Math.floor(canvas.width * 0.04));
+      ctx.font = `bold ${fontSize}px Arial`;
+      ctx.textBaseline = 'top';
+      const textWidth = ctx.measureText(watermarkText).width;
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(8, 8, textWidth + 16, fontSize + 12);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(watermarkText, 16, 14);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+      logic.setStartPhotoBase64(dataUrl);
+      closeWebRTCCamera();
+  };
+
+  React.useEffect(() => {
+      return () => {
+          if (stream) {
+              stream.getTracks().forEach(track => track.stop());
+          }
+      };
+  }, [stream]);
+
+  React.useEffect(() => {
+      if (isCameraOpen && videoRef.current && stream) {
+          videoRef.current.srcObject = stream;
+      }
+  }, [isCameraOpen, stream]);
+
+  const compressImage = (file: File, maxWidth = 600, quality = 0.5): Promise<string> => {
+      return new Promise((resolve, reject) => {
+          const img = new window.Image();
+          const url = URL.createObjectURL(file);
+          img.onload = () => {
+              URL.revokeObjectURL(url);
+              const canvas = document.createElement('canvas');
+              let { width, height } = img;
+              if (width > maxWidth) {
+                  height = Math.round((height * maxWidth) / width);
+                  width = maxWidth;
+              }
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (!ctx) { reject(new Error('Canvas not supported')); return; }
+              ctx.drawImage(img, 0, 0, width, height);
+
+              const now = new Date();
+              const vnTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+              const pad = (n: number) => String(n).padStart(2, '0');
+              const timeStr = `${pad(vnTime.getHours())}:${pad(vnTime.getMinutes())}:${pad(vnTime.getSeconds())}`;
+              const dateStr = `${pad(vnTime.getDate())}/${pad(vnTime.getMonth() + 1)}/${vnTime.getFullYear()}`;
+              const watermarkText = `${timeStr}  ${dateStr}  Room ${booking?.assignedRoomId || booking?.roomName || ''}`;
+
+              const fontSize = 14;
+              ctx.font = `bold ${fontSize}px Arial`;
+              ctx.textBaseline = 'top';
+              const textWidth = ctx.measureText(watermarkText).width;
+              
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+              ctx.fillRect(8, 8, textWidth + 16, fontSize + 12);
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillText(watermarkText, 16, 14);
+
+              resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = () => reject(new Error('Failed to load image'));
+          img.src = url;
+      });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const compressed = await compressImage(file);
+          logic.setStartPhotoBase64(compressed);
+      } catch (err) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              const result = ev.target?.result as string;
+              if (result) logic.setStartPhotoBase64(result);
+          };
+          reader.readAsDataURL(file);
+      }
+      if (e.target) e.target.value = '';
+  };
+
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
     const s = (secs % 60).toString().padStart(2, '0');
@@ -782,15 +927,55 @@ function ScreenTimer({ logic }: { logic: any }) {
       {/* Primary Action Button */}
       <div className="px-6 mb-10">
         {!isTimerRunning || isPrepping ? (
-          <div className="space-y-3">
-            <button
-              onClick={handleStartTimer}
-              disabled={logic.isLoading || (isPrepping && prepTimeRemaining > 0) || !logic.canStart}
-              className={`w-full h-16 ${THEME.radius} bg-emerald-600 text-white font-black text-lg shadow-xl shadow-emerald-200/50 flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-40 disabled:grayscale-[0.5] disabled:active:scale-100`}
-            >
-              {logic.canStart ? <Play fill="white" size={24} /> : <Lock size={24} className="text-white/70" />}
-              {logic.canStart ? 'BẮT ĐẦU' : 'CHƯA ĐẾN GIỜ'}
-            </button>
+          <div className="space-y-4">
+            {/* Selfie Photo Preview (Sequential Flow) */}
+            {logic.startPhotoBase64 && (
+              <div className="bg-slate-50 border border-slate-100 rounded-3xl p-4 flex items-center justify-between gap-4 animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3">
+                  <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md">
+                    <img src={logic.startPhotoBase64} className="w-full h-full object-cover" alt="Selfie preview" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">Đã lưu ảnh chụp!</p>
+                    <p className="text-[10px] text-slate-400 font-bold">Bấm Bắt đầu để kích hoạt ca</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => openWebRTCCamera('environment')}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-200"
+                >
+                  Chụp lại 🔄
+                </button>
+              </div>
+            )}
+
+            {/* Action buttons based on photo status */}
+            {logic.startPhotoBase64 ? (
+              <button
+                onClick={handleStartTimer}
+                disabled={logic.isLoading}
+                className="w-full h-16 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-lg shadow-xl shadow-emerald-200/50 rounded-[32px] flex items-center justify-center gap-3 transition-all disabled:opacity-40"
+              >
+                <Play fill="white" size={24} />
+                {logic.isLoading ? 'ĐANG BẮT ĐẦU...' : 'BẮT ĐẦU PHỤC VỤ'}
+              </button>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => openWebRTCCamera('environment')}
+                  disabled={logic.isLoading || (isPrepping && prepTimeRemaining > 0) || !logic.canStart}
+                  className="flex-[2] h-16 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-xs shadow-xl shadow-emerald-200/50 rounded-[32px] flex items-center justify-center gap-2 transition-all disabled:opacity-45 disabled:active:scale-100"
+                >
+                  <Camera size={18} />
+                  {logic.canStart ? 'CHỤP ẢNH ĐỂ BẮT ĐẦU' : 'CHƯA ĐẾN GIỜ'}
+                </button>
+                <label className="flex-[0.8] h-16 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-[32px] flex flex-col items-center justify-center cursor-pointer transition-all active:scale-[0.98] disabled:opacity-40">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">Tải ảnh</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} disabled={logic.isLoading || (isPrepping && prepTimeRemaining > 0) || !logic.canStart} />
+                </label>
+              </div>
+            )}
+
             {!logic.canStart && logic.allowedStartTime && (
               <motion.p 
                 initial={{ opacity: 0, y: -5 }}
@@ -866,6 +1051,47 @@ function ScreenTimer({ logic }: { logic: any }) {
               BÁO ĐỘNG KHẨN CẤP
             </button>
         </motion.div>
+      )}
+
+      {/* WebRTC Camera Overlay */}
+      {isCameraOpen && (
+        <div className="fixed inset-0 bg-black z-[90] flex flex-col animate-in fade-in duration-250">
+          <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              className="w-full h-full object-cover"
+            />
+            <button 
+              onClick={closeWebRTCCamera}
+              className="absolute top-4 left-4 bg-black/50 text-white p-2 rounded-full backdrop-blur z-10 hover:bg-black/70 transition-colors"
+            >
+              <X size={24} />
+            </button>
+            <button 
+              onClick={() => openWebRTCCamera(facingMode === 'user' ? 'environment' : 'user')}
+              className="absolute top-4 left-16 bg-black/50 text-white p-2 rounded-full backdrop-blur z-10 hover:bg-black/70 transition-colors"
+            >
+              <RefreshCw size={24} />
+            </button>
+            <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur flex items-center gap-2 z-10">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              CHỤP ẢNH XÁC NHẬN
+            </div>
+            <div className="absolute bottom-6 left-4 right-4 bg-black/60 text-white p-3 rounded-2xl text-[10px] font-medium backdrop-blur border border-white/10 text-center leading-relaxed">
+              ⚠️ Vui lòng chụp ảnh khách của bạn để xác nhận bắt đầu làm việc.
+            </div>
+          </div>
+          <div className="bg-black p-6 pb-12 flex items-center justify-center">
+            <button 
+              onClick={captureFromVideo}
+              className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center bg-transparent active:scale-95 transition-transform"
+            >
+              <div className="w-16 h-16 rounded-full bg-white transition-transform active:scale-90"></div>
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1387,3 +1613,4 @@ function RoomIssueModal({ isOpen, onClose, onSubmit, roomId }: { isOpen: boolean
     </div>
   );
 }
+

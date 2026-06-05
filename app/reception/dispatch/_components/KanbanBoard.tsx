@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles, Banknote, CreditCard } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles, Banknote, CreditCard, Camera, X } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
 import { SubOrder, buildOrderTimeline } from './dispatch-timeline';
 
@@ -134,6 +134,7 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
 
 export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, roomTransitionTime = 5 }: KanbanBoardProps) {
     const [draggedSubOrderId, setDraggedSubOrderId] = useState<string | null>(null);
+    const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; ktvId: string; time: string | null } | null>(null);
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
     const subOrders = React.useMemo(() => {
@@ -484,11 +485,31 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                             {/* Danh sách KTV */}
                                                             {!s.isUtility && s.staffList && s.staffList.length > 0 && (
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {s.staffList.map((st: any, idx: number) => (
-                                                                        <span key={idx} className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md">
-                                                                            👤 {st.ktvId || 'Chưa gán'}
-                                                                        </span>
-                                                                    ))}
+                                                                    {s.staffList.map((st: any, idx: number) => {
+                                                                        const photoSegment = st.segments?.find((seg: any) => seg.startPhotoUrl);
+                                                                        const startPhotoUrl = photoSegment?.startPhotoUrl;
+                                                                        return (
+                                                                            <span key={idx} className="text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-md flex items-center gap-1.5">
+                                                                                <span>👤 {st.ktvId || 'Chưa gán'}</span>
+                                                                                {startPhotoUrl && (
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setSelectedPhoto({
+                                                                                                url: startPhotoUrl,
+                                                                                                ktvId: st.ktvId,
+                                                                                                time: photoSegment.actualStartTime || photoSegment.startTime
+                                                                                            });
+                                                                                        }}
+                                                                                        className="w-3.5 h-3.5 rounded-full overflow-hidden border border-indigo-300 hover:scale-110 active:scale-95 transition-transform shrink-0"
+                                                                                        title="Xem ảnh xác nhận khách"
+                                                                                    >
+                                                                                        <img src={startPhotoUrl} alt="Selfie" className="w-full h-full object-cover" />
+                                                                                    </button>
+                                                                                )}
+                                                                            </span>
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
 
@@ -503,7 +524,29 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                                             const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : getDynamicEndTime(ktvStart, Number(seg?.duration) || duration);
                                                                             return (
                                                                                 <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
-                                                                                    <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
+                                                                                    <div className="flex items-center gap-1.5">
+                                                                                        <span className="text-[9px] font-bold text-gray-500">{st.ktvId}</span>
+                                                                                        {(() => {
+                                                                                            const photoSegment = st.segments?.find((seg: any) => seg.startPhotoUrl);
+                                                                                            if (!photoSegment) return null;
+                                                                                            return (
+                                                                                                <button
+                                                                                                    onClick={(e) => {
+                                                                                                        e.stopPropagation();
+                                                                                                        setSelectedPhoto({
+                                                                                                            url: photoSegment.startPhotoUrl,
+                                                                                                            ktvId: st.ktvId,
+                                                                                                            time: photoSegment.actualStartTime || photoSegment.startTime
+                                                                                                        });
+                                                                                                    }}
+                                                                                                    className="w-4 h-4 rounded-full overflow-hidden border border-indigo-300 hover:scale-110 active:scale-95 transition-transform shrink-0"
+                                                                                                    title="Xem ảnh xác nhận khách"
+                                                                                                >
+                                                                                                    <img src={photoSegment.startPhotoUrl} alt="Selfie" className="w-full h-full object-cover" />
+                                                                                                </button>
+                                                                                            );
+                                                                                        })()}
+                                                                                    </div>
                                                                                     <div className="flex items-center gap-1.5">
                                                                                         <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>
                                                                                         <span className="text-indigo-300 text-[8px]">→</span>
@@ -676,6 +719,60 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                     </div>
                 );
             })}
+
+            {/* Modal Xem Ảnh Xác Nhận Khách */}
+            <AnimatePresence>
+                {selectedPhoto && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setSelectedPhoto(null)}
+                        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="relative bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-gray-100 flex flex-col"
+                        >
+                            {/* Header */}
+                            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-black text-gray-900 text-sm">Ảnh xác nhận khách bắt đầu ca</h3>
+                                    <p className="text-xs text-gray-500 font-bold">Kỹ thuật viên: {selectedPhoto.ktvId}</p>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedPhoto(null)}
+                                    className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {/* Image Body */}
+                            <div className="relative aspect-[3/4] bg-gray-50 flex items-center justify-center">
+                                <img
+                                    src={selectedPhoto.url}
+                                    alt="Ảnh xác nhận khách"
+                                    className="w-full h-full object-contain"
+                                />
+                            </div>
+
+                            {/* Footer */}
+                            {selectedPhoto.time && (
+                                <div className="p-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                                    <span className="text-xs text-gray-500 font-bold">Thời gian bắt đầu:</span>
+                                    <span className="text-xs font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md">
+                                        {formatToHourMinute(selectedPhoto.time)}
+                                    </span>
+                                </div>
+                            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
