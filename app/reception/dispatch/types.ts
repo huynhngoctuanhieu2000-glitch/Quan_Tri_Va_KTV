@@ -8,6 +8,7 @@ export interface WorkSegment {
   endTime: string;
   actualEndTime?: string | null;
   feedbackTime?: string | null;
+  startPhotoUrl?: string | null;
 }
 
 export interface StaffAssignment {

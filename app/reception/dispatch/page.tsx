@@ -159,6 +159,7 @@ export default function DispatchBoardPage() {
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
   const [dispatchMode, setDispatchMode] = useState<'quick' | 'detail'>('quick');
+  const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; ktvId: string; time: string | null } | null>(null);
   // 🔧 QR CONFIGURATION
   const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
   const QR_SIZE = 250;
@@ -1901,6 +1902,7 @@ if (!hasPermission('dispatch_board')) {
                             onEditSvc={(orderId, svcId) => setEditingSvc({ orderId, svcId, oldSvcName: svc.serviceName })}
                             selectedDate={selectedDate}
                             isExpanded={expandedSvcIds.includes(svc.id)}
+                            onViewPhoto={setSelectedPhoto}
                             onToggleExpand={() => {
                               const isOpening = !expandedSvcIds.includes(svc.id);
                               setExpandedSvcIds(prev => 
@@ -2436,6 +2438,60 @@ if (!hasPermission('dispatch_board')) {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Xem Ảnh Xác Nhận Khách */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedPhoto(null)}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-gray-100 flex flex-col"
+            >
+              {/* Header */}
+              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h3 className="font-black text-gray-900 text-sm">Ảnh xác nhận khách bắt đầu ca</h3>
+                  <p className="text-xs text-gray-500 font-bold">Kỹ thuật viên: {selectedPhoto.ktvId}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedPhoto(null)}
+                  className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Image Body */}
+              <div className="relative aspect-[3/4] bg-gray-50 flex items-center justify-center">
+                <img
+                  src={selectedPhoto.url}
+                  alt="Ảnh xác nhận khách"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+
+              {/* Footer */}
+              {selectedPhoto.time && (
+                <div className="p-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-xs text-gray-500 font-bold">Thời gian bắt đầu:</span>
+                  <span className="text-xs font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md">
+                    {formatToHourMinute(selectedPhoto.time)}
+                  </span>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </AppLayout>

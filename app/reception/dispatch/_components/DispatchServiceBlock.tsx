@@ -37,12 +37,13 @@ interface DispatchServiceBlockProps {
     onToggleExpand?: () => void;
     onDispatchSvc?: (orderId: string, svcId: string) => void;
     reminders?: ReminderData[];
+    onViewPhoto?: (photo: { url: string; ktvId: string; time: string | null }) => void;
 }
 
 export const DispatchServiceBlock = ({
     svc, svcIndex, orderId, rooms, beds, busyBedIds = [], usedKtvIds = [], availableTurns,
     onUpdateSvc, onUpdateStaff, onAddStaff, onRemoveStaff, onRemoveSvc, onEditSvc, selectedDate,
-    isExpanded = true, onToggleExpand, onDispatchSvc, reminders = []
+    isExpanded = true, onToggleExpand, onDispatchSvc, reminders = [], onViewPhoto
 }: DispatchServiceBlockProps) => {
 
     const isUtility = !!(svc as any).isUtility;
@@ -73,10 +74,29 @@ export const DispatchServiceBlock = ({
                                     
                                     if (!ktvCode && !roomName) return null;
                                     
+                                    const photoSegment = row.segments?.find((seg: any) => seg.startPhotoUrl);
+                                    const startPhotoUrl = photoSegment?.startPhotoUrl;
+
                                     return (
                                         <span key={`${row.id || 'row'}-${ktvCode || 'none'}-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-black rounded-lg whitespace-nowrap shadow-sm">
                                             <UserCheck size={14} className="text-indigo-500" />
                                             {ktvCode || 'Chưa gán'}
+                                            {startPhotoUrl && onViewPhoto && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onViewPhoto({
+                                                            url: startPhotoUrl,
+                                                            ktvId: ktvCode,
+                                                            time: photoSegment.actualStartTime || photoSegment.startTime
+                                                        });
+                                                    }}
+                                                    className="w-4 h-4 rounded-full overflow-hidden border border-indigo-300 hover:scale-110 active:scale-95 transition-transform shrink-0"
+                                                    title="Xem ảnh xác nhận khách"
+                                                >
+                                                    <img src={startPhotoUrl} alt="Selfie" className="w-full h-full object-cover" />
+                                                </button>
+                                            )}
                                             {roomName && <span className="text-indigo-300 mx-0.5">•</span>}
                                             {roomName && <span className="text-indigo-600 truncate max-w-[120px]">{roomName}</span>}
                                         </span>
@@ -224,6 +244,7 @@ export const DispatchServiceBlock = ({
                                         realSvcId={svc.serviceId}
                                         reminders={reminders}
                                         genderReq={svc.genderReq}
+                                        onViewPhoto={onViewPhoto}
                                     />
                                 ))}
                             </div>

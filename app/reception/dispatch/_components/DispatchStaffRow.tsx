@@ -55,6 +55,7 @@ interface DispatchStaffRowProps {
     billCode?: string;
     genderReq?: string;
     customerName?: string;
+    onViewPhoto?: (photo: { url: string; ktvId: string; time: string | null }) => void;
 }
 
 const SERVICE_TO_SKILL: Record<string, string> = {
@@ -87,7 +88,7 @@ const calcEndTime = (start: string, duration: number): string => {
 export const DispatchStaffRow = ({
     row, svcId, orderId, serviceName, svcDuration, availableTurns, rooms, beds, busyBedIds = [], usedKtvIds = [], onUpdate, onRemove, canRemove,
     displayName, serviceDescription, strength, adminNote, customerNote, selectedDate, focus, avoid, realSvcId, reminders = [],
-    billCode, genderReq, customerName
+    billCode, genderReq, customerName, onViewPhoto
 }: DispatchStaffRowProps) => {
 
     const targetSkill = Object.keys(SERVICE_TO_SKILL).find(k => serviceName.toLowerCase().includes(k.toLowerCase()))
@@ -340,24 +341,44 @@ export const DispatchStaffRow = ({
                     </div>
 
                     {/* 🖨️ Print Ticket Button — only show when KTV is selected */}
-                    {row.ktvId && (
-                        <>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); handleChange({ ktvId: '', ktvName: '' }); }}
-                                className="p-2.5 bg-rose-50 text-rose-400 hover:bg-rose-100 hover:text-rose-600 border border-rose-100 rounded-xl transition-all active:scale-90"
-                                title="Xoá KTV (để trống)"
-                            >
-                                <X size={15} strokeWidth={2.5} />
-                            </button>
-                            <button
-                                onClick={handlePrintTicket}
-                                className="p-2.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all active:scale-90"
-                                title="In phiếu tua KTV"
-                            >
-                                <Printer size={15} strokeWidth={2.5} />
-                            </button>
-                        </>
-                    )}
+                    {row.ktvId && (() => {
+                        const photoSegment = row.segments?.find((seg: any) => seg.startPhotoUrl);
+                        const startPhotoUrl = photoSegment?.startPhotoUrl;
+                        return (
+                            <>
+                                {startPhotoUrl && onViewPhoto && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onViewPhoto({
+                                                url: startPhotoUrl,
+                                                ktvId: row.ktvId,
+                                                time: photoSegment.actualStartTime || photoSegment.startTime
+                                            });
+                                        }}
+                                        className="w-10 h-10 rounded-xl overflow-hidden border border-indigo-300 hover:scale-105 active:scale-95 transition-all shrink-0 flex items-center justify-center bg-indigo-50 shadow-sm"
+                                        title="Xem ảnh xác nhận khách"
+                                    >
+                                        <img src={startPhotoUrl} alt="Check-in" className="w-full h-full object-cover" />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleChange({ ktvId: '', ktvName: '' }); }}
+                                    className="p-2.5 bg-rose-50 text-rose-400 hover:bg-rose-100 hover:text-rose-600 border border-rose-100 rounded-xl transition-all active:scale-90"
+                                    title="Xoá KTV (để trống)"
+                                >
+                                    <X size={15} strokeWidth={2.5} />
+                                </button>
+                                <button
+                                    onClick={handlePrintTicket}
+                                    className="p-2.5 bg-indigo-50 text-indigo-500 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all active:scale-90"
+                                    title="In phiếu tua KTV"
+                                >
+                                    <Printer size={15} strokeWidth={2.5} />
+                                </button>
+                            </>
+                        );
+                    })()}
 
                     {canRemove && (
                         <button
