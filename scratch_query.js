@@ -15,21 +15,17 @@ fileContent.split(/\r?\n/).forEach(line => {
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-async function checkSpecificBooking() {
-  const { data: booking } = await supabase
-    .from('Bookings')
+async function checkKTVDailyLedgerSchema() {
+  const { data: ledger, error } = await supabase
+    .from('KTVDailyLedger')
     .select('*')
-    .eq('id', '11NDK-006-06062026')
-    .single();
-  console.log('Booking 11NDK-006-06062026 details:');
-  console.log(JSON.stringify(booking, null, 2));
-
-  const { data: notif } = await supabase
-    .from('StaffNotifications')
-    .select('*')
-    .eq('bookingId', '11NDK-006-06062026');
-  console.log('Notifications for this booking:');
-  console.log(JSON.stringify(notif, null, 2));
+    .limit(1);
+  
+  if (error) {
+    console.error('Error fetching ledger:', error);
+  } else {
+    console.log('KTVDailyLedger columns:', Object.keys(ledger[0] || {}));
+  }
 }
 
-checkSpecificBooking().catch(console.error);
+checkKTVDailyLedgerSchema().catch(console.error);

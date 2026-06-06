@@ -72,7 +72,7 @@ BEGIN
         v_has_items := false;
 
         FOR v_item IN 
-            SELECT i.segments, i.status, s.duration as default_duration, s.id as service_id, s.name as service_name, i.is_utility
+            SELECT i.segments, i.status, s.duration as default_duration, s.id as service_id, s."nameVN" as service_name, s.is_utility
             FROM "BookingItems" i
             LEFT JOIN "Services" s ON i."serviceId" = s.id
             WHERE i."bookingId" = v_turn.booking_id 
@@ -190,19 +190,19 @@ BEGIN
 
     -- 2. Process TurnLedger (Commission)
     FOR v_turn IN 
-        SELECT DISTINCT booking_id, counted_at, id as turn_id
-        FROM "TurnLedger" 
-        WHERE employee_id = p_staff_id
-          AND counted_at >= '2026-05-04'::date
-          AND EXTRACT(MONTH FROM counted_at) = p_month
-          AND EXTRACT(YEAR FROM counted_at) = p_year
+        SELECT DISTINCT tl.booking_id, tl.counted_at, tl.id as turn_id
+        FROM "TurnLedger" tl
+        WHERE tl.employee_id = p_staff_id
+          AND tl.counted_at >= '2026-05-04'::date
+          AND EXTRACT(MONTH FROM tl.counted_at) = p_month
+          AND EXTRACT(YEAR FROM tl.counted_at) = p_year
     LOOP
         v_turn_amount := 0;
         v_total_booking_duration := 0;
         v_has_items := false;
 
         FOR v_item IN 
-            SELECT i.id, i.segments, i.status, s.duration as default_duration, s.id as service_id, s.name as service_name, i.is_utility
+            SELECT i.id as item_id, i.segments, i.status, s.duration as default_duration, s.id as service_id, s."nameVN" as service_name, s.is_utility
             FROM "BookingItems" i
             LEFT JOIN "Services" s ON i."serviceId" = s.id
             WHERE i."bookingId" = v_turn.booking_id 
@@ -280,7 +280,7 @@ BEGIN
 
     -- 3. Process Tips
     FOR v_turn IN
-        SELECT b.id, b.tip, b."timeEnd", b."bookingId", b."technicianCodes"
+        SELECT b.id as item_id, b.tip, b."timeEnd", b."bookingId", b."technicianCodes"
         FROM "BookingItems" b
         WHERE p_staff_id = ANY(b."technicianCodes")
           AND b.status = 'DONE'
@@ -289,7 +289,7 @@ BEGIN
           AND EXTRACT(MONTH FROM b."timeEnd") = p_month
           AND EXTRACT(YEAR FROM b."timeEnd") = p_year
     LOOP
-        id := v_turn.id;
+        id := v_turn.item_id;
         type := 'TIP';
         title := 'Tiền Tip đơn ' || COALESCE(v_turn."bookingId", '');
         IF array_length(v_turn."technicianCodes", 1) > 0 THEN
@@ -305,14 +305,14 @@ BEGIN
 
     -- 4. Process Adjustments
     FOR v_turn IN
-        SELECT id, type as adj_type, reason, amount as adj_amount, created_at as adj_date
-        FROM "WalletAdjustments"
-        WHERE staff_id = p_staff_id
-          AND created_at >= '2026-05-04'::date
-          AND EXTRACT(MONTH FROM created_at) = p_month
-          AND EXTRACT(YEAR FROM created_at) = p_year
+        SELECT wa.id as adj_id, wa.type as adj_type, wa.reason, wa.amount as adj_amount, wa.created_at as adj_date
+        FROM "WalletAdjustments" wa
+        WHERE wa.staff_id = p_staff_id
+          AND wa.created_at >= '2026-05-04'::date
+          AND EXTRACT(MONTH FROM wa.created_at) = p_month
+          AND EXTRACT(YEAR FROM wa.created_at) = p_year
     LOOP
-        id := v_turn.id::text;
+        id := v_turn.adj_id::text;
         IF v_turn.adj_type = 'GIFT' THEN type := 'GIFT';
         ELSIF v_turn.adj_type = 'PENALTY' THEN type := 'PENALTY';
         ELSE type := 'ADJUSTMENT'; END IF;
@@ -332,14 +332,14 @@ BEGIN
 
     -- 5. Process Withdrawals
     FOR v_turn IN
-        SELECT id, amount as w_amount, request_date, status as w_status, note as w_note
-        FROM "KTVWithdrawals"
-        WHERE staff_id = p_staff_id
-          AND request_date >= '2026-05-04'::date
-          AND EXTRACT(MONTH FROM request_date) = p_month
-          AND EXTRACT(YEAR FROM request_date) = p_year
+        SELECT kw.id as w_id, kw.amount as w_amount, kw.request_date, kw.status as w_status, kw.note as w_note
+        FROM "KTVWithdrawals" kw
+        WHERE kw.staff_id = p_staff_id
+          AND kw.request_date >= '2026-05-04'::date
+          AND EXTRACT(MONTH FROM kw.request_date) = p_month
+          AND EXTRACT(YEAR FROM kw.request_date) = p_year
     LOOP
-        id := v_turn.id::text;
+        id := v_turn.w_id::text;
         type := 'WITHDRAWAL';
         title := 'Rút tiền mặt';
         amount := -v_turn.w_amount; -- Negative for withdrawals
