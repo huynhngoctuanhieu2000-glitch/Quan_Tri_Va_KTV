@@ -32,6 +32,38 @@ export interface PushPayload {
     url?: string;
     targetStaffIds?: string[];
     targetRoles?: string[];
+    requireOnShift?: boolean; // NEW: Filter only on-shift staff
+}
+
+/**
+ * 🔧 Helper: Get list of employee_ids currently on shift today
+ * Queries TurnQueue for today's date with status NOT 'off'
+ */
+async function getOnShiftEmployeeIds(): Promise<Set<string>> {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return new Set();
+
+    // Get today's date in Vietnam timezone (UTC+7)
+    const now = new Date();
+    const vnDate = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const today = vnDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    const { data, error } = await supabase
+        .from('TurnQueue')
+        .select('employee_id')
+        .eq('work_date', today)
+        .neq('status', 'off');
+
+    if (error) {
+        console.warn('⚠️ [Push Helper] Error fetching on-shift employees:', error.message);
+        return new Set();
+    }
+
+    const ids = new Set<string>();
+    data?.forEach(row => {
+        if (row.employee_id) ids.add(row.employee_id);
+    });
+    return ids;
 }
 
 export async function sendPushNotification(payload: PushPayload) {
@@ -40,7 +72,7 @@ export async function sendPushNotification(payload: PushPayload) {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
-        const { title, message, url, targetStaffIds, targetRoles } = payload;
+        const { title, message, url, targetStaffIds, targetRoles, requireOnShift } = payload;
         
         let finalStaffIds = new Set<string>(targetStaffIds || []);
 
@@ -80,6 +112,25 @@ export async function sendPushNotification(payload: PushPayload) {
                     if (u.id) finalStaffIds.add(u.id);
                     if (u.code && u.code !== u.id) finalStaffIds.add(u.code);
                 });
+            }
+        }
+
+        // 🛡️ NEW: Filter by on-shift status if required
+        if (requireOnShift && finalStaffIds.size > 0) {
+            const onShiftIds = await getOnShiftEmployeeIds();
+            if (onShiftIds.size > 0) {
+                const beforeCount = finalStaffIds.size;
+                // Keep: targetStaffIds (explicit targets) + anyone on-shift
+                // This ensures the specific KTV assigned to a booking still gets notified
+                const explicitTargets = new Set<string>(targetStaffIds || []);
+                const filteredIds = new Set<string>();
+                finalStaffIds.forEach(id => {
+                    if (explicitTargets.has(id) || onShiftIds.has(id)) {
+                        filteredIds.add(id);
+                    }
+                });
+                finalStaffIds = filteredIds;
+                console.log(`📡 [Push Helper] On-shift filter: ${beforeCount} → ${finalStaffIds.size} staff (${onShiftIds.size} on shift today)`);
             }
         }
 
@@ -136,3 +187,4 @@ export async function sendPushNotification(payload: PushPayload) {
         return { success: false, error: error.message };
     }
 }
+

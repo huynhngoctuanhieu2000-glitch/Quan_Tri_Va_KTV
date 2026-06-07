@@ -614,7 +614,7 @@ export const DispatchStaffRow = ({
                                                 </span>
                                             )}
                                             {focus && (() => {
-                                                const FULL_BODY_THRESHOLD = 6;
+                                                const FULL_BODY_THRESHOLD = 8;
                                                 const areas = focus.split(',').map(s => s.trim()).filter(Boolean);
                                                 const displayText = areas.length >= FULL_BODY_THRESHOLD ? 'Full Body' : focus;
                                                 return (

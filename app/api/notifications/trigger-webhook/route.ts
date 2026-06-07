@@ -13,6 +13,10 @@ interface NotifRule {
  * POST /api/notifications/trigger-webhook
  * Receives database webhook event from Supabase on StaffNotifications insert
  * and triggers matching Web Push notifications.
+ * 
+ * ⚠️ ĐÂY LÀ ĐƯỜNG GỬI PUSH DUY NHẤT.
+ * notification-helper.ts chỉ INSERT vào DB, KHÔNG gửi Push trực tiếp.
+ * Supabase DB Webhook bắt INSERT → gọi route này → route này gửi Push.
  */
 export async function POST(request: Request) {
     try {
@@ -58,16 +62,20 @@ export async function POST(request: Request) {
             .replace(/\[AUTO\]/gi, '')
             .trim();
 
-        // 4. Dispatch Push Notifications based on rule targets
+        // 4. Determine if on-shift filtering should be applied
+        const shouldFilterOnShift = rule.require_on_shift === true;
+
+        // 5. Dispatch Push Notifications based on rule targets
         let pushSent = false;
         
         if (record.employeeId && rule.include_target_employee) {
-            // Push to target employee
+            // Push to target employee (always send regardless of on-shift for explicit targets)
             await sendPushNotification({
                 title: `${record.type === 'REWARD' ? '🎁' : '🔔'} Thông báo`,
                 message: cleanMessage,
                 targetStaffIds: [record.employeeId],
-                url: '/'
+                url: '/',
+                requireOnShift: false, // Explicit target: always deliver
             });
             pushSent = true;
 
@@ -78,7 +86,8 @@ export async function POST(request: Request) {
                     title: '🔔 Thông báo',
                     message: cleanMessage,
                     targetRoles,
-                    url: '/'
+                    url: '/',
+                    requireOnShift: shouldFilterOnShift,
                 });
             }
         } else if (rule.allowed_roles && rule.allowed_roles.length > 0) {
@@ -88,15 +97,17 @@ export async function POST(request: Request) {
                 title: '🔔 Thông báo',
                 message: cleanMessage,
                 targetRoles,
-                url: '/'
+                url: '/',
+                requireOnShift: shouldFilterOnShift,
             });
             pushSent = true;
         }
 
-        console.log(`📡 [Webhook] Push dispatch completed. Push sent:`, pushSent);
+        console.log(`📡 [Webhook] Push dispatch completed. Push sent:`, pushSent, `| On-shift filter:`, shouldFilterOnShift);
         return NextResponse.json({ success: true, pushSent });
     } catch (error: any) {
         console.error('❌ [Webhook] Error processing notification webhook:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
+

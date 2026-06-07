@@ -835,7 +835,7 @@ const ServiceGroupCard = ({
                         </span>
                     )}
                     {customerReqs.focus && (() => {
-                        const FULL_BODY_THRESHOLD = 6;
+                        const FULL_BODY_THRESHOLD = 8;
                         const areas = customerReqs.focus.split(',').map(s => s.trim()).filter(Boolean);
                         const displayText = areas.length >= FULL_BODY_THRESHOLD ? 'Full Body' : customerReqs.focus;
                         return (
