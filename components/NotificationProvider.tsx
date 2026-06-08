@@ -507,25 +507,6 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 // GIAO DIỆN TIN NHẮN CHO KTV (Trên đầu)
                 <div suppressHydrationWarning className="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
                     <AnimatePresence>
-                        {sortedToasts.filter(n => !n.isRead).length >= 2 && (
-                            <motion.div
-                                key="ktv-clear-all"
-                                initial={{ opacity: 0, y: -8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -8 }}
-                                className="pointer-events-auto flex justify-end"
-                            >
-                                <button
-                                    onClick={clearAllToasts}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 backdrop-blur-sm text-white text-[11px] font-bold shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
-                                >
-                                    <X size={12} strokeWidth={3} />
-                                    Đóng tất cả ({sortedToasts.filter(n => !n.isRead).length})
-                                </button>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                    <AnimatePresence>
                         {sortedToasts.filter(n => !n.isRead).map((n) => (
                                 <KtvMessageToast 
                                     key={n.id} 
@@ -549,18 +530,13 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                                 />
                         ))}
                     </AnimatePresence>
-                </div>
-            ) : (
-                // GIAO DIỆN TOAST CHO QUẦY (Dưới góc)
-                <div suppressHydrationWarning className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
-                    {/* Nút đóng tất cả — chỉ xuất hiện khi có >= 2 thông báo */}
                     <AnimatePresence>
-                        {sortedToasts.length >= 2 && (
+                        {sortedToasts.filter(n => !n.isRead).length >= 2 && (
                             <motion.div
-                                key="clear-all-btn"
-                                initial={{ opacity: 0, y: 8 }}
+                                key="ktv-clear-all"
+                                initial={{ opacity: 0, y: -8 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 8 }}
+                                exit={{ opacity: 0, y: -8 }}
                                 className="pointer-events-auto flex justify-end"
                             >
                                 <button
@@ -568,11 +544,15 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 backdrop-blur-sm text-white text-[11px] font-bold shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
                                 >
                                     <X size={12} strokeWidth={3} />
-                                    Đóng tất cả ({sortedToasts.length})
+                                    Đóng tất cả ({sortedToasts.filter(n => !n.isRead).length})
                                 </button>
                             </motion.div>
                         )}
                     </AnimatePresence>
+                </div>
+            ) : (
+                // GIAO DIỆN TOAST CHO QUẦY (Dưới góc)
+                <div suppressHydrationWarning className="fixed bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-[9999] flex flex-col gap-3 pointer-events-none">
                     <AnimatePresence>
                         {sortedToasts.map((n) => (
                             <Toast 
@@ -594,6 +574,25 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                                 }}
                             />
                         ))}
+                    </AnimatePresence>
+                    <AnimatePresence>
+                        {sortedToasts.length >= 2 && (
+                            <motion.div
+                                key="clear-all-btn"
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 8 }}
+                                className="pointer-events-auto flex justify-end"
+                            >
+                                <button
+                                    onClick={clearAllToasts}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 backdrop-blur-sm text-white text-[11px] font-bold shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
+                                >
+                                    <X size={12} strokeWidth={3} />
+                                    Đóng tất cả ({sortedToasts.length})
+                                </button>
+                            </motion.div>
+                        )}
                     </AnimatePresence>
                 </div>
             )}
