@@ -781,7 +781,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                             if (allFeedback) currentStatus = 'FEEDBACK';
                             else if (allDone && currentStatus !== 'DONE' && currentStatus !== 'CLEANING') currentStatus = 'CLEANING';
                             else if (isAnyStarted) {
-                                if (!['DONE', 'CLEANING', 'FEEDBACK', 'IN_PROGRESS'].includes(currentStatus)) currentStatus = 'IN_PROGRESS';
+                                if (!['DONE', 'CLEANING', 'FEEDBACK', 'IN_PROGRESS', 'CANCELLED'].includes(currentStatus)) currentStatus = 'IN_PROGRESS';
                             } else {
                                 // ⚠️ FIX: Nếu KTV này CHƯA BẮT ĐẦU (chưa có actualStartTime)
                                 if (['IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {

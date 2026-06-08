@@ -85,7 +85,14 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
 
                 if (tError) throw tError;
                 if (!turn || !turn.current_order_id) {
-                    const { data: nextAssign } = await supabase.from('KtvAssignments').select('booking_id').eq('employee_id', technicianCode).eq('business_date', today).in('status', ['QUEUED', 'READY']).order('priority', { ascending: true }).order('planned_start_time', { ascending: true, nullsFirst: false }).limit(1).maybeSingle();
+                    const { data: nextAssigns } = await supabase.from('KtvAssignments').select('booking_id').eq('employee_id', technicianCode).eq('business_date', today).in('status', ['QUEUED', 'READY']).order('priority', { ascending: true }).order('planned_start_time', { ascending: true, nullsFirst: false }).limit(5);
+                    let nextAssign = null;
+                    if (nextAssigns && nextAssigns.length > 0) {
+                        const bIds = nextAssigns.map((a: any) => a.booking_id);
+                        const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED")');
+                        const validBIds = new Set(bData?.map((b: any) => b.id) || []);
+                        nextAssign = nextAssigns.find((a: any) => validBIds.has(a.booking_id));
+                    }
                     if (nextAssign) return NextResponse.json({ success: true, data: { nextBookingId: nextAssign.booking_id } });
                     return NextResponse.json({ success: true, data: null });
                 }
@@ -173,7 +180,14 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         if (!booking) {
             if (technicianCode) {
                 const today = getBusinessDate();
-                const { data: nextAssign } = await supabase.from('KtvAssignments').select('booking_id').eq('employee_id', technicianCode).eq('business_date', today).in('status', ['QUEUED', 'READY']).order('priority', { ascending: true }).order('planned_start_time', { ascending: true, nullsFirst: false }).limit(1).maybeSingle();
+                const { data: nextAssigns } = await supabase.from('KtvAssignments').select('booking_id').eq('employee_id', technicianCode).eq('business_date', today).in('status', ['QUEUED', 'READY']).order('priority', { ascending: true }).order('planned_start_time', { ascending: true, nullsFirst: false }).limit(5);
+                let nextAssign = null;
+                if (nextAssigns && nextAssigns.length > 0) {
+                    const bIds = nextAssigns.map((a: any) => a.booking_id);
+                    const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED")');
+                    const validBIds = new Set(bData?.map((b: any) => b.id) || []);
+                    nextAssign = nextAssigns.find((a: any) => validBIds.has(a.booking_id));
+                }
                 if (nextAssign) return NextResponse.json({ success: true, data: { nextBookingId: nextAssign.booking_id } });
             }
             return NextResponse.json({ success: true, data: null });
@@ -417,7 +431,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         let nextStartTime = null;
         if (technicianCode) {
             const today = getBusinessDate();
-            const { data: nextAssign } = await supabase
+            const { data: nextAssigns } = await supabase
                 .from('KtvAssignments')
                 .select('booking_id, planned_start_time')
                 .eq('employee_id', technicianCode)
@@ -428,9 +442,15 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 .order('planned_start_time', { ascending: true, nullsFirst: false })
                 .order('sequence_no', { ascending: true })
                 .order('created_at', { ascending: true })
-                .limit(1)
-                .maybeSingle();
+                .limit(5);
             
+            let nextAssign = null;
+            if (nextAssigns && nextAssigns.length > 0) {
+                const bIds = nextAssigns.map((a: any) => a.booking_id);
+                const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED")');
+                const validBIds = new Set(bData?.map((b: any) => b.id) || []);
+                nextAssign = nextAssigns.find((a: any) => validBIds.has(a.booking_id));
+            }
             if (nextAssign) {
                 nextBookingId = nextAssign.booking_id;
 
