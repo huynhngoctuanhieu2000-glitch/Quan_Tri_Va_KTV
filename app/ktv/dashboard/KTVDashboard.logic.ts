@@ -1161,6 +1161,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
             };
 
             if (isMergeSync) {
+                // 🛡️ REGRESSION PREVENTION: SMART MERGE LOGIC
+                // KHÔNG ĐƯỢC sửa đổi thuật toán "Sequential Time Allocation" bên dưới.
+                // Thuật toán này đảm bảo khi Quầy Lễ Tân thêm DV2 vào *sau khi* DV1 đã bắt đầu (có Gap),
+                // thời lượng của DV2 KHÔNG bị DV1 nuốt mất (nếu DV1 bị lố giờ).
+                // Cơ chế: Tính mốc thời gian hoàn tất nối tiếp (currentVirtualEndMs),
+                // sau đó dịch ngược thời gian bắt đầu ảo (synthesizedStartMs) để bộ đếm lùi tuyệt đối chạy đúng.
+                
                 // 🔥 Smart Merge: Tính tổng duration
                 currentSegDuration = allMySegs.reduce((sum: number, s: any) => sum + (Number(s.duration) || 60), 0);
                 
