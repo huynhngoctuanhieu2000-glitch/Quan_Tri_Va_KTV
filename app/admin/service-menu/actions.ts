@@ -66,7 +66,12 @@ export async function updateServiceBulkSync(originalNameVN: string, payload: Par
             tags: payload.tags,
             focusConfig: payload.focusConfig,
             imageUrl: payload.imageUrl,
-            category: payload.category
+            category: payload.category,
+            showCustomForYou: payload.showCustomForYou,
+            showNotes: payload.showNotes,
+            showGender: payload.showGender,
+            showStrength: payload.showStrength,
+            showFocus: payload.showFocus
         };
 
         const cleanPayload = Object.fromEntries(
@@ -90,3 +95,4 @@ export async function updateServiceBulkSync(originalNameVN: string, payload: Par
         return { success: false, error: error.message || 'Unknown error' };
     }
 }
+
