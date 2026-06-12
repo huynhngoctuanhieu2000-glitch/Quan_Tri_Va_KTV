@@ -3,9 +3,17 @@
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { ShieldAlert, Search, Filter, Plus, User, Phone, Calendar, Star, MoreHorizontal, Edit2, Check, X, Tag } from 'lucide-react';
+import { ShieldAlert, Search, Filter, Plus, User, Phone, Calendar, Star, MoreHorizontal, Edit2, Check, X, Tag, Building2, MapPin, Mail, FileText, Receipt } from 'lucide-react';
 
 import { Customer } from '@/lib/types';
+
+// 🔧 UI CONFIGURATION
+const MODAL_ANIMATION_MS = 200;
+const BADGE_COLORS = {
+  vat: 'bg-amber-100 text-amber-700 border-amber-200',
+  vip: 'bg-amber-100 text-amber-700',
+  member: 'bg-blue-100 text-blue-700',
+};
 
 export default function CRMPage() {
   const { hasPermission } = useAuth();
@@ -13,6 +21,7 @@ export default function CRMPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   React.useEffect(() => {
     setMounted(true);
@@ -48,7 +57,9 @@ export default function CRMPage() {
   const filteredCustomers = customers.filter(c => 
     (c.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (c.phone || '').includes(searchTerm) ||
-    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.taxCode || '').includes(searchTerm) ||
+    (c.companyName || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const formatVND = (n?: number) => n ? new Intl.NumberFormat('vi-VN').format(n) + 'đ' : '0đ';
@@ -70,7 +81,7 @@ export default function CRMPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="text" 
-                placeholder="Tìm theo tên, SĐT, Email..." 
+                placeholder="Tìm theo tên, SĐT, Email, MST, công ty..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
@@ -98,16 +109,16 @@ export default function CRMPage() {
               <tbody className="divide-y divide-gray-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                    <td colSpan={7} className="p-8 text-center text-gray-500">
                       Đang tải danh sách khách hàng...
                     </td>
                   </tr>
                 ) : filteredCustomers.map(customer => (
-                  <CustomerRow key={customer.id} customer={customer} formatVND={formatVND} />
+                  <CustomerRow key={customer.id} customer={customer} formatVND={formatVND} onViewDetail={setSelectedCustomer} />
                 ))}
                 {!isLoading && filteredCustomers.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                    <td colSpan={7} className="p-8 text-center text-gray-500">
                       Không tìm thấy khách hàng nào phù hợp.
                     </td>
                   </tr>
@@ -117,11 +128,26 @@ export default function CRMPage() {
           </div>
         </div>
       </div>
+
+      {/* Customer Detail Modal */}
+      {selectedCustomer && (
+        <CustomerDetailModal 
+          customer={selectedCustomer} 
+          formatVND={formatVND}
+          onClose={() => setSelectedCustomer(null)} 
+        />
+      )}
     </AppLayout>
   );
 }
 
-const CustomerRow = ({ customer, formatVND }: { customer: Customer, formatVND: (n?: number) => string }) => {
+// ─── Customer Row ────────────────────────────────────────────────────────────
+
+const CustomerRow = ({ customer, formatVND, onViewDetail }: { 
+  customer: Customer; 
+  formatVND: (n?: number) => string;
+  onViewDetail: (c: Customer) => void;
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [notes, setNotes] = useState(customer.notes || '');
   const [isSaving, setIsSaving] = useState(false);
@@ -155,7 +181,15 @@ const CustomerRow = ({ customer, formatVND }: { customer: Customer, formatVND: (
             {(customer.fullName || '?').charAt(0).toUpperCase()}
           </div>
           <div>
-            <div className="font-medium text-gray-900">{customer.fullName}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-gray-900">{customer.fullName}</span>
+              {customer.taxCode && (
+                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${BADGE_COLORS.vat}`}>
+                  <Receipt size={10} />
+                  VAT
+                </span>
+              )}
+            </div>
             <div className="text-[11px] text-gray-500 flex flex-col gap-0.5 mt-0.5">
               <div className="flex items-center gap-1.5 line-clamp-1">
                 <Phone size={10} className="text-gray-400" /> {customer.phone}
@@ -219,7 +253,7 @@ const CustomerRow = ({ customer, formatVND }: { customer: Customer, formatVND: (
       </td>
       <td className="p-4 align-top">
         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-          (customer.visitCount || 0) > 10 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+          (customer.visitCount || 0) > 10 ? BADGE_COLORS.vip : BADGE_COLORS.member
         }`}>
           <Star size={12} />
           {(customer.visitCount || 0) > 10 ? 'VIP' : 'Member'}
@@ -238,7 +272,11 @@ const CustomerRow = ({ customer, formatVND }: { customer: Customer, formatVND: (
         </div>
       </td>
       <td className="p-4 text-right align-top">
-        <button className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
+        <button 
+          onClick={() => onViewDetail(customer)}
+          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+          title="Xem chi tiết"
+        >
           <MoreHorizontal size={18} />
         </button>
       </td>
@@ -246,3 +284,183 @@ const CustomerRow = ({ customer, formatVND }: { customer: Customer, formatVND: (
   );
 };
 
+// ─── Customer Detail Modal ───────────────────────────────────────────────────
+
+const CustomerDetailModal = ({ customer, formatVND, onClose }: { 
+  customer: Customer; 
+  formatVND: (n?: number) => string;
+  onClose: () => void; 
+}) => {
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div 
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        style={{ animation: `fadeInScale ${MODAL_ANIMATION_MS}ms ease-out` }}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+          <h2 className="text-lg font-bold text-gray-900">Chi tiết Khách Hàng</h2>
+          <button 
+            onClick={onClose} 
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Customer Info */}
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl font-bold shrink-0">
+              {(customer.fullName || '?').charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-bold text-gray-900 truncate">{customer.fullName}</h3>
+                {customer.taxCode && (
+                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${BADGE_COLORS.vat}`}>
+                    <Receipt size={10} />
+                    VAT
+                  </span>
+                )}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  (customer.visitCount || 0) > 10 ? BADGE_COLORS.vip : BADGE_COLORS.member
+                }`}>
+                  <Star size={10} />
+                  {(customer.visitCount || 0) > 10 ? 'VIP' : 'Member'}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
+                <Phone size={12} /> {customer.phone}
+              </div>
+              {customer.email && (
+                <div className="text-sm text-indigo-500 mt-0.5">@ {customer.email}</div>
+              )}
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Tổng chi tiêu</div>
+              <div className="text-base font-bold text-gray-900 mt-1">{formatVND(customer.totalSpent)}</div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Số lần đến</div>
+              <div className="text-base font-bold text-gray-900 mt-1">{customer.visitCount || 0}</div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">Lần cuối</div>
+              <div className="text-sm font-bold text-gray-900 mt-1">
+                {customer.lastVisited ? new Date(customer.lastVisited).toLocaleDateString('vi-VN') : '---'}
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          {customer.notes && (
+            <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-4">
+              <div className="text-[10px] text-amber-600 uppercase tracking-wider font-bold mb-1.5">📝 Ghi chú</div>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap">{customer.notes}</div>
+            </div>
+          )}
+
+          {/* KTV Reviews */}
+          {customer.ktvReviews && customer.ktvReviews.length > 0 && (
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-2">Đánh giá từ KTV</div>
+              <div className="flex flex-wrap gap-1.5">
+                {customer.ktvReviews.map((review, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 text-rose-600 text-xs font-medium border border-rose-100">
+                    <Tag size={10} /> {review}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ──── VAT Invoice Section ──── */}
+          {customer.taxCode && (
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <FileText size={14} className="text-amber-700" />
+                </div>
+                <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                  Thông tin xuất hoá đơn VAT
+                </h4>
+              </div>
+
+              <div className="space-y-2.5 pl-1">
+                {/* MST */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-amber-600 uppercase tracking-widest font-bold bg-amber-100 px-2 py-0.5 rounded">MST</span>
+                  <span className="text-sm font-mono font-bold text-amber-900">{customer.taxCode}</span>
+                </div>
+
+                {/* Company Name */}
+                {customer.companyName && (
+                  <div className="flex items-start gap-2.5">
+                    <Building2 size={14} className="text-amber-600 mt-0.5 shrink-0" />
+                    <span className="text-sm font-semibold text-gray-800">{customer.companyName}</span>
+                  </div>
+                )}
+
+                {/* Address */}
+                {customer.companyAddress && (
+                  <div className="flex items-start gap-2.5">
+                    <MapPin size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <span className="text-sm text-gray-600">{customer.companyAddress}</span>
+                  </div>
+                )}
+
+                {/* Email */}
+                {customer.companyEmail && (
+                  <div className="flex items-start gap-2.5">
+                    <Mail size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <span className="text-sm text-gray-600">{customer.companyEmail}</span>
+                  </div>
+                )}
+
+                {/* Phone */}
+                {customer.companyPhone && (
+                  <div className="flex items-start gap-2.5">
+                    <Phone size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                    <span className="text-sm text-gray-600">{customer.companyPhone}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-end rounded-b-2xl">
+          <button 
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+
+      {/* Animation keyframes */}
+      <style jsx>{`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.95) translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  );
+};

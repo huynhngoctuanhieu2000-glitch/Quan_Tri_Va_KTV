@@ -112,6 +112,12 @@ export interface Customer {
   lastVisited?: string;
   createdAt?: string;
   updatedAt?: string;
+  // VAT Invoice fields
+  taxCode?: string;
+  companyName?: string;
+  companyAddress?: string;
+  companyEmail?: string;
+  companyPhone?: string;
   // Aggregated fields
   totalSpent?: number;
   visitCount?: number;
