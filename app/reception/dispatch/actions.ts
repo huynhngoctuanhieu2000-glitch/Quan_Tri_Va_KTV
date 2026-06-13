@@ -34,7 +34,7 @@ export async function getDispatchData(date: string) {
         // 🔧 EGRESS FIX: Only select needed columns for Bookings
         const { data: bData, error: bError } = await supabase
             .from('Bookings')
-            .select('id, billCode, customerName, customerLang, customerPhone, customerEmail, timeBooking, bookingDate, createdAt, updatedAt, status, totalAmount, paymentMethod, technicianCode, bedId, roomName, notes, accessToken, rating, feedbackNote, focusAreaNote, timeStart, timeEnd')
+            .select('id, billCode, customerId, customerName, customerLang, customerPhone, customerEmail, timeBooking, bookingDate, createdAt, updatedAt, status, totalAmount, paymentMethod, technicianCode, bedId, roomName, notes, accessToken, rating, feedbackNote, focusAreaNote, timeStart, timeEnd')
             .in('source', ['STANDARD_WALK_IN', 'VIP_WALK_IN', 'STANDARD_MENU', 'VIP_MENU', 'MIXED_WALK_IN'])
             .gte('bookingDate', startOfDay)
             .lte('bookingDate', endOfDay)
@@ -44,6 +44,19 @@ export async function getDispatchData(date: string) {
         if (bError) throw bError;
 
         let bookings: any[] = bData || [];
+
+        // Fetch VAT info from Customers
+        const customerIds = Array.from(new Set(bookings.map(b => b.customerId).filter(Boolean)));
+        const { data: customersData } = await supabase
+            .from('Customers')
+            .select('id, taxCode')
+            .in('id', customerIds);
+        const taxCodeMap = Object.fromEntries((customersData || []).map(c => [c.id, c.taxCode]));
+
+        bookings = bookings.map(b => ({
+            ...b,
+            hasVat: !!taxCodeMap[b.customerId]
+        }));
 
         // 4. Fetch Services FIRST to build map (safer than complex filtering)
         const { data: allServices, error: svcError } = await supabase

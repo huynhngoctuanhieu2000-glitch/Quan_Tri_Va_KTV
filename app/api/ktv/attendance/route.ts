@@ -62,31 +62,20 @@ export async function POST(request: Request) {
                 if (checkType !== 'SUDDEN_OFF' && !allowedPrefixes.includes(clientPrefix)) {
                     console.error(`❌ [Attendance] IP prefix mismatch: clientIp=${clientIp} (prefix=${clientPrefix}), allowedPrefixes=${allowedPrefixes}`);
                     
-                    // SAVE REJECTED IP TO SYSTEM CONFIGS
-                    const rejectedInfo = {
-                        ip: clientIp,
-                        name: displayName || staffCode || employeeId,
-                        time: new Date().toISOString()
-                    };
-                    
+                    // LOG TO SECURITY AUDIT LOGS
+                    const rejectedName = displayName || staffCode || employeeId;
                     try {
-                        const { data: existing } = await supabase
-                            .from('SystemConfigs')
-                            .select('id')
-                            .eq('key', 'spa_wifi_last_rejected_ip')
-                            .maybeSingle();
-
-                        if (existing) {
-                            await supabase.from('SystemConfigs').update({ value: rejectedInfo, updated_at: new Date().toISOString() }).eq('id', existing.id);
-                        } else {
-                            await supabase.from('SystemConfigs').insert({ 
-                                key: 'spa_wifi_last_rejected_ip', 
-                                value: rejectedInfo, 
-                                description: 'IP vừa bị từ chối khi điểm danh gần nhất' 
-                            });
-                        }
+                        const userAgent = request.headers.get('user-agent') || 'unknown';
+                        await supabase.from('SecurityAuditLogs').insert({
+                            employee_id: employeeId,
+                            employee_name: rejectedName,
+                            event_type: 'INVALID_WIFI_IP',
+                            ip_address: clientIp,
+                            user_agent: userAgent,
+                            details: { checkType, expected_prefixes: allowedPrefixes }
+                        });
                     } catch (e) {
-                        console.error('Lỗi khi lưu IP từ chối:', e);
+                        console.error('Lỗi khi lưu SecurityAuditLog:', e);
                     }
 
                     return NextResponse.json({ 

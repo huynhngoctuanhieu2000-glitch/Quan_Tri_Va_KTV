@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
+import { headers } from 'next/headers';
 
 const DOMAIN_SUFFIX = '@nganhaspa.internal';
 
@@ -43,6 +44,26 @@ export async function authenticateUser(username: string, password?: string) {
 
         if (error || !user) {
             console.error("Login failed or user not found in public.Users", error);
+            
+            // LOG TO SECURITY AUDIT LOGS
+            try {
+                const headersList = await headers();
+                const forwardedFor = headersList.get('x-forwarded-for');
+                const realIp = headersList.get('x-real-ip');
+                const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : (realIp || 'unknown');
+                const userAgent = headersList.get('user-agent') || 'unknown';
+
+                await supabaseAdmin.from('SecurityAuditLogs').insert({
+                    employee_name: username,
+                    event_type: 'INVALID_LOGIN',
+                    ip_address: clientIp,
+                    user_agent: userAgent,
+                    details: { error: error?.message || 'Sai mật khẩu' }
+                });
+            } catch (e) {
+                console.error('Lỗi khi lưu SecurityAuditLog (INVALID_LOGIN):', e);
+            }
+
             return { success: false, error: 'Sai tài khoản hoặc mật khẩu' };
         }
 

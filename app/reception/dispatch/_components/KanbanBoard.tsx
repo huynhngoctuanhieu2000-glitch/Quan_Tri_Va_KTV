@@ -440,6 +440,11 @@ export function KanbanBoard({ orders, onUpdateStatus, onOpenDetail, onConfirmAdd
                                                               {pmIcon}
                                                               <span className={`text-[9px] font-bold ${colorClass}`}>{pmText}</span>
                                                             </div>
+                                                            {order.hasVat && (
+                                                                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border bg-blue-50 border-blue-100" title="Khách yêu cầu xuất hoá đơn VAT">
+                                                                    <span className="text-[9px] font-black text-blue-600">VAT</span>
+                                                                </div>
+                                                            )}
                                                           </div>
                                                         );
                                                     })()}

@@ -489,3 +489,19 @@
 | `updated_at` | timestamptz | Thời điểm cập nhật |
 
 **Constraint**: `UNIQUE(staff_id, subscription)` — mỗi thiết bị chỉ đăng ký 1 lần
+
+---
+
+### 14. SecurityAuditLogs ✅ CHỦ LỰC
+**Nhiệm vụ**: Lưu trữ vĩnh viễn các sự kiện bảo mật (vi phạm IP Wifi, đăng nhập sai).
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `employee_id` | text | Mã nhân viên (nếu có) |
+| `employee_name` | text | Tên nhân viên hoặc username |
+| `event_type` | text | Loại sự kiện (VD: `INVALID_WIFI_IP`, `INVALID_LOGIN`) |
+| `ip_address` | text | Địa chỉ IP của thiết bị vi phạm |
+| `user_agent` | text | Trình duyệt / Thiết bị |
+| `details` | jsonb | Thông tin chi tiết thêm |
+| `created_at` | timestamptz | Thời điểm xảy ra |

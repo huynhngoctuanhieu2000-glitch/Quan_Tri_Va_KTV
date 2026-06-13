@@ -61,6 +61,7 @@ export interface PendingOrder {
   updatedAt?: string;
   totalAmount?: number;
   paymentMethod?: string;
+  hasVat?: boolean;
   rawStatus?: string;
   hasAssignedKtv?: boolean;
   timeStart?: string | null;
