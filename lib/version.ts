@@ -1,2 +1,2 @@
-export const APP_VERSION = '2.1.24';
-export const LAST_UPDATE = 'Đồng bộ chính xác số giờ làm KPI giữa Admin và KTV App';
+export const APP_VERSION = '2.1.26';
+export const LAST_UPDATE = 'Sửa lỗi reset thời gian KTV khi Lễ Tân thao tác kéo Kanban lùi về Chuẩn bị';

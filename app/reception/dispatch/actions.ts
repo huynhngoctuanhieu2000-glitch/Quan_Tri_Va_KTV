@@ -1491,6 +1491,15 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
 
             // Xóa sạch thời gian nếu Lễ tân ÉP KÉO LÙI về Chuẩn Bị
             if (['PREPARING', 'WAITING', 'NEW'].includes(newStatus) && forceBackward) {
+                // 🔥 HARD BLOCK: Ngăn chặn tuyệt đối việc xóa mất actualStartTime của KTV đã làm
+                const startedKtvs = segs
+                    .filter((s: any) => s.actualStartTime && (!targetKtvIds || targetKtvIds.length === 0 || targetKtvIds.includes(s.ktvId)))
+                    .map((s: any) => s.ktvId || s.ktvName);
+                
+                if (startedKtvs.length > 0) {
+                    throw new Error(`Không thể kéo thẻ lùi về "Chuẩn Bị" vì KTV [${startedKtvs.join(', ')}] đã bắt đầu làm. Để thêm/đổi người, vui lòng dùng tính năng "Cập Nhật KTV" hoặc "Tạm Dừng" ở menu chuột phải!`);
+                }
+
                 segs.forEach((s: any) => {
                     if (targetKtvIds && targetKtvIds.length > 0 && s.ktvId && !targetKtvIds.includes(s.ktvId)) {
                         return;
