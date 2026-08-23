@@ -440,15 +440,49 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
                       <input type="checkbox" name="showGender" checked={formData.showGender !== false} onChange={handleChange} className="w-5 h-5 accent-indigo-600 rounded" />
                     </label>
 
-                    <label className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-indigo-300 transition-colors">
-                      <span className="text-sm font-medium text-gray-700">Chọn Vị trí (Focus/Avoid)</span>
-                      <input type="checkbox" name="showFocus" checked={formData.showFocus !== false} onChange={handleChange} className="w-5 h-5 accent-indigo-600 rounded" />
-                    </label>
+                    <div className="space-y-3">
+                      <label className={`flex items-center justify-between p-3 bg-white border ${formData.showFocus !== false ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-gray-200'} rounded-xl cursor-pointer hover:border-indigo-300 transition-all`}>
+                        <span className="text-sm font-medium text-gray-700">Chọn Vị trí (Focus/Avoid)</span>
+                        <input type="checkbox" name="showFocus" checked={formData.showFocus !== false} onChange={handleChange} className="w-5 h-5 accent-indigo-600 rounded" />
+                      </label>
+                      
+                      {formData.showFocus !== false && (
+                        <div className="pl-4 border-l-2 border-indigo-100 ml-2 space-y-3 animate-in slide-in-from-top-2 duration-200">
+                          <p className="text-xs text-gray-500">
+                            Khách có thể chọn các khu vực được đánh dấu dưới đây trong hộp thoại Custom For You.
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {FOCUS_AREAS.map(area => {
+                              const focusCfg: any = formData.focusConfig || {};
+                              const isSelected = !!focusCfg[area.id];
+                              return (
+                                <label 
+                                  key={area.id}
+                                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                                    isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-200 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    onChange={() => handleFocusAreaToggle(area.id)}
+                                    className="w-4 h-4 accent-indigo-600"
+                                  />
+                                  <span className={`text-xs ${isSelected ? 'font-medium text-indigo-900' : 'text-gray-700'}`}>
+                                    {area.label}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
 
-              {/* SECTION 5: TAGS VÀ FOCUS AREAS */}
+              {/* SECTION 5: TAGS */}
               <section className="space-y-6">
                 
                 {/* COMBO TAGS */}
@@ -475,40 +509,6 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
                         >
                           {tag.label}
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* FOCUS AREAS */}
-                <div>
-                  <div className="flex items-center gap-2 border-b pb-2 mb-4">
-                    <Target size={18} className="text-gray-400" />
-                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Vị Trí Tập Trung (Focus Area)</h3>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">Khách có thể chọn khu vực mỏi khi đặt lịch trong hộp thoại Custom For You của dịch vụ này.</p>
-                  
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {FOCUS_AREAS.map(area => {
-                      const focusCfg: any = formData.focusConfig || {};
-                      const isSelected = !!focusCfg[area.id];
-                      return (
-                        <label 
-                          key={area.id}
-                          className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                            isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected}
-                            onChange={() => handleFocusAreaToggle(area.id)}
-                            className="w-4 h-4 accent-indigo-600"
-                          />
-                          <span className={`text-sm ${isSelected ? 'font-medium text-indigo-900' : 'text-gray-700'}`}>
-                            {area.label}
-                          </span>
-                        </label>
                       );
                     })}
                   </div>
