@@ -20,6 +20,7 @@ export interface StaffAssignment {
   segments: WorkSegment[];
   noteForKtv: string;
   serviceNameForKtv?: string;
+  _calculatedStartTime?: string; // Virtual property for Kanban rendering
 }
 
 export interface GuestBlock {
