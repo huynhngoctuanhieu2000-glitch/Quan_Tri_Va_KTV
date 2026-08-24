@@ -1849,8 +1849,8 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
 }
 
 
-export async function splitBookingItem(bookingId: string, itemId: string, dur1: number, dur2: number, date: string) {
-    return await BookingModificationService.splitBookingItem(bookingId, itemId, dur1, dur2, date);
+export async function splitBookingItem(bookingId: string, itemId: string, dur1: number, dur2: number, date: string, name1?: string, name2?: string) {
+    return await BookingModificationService.splitBookingItem(bookingId, itemId, dur1, dur2, date, name1, name2);
 }
 
 /**

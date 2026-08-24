@@ -637,7 +637,7 @@ export class BookingModificationService {
         }
     }
 
-    static async splitBookingItem(bookingId: string, itemId: string, dur1: number, dur2: number, date: string) {
+    static async splitBookingItem(bookingId: string, itemId: string, dur1: number, dur2: number, date: string, name1?: string, name2?: string) {
         try {
             await requirePermission('dispatch_board');
             const supabase = getSupabaseAdmin();
@@ -671,7 +671,10 @@ export class BookingModificationService {
                 originalSegs = [{ duration: dur1, startTime: ktv1Start, endTime: ktv1End }];
             }
 
-            await supabase.from('BookingItems').update({ segments: originalSegs }).eq('id', itemId);
+            const updateData: any = { segments: originalSegs };
+            if (name1) updateData.serviceName = name1;
+
+            await supabase.from('BookingItems').update(updateData).eq('id', itemId);
 
             const { id: _oldId, created_at: _ca, ...newItemData } = originalItem;
             newItemData.id = crypto.randomUUID();
@@ -679,6 +682,8 @@ export class BookingModificationService {
             newItemData.technicianCodes = []; 
             newItemData.segments = [{ duration: dur2, startTime: ktv2Start, endTime: ktv2End }];
             newItemData.timeStart = null; newItemData.timeEnd = null; newItemData.status = 'NEW';
+            if (name2) newItemData.serviceName = name2;
+            else if (name1) newItemData.serviceName = name1;
             
             let opts = typeof newItemData.options === 'string' ? JSON.parse(newItemData.options) : (newItemData.options || {});
             opts.isSplitItem = true; opts.parentItemId = itemId; newItemData.options = opts;

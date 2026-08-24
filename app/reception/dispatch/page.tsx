@@ -279,6 +279,9 @@ export default function DispatchBoardPage() {
     duration: number;
     ktv1Dur: number;
     ktv2Dur: number;
+    name1?: string;
+    name2?: string;
+    defaultName?: string;
     isSaving: boolean;
   } | null>(null);
 
@@ -601,7 +604,7 @@ if (!hasPermission('dispatch_board')) {
 
   const confirmSplitService = async () => {
       if (!splitConfig) return;
-      const { orderId, svcId, duration, ktv1Dur, ktv2Dur } = splitConfig;
+      const { orderId, svcId, duration, ktv1Dur, ktv2Dur, name1, name2 } = splitConfig;
       
       setSplitConfig(prev => prev ? { ...prev, isSaving: true } : null);
       
@@ -637,7 +640,7 @@ if (!hasPermission('dispatch_board')) {
               if (!realSvcId) throw new Error('Không tìm thấy ID dịch vụ');
               
               const { splitBookingItem } = await import('./actions');
-              const res = await splitBookingItem(orderId, realSvcId, ktv1Dur, ktv2Dur, selectedDate);
+              const res = await splitBookingItem(orderId, realSvcId, ktv1Dur, ktv2Dur, selectedDate, name1, name2);
               if (!res.success) throw new Error(res.error);
               
               await fetchData();
@@ -676,6 +679,9 @@ if (!hasPermission('dispatch_board')) {
            duration: dur,
            ktv1Dur: dur,
            ktv2Dur: dur,
+           defaultName: svc?.serviceName,
+           name1: svc?.serviceName,
+           name2: svc?.serviceName,
            isSaving: false
        });
        return;
@@ -3239,6 +3245,20 @@ if (!hasPermission('dispatch_board')) {
                     }}
                     className="w-full text-center font-black text-2xl text-indigo-600 bg-white border border-gray-200 rounded-xl py-2 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
                   />
+                  {splitConfig.ktv1Dur !== splitConfig.duration && (
+                    <div className="mt-3">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                        Tên Dịch Vụ
+                      </label>
+                      <input
+                        type="text"
+                        value={splitConfig.name1 || ''}
+                        onChange={(e) => setSplitConfig(prev => prev ? { ...prev, name1: e.target.value } : null)}
+                        className="w-full text-center font-bold text-sm text-gray-700 bg-white border border-gray-200 rounded-xl py-1.5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
+                        placeholder={splitConfig.defaultName}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-center text-gray-300">
@@ -3264,6 +3284,20 @@ if (!hasPermission('dispatch_board')) {
                     }}
                     className="w-full text-center font-black text-2xl text-indigo-700 bg-white border border-indigo-200 rounded-xl py-2 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
                   />
+                  {splitConfig.ktv1Dur !== splitConfig.duration && (
+                    <div className="mt-3">
+                      <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-1">
+                        Tên Dịch Vụ
+                      </label>
+                      <input
+                        type="text"
+                        value={splitConfig.name2 || ''}
+                        onChange={(e) => setSplitConfig(prev => prev ? { ...prev, name2: e.target.value } : null)}
+                        className="w-full text-center font-bold text-sm text-indigo-700 bg-white border border-indigo-200 rounded-xl py-1.5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
+                        placeholder={splitConfig.defaultName}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               

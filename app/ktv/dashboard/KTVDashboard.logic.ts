@@ -1949,6 +1949,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 let ratePer60 = type === 'TYPE_B' ? 180000 : 100000;
                 if (settings[rateKey] !== undefined) {
                     ratePer60 = Number(settings[rateKey]);
+                } else if (type === 'TYPE_B') {
+                    // Force TYPE_B default if no specific TYPE_B key exists
+                    ratePer60 = 180000;
                 } else if (settings['ktv_commission_per_60min'] !== undefined) {
                     ratePer60 = Number(settings['ktv_commission_per_60min']);
                 }

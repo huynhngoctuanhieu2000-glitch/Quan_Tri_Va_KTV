@@ -82,6 +82,8 @@ export class KtvCommissionService {
             ratePer60 = Number(configMap[rateKey]);
         } else if (workType === 'TYPE_B') {
             ratePer60 = 180000;
+        } else if (configMap['ktv_commission_per_60min'] !== undefined) {
+            ratePer60 = Number(configMap['ktv_commission_per_60min']);
         }
         
         // Deposit
