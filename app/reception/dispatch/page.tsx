@@ -1794,6 +1794,22 @@ if (!hasPermission('dispatch_board')) {
                     <LayoutList size={14} /> Điều Phối
                   </button>
                   <button
+                    onClick={() => setActiveMode('MONITOR')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      activeMode === 'MONITOR'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <Columns3 size={14} /> Giám Sát
+                  </button>
+                  <button
+                    onClick={() => window.location.href = '/reception/feedback'}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                  >
+                    <Star size={14} /> Đánh Giá
+                  </button>
+                  <button
                     onClick={() => setActiveMode('TURN_QUEUE')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeMode === 'TURN_QUEUE'
@@ -1812,16 +1828,6 @@ if (!hasPermission('dispatch_board')) {
                     }`}
                   >
                     <BedDouble size={14} /> Phòng
-                  </button>
-                  <button
-                    onClick={() => setActiveMode('MONITOR')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      activeMode === 'MONITOR'
-                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <Columns3 size={14} /> Giám Sát
                   </button>
                   <button
                     onClick={() => setActiveMode('WEB_BOOKING')}
@@ -1848,12 +1854,6 @@ if (!hasPermission('dispatch_board')) {
                   >
                     <CalendarClock size={14} /> Lịch Hẹn
                   </button>
-                  <button
-                    onClick={() => window.location.href = '/reception/feedback'}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                  >
-                    <Star size={14} /> Đánh Giá
-                  </button>
                 </div>
               </h1>
               
@@ -1868,6 +1868,16 @@ if (!hasPermission('dispatch_board')) {
                   }`}
                 >
                   <LayoutList size={12} /> <span className="hidden xs:inline">Điều Phối</span>
+                </button>
+                <button
+                  onClick={() => setActiveMode('MONITOR')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                    activeMode === 'MONITOR'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Columns3 size={12} /> <span className="hidden xs:inline">Giám Sát</span>
                 </button>
                 <button
                   onClick={() => setActiveMode('TURN_QUEUE')}
@@ -1888,16 +1898,6 @@ if (!hasPermission('dispatch_board')) {
                   }`}
                 >
                   <BedDouble size={12} /> <span className="hidden xs:inline">Phòng</span>
-                </button>
-                <button
-                  onClick={() => setActiveMode('MONITOR')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
-                    activeMode === 'MONITOR'
-                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Columns3 size={12} /> <span className="hidden xs:inline">Giám Sát</span>
                 </button>
                 <button
                   onClick={() => setActiveMode('WEB_BOOKING')}
