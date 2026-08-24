@@ -11,7 +11,7 @@ import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
 import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
-  Plus, Calendar as CalendarIcon, Send, Phone,
+  Plus, Calendar as CalendarIcon, Send, Phone, Globe,
   ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save, Zap, AlertTriangle, Info,
   Users, BedDouble, CalendarClock, ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Loader2, ChevronUp, Ban, Crown, Stethoscope, RotateCcw, Star
 } from 'lucide-react';
@@ -214,6 +214,45 @@ export default function DispatchBoardPage() {
     message: string;
     onConfirm: () => void;
   }>({ isOpen: false, message: '', onConfirm: () => {} });
+
+  const [webBookingCount, setWebBookingCount] = useState(0);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const fetchWebBookingCount = async () => {
+        try {
+            const startOfRange = `${selectedDate} 00:00:00`;
+            const endOfRange = `${selectedDate} 23:59:59`;
+            
+            const { count, error } = await supabase
+                .from('Bookings')
+                .select('*', { count: 'exact', head: true })
+                .gte('bookingDate', startOfRange)
+                .lte('bookingDate', endOfRange)
+                .neq('status', 'CANCELLED')
+                .in('source', ['WEB_BOOKING', 'HOME_BOOKING', 'VIP_BOOKING', 'STANDARD_BOOKING', 'MIXED_BOOKING'])
+                .eq('status', 'NEW');
+
+            if (count !== null && !error) {
+                setWebBookingCount(count);
+            }
+        } catch (err) {
+            console.error('Fetch web booking count error:', err);
+        }
+    };
+    
+    fetchWebBookingCount();
+    
+    const channel = supabase.channel('web_booking_badge')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'Bookings' }, () => {
+            fetchWebBookingCount();
+        })
+        .subscribe();
+        
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [mounted, selectedDate]);
 
   const [startServiceModal, setStartServiceModal] = useState<{
     isOpen: boolean;
@@ -1738,6 +1777,17 @@ if (!hasPermission('dispatch_board')) {
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight hidden sm:flex items-center gap-3">
                 <div className="hidden sm:flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200">
                   <button
+                    onClick={() => window.location.href = '/reception/web-booking'}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative text-gray-500 hover:text-emerald-600 hover:bg-emerald-50`}
+                  >
+                    <Globe size={14} /> Đơn Đặt Lịch
+                    {webBookingCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 shadow-sm">
+                        {webBookingCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
                     onClick={() => setActiveMode('DISPATCH')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeMode === 'DISPATCH'
@@ -1798,6 +1848,17 @@ if (!hasPermission('dispatch_board')) {
               
               {/* Mobile Mode Switcher */}
               <div className="flex sm:hidden items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200 w-full mb-1">
+                <button
+                  onClick={() => window.location.href = '/reception/web-booking'}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all relative text-gray-500 hover:text-emerald-600`}
+                >
+                  <Globe size={12} /> <span className="hidden xs:inline">Web</span>
+                  {webBookingCount > 0 && (
+                    <span className="absolute top-1 right-2 min-w-[14px] h-[14px] bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-sm">
+                      {webBookingCount}
+                    </span>
+                  )}
+                </button>
                 <button
                   onClick={() => setActiveMode('DISPATCH')}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
