@@ -1,2 +1,2 @@
-export const APP_VERSION = '2.1.39';
-export const LAST_UPDATE = 'Fix lỗi thiếu thời gian kết thúc ở bảng Đánh giá (do trạng thái ép Kéo/Thả bỏ qua bước lưu thời gian)';
+export const APP_VERSION = '2.1.40';
+export const LAST_UPDATE = 'Sửa lỗi lặp tên Khách A ở trang Đánh Giá do xung đột flow split';

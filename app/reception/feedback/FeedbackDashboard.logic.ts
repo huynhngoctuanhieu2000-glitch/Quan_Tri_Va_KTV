@@ -201,9 +201,18 @@ export function useFeedbackDashboard(selectedDate: string) {
                             }
                         }
                         
-                        // Tự động gán Khách A, Khách B nếu bị trống
-                        const autoGuestName = `Khách ${String.fromCharCode(65 + guestIndex)}`;
-                        const finalCustomerName = guest.guest_label || guest.customer_name || autoGuestName;
+                        // Tự động gán Khách A, Khách B nếu bị trống (dựa vào số lượng đã có trong group)
+                        const childIndex = group.childBookings.length;
+                        const autoGuestName = `Khách ${String.fromCharCode(65 + childIndex)}`;
+                        let finalCustomerName = guest.guestLabel || guest.customerName || guest.guest_label || guest.customer_name || autoGuestName;
+
+                        // Làm sạch tên nếu dính tiền tố (ví dụ: "Rose Huyen - Khách B" -> "Khách B")
+                        if (finalCustomerName.includes(' - Khách')) {
+                            const match = finalCustomerName.match(/Khách\s+[A-Z0-9]+/i);
+                            if (match) {
+                                finalCustomerName = match[0];
+                            }
+                        }
 
                         group.childBookings.push({
                             id: guest.id,
