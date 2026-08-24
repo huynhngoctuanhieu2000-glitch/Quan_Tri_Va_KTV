@@ -73,6 +73,7 @@ export const RoomBoard: React.FC<RoomBoardProps> = ({ rooms, beds, occupancies }
                     className={`relative p-3 rounded-2xl border transition-all ${
                       isBusy ? 'bg-rose-50/30 border-rose-100' : 
                       isCleaning ? 'bg-amber-50/30 border-amber-100' : 
+                      !isEmpty ? 'bg-indigo-50/30 border-indigo-100' :
                       'bg-gray-50 border-gray-100 hover:border-gray-200'
                     }`}
                   >
@@ -81,6 +82,7 @@ export const RoomBoard: React.FC<RoomBoardProps> = ({ rooms, beds, occupancies }
                         <BedDouble size={14} className={
                           isBusy ? 'text-rose-400' : 
                           isCleaning ? 'text-amber-400' : 
+                          !isEmpty ? 'text-indigo-400' :
                           'text-emerald-400'
                         } />
                         {bed.name}
@@ -101,9 +103,14 @@ export const RoomBoard: React.FC<RoomBoardProps> = ({ rooms, beds, occupancies }
                           <Clock size={10} /> Đang làm
                         </span>
                       )}
+                      {!isEmpty && !isCleaning && !isBusy && (
+                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Clock size={10} /> Chờ làm
+                        </span>
+                      )}
                     </div>
 
-                    {(isBusy || isCleaning) && bed.occupancy && (
+                    {!isEmpty && bed.occupancy && (
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200/50">
                         <div className="flex flex-col gap-1">
                           {bed.occupancy.ktvName && (
@@ -120,7 +127,11 @@ export const RoomBoard: React.FC<RoomBoardProps> = ({ rooms, beds, occupancies }
                         {bed.occupancy.endTime && (
                           <div className="text-right">
                             <span className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Xong lúc</span>
-                            <span className={`text-sm font-black ${isCleaning ? 'text-amber-600' : 'text-rose-600'}`}>
+                            <span className={`text-sm font-black ${
+                              isCleaning ? 'text-amber-600' : 
+                              isBusy ? 'text-rose-600' : 
+                              'text-indigo-600'
+                            }`}>
                               {bed.occupancy.endTime}
                             </span>
                           </div>

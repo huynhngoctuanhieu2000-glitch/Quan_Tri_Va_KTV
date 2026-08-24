@@ -2634,16 +2634,61 @@ if (!hasPermission('dispatch_board')) {
                 rooms={rooms}
                 beds={beds}
                 occupancies={orders.flatMap(order => 
-                  order.services
-                    .filter(svc => svc.bedId && svc.status !== 'COMPLETED' && svc.status !== 'CANCELLED')
-                    .map(svc => ({
-                      bedId: svc.bedId as string,
-                      roomId: svc.selectedRoomId as string,
-                      ktvName: svc.staffList?.[0]?.ktvName || 'Chưa phân công',
-                      endTime: svc.timeEnd ? svc.timeEnd.substring(0, 5) : undefined,
-                      status: svc.status || 'NEW',
-                      serviceName: svc.serviceName
-                    }))
+                  order.services.flatMap(svc => {
+                    if (['COMPLETED', 'CANCELLED', 'FEEDBACK', 'DONE'].includes(svc.status || '')) return [];
+                    if (['FEEDBACK', 'DONE'].includes(order.dispatchStatus)) return []; // Nếu tổng đơn đã ở FEEDBACK thì bỏ qua luôn
+
+                    const formatEndTime = (t?: string | null) => {
+                        if (!t) return undefined;
+                        if (t.includes('T')) {
+                            try {
+                                const d = new Date(t);
+                                if (!isNaN(d.getTime())) {
+                                    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                                }
+                            } catch (e) {}
+                            return t.substring(11, 16);
+                        }
+                        return t.substring(0, 5);
+                    };
+                    
+                    const segmentsWithBed = svc.staffList?.flatMap(staff => 
+                      (staff.segments || []).filter(seg => seg.bedId).map(seg => {
+                        let computedEndTime = seg.actualEndTime;
+                        if (!computedEndTime && seg.actualStartTime && seg.duration) {
+                            computedEndTime = getDynamicEndTime(seg.actualStartTime, seg.duration);
+                        } else if (!computedEndTime) {
+                            computedEndTime = seg.endTime;
+                        }
+
+                        return {
+                          bedId: seg.bedId as string,
+                          roomId: seg.roomId as string,
+                          ktvName: staff.ktvName || 'Chưa phân công',
+                          endTime: formatEndTime(computedEndTime) || formatEndTime(svc.timeEnd),
+                          status: svc.status || 'NEW',
+                          serviceName: svc.serviceName
+                        };
+                      })
+                    ) || [];
+
+                    if (segmentsWithBed.length > 0) {
+                      return segmentsWithBed;
+                    }
+
+                    if (svc.bedId) {
+                      return [{
+                        bedId: svc.bedId as string,
+                        roomId: svc.selectedRoomId as string,
+                        ktvName: svc.staffList?.[0]?.ktvName || 'Chưa phân công',
+                        endTime: formatEndTime(svc.timeEnd),
+                        status: svc.status || 'NEW',
+                        serviceName: svc.serviceName
+                      }];
+                    }
+
+                    return [];
+                  })
                 )}
               />
             </div>
