@@ -1419,6 +1419,9 @@ if (!hasPermission('dispatch_board')) {
                       noteForKtv: svc.staffList?.[0]?.noteForKtv || '',
                       notesForKtvs: Object.fromEntries(
                           svc.staffList.filter(r => r.ktvId && r.noteForKtv).map(r => [r.ktvId, r.noteForKtv])
+                      ),
+                      serviceNamesForKtvs: Object.fromEntries(
+                          svc.staffList.filter(r => r.ktvId && r.serviceNameForKtv).map(r => [r.ktvId, r.serviceNameForKtv])
                       )
                   }
               };

@@ -754,7 +754,7 @@ export async function processDispatch(bookingId: string, dispatchData: {
                 );
                 
                 if (ktvItem) {
-                    svcName = ktvItem.options?.displayName || 'dịch vụ mới';
+                    svcName = ktvItem.options?.serviceNamesForKtvs?.[staffId] || ktvItem.options?.displayName || 'dịch vụ mới';
                     const ktvSeg = ktvItem.segments?.find((s: any) => s.ktvId === staffId);
                     if (ktvSeg && ktvSeg.startTime) {
                         svcTime = ` lúc ${ktvSeg.startTime}`;
