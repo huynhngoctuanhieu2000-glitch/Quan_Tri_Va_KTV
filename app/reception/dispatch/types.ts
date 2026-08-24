@@ -43,6 +43,7 @@ export interface ServiceBlock {
   id: string; // BookingItem ID
   serviceId?: string;
   serviceName: string;
+  _splitTime?: string;
   displayName?: string; // Tên hiển thị (đặc biệt khi gộp)
   serviceDescription?: string;
   is_utility?: boolean;
