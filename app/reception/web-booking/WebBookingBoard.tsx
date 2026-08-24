@@ -451,6 +451,5 @@ export function WebBookingBoard() {
 
       </div>
     </div>
-    </div>
   );
 }
