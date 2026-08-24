@@ -1793,6 +1793,16 @@ if (!hasPermission('dispatch_board')) {
                     )}
                   </button>
                   <button
+                    onClick={() => setActiveMode('SCHEDULE')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      activeMode === 'SCHEDULE'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <CalendarClock size={14} /> Lịch Hẹn
+                  </button>
+                  <button
                     onClick={() => setActiveMode('DISPATCH')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeMode === 'DISPATCH'
@@ -1801,16 +1811,6 @@ if (!hasPermission('dispatch_board')) {
                     }`}
                   >
                     <LayoutList size={14} /> Điều Phối
-                  </button>
-                  <button
-                    onClick={() => setActiveMode('MONITOR')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      activeMode === 'MONITOR'
-                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <Columns3 size={14} /> Giám Sát
                   </button>
                   <button
                     onClick={() => setActiveMode('TURN_QUEUE')}
@@ -1833,14 +1833,14 @@ if (!hasPermission('dispatch_board')) {
                     <BedDouble size={14} /> Phòng
                   </button>
                   <button
-                    onClick={() => setActiveMode('SCHEDULE')}
+                    onClick={() => setActiveMode('MONITOR')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      activeMode === 'SCHEDULE'
+                      activeMode === 'MONITOR'
                         ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    <CalendarClock size={14} /> Lịch Hẹn
+                    <Columns3 size={14} /> Giám Sát
                   </button>
                   <button
                     onClick={() => window.location.href = '/reception/feedback'}
@@ -1869,6 +1869,16 @@ if (!hasPermission('dispatch_board')) {
                   )}
                 </button>
                 <button
+                  onClick={() => setActiveMode('SCHEDULE')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                    activeMode === 'SCHEDULE'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <CalendarClock size={12} /> <span className="hidden xs:inline">Lịch</span>
+                </button>
+                <button
                   onClick={() => setActiveMode('DISPATCH')}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
                     activeMode === 'DISPATCH'
@@ -1877,16 +1887,6 @@ if (!hasPermission('dispatch_board')) {
                   }`}
                 >
                   <LayoutList size={12} /> <span className="hidden xs:inline">Điều Phối</span>
-                </button>
-                <button
-                  onClick={() => setActiveMode('MONITOR')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
-                    activeMode === 'MONITOR'
-                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Columns3 size={12} /> <span className="hidden xs:inline">Giám Sát</span>
                 </button>
                 <button
                   onClick={() => setActiveMode('TURN_QUEUE')}
@@ -1909,14 +1909,14 @@ if (!hasPermission('dispatch_board')) {
                   <BedDouble size={12} /> <span className="hidden xs:inline">Phòng</span>
                 </button>
                 <button
-                  onClick={() => setActiveMode('SCHEDULE')}
+                  onClick={() => setActiveMode('MONITOR')}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
-                    activeMode === 'SCHEDULE'
+                    activeMode === 'MONITOR'
                       ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <CalendarClock size={12} /> <span className="hidden xs:inline">Lịch</span>
+                  <Columns3 size={12} /> <span className="hidden xs:inline">Giám Sát</span>
                 </button>
               </div>
             </div>
