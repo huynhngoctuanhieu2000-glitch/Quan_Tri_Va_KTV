@@ -435,6 +435,9 @@ export const QuickDispatchTable = ({
           if (svcIdx === -1) return;
           // Find which KTVs belong to this item
           const staffEntries: { ktvId: string; ktvName: string; roomId: string | null; bedId: string | null; startTime: string; endTime: string; duration: number; }[] = [];
+          
+          const baseIdxToBedId = new Map<number, string>();
+          
           // Each item gets KTVs. If merged, all KTVs go to all items. Otherwise, distribute round-robin.
           for (let ki = 0; ki < ktvCount; ki++) {
             if (!state.isMergedGroup && ki % itemCount !== itemIdx) continue;
@@ -444,8 +447,28 @@ export const QuickDispatchTable = ({
             const ktvName = state.ktvDisplayNames?.[ktvId] || ktvTurn?.staff?.full_name || ktvId;
             const roomId = state.selectedRoomIds?.[ki] || null;
             let bedId: string | null = state.ktvBedIds?.[ki] || null;
-            if (roomId && !bedId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
-            else if (bedId) { globalUsedBedIds.push(bedId); }
+            
+            const baseIdx = ki % (itemCount || 1);
+            
+            if (roomId && !bedId) { 
+                if (baseIdxToBedId.has(baseIdx)) {
+                    bedId = baseIdxToBedId.get(baseIdx)!;
+                } else {
+                    bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); 
+                    if (bedId) {
+                        globalUsedBedIds.push(bedId); 
+                        baseIdxToBedId.set(baseIdx, bedId);
+                    }
+                }
+            }
+            else if (bedId) { 
+                if (!globalUsedBedIds.includes(bedId)) {
+                    globalUsedBedIds.push(bedId); 
+                }
+                if (!baseIdxToBedId.has(baseIdx)) {
+                    baseIdxToBedId.set(baseIdx, bedId);
+                }
+            }
             const st = state.ktvStartTimes?.[ki] || getCurrentTime();
             const originalDur = (updatedServices[svcIdx].staffList?.[ki]?.segments?.[0]?.duration !== undefined && updatedServices[svcIdx].staffList?.[ki]?.segments?.[0]?.duration !== null) ? updatedServices[svcIdx].staffList[ki].segments[0].duration : updatedServices[svcIdx].duration;
             
@@ -1354,24 +1377,35 @@ const ServiceGroupCard = ({
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shrink-0 ${getBadgeBg(idx)}`}>{idx + 1}</span>
                     <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">{name}</span>
-                    <select value={selRoom} onChange={e => updateRoomForIdx(idx, e.target.value)} className="w-[70px] px-1.5 py-1 border border-gray-200 rounded-lg text-[11px] font-bold bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none">
-                      <option value="">P.</option>
-                      {rooms.filter((r: any) => !r.name?.toLowerCase().includes('vệ sinh') && !r.name?.toLowerCase().includes('tắm')).map((r: any) => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
-                    </select>
-                    {selRoom && (rooms as any[]).find(r => r.id === selRoom)?.has_guests && (
-                      <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 shrink-0" title="Phòng đang có khách (Chưa bàn giao xong)">🙋 Khách</span>
-                    )}
-                    {selRoom && !((rooms as any[]).find(r => r.id === selRoom)?.has_guests) && (
-                      <select 
-                        value={selBed} 
-                        onChange={e => updateBedForIdx(idx, e.target.value)} 
-                        className="w-[55px] px-1 py-1 border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                      >
-                        <option value="">G.</option>
-                        {roomBedsList.map((b, bIdx) => (
-                          <option key={b.id} value={b.id}>G.{bIdx + 1}</option>
-                        ))}
-                      </select>
+                    {idx < (count || 1) ? (
+                        <>
+                            <select value={selRoom} onChange={e => updateRoomForIdx(idx, e.target.value)} className="w-[70px] px-1.5 py-1 border border-gray-200 rounded-lg text-[11px] font-bold bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none">
+                              <option value="">P.</option>
+                              {rooms.filter((r: any) => !r.name?.toLowerCase().includes('vệ sinh') && !r.name?.toLowerCase().includes('tắm')).map((r: any) => <option key={r.id} value={r.id}>{r.name || r.id}</option>)}
+                            </select>
+                            {selRoom && (rooms as any[]).find(r => r.id === selRoom)?.has_guests && (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 shrink-0" title="Phòng đang có khách (Chưa bàn giao xong)">⚠️ Khách</span>
+                            )}
+                            {selRoom && !((rooms as any[]).find(r => r.id === selRoom)?.has_guests) && (
+                              <select 
+                                value={selBed} 
+                                onChange={e => updateBedForIdx(idx, e.target.value)} 
+                                className="w-[55px] px-1 py-1 border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                              >
+                                <option value="">G.</option>
+                                {roomBedsList.map((b, bIdx) => (
+                                  <option key={b.id} value={b.id}>G.{bIdx + 1}</option>
+                                ))}
+                              </select>
+                            )}
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-1 shrink-0 max-w-[120px]">
+                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 truncate" title={`Cùng phòng/giường với KTV trên (KTV ${idx % (count || 1) + 1})`}>
+                                {selRoom ? (rooms.find(r => r.id === selRoom)?.name || selRoom) : 'Chưa xếp'}
+                                {selBed ? ` - G.${beds.filter(b => b.roomId === selRoom).findIndex(b => b.id === selBed) + 1}` : ''}
+                            </span>
+                        </div>
                     )}
                     <div className="relative">
                         <input

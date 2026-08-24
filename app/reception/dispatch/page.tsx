@@ -1784,31 +1784,6 @@ if (!hasPermission('dispatch_board')) {
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight hidden sm:flex items-center gap-3">
                 <div className="hidden sm:flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200">
                   <button
-                    onClick={() => setActiveMode('WEB_BOOKING')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
-                      activeMode === 'WEB_BOOKING'
-                        ? 'bg-white text-emerald-600 shadow-sm border border-gray-200/50'
-                        : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50'
-                    }`}
-                  >
-                    <Globe size={14} /> Lịch Web
-                    {webBookingCount > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 shadow-sm">
-                        {webBookingCount}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setActiveMode('SCHEDULE')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      activeMode === 'SCHEDULE'
-                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    <CalendarClock size={14} /> Lịch Hẹn
-                  </button>
-                  <button
                     onClick={() => setActiveMode('DISPATCH')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       activeMode === 'DISPATCH'
@@ -1849,6 +1824,31 @@ if (!hasPermission('dispatch_board')) {
                     <Columns3 size={14} /> Giám Sát
                   </button>
                   <button
+                    onClick={() => setActiveMode('WEB_BOOKING')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
+                      activeMode === 'WEB_BOOKING'
+                        ? 'bg-white text-emerald-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <Globe size={14} /> Lịch Web
+                    {webBookingCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 shadow-sm">
+                        {webBookingCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveMode('SCHEDULE')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      activeMode === 'SCHEDULE'
+                        ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <CalendarClock size={14} /> Lịch Hẹn
+                  </button>
+                  <button
                     onClick={() => window.location.href = '/reception/feedback'}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-amber-600 hover:text-amber-700 hover:bg-amber-50"
                   >
@@ -1859,31 +1859,6 @@ if (!hasPermission('dispatch_board')) {
               
               {/* Mobile Mode Switcher */}
               <div className="flex sm:hidden items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200 w-full mb-1">
-                <button
-                  onClick={() => setActiveMode('WEB_BOOKING')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all relative ${
-                    activeMode === 'WEB_BOOKING'
-                      ? 'bg-white text-emerald-600 shadow-sm border border-gray-200/50'
-                      : 'text-gray-500 hover:text-emerald-600'
-                  }`}
-                >
-                  <Globe size={12} /> <span className="hidden xs:inline">Web</span>
-                  {webBookingCount > 0 && (
-                    <span className="absolute top-1 right-2 min-w-[14px] h-[14px] bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-sm">
-                      {webBookingCount}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setActiveMode('SCHEDULE')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
-                    activeMode === 'SCHEDULE'
-                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <CalendarClock size={12} /> <span className="hidden xs:inline">Lịch</span>
-                </button>
                 <button
                   onClick={() => setActiveMode('DISPATCH')}
                   className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
@@ -1923,6 +1898,31 @@ if (!hasPermission('dispatch_board')) {
                   }`}
                 >
                   <Columns3 size={12} /> <span className="hidden xs:inline">Giám Sát</span>
+                </button>
+                <button
+                  onClick={() => setActiveMode('WEB_BOOKING')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all relative ${
+                    activeMode === 'WEB_BOOKING'
+                      ? 'bg-white text-emerald-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-emerald-600'
+                  }`}
+                >
+                  <Globe size={12} /> <span className="hidden xs:inline">Web</span>
+                  {webBookingCount > 0 && (
+                    <span className="absolute top-1 right-2 min-w-[14px] h-[14px] bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow-sm">
+                      {webBookingCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveMode('SCHEDULE')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                    activeMode === 'SCHEDULE'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <CalendarClock size={12} /> <span className="hidden xs:inline">Lịch</span>
                 </button>
               </div>
             </div>
