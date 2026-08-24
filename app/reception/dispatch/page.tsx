@@ -36,6 +36,7 @@ import { useNotifications } from '@/components/NotificationProvider';
 import { CustomerDetailModal } from '../crm/_components/CustomerDetailModal';
 import { Customer } from '@/lib/types';
 import { SplitPreviewModal } from './_components/SplitPreviewModal';
+import { WebBookingBoard } from '../web-booking/WebBookingBoard';
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 import { 
   StaffAssignment, 
@@ -197,7 +198,7 @@ export default function DispatchBoardPage() {
   const [reviewModalService, setReviewModalService] = useState<ServiceBlock | null>(null);
   const { notifications, soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
   const [leftPanelTab, setLeftPanelTab] = useState<DispatchStatus>('pending');
-  const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR' | 'TURN_QUEUE' | 'ROOMS' | 'SCHEDULE'>('DISPATCH');
+  const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR' | 'TURN_QUEUE' | 'ROOMS' | 'SCHEDULE' | 'WEB_BOOKING'>('DISPATCH');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showAddSvcModal, setShowAddSvcModal] = useState(false);
   const [selectedGuestForAddon, setSelectedGuestForAddon] = useState<string>('');
@@ -1777,8 +1778,12 @@ if (!hasPermission('dispatch_board')) {
               <h1 className="text-xl lg:text-2xl font-black text-gray-900 tracking-tight hidden sm:flex items-center gap-3">
                 <div className="hidden sm:flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200">
                   <button
-                    onClick={() => window.location.href = '/reception/web-booking'}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative text-gray-500 hover:text-emerald-600 hover:bg-emerald-50`}
+                    onClick={() => setActiveMode('WEB_BOOKING')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
+                      activeMode === 'WEB_BOOKING'
+                        ? 'bg-white text-emerald-600 shadow-sm border border-gray-200/50'
+                        : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50'
+                    }`}
                   >
                     <Globe size={14} /> Đơn Đặt Lịch
                     {webBookingCount > 0 && (
@@ -1849,8 +1854,12 @@ if (!hasPermission('dispatch_board')) {
               {/* Mobile Mode Switcher */}
               <div className="flex sm:hidden items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200 w-full mb-1">
                 <button
-                  onClick={() => window.location.href = '/reception/web-booking'}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all relative text-gray-500 hover:text-emerald-600`}
+                  onClick={() => setActiveMode('WEB_BOOKING')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[10px] font-bold transition-all relative ${
+                    activeMode === 'WEB_BOOKING'
+                      ? 'bg-white text-emerald-600 shadow-sm border border-gray-200/50'
+                      : 'text-gray-500 hover:text-emerald-600'
+                  }`}
                 >
                   <Globe size={12} /> <span className="hidden xs:inline">Web</span>
                   {webBookingCount > 0 && (
@@ -2641,6 +2650,10 @@ if (!hasPermission('dispatch_board')) {
           ) : activeMode === 'SCHEDULE' ? (
             <div className="flex-1 overflow-hidden bg-white rounded-3xl border border-gray-200 shadow-sm w-full h-full">
               <ScheduleBoard orders={orders} />
+            </div>
+          ) : activeMode === 'WEB_BOOKING' ? (
+            <div className="flex-1 overflow-hidden bg-white rounded-3xl border border-gray-200 shadow-sm w-full h-full relative z-0">
+              <WebBookingBoard />
             </div>
           ) : null}
 
