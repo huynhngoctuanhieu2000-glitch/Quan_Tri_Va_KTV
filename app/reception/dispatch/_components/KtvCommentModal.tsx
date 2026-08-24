@@ -61,7 +61,7 @@ export function KtvCommentModal({ subOrder, order, onClose, onSuccess }: KtvComm
                         <div>
                             <h3 className="font-bold text-gray-900 text-lg">Nhận xét KTV</h3>
                             <p className="text-sm text-gray-500">
-                                Đơn: <span className="font-medium text-gray-700">{order.billCode}</span>
+                                Đơn: <span className="font-medium text-gray-700">{(order.billCode || '').split('-')[0]}</span>
                             </p>
                         </div>
                     </div>

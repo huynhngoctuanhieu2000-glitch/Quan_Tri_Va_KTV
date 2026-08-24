@@ -130,11 +130,11 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
                 if (!staff.segments) continue;
                 for (const seg of staff.segments) {
                     // Cải tiến: Nếu service thứ 2 trở đi chưa bắt đầu (vd làm nối tiếp), lấy calculatedStart (đã tịnh tiến) thay vì timeStart gốc của booking
-                    let start = seg.actualStartTime || svc.timeStart || seg.startTime;
-                    if (!seg.actualStartTime && subOrder && subOrder.calculatedStart && i > 0) {
+                    let start = seg.actualStartTime || (staff as any)._calculatedStartTime || svc.timeStart || seg.startTime;
+                    if (!seg.actualStartTime && !(staff as any)._calculatedStartTime && subOrder && subOrder.calculatedStart && i > 0) {
                         // Tính toán thời gian bắt đầu dự kiến của dịch vụ nối tiếp
                         start = getDynamicEndTime(subOrder.calculatedStart, servicesToCheck.slice(0, i).reduce((sum, prevSvc) => sum + (Number(prevSvc.duration) || 60), 0));
-                    } else if (!seg.actualStartTime && subOrder && subOrder.calculatedStart) {
+                    } else if (!seg.actualStartTime && !(staff as any)._calculatedStartTime && subOrder && subOrder.calculatedStart) {
                         start = subOrder.calculatedStart;
                     }
 
@@ -489,7 +489,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                 <div className="flex items-center justify-between mb-4">
                                                     <div className="flex items-center gap-1.5">
                                                         <span className="text-[10px] font-black text-gray-400 bg-gray-50 px-2 py-0.5 rounded-lg tracking-wider">
-                                                            #{subOrder.services.length < order.services.length ? `${order.billCode.replace(/-[A-Z]$/i, '')}-${subOrder.subSuffix || 'A'}` : order.billCode}
+                                                            #{subOrder.services.length < order.services.length ? `${(order.billCode || '').split('-')[0]}-${subOrder.subSuffix || 'A'}` : (order.billCode || '').split('-')[0]}
                                                         </span>
                                                         {order.hasVat && (
                                                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-50 text-blue-600 border border-blue-100" title="Khách yêu cầu xuất hoá đơn VAT">VAT</span>
@@ -836,7 +836,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                     <div className="space-y-1 mt-1">
                                                                         {s.staffList.map((st: any, stIdx: number) => {
                                                                             const seg = st?.segments?.[0];
-                                                                            const ktvStart = seg?.actualStartTime || subOrder.calculatedStart || seg?.startTime || displayStart;
+                                                                            const ktvStart = seg?.actualStartTime || st._calculatedStartTime || seg?.startTime || subOrder.calculatedStart || displayStart;
                                                                             // 🔥 FIX: Luôn tính dynamic end time từ ktvStart thực tế, không dùng seg.endTime cũ
                                                                             const ktvEnd = seg?.actualEndTime ? seg.actualEndTime : getDynamicEndTime(ktvStart, Number(seg?.duration) || duration);
                                                                             return (
@@ -863,6 +863,11 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                                                 </button>
                                                                                             );
                                                                                         })()}
+                                                                                        {s.options?.serviceNamesForKtvs?.[st.ktvId] && (
+                                                                                            <span className="text-[8px] font-black text-indigo-500 bg-indigo-50/80 px-1 py-0.5 rounded-md ml-0.5 border border-indigo-100/50 uppercase">
+                                                                                                {s.options.serviceNamesForKtvs[st.ktvId]}
+                                                                                            </span>
+                                                                                        )}
                                                                                     </div>
                                                                                     <div className="flex items-center gap-1.5">
                                                                                         <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>

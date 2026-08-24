@@ -8,19 +8,63 @@ import { CheckCircle2, UserCircle2, LayoutList, Columns3, Users, BedDouble, Cale
 function FeedbackGroupBlock({ group, onSelectChild }: { group: any, onSelectChild: (child: any) => void }) {
     const [isExpanded, setIsExpanded] = useState(false);
 
+    // Tính danh sách KTV tham gia đơn này kèm thời gian kết thúc
+    const ktvMap = new Map();
+    group.childBookings.forEach((c: any) => {
+        c.ktvList?.forEach((k: any) => {
+            const isTypeC = k.workType === 'C' || k.workType === 'c' || (k.ktvId && (k.ktvId.toUpperCase().startsWith('C_') || k.ktvId.toUpperCase().startsWith('EXT_')));
+            const name = isTypeC ? k.ktvName : k.ktvId;
+            const currentMax = ktvMap.get(name);
+            if (!currentMax || (k.timeEnd && k.timeEnd > (currentMax.timeEnd || ''))) {
+                ktvMap.set(name, k);
+            }
+        });
+    });
+
+    const allKtvs = Array.from(ktvMap.values()).map((k: any) => {
+        const isTypeC = k.workType === 'C' || k.workType === 'c' || (k.ktvId && (k.ktvId.toUpperCase().startsWith('C_') || k.ktvId.toUpperCase().startsWith('EXT_')));
+        const name = isTypeC ? k.ktvName : k.ktvId;
+        const time = k.timeEnd ? (k.timeEnd.includes(':') && k.timeEnd.length <= 5 ? k.timeEnd : new Date(k.timeEnd).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })) : '';
+        return time ? `${name} (${time})` : name;
+    }).filter(Boolean);
+    const ktvNamesString = allKtvs.length > 0 ? `KTV: ${allKtvs.join(', ')}` : '';
+    
+    // Tính toán số lượng khách đã xong
+    const totalGuests = group.childBookings.length;
+    const doneGuests = group.childBookings.filter((child: any) => child.status === 'DONE' || (child.ktvList && child.ktvList.length > 0 && child.ktvList.every((k: any) => k.rating && k.rating > 0))).length;
+    const isAllDone = totalGuests > 0 && doneGuests === totalGuests;
+
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className={`bg-white rounded-xl shadow-sm border overflow-hidden transition-colors ${isAllDone ? 'border-emerald-200' : 'border-gray-100'}`}>
             <div 
-                className="p-4 bg-gray-50/50 border-b border-gray-100 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
+                className={`p-4 flex justify-between items-center cursor-pointer transition-colors ${isAllDone ? 'bg-emerald-50/50 hover:bg-emerald-50 border-b border-emerald-100' : 'bg-gray-50/50 hover:bg-gray-50 border-b border-gray-100'}`}
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 <div>
                     <h2 className="text-lg font-bold text-indigo-700">
-                        {group.billCode} - {group.customerName}
+                        {(group.billCode || '').split('-')[0]} - {group.customerName}
                     </h2>
-                    <p className="text-sm font-medium text-gray-600">{group.childBookings.length} khách</p>
+                    <div className="text-sm font-medium text-gray-600 mt-1 flex items-center flex-wrap gap-2">
+                        <span className="bg-white px-2 py-0.5 rounded border border-gray-200 shadow-sm">{totalGuests} khách</span>
+                        
+                        {ktvNamesString && (
+                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                {ktvNamesString}
+                            </span>
+                        )}
+
+                        {isAllDone ? (
+                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 flex items-center gap-1">
+                                <CheckCircle2 size={12} strokeWidth={3} /> Đã đánh giá hết
+                            </span>
+                        ) : (
+                            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                                Đã đánh giá {doneGuests}/{totalGuests}
+                            </span>
+                        )}
+                    </div>
                 </div>
-                <button className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-200/50 transition-all">
+                <button className={`p-1 rounded-md transition-all ${isAllDone ? 'text-emerald-500 hover:bg-emerald-100' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}>
                     {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                 </button>
             </div>
@@ -63,7 +107,9 @@ function FeedbackGroupBlock({ group, onSelectChild }: { group: any, onSelectChil
                                             <div className="flex items-center justify-between gap-2">
                                                 <div className="flex items-center gap-2">
                                                     <UserCircle2 className="w-4 h-4 text-gray-400" />
-                                                    <span className="font-medium text-gray-800">{ktv.ktvId} - {ktv.ktvName}</span>
+                                                    <span className="font-medium text-gray-800">
+                                                        {ktv.workType === 'TYPE_C' ? ktv.ktvName : ktv.ktvId}
+                                                    </span>
                                                     <span className="text-gray-400 text-xs">-</span>
                                                     <span className="text-gray-500 text-xs uppercase tracking-tight line-clamp-1">{ktv.serviceNames?.join(' + ')}</span>
                                                 </div>

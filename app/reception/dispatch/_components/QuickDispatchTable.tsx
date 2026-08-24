@@ -23,6 +23,7 @@ interface ServiceGroup {
   ktvStartTimes: string[];
   ktvEndTimes: string[];
   ktvNotes: string[];
+  ktvServiceNames?: string[];
   note: string;
   duration: number;
 }
@@ -133,7 +134,9 @@ export const QuickDispatchTable = ({
     displayName: string;
     selectedKtvIds: string[]; selectedRoomIds: string[];
     ktvStartTimes: string[]; ktvEndTimes: string[];
-    ktvDurations: number[]; ktvNotes: string[]; ktvBedIds: string[];
+    ktvDurations: number[]; ktvNotes: string[];
+    ktvServiceNames?: string[];
+    ktvBedIds: string[];
     ktvDisplayNames?: Record<string, string>; // Map ktvId -> display name (for external KTVs and name resolution)
     note: string; duration: number;
     isUtility?: boolean;
@@ -291,6 +294,7 @@ export const QuickDispatchTable = ({
         const endTimes: string[] = [];
         const ktvDurationsList: number[] = [];
         const ktvNotesList: string[] = [];
+        const ktvServiceNamesList: string[] = [];
         const bedIdsList: string[] = [];
         const ktvDisplayNames: Record<string, string> = {};
         items.forEach(item => {
@@ -316,6 +320,7 @@ export const QuickDispatchTable = ({
                 endTimes.push(finalEndTime);
                 ktvDurationsList.push(totalStaffDur);
                 ktvNotesList.push(staff.noteForKtv || '');
+                ktvServiceNamesList.push(staff.serviceNameForKtv || '');
                 bedIdsList.push(staff.segments?.[0]?.bedId || '');
               }
             });
@@ -325,22 +330,32 @@ export const QuickDispatchTable = ({
           startTimes.push(defaultTime);
           endTimes.push(calcEndTime(defaultTime, duration));
         }
-        newStates.set(groupKey, {
-          displayName: items[0]?.options?.displayName || items[0]?.options?._generatedDisplayName || items[0]?.serviceName || '',
-          selectedKtvIds: ktvIds,
-          selectedRoomIds: roomIds,
-          ktvStartTimes: startTimes,
-          ktvEndTimes: endTimes,
-          ktvDurations: ktvDurationsList.length > 0 ? ktvDurationsList : [duration],
-          ktvNotes: ktvNotesList,
-          ktvBedIds: bedIdsList,
-          ktvDisplayNames: Object.keys(ktvDisplayNames).length > 0 ? ktvDisplayNames : undefined,
-          note: items[0]?.staffList?.[0]?.noteForKtv || '',
-          duration,
-          isUtility: !!(items[0] as any).isUtility,
-          isMergedGroup,
-          workMode: prevStates.get(groupKey)?.workMode || 'parallel'
-        });
+          let initialWorkMode: 'parallel' | 'sequential' = 'parallel';
+          const prevMode = prevStates.get(groupKey)?.workMode;
+          if (prevMode) {
+              initialWorkMode = prevMode;
+          } else if (ktvIds.length > 1 && startTimes.length > 1) {
+              const allSame = startTimes.every(st => st === startTimes[0]);
+              if (!allSame) initialWorkMode = 'sequential';
+          }
+
+          newStates.set(groupKey, {
+            displayName: items[0]?.options?.displayName || items[0]?.options?._generatedDisplayName || items[0]?.serviceName || '',
+            selectedKtvIds: ktvIds,
+            selectedRoomIds: roomIds,
+            ktvStartTimes: startTimes,
+            ktvEndTimes: endTimes,
+            ktvDurations: ktvDurationsList.length > 0 ? ktvDurationsList : [duration],
+            ktvNotes: ktvNotesList,
+            ktvServiceNames: ktvServiceNamesList,
+            ktvBedIds: bedIdsList,
+            ktvDisplayNames: Object.keys(ktvDisplayNames).length > 0 ? ktvDisplayNames : undefined,
+            note: items[0]?.staffList?.[0]?.noteForKtv || '',
+            duration,
+            isUtility: !!(items[0] as any).isUtility,
+            isMergedGroup,
+            workMode: initialWorkMode
+          });
       });
       return newStates.size > 0 ? newStates : prevStates;
     });
@@ -374,7 +389,7 @@ export const QuickDispatchTable = ({
       const ktvCount = state.selectedKtvIds.length;
       const itemCount = items.length;
 
-      if (ktvCount <= itemCount) {
+      if (ktvCount <= itemCount && !state.isMergedGroup) {
         // Normal: 1 KTV per service item
         items.forEach((item, idx) => {
           const svcIdx = updatedServices.findIndex(s => s.id === item.id);
@@ -383,8 +398,9 @@ export const QuickDispatchTable = ({
           const ktvTurn = availableTurns.find(t => t.employee_id === ktvId);
           const ktvName = state.ktvDisplayNames?.[ktvId] || ktvTurn?.staff?.full_name || ktvId;
           const roomId = state.selectedRoomIds?.[idx] || null;
-          let bedId: string | null = null;
-          if (roomId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
+          let bedId: string | null = state.ktvBedIds?.[idx] || null;
+          if (roomId && !bedId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
+          else if (bedId) { globalUsedBedIds.push(bedId); }
           const st = state.ktvStartTimes?.[idx] || getCurrentTime();
           
           const originalDur = (updatedServices[svcIdx].staffList?.[0]?.segments?.[0]?.duration !== undefined && updatedServices[svcIdx].staffList?.[0]?.segments?.[0]?.duration !== null) ? updatedServices[svcIdx].staffList[0].segments[0].duration : updatedServices[svcIdx].duration;
@@ -392,7 +408,11 @@ export const QuickDispatchTable = ({
           // For merged services, ktvDurations[0] already contains the TOTAL merged duration from the UI
           let ktvDur = originalDur;
           if (state.isMergedGroup) {
-              ktvDur = idx === 0 ? ((state.ktvDurations?.[0] !== undefined && state.ktvDurations?.[0] !== null) ? state.ktvDurations[0] : originalDur) : 0;
+              if (ktvCount === 1) {
+                  ktvDur = idx === 0 ? ((state.ktvDurations?.[0] !== undefined && state.ktvDurations?.[0] !== null) ? state.ktvDurations[0] : originalDur) : 0;
+              } else {
+                  ktvDur = (state.ktvDurations?.[idx] !== undefined && state.ktvDurations?.[idx] !== null) ? state.ktvDurations[idx] : originalDur;
+              }
           } else {
               ktvDur = (state.ktvDurations?.[idx] !== undefined && state.ktvDurations?.[idx] !== null) ? state.ktvDurations[idx] : originalDur;
           }
@@ -404,7 +424,7 @@ export const QuickDispatchTable = ({
           };
           updatedServices[svcIdx] = {
             ...updatedServices[svcIdx],
-            staffList: [{ id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`, ktvId, ktvName, segments: [segment], noteForKtv: state.ktvNotes?.[idx] || state.note || '' }],
+            staffList: [{ id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`, ktvId, ktvName, segments: [segment], noteForKtv: state.ktvNotes?.[idx] || state.note || '', serviceNameForKtv: (state.isMergedGroup && state.workMode === 'sequential') ? (state.ktvServiceNames?.[idx] || '') : '' }],
             options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
           };
         });
@@ -415,15 +435,17 @@ export const QuickDispatchTable = ({
           if (svcIdx === -1) return;
           // Find which KTVs belong to this item
           const staffEntries: { ktvId: string; ktvName: string; roomId: string | null; bedId: string | null; startTime: string; endTime: string; duration: number; }[] = [];
-          // Each item gets at least 1 KTV, extras distributed round-robin
+          // Each item gets KTVs. If merged, all KTVs go to all items. Otherwise, distribute round-robin.
           for (let ki = 0; ki < ktvCount; ki++) {
-            if (ki % itemCount !== itemIdx) continue;
+            if (!state.isMergedGroup && ki % itemCount !== itemIdx) continue;
+            
             const ktvId = state.selectedKtvIds[ki] || '';
             const ktvTurn = availableTurns.find(t => t.employee_id === ktvId);
             const ktvName = state.ktvDisplayNames?.[ktvId] || ktvTurn?.staff?.full_name || ktvId;
             const roomId = state.selectedRoomIds?.[ki] || null;
-            let bedId: string | null = null;
-            if (roomId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
+            let bedId: string | null = state.ktvBedIds?.[ki] || null;
+            if (roomId && !bedId) { bedId = getAvailableBedInRoom(roomId, globalUsedBedIds); if (bedId) globalUsedBedIds.push(bedId); }
+            else if (bedId) { globalUsedBedIds.push(bedId); }
             const st = state.ktvStartTimes?.[ki] || getCurrentTime();
             const originalDur = (updatedServices[svcIdx].staffList?.[ki]?.segments?.[0]?.duration !== undefined && updatedServices[svcIdx].staffList?.[ki]?.segments?.[0]?.duration !== null) ? updatedServices[svcIdx].staffList[ki].segments[0].duration : updatedServices[svcIdx].duration;
             
@@ -446,6 +468,7 @@ export const QuickDispatchTable = ({
               ktvId: e.ktvId, ktvName: e.ktvName,
               segments: [{ id: updatedServices[svcIdx].staffList?.[si]?.segments?.[0]?.id || `seg-${genId()}`, roomId: e.roomId, bedId: e.bedId, startTime: e.startTime, duration: e.duration, endTime: e.endTime }],
               noteForKtv: state.ktvNotes?.[state.selectedKtvIds.indexOf(e.ktvId)] || state.note || '',
+              serviceNameForKtv: (state.isMergedGroup && state.workMode === 'sequential') ? (state.ktvServiceNames?.[state.selectedKtvIds.indexOf(e.ktvId)] || '') : '',
             })),
             options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
           };
@@ -497,7 +520,7 @@ export const QuickDispatchTable = ({
       if (isAllSelected) setSelectedGroupKeys([]);
       else setSelectedGroupKeys(Array.from(initialGroups.keys()));
   };
-  const parentPrefix = billCode ? billCode.replace(/-[A-Z]$/i, '') : 'XXX';
+  const parentPrefix = billCode ? billCode.split('-')[0] : 'XXX';
   // Assign subSuffix based on customerGroupId (or groupKey if no customerGroupId)
   const persistentSuffixesRef = useRef(new Map<string, string>());
 
@@ -634,7 +657,7 @@ export const QuickDispatchTable = ({
                                    {billCode && (
                                      <>
                                        <span className="text-xs text-slate-400 font-bold">•</span>
-                                       <span className="text-xs text-slate-500 font-bold">Mã chính: <span className="text-slate-800 font-black">{billCode}</span></span>
+                                       <span className="text-xs text-slate-500 font-bold">Mã chính: <span className="text-slate-800 font-black">{billCode.split('-')[0]}</span></span>
                                      </>
                                    )}
                                    
@@ -742,7 +765,23 @@ interface ServiceGroupCardProps {
   serviceDescription?: string;
   count: number;
   duration: number;
-  state: { displayName: string; selectedKtvIds: string[]; selectedRoomIds?: string[]; ktvStartTimes?: string[]; ktvEndTimes?: string[]; ktvDurations?: number[]; ktvNotes?: string[]; ktvBedIds?: string[]; ktvDisplayNames?: Record<string, string>; note: string; duration: number; isUtility?: boolean; isMergedGroup?: boolean; workMode?: 'parallel' | 'sequential'; };
+  state: { 
+    displayName: string; 
+    selectedKtvIds: string[]; 
+    selectedRoomIds?: string[]; 
+    ktvStartTimes?: string[]; 
+    ktvEndTimes?: string[]; 
+    ktvDurations?: number[];  
+    ktvNotes: string[];
+    ktvServiceNames?: string[];
+    ktvBedIds: string[]; 
+    ktvDisplayNames?: Record<string, string>; 
+    note: string; 
+    duration: number; 
+    isUtility?: boolean; 
+    isMergedGroup?: boolean; 
+    workMode?: 'parallel' | 'sequential'; 
+  };
   targetSkill: string | null;
   availableTurns: (TurnQueueData & { staff?: StaffData })[];
   allSelectedKtvIds: string[];
@@ -872,7 +911,9 @@ const ServiceGroupCard = ({
       }
 
       const defaultEnd = calcEndTime(defaultStart, defaultDur);
-      const defaultRoom = (state.selectedRoomIds || [])[0] || '';
+      const baseIdx = state.selectedKtvIds.length % (count || 1);
+      const defaultRoom = (state.selectedRoomIds || [])[baseIdx] || (state.selectedRoomIds || [])[0] || '';
+      const defaultBed = (state.ktvBedIds || [])[baseIdx] || '';
 
       onUpdate({ 
         selectedKtvIds: [...state.selectedKtvIds, ktvId], 
@@ -880,7 +921,7 @@ const ServiceGroupCard = ({
         ktvEndTimes: [...(state.ktvEndTimes || []), defaultEnd], 
         ktvDurations: [...(state.ktvDurations || []), defaultDur], 
         ktvNotes: [...(state.ktvNotes || []), ''], 
-        ktvBedIds: [...(state.ktvBedIds || []), ''],
+        ktvBedIds: [...(state.ktvBedIds || []), defaultBed],
         selectedRoomIds: [...(state.selectedRoomIds || []), defaultRoom]
       });
       setKtvSearch('');
@@ -924,29 +965,47 @@ const ServiceGroupCard = ({
     while (nextNotes.length <= idx) nextNotes.push('');
 
     if (roomId) {
-      const usedBeds = nextBedIds.filter((_, i) => i !== idx).filter(Boolean);
+      const baseIdx = idx % (count || 1);
+      // Find a free bed. We only exclude beds used by OTHER base indices
+      const usedBedsByOthers = nextBedIds.filter((bId, i) => bId && (i % (count || 1) !== baseIdx));
       const roomBeds = beds.filter(b => b.roomId === roomId);
-      const allExcluded = [...busyBedIds, ...usedBeds];
+      const allExcluded = [...busyBedIds, ...usedBedsByOthers];
       const freeBed = roomBeds.find(b => !allExcluded.includes(b.id));
-      nextBedIds[idx] = freeBed?.id || '';
+      const chosenBed = freeBed?.id || '';
 
-      // 🧠 AUTO-REMINDERS
-      const roomData = (rooms as any[]).find(r => r.id === roomId);
-      if (roomData && roomData.default_reminders && Array.isArray(roomData.default_reminders)) {
-        const defaultReminders = reminders
-          .filter(rm => roomData.default_reminders.includes(rm.id))
-          .map(rm => rm.content);
-        
-        if (defaultReminders.length > 0) {
-          const currentNote = nextNotes[idx] || '';
-          const reminderStr = defaultReminders.join(' - ');
-          if (!currentNote.includes(reminderStr)) {
-            nextNotes[idx] = currentNote ? `${currentNote} - ${reminderStr}` : reminderStr;
+      // Update room and bed for all KTVs sharing this baseIdx
+      for (let i = baseIdx; i < Math.max(state.selectedKtvIds.length, idx + 1); i += (count || 1)) {
+          while (nextRoomIds.length <= i) nextRoomIds.push('');
+          while (nextBedIds.length <= i) nextBedIds.push('');
+          while (nextNotes.length <= i) nextNotes.push('');
+          
+          nextRoomIds[i] = roomId;
+          nextBedIds[i] = chosenBed;
+          
+          // 🧠 AUTO-REMINDERS
+          const roomData = (rooms as any[]).find(r => r.id === roomId);
+          if (roomData && roomData.default_reminders && Array.isArray(roomData.default_reminders)) {
+            const defaultReminders = reminders
+              .filter(rm => roomData.default_reminders.includes(rm.id))
+              .map(rm => rm.content);
+            
+            if (defaultReminders.length > 0) {
+              const currentNote = nextNotes[i] || '';
+              const reminderStr = defaultReminders.join(' - ');
+              if (!currentNote.includes(reminderStr)) {
+                nextNotes[i] = currentNote ? `${currentNote} - ${reminderStr}` : reminderStr;
+              }
+            }
           }
-        }
       }
     } else {
-      nextBedIds[idx] = '';
+      const baseIdx = idx % (count || 1);
+      for (let i = baseIdx; i < Math.max(state.selectedKtvIds.length, idx + 1); i += (count || 1)) {
+          while (nextRoomIds.length <= i) nextRoomIds.push('');
+          while (nextBedIds.length <= i) nextBedIds.push('');
+          nextRoomIds[i] = '';
+          nextBedIds[i] = '';
+      }
     }
 
     onUpdate({ 
@@ -956,8 +1015,24 @@ const ServiceGroupCard = ({
     });
   };
 
+  const updateBedForIdx = (idx: number, bedId: string) => {
+    const nextBedIds = [...(state.ktvBedIds || [])];
+    const baseIdx = idx % (count || 1);
+    
+    for (let i = baseIdx; i < Math.max(state.selectedKtvIds.length, idx + 1); i += (count || 1)) {
+        while (nextBedIds.length <= i) nextBedIds.push('');
+        nextBedIds[i] = bedId;
+    }
+
+    onUpdate({ ktvBedIds: nextBedIds });
+  };
+
   const updateNoteForIdx = (idx: number, note: string) => {
     const arr = [...(state.ktvNotes || [])]; while (arr.length <= idx) arr.push(''); arr[idx] = note; onUpdate({ ktvNotes: arr });
+  };
+
+  const updateServiceNameForIdx = (idx: number, name: string) => {
+    const arr = [...(state.ktvServiceNames || [])]; while (arr.length <= idx) arr.push(''); arr[idx] = name; onUpdate({ ktvServiceNames: arr });
   };
 
   // Duration presets — không giới hạn theo duration dịch vụ, cho phép chọn linh hoạt
@@ -1286,7 +1361,18 @@ const ServiceGroupCard = ({
                     {selRoom && (rooms as any[]).find(r => r.id === selRoom)?.has_guests && (
                       <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 shrink-0" title="Phòng đang có khách (Chưa bàn giao xong)">🙋 Khách</span>
                     )}
-                    {selRoom && !((rooms as any[]).find(r => r.id === selRoom)?.has_guests) && (<span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100 shrink-0">{selBed ? `G.${roomBedsList.findIndex(b => b.id === selBed) + 1}` : String.fromCharCode(8212)}</span>)}
+                    {selRoom && !((rooms as any[]).find(r => r.id === selRoom)?.has_guests) && (
+                      <select 
+                        value={selBed} 
+                        onChange={e => updateBedForIdx(idx, e.target.value)} 
+                        className="w-[55px] px-1 py-1 border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-lg text-[10px] font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      >
+                        <option value="">G.</option>
+                        {roomBedsList.map((b, bIdx) => (
+                          <option key={b.id} value={b.id}>G.{bIdx + 1}</option>
+                        ))}
+                      </select>
+                    )}
                     <div className="relative">
                         <input
                             type="number"
@@ -1344,7 +1430,15 @@ const ServiceGroupCard = ({
                   </div>
                   {/* Row 2: Per-KTV Note | Reminder Button | Dispatch button */}
                   <div className="flex items-center gap-2 ml-6">
-                    <div className="flex-1 relative">
+                    {state.isMergedGroup && state.workMode === 'sequential' && (
+                        <div className="flex-1 relative">
+                            <input type="text" value={state.ktvServiceNames?.[idx] || ''} onChange={e => updateServiceNameForIdx(idx, e.target.value)} placeholder="Tên DV..." className="w-full px-2.5 py-1.5 border border-indigo-100 rounded-xl text-[11px] font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500/10 outline-none bg-indigo-50/30 placeholder:text-indigo-300 pr-8" />
+                            {state.ktvServiceNames?.[idx] && (
+                                <button onClick={() => updateServiceNameForIdx(idx, '')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-indigo-300 hover:text-indigo-500"><X size={12} /></button>
+                            )}
+                        </div>
+                    )}
+                    <div className="flex-[2] relative">
                         <input type="text" value={ktvNote} onChange={e => updateNoteForIdx(idx, e.target.value)} placeholder="Ghi chú riêng..." className="w-full px-2.5 py-1.5 border border-gray-100 rounded-xl text-[11px] font-medium focus:ring-2 focus:ring-indigo-500/10 outline-none bg-white placeholder:text-gray-300 pr-8" />
                         {ktvNote && (
                             <button onClick={() => updateNoteForIdx(idx, '')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-300 hover:text-gray-500"><X size={12} /></button>
@@ -1422,7 +1516,7 @@ const ServiceGroupCard = ({
     <AnimatePresence>
     {showTicketForIdx !== null && (() => {
       const idx = showTicketForIdx; const ktvId = state.selectedKtvIds[idx] || ''; const rId = (state.selectedRoomIds || [])[idx] || '';
-      const rName = rooms.find(r => r.id === rId)?.name || rId || '---'; const tName = state.displayName || serviceName;
+      const rName = rooms.find(r => r.id === rId)?.name || rId || '---'; const tName = (state.isMergedGroup && state.workMode === 'sequential' && state.ktvServiceNames?.[idx]) ? state.ktvServiceNames[idx] : (state.displayName || serviceName);
       const sT = (state.ktvStartTimes || [])[idx] || '--:--'; const eT = (state.ktvEndTimes || [])[idx] || '--:--';
       const ticketDur = (state.ktvDurations || [])[idx] || duration;
       const ticketNote = (state.ktvNotes || [])[idx] || '';

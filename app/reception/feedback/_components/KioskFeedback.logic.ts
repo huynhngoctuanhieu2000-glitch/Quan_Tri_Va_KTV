@@ -172,7 +172,9 @@ export function useKioskFeedback(booking: ChildBookingForFeedback, onClose: () =
             rateOk: 'Bình thường',
             rateGood: 'Tốt',
             rateExcellent: 'Tuyệt vời',
-            violationsSectionTitle: 'Góp ý dịch vụ (nếu có)'
+            violationsSectionTitle: 'Góp ý dịch vụ (nếu có)',
+            experienceTitle: 'Trải nghiệm của bạn',
+            staffLbl: 'Nhân viên phục vụ'
         },
         EN: {
             forgotTitle: 'Please check your personal belongings',
@@ -192,7 +194,9 @@ export function useKioskFeedback(booking: ChildBookingForFeedback, onClose: () =
             rateOk: 'Ok',
             rateGood: 'Good',
             rateExcellent: 'Excellent',
-            violationsSectionTitle: 'Service feedback (if any)'
+            violationsSectionTitle: 'Service feedback (if any)',
+            experienceTitle: 'Your experience',
+            staffLbl: 'Served by'
         },
         KR: {
             forgotTitle: '소지품을 다시 한 번 확인해 주세요',
@@ -212,7 +216,9 @@ export function useKioskFeedback(booking: ChildBookingForFeedback, onClose: () =
             rateOk: '보통',
             rateGood: '좋음',
             rateExcellent: '매우 좋음',
-            violationsSectionTitle: '서비스 피드백 (선택)'
+            violationsSectionTitle: '서비스 피드백 (선택)',
+            experienceTitle: '고객님의 경험',
+            staffLbl: '담당 직원'
         },
         JP: {
             forgotTitle: 'お忘れ物がないかご確認ください',
@@ -232,7 +238,9 @@ export function useKioskFeedback(booking: ChildBookingForFeedback, onClose: () =
             rateOk: '普通',
             rateGood: '良い',
             rateExcellent: '素晴らしい',
-            violationsSectionTitle: 'サービスのフィードバック (任意)'
+            violationsSectionTitle: 'サービスのフィードバック (任意)',
+            experienceTitle: 'お客様の体験',
+            staffLbl: '担当スタッフ'
         },
         ZH: {
             forgotTitle: '请再次检查您的随身物品',
@@ -252,7 +260,9 @@ export function useKioskFeedback(booking: ChildBookingForFeedback, onClose: () =
             rateOk: '一般',
             rateGood: '好',
             rateExcellent: '极好',
-            violationsSectionTitle: '服务反馈 (选填)'
+            violationsSectionTitle: '服务反馈 (选填)',
+            experienceTitle: '您的体验',
+            staffLbl: '服务人员'
         }
     };
 

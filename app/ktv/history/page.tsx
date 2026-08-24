@@ -151,7 +151,7 @@ const OrderCard = ({ order, getStatusLabel, techCode, refetch }: {
             <Clock size={16} className="text-gray-300 shrink-0" />
           )}
           <div className="min-w-0">
-            <span className="text-sm font-black text-indigo-600">#{order.billCode}</span>
+            <span className="text-sm font-black text-indigo-600">#{(order.billCode || '').split('-')[0]}</span>
             <p className="text-[11px] text-gray-400 mt-0.5">
               {format(parseDbDate(order.createdAt), 'HH:mm — dd/MM/yyyy')}
             </p>

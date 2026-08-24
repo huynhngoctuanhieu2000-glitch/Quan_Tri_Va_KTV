@@ -20,6 +20,19 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
         t, isSuccess
     } = useKioskFeedback(currentBooking, onClose);
 
+    const getKtvDisplay = (child: any) => {
+        if (!child.ktvList || child.ktvList.length === 0) return 'Chưa có KTV';
+        const parts = child.ktvList.map((k: any) => {
+            const isTypeC = k.workType === 'C' || k.workType === 'c' || (k.ktvId && (k.ktvId.toUpperCase().startsWith('C_') || k.ktvId.toUpperCase().startsWith('EXT_')));
+            const displayName = isTypeC ? k.ktvName : k.ktvId;
+            const svcs = k.serviceNames && k.serviceNames.length > 0 ? ` (${k.serviceNames.join(', ')})` : '';
+            return `${displayName}${svcs}`;
+        });
+        const fullText = parts.join(' + ');
+        if (fullText.length > 35) return fullText.slice(0, 35) + '...';
+        return fullText;
+    };
+
     return (
         <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
             {/* HEADER: Chuyển sang relative và sắp xếp flex-col trên mobile để không đè nội dung */}
@@ -46,10 +59,10 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
                                     {group.childBookings.map((child: any) => {
                                         const isEvaluated = child.status === 'DONE' || (child.ktvList && child.ktvList.length > 0 && child.ktvList.every((k: any) => k.rating && k.rating > 0));
                                         const isReady = child.status === 'COMPLETED' || child.status === 'FEEDBACK';
-                                        const ktvNames = child.ktvList.map((k: any) => k.ktvName).join(', ') || 'Chưa có KTV';
+                                        const ktvNames = getKtvDisplay(child);
                                         return (
                                             <option key={child.id} value={child.id} disabled={(!isReady && currentBooking.id !== child.id) || isEvaluated}>
-                                                KTV: {ktvNames} {isEvaluated ? '✓' : isReady ? '(!)' : '(Đang làm)'}
+                                                {ktvNames}{isEvaluated ? ' ✓' : !isReady ? ' (Đang làm)' : ''}
                                             </option>
                                         );
                                     })}
@@ -91,11 +104,11 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
                                 {group.childBookings.map((child: any) => {
                                     const isEvaluated = child.status === 'DONE' || (child.ktvList && child.ktvList.length > 0 && child.ktvList.every((k: any) => k.rating && k.rating > 0));
                                     const isReady = child.status === 'COMPLETED' || child.status === 'FEEDBACK';
-                                    const ktvNames = child.ktvList.map((k: any) => k.ktvName).join(', ') || 'Chưa có KTV';
+                                    const ktvNames = getKtvDisplay(child);
                                     
                                     return (
                                         <option key={child.id} value={child.id} disabled={(!isReady && currentBooking.id !== child.id) || isEvaluated}>
-                                            Nhân viên: {ktvNames} {isEvaluated ? ' ✓ (Đã đánh giá)' : isReady ? ' (Chờ đánh giá)' : ' (Đang phục vụ)'}
+                                            {ktvNames}{isEvaluated ? ' ✓' : !isReady ? ' (Đang làm)' : ''}
                                         </option>
                                     );
                                 })}
@@ -245,9 +258,12 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
                                             <UserCircle2 className="w-10 h-10" />
                                         </div>
                                         <div className="text-center sm:text-left">
-                                            <h3 className="text-2xl font-bold text-gray-900 leading-tight mb-2">Trải nghiệm của bạn</h3>
+                                            <h3 className="text-2xl font-bold text-gray-900 leading-tight mb-2">{t.experienceTitle || 'Trải nghiệm của bạn'}</h3>
                                             <p className="text-sm text-[#7C3AED] bg-[#F3E8FF] inline-block px-3 py-1 rounded-md font-medium">
-                                                Nhân viên phục vụ: {mergedKtvGroups.map(g => g.ktvName).join(', ')}
+                                                {t.staffLbl || 'Nhân viên phục vụ'}: {mergedKtvGroups.map(g => {
+                                                    const isTypeC = (g as any).workType === 'C' || (g as any).workType === 'c' || (g.ktvId && (g.ktvId.toUpperCase().startsWith('C_') || g.ktvId.toUpperCase().startsWith('EXT_')));
+                                                    return isTypeC ? g.ktvName : g.ktvId;
+                                                }).join(', ')}
                                             </p>
                                         </div>
                                     </div>

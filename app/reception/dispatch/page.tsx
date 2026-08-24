@@ -1075,6 +1075,11 @@ if (!hasPermission('dispatch_board')) {
                       svc.staffList
                           .filter(r => r.ktvId && r.noteForKtv)
                           .map(r => [r.ktvId, r.noteForKtv])
+                  ),
+                  serviceNamesForKtvs: Object.fromEntries(
+                      svc.staffList
+                          .filter(r => r.ktvId && r.serviceNameForKtv)
+                          .map(r => [r.ktvId, r.serviceNameForKtv])
                   )
               }
           };
@@ -1960,7 +1965,7 @@ if (!hasPermission('dispatch_board')) {
                     <div className="flex justify-between items-center mb-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wider">
-                          #{subOrder.services.length < order.services.length ? `${order.billCode.replace(/-[A-Z]$/i, '')}-${subOrder.subSuffix || 'A'}` : order.billCode}
+                          #{subOrder.services.length < order.services.length ? `${(order.billCode || '').split('-')[0]}-${subOrder.subSuffix || 'A'}` : (order.billCode || '').split('-')[0]}
                         </span>
                         {order.hasVat && <span className="shrink-0 px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-50 text-blue-600 border border-blue-100" title="Khách yêu cầu xuất hoá đơn VAT">VAT</span>}
                         {(() => {
@@ -2070,7 +2075,7 @@ if (!hasPermission('dispatch_board')) {
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
                       <h2 className="font-black text-gray-900 text-base flex-1 flex flex-wrap items-center gap-2">
-                        Đơn {selectedSubOrder.originalOrder.billCode} — {getDisplayCustomerName(selectedSubOrder)}
+                        Đơn {(selectedSubOrder.originalOrder.billCode || '').split('-')[0]} — {getDisplayCustomerName(selectedSubOrder)}
                         <span className="text-gray-400 font-normal text-sm block sm:inline">
                           — {[selectedSubOrder.originalOrder.phone, selectedSubOrder.originalOrder.email].filter(Boolean).join(' — ') || '....'}
                         </span>
@@ -2353,7 +2358,7 @@ if (!hasPermission('dispatch_board')) {
                       alert(`🖨️ In phiếu: ${group.displayName || group.serviceName} x${group.items.length}\nKTV: ${group.selectedKtvIds.join(', ')}\n${(group.ktvStartTimes || [])[0] || '--:--'} → ${(group.ktvEndTimes || [])[0] || '--:--'}`);
                     }}
                     reminders={reminders}
-                    billCode={selectedSubOrder.originalOrder.billCode.replace(/-[A-Z]$/i, '')}
+                    billCode={(selectedSubOrder.originalOrder.billCode || '').split('-')[0]}
                     customerName={getDisplayCustomerName(selectedSubOrder)}
                     subOrderCodeProp={(selectedSubOrder as any).subSuffix || undefined}
                     onRemoveSvc={removeServiceBlock}
@@ -2717,7 +2722,7 @@ if (!hasPermission('dispatch_board')) {
                 <div>
                   <h3 className="font-black text-indigo-900 text-lg uppercase tracking-tight">Xác nhận thông tin</h3>
                   <p className="text-sm text-indigo-600 font-bold mt-1">
-                      Đơn #{selectedSubOrder?.services.length < orderForModal.services.length ? `${orderForModal.billCode.replace(/-[A-Z]$/i, '')}-${(selectedSubOrder as any).subSuffix || 'A'}` : orderForModal.billCode} - {getDisplayCustomerName(selectedSubOrder || { originalOrder: orderForModal, services: orderForModal.services, subSuffix: 'A' })}
+                      Đơn #{selectedSubOrder?.services.length < orderForModal.services.length ? `${(orderForModal.billCode || '').split('-')[0]}-${(selectedSubOrder as any).subSuffix || 'A'}` : (orderForModal.billCode || '').split('-')[0]} - {getDisplayCustomerName(selectedSubOrder || { originalOrder: orderForModal, services: orderForModal.services, subSuffix: 'A' })}
                   </p>
                 </div>
                 <button 
@@ -3000,7 +3005,7 @@ if (!hasPermission('dispatch_board')) {
                 <QrCode size={28} className="text-indigo-600" />
               </div>
               <h3 className="text-lg font-black text-gray-900 mb-1">QR Journey</h3>
-              <p className="text-xs text-gray-500 font-medium mb-6">Đơn #{qrModal.billCode} — Khách quét để xem lộ trình</p>
+              <p className="text-xs text-gray-500 font-medium mb-6">Đơn #{(qrModal.billCode || '').split('-')[0]} — Khách quét để xem lộ trình</p>
               
               <div className="bg-gray-50 rounded-2xl p-6 mb-6 inline-block border border-gray-100">
                 <img

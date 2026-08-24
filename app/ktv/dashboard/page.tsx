@@ -418,7 +418,15 @@ function ScreenDashboard({ logic }: { logic: any }) {
     } else if (Array.isArray(i?.segments)) {
         segs = i.segments;
     }
-    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase()).map((s: any) => ({ ...s, _itemId: i.id, _serviceName: i.service_name }));
+    return segs.filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase()).map((s: any) => {
+        let customName = undefined;
+        try {
+            const opts = typeof i.options === 'string' ? JSON.parse(i.options) : (i.options || {});
+            // KtvId from segment or logic.ktvId
+            customName = opts?.serviceNamesForKtvs?.[s.ktvId || logic.ktvId];
+        } catch(e) {}
+        return { ...s, _itemId: i.id, _serviceName: customName || i.service_name };
+    });
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';
@@ -491,7 +499,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="absolute top-12 right-0 w-80 max-h-96 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col z-50"
+                    className="absolute top-12 right-0 w-[85vw] sm:w-80 max-w-sm max-h-96 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col z-50"
                   >
                     <div className="p-3 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
                       <h3 className="font-bold text-sm text-slate-700">Thông báo</h3>
@@ -620,7 +628,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
               <div className="space-y-2">
                 {logic.pendingHandovers.map((item: any) => (
                   <div key={item.id} onClick={() => logic.handleSelectDebt(item.bookingId)} className="bg-white p-2.5 rounded-2xl flex items-center justify-between border border-amber-100 cursor-pointer hover:bg-amber-100/50">
-                    <span className="text-xs font-bold text-slate-700">#{item.guest_index ? `${item.Bookings?.billCode?.replace(/-[A-Z]$/i, '') || ''}-${String.fromCharCode(64 + item.guest_index)}` : (item.Bookings?.billCode || '---')} <span className="text-[10px] text-slate-400 font-normal ml-1">P.{item.roomId}</span></span>
+                    <span className="text-xs font-bold text-slate-700">#{item.guest_index ? `${(item.Bookings?.billCode || '').split('-')[0]}-${String.fromCharCode(64 + item.guest_index)}` : ((item.Bookings?.billCode || '---').split('-')[0])} <span className="text-[10px] text-slate-400 font-normal ml-1">P.{item.roomId}</span></span>
                     <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-lg">Chưa nộp</span>
                   </div>
                 ))}
@@ -734,14 +742,14 @@ function ScreenDashboard({ logic }: { logic: any }) {
                         )}
                         <span>{allServiceNames.length > 1 ? formatMultiServiceNames(ktvSegments) : item.service_name}</span>
                       </h3>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{totalAssignedMins || item.duration} phút</span>
                         {allServiceNames.length > 1 && <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-lg">{allServiceNames.length} DV</span>}
                         <ServiceTypeLabel serviceId={item.serviceId} />
-                        <span className="text-base font-black text-slate-800 truncate block mt-0.5">
+                        <span className="text-base font-black text-slate-800 truncate block mt-0.5 flex-1 min-w-[120px]">
                           {item.guest_index ? `[Khách ${String.fromCharCode(64 + item.guest_index)}] ` : ''}{item.guest_customer_name || booking.customerName || booking.customerEmail || 'Khách vãng lai'}
                         </span>
-                        <span className="text-sm font-black text-slate-800">#{item.guest_index ? `${booking.billCode?.replace(/-[A-Z]$/i, '') || ''}-${String.fromCharCode(64 + item.guest_index)}` : booking.billCode}</span>
+                        <span className="text-sm font-black text-slate-800 shrink-0">#{item.guest_index ? `${(booking.billCode || '').split('-')[0]}-${String.fromCharCode(64 + item.guest_index)}` : (booking.billCode || '').split('-')[0]}</span>
                       </div>
                       {coWorkers.length > 0 && (
                         <p className="mt-2 text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">Cùng làm với {coWorkers.join(', ')}</p>
@@ -749,7 +757,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                    </div>
               </div>
 
-              <div className="flex justify-between items-end mb-6">
+              <div className="flex justify-between items-end mb-6 flex-wrap gap-2">
                 <div className="flex flex-col">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
                     {ktvSegments.length > 1 ? `Vị trí chặng ${activeSegmentIndex + 1}` : 'Vị trí'}
@@ -767,7 +775,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                 </div>
                 <button 
                   onClick={() => setShowProcedure(true)}
-                  className="text-emerald-600 text-xs font-bold flex items-center gap-1 underline mb-2"
+                  className="text-emerald-600 text-xs font-bold flex items-center gap-1 underline mb-2 shrink-0"
                 >
                    <ClipboardList size={14} /> Quy trình
                 </button>
@@ -792,14 +800,14 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
           {/* Setup Checklist */}
           <div>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className={`font-bold ${THEME.textBase} flex items-center gap-2 uppercase text-[11px] tracking-widest`}>
+            <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+              <h3 className={`font-bold ${THEME.textBase} flex items-center gap-2 uppercase text-[11px] tracking-widest min-w-[120px]`}>
                 <CheckCircle size={18} className={THEME.gold} />
                 Quy trình chuẩn bị
               </h3>
               <button 
                  onClick={checkAllChecklist}
-                 className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg active:scale-95 transition-all uppercase tracking-widest border border-emerald-100 shadow-sm"
+                 className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-4 py-2 rounded-lg active:scale-95 transition-all uppercase tracking-widest border border-emerald-100 shadow-sm shrink-0 whitespace-nowrap"
               >
                  Chọn tất cả
               </button>
@@ -955,7 +963,14 @@ function ScreenTimer({ logic }: { logic: any }) {
     }
     return segs
       .filter((s: any) => s.ktvId?.toLowerCase() === logic.ktvId?.toLowerCase())
-      .map((s: any) => ({ ...s, _itemId: i.id, _serviceName: i.service_name }));
+      .map((s: any) => {
+        let customName = undefined;
+        try {
+            const opts = typeof i.options === 'string' ? JSON.parse(i.options) : (i.options || {});
+            customName = opts?.serviceNamesForKtvs?.[s.ktvId || logic.ktvId];
+        } catch(e) {}
+        return { ...s, _itemId: i.id, _serviceName: customName || i.service_name };
+      });
   }).sort((a: any, b: any) => {
       const timeA = a.startTime || '23:59';
       const timeB = b.startTime || '23:59';

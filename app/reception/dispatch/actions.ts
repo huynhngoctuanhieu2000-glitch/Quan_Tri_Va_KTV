@@ -61,7 +61,7 @@ export async function getDispatchData(date: string, _timestamp?: number) {
         // 🔧 EGRESS FIX: Only select needed columns for Bookings
         const { data: bData, error: bError } = await supabase
             .from('Bookings')
-            .select('id, billCode, customerId, customerName, customerLang, customerPhone, customerEmail, timeBooking, bookingDate, createdAt, updatedAt, status, totalAmount, paymentMethod, technicianCode, bedId, roomName, notes, accessToken, rating, feedbackNote, focusAreaNote, timeStart, timeEnd, source, guestCount, nationality, customerGender, parent_booking_id, sub_suffix, vatRequested')
+            .select('id, billCode, customerId, customerName, customerLang, customerPhone, customerEmail, timeBooking, bookingDate, createdAt, updatedAt, status, totalAmount, paymentMethod, technicianCode, bedId, roomName, notes, accessToken, rating, feedbackNote, focusAreaNote, timeStart, timeEnd, source, guestCount, nationality, customerGender, parent_booking_id, sub_suffix')
             .in('source', ['STANDARD_WALK_IN', 'VIP_WALK_IN', 'STANDARD_MENU', 'VIP_MENU', 'MIXED_WALK_IN'])
             .gte('bookingDate', startOfDay)
             .lte('bookingDate', endOfDay)
@@ -83,7 +83,7 @@ export async function getDispatchData(date: string, _timestamp?: number) {
 
         bookings = bookings.map(b => ({
             ...b,
-            hasVat: !!taxCodeMap[b.customerId] || !!b.vatRequested
+            hasVat: !!taxCodeMap[b.customerId]
         }));
 
         // Fetch historical visits for returning customer tag (using shared library)

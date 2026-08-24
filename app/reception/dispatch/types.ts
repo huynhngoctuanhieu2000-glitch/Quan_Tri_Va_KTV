@@ -19,6 +19,7 @@ export interface StaffAssignment {
   ktvName: string;
   segments: WorkSegment[];
   noteForKtv: string;
+  serviceNameForKtv?: string;
 }
 
 export interface GuestBlock {

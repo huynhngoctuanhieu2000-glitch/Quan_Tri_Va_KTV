@@ -63,10 +63,12 @@ export async function handleReleaseKTV(ctx: HandlerContext): Promise<void> {
     // ─── 1. CẬP NHẬT ẢNH VÀ THỜI GIAN BÀN GIAO VÀO BookingItems.segments ───
     // Lấy tất cả items của booking để cập nhật handoverTime cho KTV này
     const { data: currentItems } = await supabase.from('BookingItems').select('id, segments').eq('bookingId', bookingId);
+    let finishedItemIds: string[] = [];
     if (currentItems && currentItems.length > 0) {
         for (const item of currentItems) {
             let segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (Array.isArray(item.segments) ? item.segments : []);
             let isModified = false;
+            let hasCompletedSeg = false;
             segs.forEach((seg: any) => {
                 if (ktvMatchesSeg(seg.ktvId, technicianCode)) {
                     if (handoverPhotoUrls.length > 0) {
@@ -75,8 +77,15 @@ export async function handleReleaseKTV(ctx: HandlerContext): Promise<void> {
                     // LUÔN GÁN handoverTime kể cả khi không có ảnh
                     seg.handoverTime = new Date().toISOString();
                     isModified = true;
+                    if (seg.actualEndTime) {
+                        hasCompletedSeg = true;
+                    }
                 }
             });
+            
+            if (hasCompletedSeg) {
+                finishedItemIds.push(item.id);
+            }
             
             if (isModified) {
                 const updatePayload: any = { segments: JSON.stringify(segs) };
@@ -96,13 +105,27 @@ export async function handleReleaseKTV(ctx: HandlerContext): Promise<void> {
     }
 
     // ─── 2. CẬP NHẬT KtvAssignments ───
-    await supabase
-        .from('KtvAssignments')
-        .update({ status: 'COMPLETED', updated_at: new Date().toISOString() })
-        .eq('employee_id', technicianCode)
-        .eq('business_date', today)
-        .eq('booking_id', bookingId)
-        .in('status', ['ACTIVE', 'QUEUED', 'READY']);
+    // CHỈ hoàn tất các KtvAssignments của những BookingItems mà KTV đã thực sự làm xong (có actualEndTime)
+    // Các item khác (như QUEUED chờ làm sau) sẽ không bị đánh dấu COMPLETED, tránh lỗi treo đơn.
+    if (finishedItemIds.length > 0) {
+        await supabase
+            .from('KtvAssignments')
+            .update({ status: 'COMPLETED', updated_at: new Date().toISOString() })
+            .eq('employee_id', technicianCode)
+            .eq('business_date', today)
+            .eq('booking_id', bookingId)
+            .in('booking_item_id', finishedItemIds)
+            .in('status', ['ACTIVE', 'QUEUED', 'READY']);
+    } else {
+        // Fallback an toàn nếu không tìm thấy ID
+        await supabase
+            .from('KtvAssignments')
+            .update({ status: 'COMPLETED', updated_at: new Date().toISOString() })
+            .eq('employee_id', technicianCode)
+            .eq('business_date', today)
+            .eq('booking_id', bookingId)
+            .eq('status', 'ACTIVE');
+    }
 
     // ─── 3. PROMPT NEXT ASSIGNMENT ───
     await supabase.rpc('promote_next_assignment', {

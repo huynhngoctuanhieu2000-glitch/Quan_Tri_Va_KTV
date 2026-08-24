@@ -6,6 +6,7 @@ export type FeedbackKtvInfo = {
     itemId: string;
     ktvId: string;
     ktvName: string;
+    workType?: string;
     serviceNames: string[];
     rating?: number;
     timeEnd?: string;
@@ -27,6 +28,27 @@ export type ParentBookingGroup = {
     billCode: string;
     customerName: string;
     childBookings: ChildBookingForFeedback[];
+    bookingDate?: string;
+};
+
+// 🔧 Helper to extract fallback timeEnd if KTV didn't explicitly finish via app
+const getFallbackTimeEnd = (item: any, ktvId?: string) => {
+    if (item.timeEnd) return item.timeEnd;
+    let segs = item.segments;
+    if (typeof segs === 'string') {
+        try { segs = JSON.parse(segs); } catch (e) { segs = []; }
+    }
+    if (Array.isArray(segs) && segs.length > 0) {
+        // Try finding segment matching the specific KTV
+        let targetSeg = ktvId ? segs.find((s: any) => s.ktvId === ktvId) : null;
+        if (!targetSeg) targetSeg = segs[segs.length - 1];
+        
+        if (targetSeg) {
+            if (targetSeg.actualEndTime) return targetSeg.actualEndTime;
+            if (targetSeg.endTime) return targetSeg.endTime; // HH:mm string
+        }
+    }
+    return undefined;
 };
 
 export function useFeedbackDashboard(selectedDate: string) {
@@ -122,16 +144,18 @@ export function useFeedbackDashboard(selectedDate: string) {
                                             itemId: guest.id, // TRUYỀN GUEST_ID VÀO itemId
                                             ktvId: code,
                                             ktvName: staffInfo?.full_name || code,
+                                            workType: staffInfo?.work_type,
                                             serviceNames: [svcName],
                                             rating,
-                                            timeEnd: item.timeEnd
+                                            timeEnd: getFallbackTimeEnd(item, code)
                                         });
                                     } else {
                                         if (!existingKtv.serviceNames.includes(svcName)) {
                                             existingKtv.serviceNames.push(svcName);
                                         }
-                                        if (item.timeEnd && (!existingKtv.timeEnd || new Date(item.timeEnd) > new Date(existingKtv.timeEnd))) {
-                                            existingKtv.timeEnd = item.timeEnd;
+                                        const fbTime = getFallbackTimeEnd(item, code);
+                                        if (fbTime && (!existingKtv.timeEnd || fbTime > existingKtv.timeEnd)) {
+                                            existingKtv.timeEnd = fbTime;
                                         }
                                     }
                                 });
@@ -147,15 +171,17 @@ export function useFeedbackDashboard(selectedDate: string) {
                                             itemId: guest.id,
                                             ktvId: t.employee_id,
                                             ktvName: staffInfo?.full_name || t.employee_id,
+                                            workType: staffInfo?.work_type,
                                             serviceNames: [svcName],
-                                            timeEnd: item.timeEnd
+                                            timeEnd: getFallbackTimeEnd(item, t.employee_id)
                                         });
                                     } else {
                                         if (!existingKtv.serviceNames.includes(svcName)) {
                                             existingKtv.serviceNames.push(svcName);
                                         }
-                                        if (item.timeEnd && (!existingKtv.timeEnd || new Date(item.timeEnd) > new Date(existingKtv.timeEnd))) {
-                                            existingKtv.timeEnd = item.timeEnd;
+                                        const fbTime = getFallbackTimeEnd(item, t.employee_id);
+                                        if (fbTime && (!existingKtv.timeEnd || fbTime > existingKtv.timeEnd)) {
+                                            existingKtv.timeEnd = fbTime;
                                         }
                                     }
                                 });
@@ -218,9 +244,10 @@ export function useFeedbackDashboard(selectedDate: string) {
                                     itemId: item.id,
                                     ktvId: code,
                                     ktvName: staffInfo?.full_name || code,
+                                    workType: staffInfo?.work_type,
                                     serviceNames: [item.serviceName || item.service_name || 'Dịch vụ'],
                                     rating,
-                                    timeEnd: item.timeEnd
+                                    timeEnd: getFallbackTimeEnd(item, code)
                                 });
                             });
                         } else {
@@ -232,8 +259,9 @@ export function useFeedbackDashboard(selectedDate: string) {
                                     itemId: item.id,
                                     ktvId: t.employee_id,
                                     ktvName: staffInfo?.full_name || t.employee_id,
+                                    workType: staffInfo?.work_type,
                                     serviceNames: [item.serviceName || item.service_name || 'Dịch vụ'],
-                                    timeEnd: item.timeEnd
+                                    timeEnd: getFallbackTimeEnd(item, t.employee_id)
                                 });
                             });
                         }

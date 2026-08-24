@@ -114,7 +114,7 @@ const WebBookingDetailPanel = ({ booking, onClose, onConfirm, onReject, isLoadin
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">
-                    {booking.billCode}
+                    {(booking.billCode || '').split('-')[0]}
                   </span>
                   {isNew && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 animate-pulse">
