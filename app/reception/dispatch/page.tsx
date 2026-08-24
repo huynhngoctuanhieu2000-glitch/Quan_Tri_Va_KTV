@@ -1785,7 +1785,7 @@ if (!hasPermission('dispatch_board')) {
                         : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50'
                     }`}
                   >
-                    <Globe size={14} /> Đơn Đặt Lịch
+                    <Globe size={14} /> Lịch Web
                     {webBookingCount > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 shadow-sm">
                         {webBookingCount}
@@ -1810,7 +1810,7 @@ if (!hasPermission('dispatch_board')) {
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    <Columns3 size={14} /> Giám Sát Đơn
+                    <Columns3 size={14} /> Giám Sát
                   </button>
                   <button
                     onClick={() => setActiveMode('TURN_QUEUE')}
@@ -1830,7 +1830,7 @@ if (!hasPermission('dispatch_board')) {
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    <BedDouble size={14} /> Sổ Phòng
+                    <BedDouble size={14} /> Phòng
                   </button>
                   <button
                     onClick={() => setActiveMode('SCHEDULE')}
@@ -1840,7 +1840,7 @@ if (!hasPermission('dispatch_board')) {
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    <CalendarClock size={14} /> Lịch Biểu Diễn
+                    <CalendarClock size={14} /> Lịch Hẹn
                   </button>
                   <button
                     onClick={() => window.location.href = '/reception/feedback'}
