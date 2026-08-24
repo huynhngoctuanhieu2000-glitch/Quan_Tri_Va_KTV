@@ -258,7 +258,32 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             const subKtvIds = new Set<string>();
             let calculatedStart = '';
 
+            
+            // [Antigravity] SPLIT SERVICES BY CALCULATED START TIME FOR SEQUENTIAL (NỐI TIẾP)
+            const splitGroupServices: ServiceBlock[] = [];
             group.services.forEach(svc => {
+                if (svc.staffList && svc.staffList.length > 1) {
+                    const staffByTime = new Map<string, any[]>();
+                    svc.staffList.forEach(st => {
+                        const t = st._calculatedStartTime || 'unknown';
+                        if (!staffByTime.has(t)) staffByTime.set(t, []);
+                        staffByTime.get(t)!.push(st);
+                    });
+                    
+                    if (staffByTime.size > 1) {
+                        // Split into multiple virtual service blocks
+                        staffByTime.forEach((staffs, time) => {
+                            splitGroupServices.push({ ...svc, staffList: staffs, _splitTime: time });
+                        });
+                    } else {
+                        splitGroupServices.push(svc);
+                    }
+                } else {
+                    splitGroupServices.push(svc);
+                }
+            });
+
+            splitGroupServices.forEach(svc => {
                 if (svc.staffList && svc.staffList.length > 0) {
                     svc.staffList.forEach((st: any) => {
                         subKtvIds.add(st.ktvId);
@@ -284,12 +309,12 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 }
             });
 
-            const updatedServicesTemp = group.services.map(svc => {
+            const updatedServicesTemp = splitGroupServices.map(svc => {
                 let dStatus = svc.status || 'NEW';
                 const opts = typeof (svc as any).options === 'string' ? JSON.parse((svc as any).options) : ((svc as any).options || {});
                 
                 if (opts.mergedIntoId) {
-                    return { ...svc, status: dStatus, _isChild: true, _parentId: opts.mergedIntoId };
+                    return { ...svc, status: dStatus, _isChild: true, _parentId: opts.mergedIntoId, _splitTime: (svc as any)._splitTime };
                 }
 
                 if (dStatus !== 'CANCELLED' && dStatus !== 'DONE' && dStatus !== 'PAUSED') {
@@ -311,7 +336,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     else if (svcAnyStart) dStatus = 'IN_PROGRESS';
                     else dStatus = 'PREPARING';
                 }
-                return { ...svc, status: dStatus, _isChild: false };
+                return { ...svc, status: dStatus, _isChild: false, _splitTime: (svc as any)._splitTime };
             });
 
             const updatedServices = updatedServicesTemp.map(svc => {
@@ -323,9 +348,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 }
                 return svc;
             });
-
-
-            // Helper function to map individual service status to a Kanban Phase
+// Helper function to map individual service status to a Kanban Phase
             const getServicePhase = (st: string) => {
                 if (['IN_PROGRESS', 'PAUSED'].includes(st)) return 'IN_PROGRESS';
                 if (['CLEANING', 'COMPLETED'].includes(st)) return 'CLEANING';
@@ -333,6 +356,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 return 'PREPARING';
             };
 
+            
             const servicesByPhase = new Map<string, ServiceBlock[]>();
             
             updatedServices.forEach(svc => {
@@ -351,14 +375,21 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     phase = 'pending';
                 }
 
-                if (!servicesByPhase.has(phase)) servicesByPhase.set(phase, []);
-                servicesByPhase.get(phase)!.push(svc);
-            });
+                // [Antigravity] To guarantee separated Kanban cards for "Nối tiếp" even if they share the same phase,
+                // we group by phase AND _splitTime.
+                let groupingKey = phase;
+                if ((svc as any)._splitTime) {
+                    groupingKey = `${phase}_${(svc as any)._splitTime}`;
+                }
 
-            // Nếu tất cả các services cuối cùng đều thuộc FEEDBACK/DONE, chúng sẽ tự động gom vào 1 phase 'FEEDBACK'.
+                if (!servicesByPhase.has(groupingKey)) servicesByPhase.set(groupingKey, []);
+                servicesByPhase.get(groupingKey)!.push(svc);
+            });
+// Nếu tất cả các services cuối cùng đều thuộc FEEDBACK/DONE, chúng sẽ tự động gom vào 1 phase 'FEEDBACK'.
             // Nếu có cái CLEANING, có cái IN_PROGRESS, chúng sẽ chia thành 2 phase (2 thẻ trên Kanban).
 
-            servicesByPhase.forEach((phaseServices, phase) => {
+            servicesByPhase.forEach((phaseServices, groupingKey) => {
+                const phase = groupingKey.split('_')[0]; // Extract actual phase
                 let phaseDispatchStatus = phase;
                 if (phaseDispatchStatus === 'pending') phaseDispatchStatus = order.dispatchStatus === 'pending' ? 'pending' : 'PREPARING';
 
@@ -398,18 +429,11 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 });
                 subOrderRating = maxRating;
 
-                if (subOrderRating === null) {
-                    const hasDetailedRating = order.services.some((svc: any) => 
-                        svc.itemRating != null || 
-                        (svc.ktvRatings && Object.keys(svc.ktvRatings).length > 0)
-                    );
-                    if (!hasDetailedRating) subOrderRating = order.rating ?? null;
-                }
-
                 if (!phaseCalculatedStart) phaseCalculatedStart = order.timeStart || order.time || '';
 
                 // Create a unique ID for this SubOrder split by Phase, so they render as distinct cards
-                const splitIdSuffix = servicesByPhase.size > 1 ? `_${phase}` : '';
+                // Also factor in _splitTime to ensure uniqueness
+                const splitIdSuffix = servicesByPhase.size > 1 ? `_${groupingKey}` : '';
                 const baseId = guestId !== 'default' ? `${order.id}_${guestId}` : `${order.id}_guest${groupIndex}`;
 
                 resultForOrder.push({
