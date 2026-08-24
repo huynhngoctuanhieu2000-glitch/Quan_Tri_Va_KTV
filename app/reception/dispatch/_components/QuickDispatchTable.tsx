@@ -424,7 +424,7 @@ export const QuickDispatchTable = ({
           };
           updatedServices[svcIdx] = {
             ...updatedServices[svcIdx],
-            staffList: [{ id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`, ktvId, ktvName, segments: [segment], noteForKtv: state.ktvNotes?.[idx] || state.note || '', serviceNameForKtv: (state.isMergedGroup && state.workMode === 'sequential') ? (state.ktvServiceNames?.[idx] || '') : '' }],
+            staffList: [{ id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`, ktvId, ktvName, segments: [segment], noteForKtv: state.ktvNotes?.[idx] || state.note || '', serviceNameForKtv: state.ktvServiceNames?.[idx] || '' }],
             options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
           };
         });
@@ -491,7 +491,7 @@ export const QuickDispatchTable = ({
               ktvId: e.ktvId, ktvName: e.ktvName,
               segments: [{ id: updatedServices[svcIdx].staffList?.[si]?.segments?.[0]?.id || `seg-${genId()}`, roomId: e.roomId, bedId: e.bedId, startTime: e.startTime, duration: e.duration, endTime: e.endTime }],
               noteForKtv: state.ktvNotes?.[state.selectedKtvIds.indexOf(e.ktvId)] || state.note || '',
-              serviceNameForKtv: (state.isMergedGroup && state.workMode === 'sequential') ? (state.ktvServiceNames?.[state.selectedKtvIds.indexOf(e.ktvId)] || '') : '',
+              serviceNameForKtv: state.ktvServiceNames?.[state.selectedKtvIds.indexOf(e.ktvId)] || '',
             })),
             options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
           };
@@ -1464,7 +1464,7 @@ const ServiceGroupCard = ({
                   </div>
                   {/* Row 2: Per-KTV Note | Reminder Button | Dispatch button */}
                   <div className="flex items-center gap-2 ml-6">
-                    {state.isMergedGroup && state.workMode === 'sequential' && (
+                    {count > 1 && (
                         <div className="flex-1 relative">
                             <input type="text" value={state.ktvServiceNames?.[idx] || ''} onChange={e => updateServiceNameForIdx(idx, e.target.value)} placeholder="Tên DV..." className="w-full px-2.5 py-1.5 border border-indigo-100 rounded-xl text-[11px] font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500/10 outline-none bg-indigo-50/30 placeholder:text-indigo-300 pr-8" />
                             {state.ktvServiceNames?.[idx] && (
@@ -1550,7 +1550,7 @@ const ServiceGroupCard = ({
     <AnimatePresence>
     {showTicketForIdx !== null && (() => {
       const idx = showTicketForIdx; const ktvId = state.selectedKtvIds[idx] || ''; const rId = (state.selectedRoomIds || [])[idx] || '';
-      const rName = rooms.find(r => r.id === rId)?.name || rId || '---'; const tName = (state.isMergedGroup && state.workMode === 'sequential' && state.ktvServiceNames?.[idx]) ? state.ktvServiceNames[idx] : (state.displayName || serviceName);
+      const rName = rooms.find(r => r.id === rId)?.name || rId || '---'; const tName = state.ktvServiceNames?.[idx] ? state.ktvServiceNames[idx] : (state.displayName || serviceName);
       const sT = (state.ktvStartTimes || [])[idx] || '--:--'; const eT = (state.ktvEndTimes || [])[idx] || '--:--';
       const ticketDur = (state.ktvDurations || [])[idx] || duration;
       const ticketNote = (state.ktvNotes || [])[idx] || '';
