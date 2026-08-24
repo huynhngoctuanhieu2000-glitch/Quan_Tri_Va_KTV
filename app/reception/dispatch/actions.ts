@@ -1723,7 +1723,7 @@ export async function createQuickBooking(data: { customerName: string; customerP
     return await BookingModificationService.createQuickBooking(data);
 }
 
-export async function updateBookingMeta(bookingId: string, data: { guestCount?: number; nationality?: string; customerGender?: string; }) {
+export async function updateBookingMeta(bookingId: string, data: { guestCount?: number; nationality?: string; customerGender?: string; paymentMethod?: string; }) {
     try {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');

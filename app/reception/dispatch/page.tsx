@@ -206,7 +206,7 @@ export default function DispatchBoardPage() {
   const [editingSvc, setEditingSvc] = useState<{ orderId: string, svcId: string, oldSvcName: string } | null>(null);
   const [showDispatchConfirmModal, setShowDispatchConfirmModal] = useState(false);
   const [svcSearchQuery, setSvcSearchQuery] = useState('');
-  const [editingGuestInfo, setEditingGuestInfo] = useState<{ nationality: string, guestCount: number, customerGender: string } | null>(null);
+  const [editingGuestInfo, setEditingGuestInfo] = useState<{ nationality: string, guestCount: number, customerGender: string, paymentMethod: string } | null>(null);
   const [showCustomerInfo, setShowCustomerInfo] = useState(false);
   const [fullCustomerData, setFullCustomerData] = useState<Customer | null>(null);
   const [isFetchingCustomer, setIsFetchingCustomer] = useState(false);
@@ -2230,14 +2230,15 @@ if (!hasPermission('dispatch_board')) {
                         const currentNationality = editingGuestInfo ? editingGuestInfo.nationality : (selectedSubOrder.originalOrder.nationality || '');
                         const currentGuestCount = autoGuestCount; // Tự động tính, không cho sửa tay
                         const currentGender = editingGuestInfo ? editingGuestInfo.customerGender : (selectedSubOrder.originalOrder.customerGender || 'male');
-                        const isDirty = editingGuestInfo !== null && (currentNationality !== (selectedSubOrder.originalOrder.nationality || '') || currentGender !== (selectedSubOrder.originalOrder.customerGender || 'male'));
+                          const currentPaymentMethod = editingGuestInfo ? editingGuestInfo.paymentMethod : (selectedSubOrder.originalOrder.paymentMethod || 'Cash');
+                        const isDirty = editingGuestInfo !== null && (currentNationality !== (selectedSubOrder.originalOrder.nationality || '') || currentGender !== (selectedSubOrder.originalOrder.customerGender || 'male') || currentPaymentMethod !== (selectedSubOrder.originalOrder.paymentMethod || 'Cash'));
                         
                         return (
                             <div className="flex flex-wrap items-center gap-2 sm:ml-4 sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giới tính</span>
                                 <select
                                   value={currentGender}
-                                  onChange={(e) => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: e.target.value })}
+                                  onChange={(e) => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: e.target.value, paymentMethod: currentPaymentMethod })}
                                   className="w-20 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                                 >
                                   <option value="male">Nam</option>
@@ -2247,7 +2248,7 @@ if (!hasPermission('dispatch_board')) {
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Quốc tịch</span>
                                 <select
                                   value={currentNationality}
-                                  onChange={(e) => setEditingGuestInfo({ nationality: e.target.value, guestCount: currentGuestCount, customerGender: currentGender })}
+                                  onChange={(e) => setEditingGuestInfo({ nationality: e.target.value, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod })}
                                   className="w-32 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                                 >
                                   <option value="">Chọn...</option>
@@ -2258,7 +2259,19 @@ if (!hasPermission('dispatch_board')) {
                                   <option value="Đài Loan">Đài Loan</option>
                                   <option value="Anh/Úc/Mỹ">Anh/Úc/Mỹ</option>
                                   <option value="Khác">Khác</option>
-                                </select>
+                                  </select>
+                                  <div className="w-px h-4 bg-gray-200 mx-2" />
+                                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Thanh toán</span>
+                                  <select
+                                    value={currentPaymentMethod}
+                                    onChange={(e) => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: e.target.value })}
+                                    className="w-28 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                  >
+                                    <option value="Cash">Tiền mặt</option>
+                                    <option value="Transfer">Chuyển khoản</option>
+                                    <option value="Card">Quẹt thẻ</option>
+                                    <option value="Unpaid">Chưa TT</option>
+                                  </select>
                                 <div className="w-px h-4 bg-gray-200 mx-2" />
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Số lượng</span>
                                 <div className="px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 select-none">
@@ -2307,14 +2320,15 @@ if (!hasPermission('dispatch_board')) {
                                       onClick={async () => {
                                           try {
                                               const res = await updateBookingMeta(selectedSubOrder.bookingId, {
-                                                  nationality: currentNationality,
-                                                  guestCount: currentGuestCount,
-                                                  customerGender: currentGender
-                                              });
+                                                    nationality: currentNationality,
+                                                    guestCount: currentGuestCount,
+                                                    customerGender: currentGender,
+                                                    paymentMethod: currentPaymentMethod
+                                                });
                                               if (!res.success) throw new Error(res.error || 'Lỗi không xác định');
                                               
                                               // Cập nhật lại UI local state
-                                              updateOrder(selectedSubOrder.bookingId, o => ({ ...o, nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender }));
+                                              updateOrder(selectedSubOrder.bookingId, o => ({ ...o, nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod }));
                                               setEditingGuestInfo(null);
                                               
                                               alert('Đã lưu thông tin khách hàng thành công!');
