@@ -13,7 +13,7 @@ import {
   ShieldAlert, Clock, CheckCircle2, Bell, BellOff,
   Plus, Calendar as CalendarIcon, Send, Phone, Globe,
   ChevronDown, ChevronLeft, Package, Volume2, VolumeX, Trash2, X, Sparkles, QrCode, LayoutList, Columns3, Save, Zap, AlertTriangle, Info,
-  Users, BedDouble, CalendarClock, ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Loader2, ChevronUp, Ban, Crown, Stethoscope, RotateCcw, Star
+  Users, BedDouble, CalendarClock, ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Loader2, ChevronUp, Ban, Crown, Stethoscope, RotateCcw, Star, PenLine
 } from 'lucide-react';
 import { TurnQueueBoard } from '@/components/shared/TurnQueueBoard/TurnQueueBoard';
 import { DispatchOnlineKtvTable } from './_components/DispatchOnlineKtvTable';
@@ -2093,7 +2093,23 @@ if (!hasPermission('dispatch_board')) {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <p className="font-black text-gray-900 group-hover:text-indigo-600 transition-colors uppercase tracking-tight truncate">{getDisplayCustomerName(subOrder)}</p>
                       </div>
-                        <div className="shrink-0 text-[11px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-emerald-100/50">
+                        <div className="shrink-0 text-[11px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-emerald-100/50 relative overflow-hidden group/pay cursor-pointer hover:bg-emerald-100 transition-colors">
+                            <select
+                                value={order.paymentMethod || 'Unpaid'}
+                                onClick={e => e.stopPropagation()}
+                                onChange={async (e) => {
+                                    if (!selectedSubOrder) return;
+                                    const newPm = e.target.value;
+                                    updateOrder(selectedSubOrder.bookingId, o => ({ ...o, paymentMethod: newPm }));
+                                    await updateBookingMeta(selectedSubOrder.bookingId, { paymentMethod: newPm });
+                                }}
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                            >
+                                <option value="Cash">Tiền mặt</option>
+                                <option value="Transfer">Chuyển khoản</option>
+                                <option value="Card">Quẹt thẻ</option>
+                                <option value="Unpaid">Chưa TT</option>
+                            </select>
                           <span title={(subOrder.services.reduce((acc, svc) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0)).toLocaleString('vi-VN') + 'đ'}>{formatCompactPrice(subOrder.services.reduce((acc, svc) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0))}</span>
                           <span className="opacity-30">·</span>
                           <span>{order.paymentMethod === 'Cash' || order.paymentMethod === 'cash_vnd' ? 'cash' : (order.paymentMethod === 'Transfer' ? 'ck' : order.paymentMethod)}</span>
@@ -2234,54 +2250,91 @@ if (!hasPermission('dispatch_board')) {
                         const isDirty = editingGuestInfo !== null && (currentNationality !== (selectedSubOrder.originalOrder.nationality || '') || currentGender !== (selectedSubOrder.originalOrder.customerGender || 'male') || currentPaymentMethod !== (selectedSubOrder.originalOrder.paymentMethod || 'Cash'));
                         
                         return (
-                            <div className="flex flex-wrap items-center gap-2 sm:ml-4 sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giới tính</span>
-                                <select
-                                  value={currentGender}
-                                  onChange={(e) => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: e.target.value, paymentMethod: currentPaymentMethod })}
-                                  className="w-20 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                >
-                                  <option value="male">Nam</option>
-                                  <option value="female">Nữ</option>
-                                </select>
-                                <div className="w-px h-4 bg-gray-200 mx-2" />
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Quốc tịch</span>
-                                <select
-                                  value={currentNationality}
-                                  onChange={(e) => setEditingGuestInfo({ nationality: e.target.value, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod })}
-                                  className="w-32 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                >
-                                  <option value="">Chọn...</option>
-                                  <option value="Việt Nam">Việt Nam</option>
-                                  <option value="Hàn Quốc">Hàn Quốc</option>
-                                  <option value="Nhật Bản">Nhật Bản</option>
-                                  <option value="Trung Quốc">Trung Quốc</option>
-                                  <option value="Đài Loan">Đài Loan</option>
-                                  <option value="Anh/Úc/Mỹ">Anh/Úc/Mỹ</option>
-                                  <option value="Khác">Khác</option>
-                                  </select>
-                                  <div className="w-px h-4 bg-gray-200 mx-2" />
-                                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Thanh toán</span>
-                                  <select
-                                    value={currentPaymentMethod}
-                                    onChange={(e) => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: e.target.value })}
-                                    className="w-28 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                                  >
-                                    <option value="Cash">Tiền mặt</option>
-                                    <option value="Transfer">Chuyển khoản</option>
-                                    <option value="Card">Quẹt thẻ</option>
-                                    <option value="Unpaid">Chưa TT</option>
-                                  </select>
-                                <div className="w-px h-4 bg-gray-200 mx-2" />
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Số lượng</span>
-                                <div className="px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 select-none">
-                                    {currentGuestCount} KHÁCH
-                                </div>
+                              <div className="flex flex-wrap items-center gap-2 sm:ml-4 sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
+                                {editingGuestInfo ? (
+                                  <>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giới tính</span>
+                                    <select
+                                      value={currentGender}
+                                      onChange={(e) => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: e.target.value, paymentMethod: currentPaymentMethod })}
+                                      className="w-20 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                    >
+                                      <option value="male">Nam</option>
+                                      <option value="female">Nữ</option>
+                                    </select>
+                                    <div className="w-px h-4 bg-gray-200 mx-2" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Quốc tịch</span>
+                                    <select
+                                      value={currentNationality}
+                                      onChange={(e) => setEditingGuestInfo({ nationality: e.target.value, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod })}
+                                      className="w-32 bg-white px-2 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                    >
+                                      <option value="">Chọn...</option>
+                                      <option value="Việt Nam">Việt Nam</option>
+                                      <option value="Hàn Quốc">Hàn Quốc</option>
+                                      <option value="Nhật Bản">Nhật Bản</option>
+                                      <option value="Trung Quốc">Trung Quốc</option>
+                                      <option value="Đài Loan">Đài Loan</option>
+                                      <option value="Anh/Úc/Mỹ">Anh/Úc/Mỹ</option>
+                                      <option value="Khác">Khác</option>
+                                    </select>
+                                    <div className="w-px h-4 bg-gray-200 mx-2" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Số lượng</span>
+                                    <div className="px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 select-none">
+                                        {currentGuestCount} KHÁCH
+                                    </div>
+                                    <button
+                                      onClick={async () => {
+                                          if (!selectedSubOrder) return;
+                                          try {
+                                              const res = await updateBookingMeta(selectedSubOrder.bookingId, {
+                                                  nationality: currentNationality,
+                                                  guestCount: currentGuestCount,
+                                                  customerGender: currentGender,
+                                                  paymentMethod: currentPaymentMethod
+                                              });
+                                              if (!res.success) throw new Error(res.error || 'Lỗi không xác định');
+                                              
+                                              updateOrder(selectedSubOrder.bookingId, o => ({ ...o, nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod }));
+                                              setEditingGuestInfo(null);
+                                              
+                                              alert('Đã lưu thông tin khách hàng thành công!');
+                                          } catch(e) {
+                                              alert('Lỗi khi lưu!');
+                                              console.error(e);
+                                          }
+                                      }}
+                                      className="ml-2 px-3 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1"
+                                    >
+                                      <Save size={12} /> Lưu
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Giới tính:</span>
+                                    <span className="text-xs font-bold text-gray-700">{currentGender === 'male' ? 'Nam' : 'Nữ'}</span>
+                                    <div className="w-px h-4 bg-gray-200 mx-2" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Quốc tịch:</span>
+                                    <span className="text-xs font-bold text-gray-700">{currentNationality || 'Chưa chọn'}</span>
+                                    <div className="w-px h-4 bg-gray-200 mx-2" />
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Số lượng</span>
+                                    <div className="px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-black text-indigo-700 select-none">
+                                        {currentGuestCount} KHÁCH
+                                    </div>
+                                    <button
+                                      onClick={() => setEditingGuestInfo({ nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod })}
+                                      className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors ml-2"
+                                      title="Chỉnh sửa thông tin chung"
+                                    >
+                                      <PenLine size={14} />
+                                    </button>
+                                  </>
+                                )}
                                 <button
                                   onClick={async () => {
                                     setIsFetchingCustomer(true);
                                     try {
-                                      const data = await apiClient.get<any>(API.CUSTOMERS);
+                                      const data = (await apiClient.get(API.CUSTOMERS)) as any;
                                       const orderToUse = selectedOrder || selectedSubOrder?.originalOrder;
                                       
                                       let found = null;
@@ -2306,45 +2359,18 @@ if (!hasPermission('dispatch_board')) {
                                     }
                                   }}
                                   disabled={isFetchingCustomer}
-                                  className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors disabled:opacity-50"
+                                  className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors disabled:opacity-50 ml-1"
                                   title="Xem thông tin khách hàng"
                                 >
                                   {isFetchingCustomer ? (
                                     <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                                   ) : (
-                                    <Info size={16} />
+                                    <Info size={14} />
                                   )}
                                 </button>
-                                {isDirty && (
-                                    <button
-                                      onClick={async () => {
-                                          try {
-                                              const res = await updateBookingMeta(selectedSubOrder.bookingId, {
-                                                    nationality: currentNationality,
-                                                    guestCount: currentGuestCount,
-                                                    customerGender: currentGender,
-                                                    paymentMethod: currentPaymentMethod
-                                                });
-                                              if (!res.success) throw new Error(res.error || 'Lỗi không xác định');
-                                              
-                                              // Cập nhật lại UI local state
-                                              updateOrder(selectedSubOrder.bookingId, o => ({ ...o, nationality: currentNationality, guestCount: currentGuestCount, customerGender: currentGender, paymentMethod: currentPaymentMethod }));
-                                              setEditingGuestInfo(null);
-                                              
-                                              alert('Đã lưu thông tin khách hàng thành công!');
-                                          } catch(e) {
-                                              alert('Lỗi khi lưu!');
-                                              console.error(e);
-                                          }
-                                      }}
-                                      className="ml-2 px-3 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1"
-                                    >
-                                      <Save size={12} /> Lưu
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })()}
+                              </div>
+                          );
+                      })()}
                   </div>
                   
                   {/* Cảnh báo Phát sinh chưa thu */}
