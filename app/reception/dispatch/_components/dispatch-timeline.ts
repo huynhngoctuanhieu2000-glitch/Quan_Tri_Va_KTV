@@ -379,7 +379,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 // we group by phase AND _splitTime.
                 let groupingKey = phase;
                 if ((svc as any)._splitTime) {
-                    groupingKey = `${phase}_${(svc as any)._splitTime}`;
+                    groupingKey = `${phase}#${(svc as any)._splitTime}`;
                 }
 
                 if (!servicesByPhase.has(groupingKey)) servicesByPhase.set(groupingKey, []);
@@ -389,7 +389,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             // Nếu có cái CLEANING, có cái IN_PROGRESS, chúng sẽ chia thành 2 phase (2 thẻ trên Kanban).
 
             servicesByPhase.forEach((phaseServices, groupingKey) => {
-                const phase = groupingKey.split('_')[0]; // Extract actual phase
+                const phase = groupingKey.split('#')[0]; // Extract actual phase
                 let phaseDispatchStatus = phase;
                 if (phaseDispatchStatus === 'pending') phaseDispatchStatus = order.dispatchStatus === 'pending' ? 'pending' : 'PREPARING';
 
