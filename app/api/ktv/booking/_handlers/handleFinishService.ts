@@ -45,8 +45,22 @@ export async function handleFinishService(ctx: HandlerContext): Promise<HandlerR
     const isFeedback = status === 'FEEDBACK';
     const nowISO = new Date().toISOString();
 
-    // ─── 1. GOM SEGMENTS CỦA KTV NÀY ───
-    const { data: items } = await supabase.from('BookingItems').select('id, segments, status, itemRating').in('id', allItemIdsForThisKTV);
+    // 🔍 Fetch bookings and guest ratings để check rating
+    const { data: bookingData } = await supabase
+        .from('Bookings')
+        .select('rating, BookingGuests(id, rating)')
+        .eq('id', bookingId)
+        .single();
+    
+    const guestRatings: Record<string, number> = {};
+    if (bookingData?.BookingGuests) {
+        bookingData.BookingGuests.forEach((g: any) => {
+            if (g.rating != null) guestRatings[g.id] = g.rating;
+        });
+    }
+
+    // 🛠️ 1. GOM SEGMENTS CỦA KTV NÀY 🛠️
+    const { data: items } = await supabase.from('BookingItems').select('id, segments, status, itemRating, guest_id').in('id', allItemIdsForThisKTV);
     
     let allGlobalSegs: any[] = [];
     let originalItemsData: Record<string, any[]> = {};
@@ -181,7 +195,10 @@ export async function handleFinishService(ctx: HandlerContext): Promise<HandlerR
         const startedSegs = segs.filter((s: any) => !!s.actualStartTime);
         const allSegsDone = startedSegs.length > 0 && startedSegs.every((s: any) => !!s.actualEndTime);
         const hasUnstartedSegs = segs.some((s: any) => !s.actualStartTime && s.ktvId);
-        const alreadyRated = (item as any).itemRating !== null && (item as any).itemRating !== undefined;
+        const alreadyRated = 
+            ((item as any).itemRating !== null && (item as any).itemRating !== undefined) ||
+            ((item as any).guest_id && guestRatings[(item as any).guest_id] != null) ||
+            (bookingData?.rating != null);
         // 🛡️ FIX: Kiểm tra KTV đã bàn giao phòng chưa (handoverTime trong segment)
         // Nếu khách rate trước nhưng KTV chưa bàn giao → giữ CLEANING để ScreenEngine
         // dẫn KTV đi đúng luồng: REVIEW → HANDOVER → REWARD → rồi mới DONE
