@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { ShieldAlert, Plus, Edit2, Trash2, Image as ImageIcon, Star, TrendingUp } from 'lucide-react';
-import { getServices } from './actions';
+import { getServices, updateService } from './actions';
 
 import { Service } from '@/lib/types';
 
@@ -50,6 +50,28 @@ export default function ServiceMenuPage() {
   const handleDrawerClose = () => {
     setIsDrawerOpen(false);
     setTimeout(() => setSelectedService(null), 300); // clear after animation
+  };
+
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<string | null>(null);
+
+  const handleToggleStatus = async (service: Service) => {
+    if (isUpdatingStatus === service.id) return;
+    setIsUpdatingStatus(service.id);
+    try {
+      const newStatus = service.isActive === false ? true : false;
+      const res = await updateService(service.id, { isActive: newStatus });
+      if (res.success) {
+        setServices(prev => prev.map(s => s.id === service.id ? { ...s, isActive: newStatus } : s));
+      } else {
+        console.error('Failed to update status', res.error);
+        alert('Cập nhật trạng thái thất bại: ' + res.error);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Lỗi hệ thống khi cập nhật trạng thái!');
+    } finally {
+      setIsUpdatingStatus(null);
+    }
   };
 
   if (!mounted) return null;
@@ -160,11 +182,19 @@ export default function ServiceMenuPage() {
                         {service.duration} phút
                       </td>
                       <td className="p-4 text-center">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                          (service.isActive !== false) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {(service.isActive !== false) ? 'Đang bán' : 'Tạm ngưng'}
-                        </span>
+                        <button 
+                          onClick={() => handleToggleStatus(service)}
+                          disabled={isUpdatingStatus === service.id}
+                          className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                            isUpdatingStatus === service.id ? 'opacity-50 ' : 'hover:opacity-80 '
+                          } ${
+                            (service.isActive !== false) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {isUpdatingStatus === service.id 
+                            ? 'Đang xử lý...' 
+                            : (service.isActive !== false) ? 'Đang bán' : 'Tạm ngưng'}
+                        </button>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-2">

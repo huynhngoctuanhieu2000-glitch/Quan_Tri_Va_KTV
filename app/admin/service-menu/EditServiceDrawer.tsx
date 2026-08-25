@@ -28,14 +28,15 @@ const COMBO_TAGS = [
 ];
 
 const FOCUS_AREAS = [
-  { id: 'head', label: 'Đầu' },
-  { id: 'neck', label: 'Cổ' },
-  { id: 'shoulders', label: 'Vai' },
-  { id: 'arms', label: 'Tay' },
-  { id: 'upper_back', label: 'Lưng trên' },
-  { id: 'lower_back', label: 'Lưng dưới' },
-  { id: 'legs', label: 'Chân' },
-  { id: 'feet', label: 'Bàn chân' },
+  { id: 'HEAD', label: 'Đầu' },
+  { id: 'NECK', label: 'Cổ' },
+  { id: 'SHOULDER', label: 'Vai' },
+  { id: 'ARM', label: 'Tay' },
+  { id: 'BACK', label: 'Lưng' },
+  { id: 'THIGH', label: 'Đùi' },
+  { id: 'KNEE', label: 'Đầu gối' },
+  { id: 'CALF', label: 'Bắp chân' },
+  { id: 'FOOT', label: 'Bàn chân' },
 ];
 
 export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditServiceDrawerProps) {
@@ -157,7 +158,12 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
         min_ktv_required: formData.min_ktv_required,
         service_group: formData.service_group,
 
-        focusConfig: formData.focusConfig,
+        focusConfig: formData.showFocus !== false 
+          ? FOCUS_AREAS.reduce((acc, area) => {
+              acc[area.id] = !!(formData.focusConfig as any)?.[area.id];
+              return acc;
+            }, {} as Record<string, boolean>)
+          : {},
         tags: formData.tags?.filter(t => {
             if (typeof t === 'string') return true;
             if (typeof t === 'object' && t !== null) {
