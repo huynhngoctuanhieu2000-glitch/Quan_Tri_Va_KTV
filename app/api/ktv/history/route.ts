@@ -108,7 +108,7 @@ export async function GET(request: Request) {
             .lte('bookingDate', toFilter)
             .in('status', ['PREPARING', 'IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'COMPLETED', 'DONE'])
             .order('bookingDate', { ascending: false })
-            .limit(300);
+            .limit(3000);
 
         if (bErr) throw bErr;
         
