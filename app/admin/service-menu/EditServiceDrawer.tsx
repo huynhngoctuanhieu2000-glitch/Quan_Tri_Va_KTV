@@ -28,6 +28,7 @@ const COMBO_TAGS = [
 ];
 
 const FOCUS_AREAS = [
+  { id: 'WHOLE_BODY', label: 'Toàn thân' },
   { id: 'HEAD', label: 'Đầu' },
   { id: 'NECK', label: 'Cổ' },
   { id: 'SHOULDER', label: 'Vai' },
