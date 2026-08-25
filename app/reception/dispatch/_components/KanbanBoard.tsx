@@ -187,6 +187,13 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
     const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
     const [commentModalData, setCommentModalData] = useState<{subOrder: SubOrder, order: PendingOrder} | null>(null);
     const [isHandoverReviewEnabled, setIsHandoverReviewEnabled] = useState<boolean>(true);
+    const [ktvSelectorState, setKtvSelectorState] = useState<{
+        isOpen: boolean;
+        orderId: string;
+        nextStatus: RawStatus;
+        itemIds: string[];
+        availableKtvs: string[];
+    } | null>(null);
 
     // 🔧 MAP ĐIỂM CHUYÊN CẦN
     const staffPointsMap = React.useMemo(() => {
@@ -688,7 +695,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                             if (s.options?.mergedIntoId) return null;
 
                                                             const firstSeg = s.staffList?.[0]?.segments?.[0];
-                                                            const explicitStart = firstSeg?.actualStartTime || s.timeStart || firstSeg?.startTime;
+                                                            const explicitStart = firstSeg?.actualStartTime || firstSeg?.startTime || s.timeStart;
                                                             let duration = Number(firstSeg?.duration) || Number(s.duration) || 60;
                                                             
                                                             let maxActualEndTime = firstSeg?.actualEndTime;
@@ -881,7 +888,9 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                 ) : (
                                                                     <div className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1.5 border border-indigo-100/50 mt-1">
                                                                         <div className="flex flex-col">
-                                                                            <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Bắt đầu</span>
+                                                                            <span className="text-[8px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">
+                                                                                {firstSeg?.actualStartTime ? 'Bắt đầu' : 'Dự kiến'}
+                                                                            </span>
                                                                             <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(displayStart)}</span>
                                                                         </div>
                                                                         <div className="text-indigo-300">
@@ -1083,11 +1092,21 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                     onClick={e => { 
                                                                         e.stopPropagation(); 
                                                                         const itemIds = services.map((s: any) => s.id);
-                                                                        let targetKtvIds: string[] | undefined = undefined;
-                                                                        if (subOrder.ktvIds && subOrder.ktvIds.length > 0) {
-                                                                            targetKtvIds = subOrder.ktvIds;
-                                                                        }
-                                                                        onUpdateStatus(order.id, currentCfg.next!, itemIds, false, targetKtvIds); 
+                                                                        if (subOrder.ktvIds && subOrder.ktvIds.length > 1) {
+                                                                            setKtvSelectorState({
+                                                                                isOpen: true,
+                                                                                orderId: order.id,
+                                                                                nextStatus: currentCfg.next!,
+                                                                                itemIds,
+                                                                                availableKtvs: subOrder.ktvIds
+                                                                            });
+                                                                        } else {
+                                                                            let targetKtvIds: string[] | undefined = undefined;
+                                                                            if (subOrder.ktvIds && subOrder.ktvIds.length === 1) {
+                                                                                targetKtvIds = subOrder.ktvIds;
+                                                                            }
+                                                                            onUpdateStatus(order.id, currentCfg.next!, itemIds, false, targetKtvIds); 
+                                                                        } 
                                                                     }}
                                                                     className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${currentCfg.activeBg || 'bg-indigo-600'} text-white hover:opacity-90 active:scale-95`}
                                                                 >
@@ -1229,6 +1248,44 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                         // Tùy chọn: có thể toast hoặc refresh data nếu cần
                     }}
                 />
+            )}
+
+            {ktvSelectorState?.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+                        <h3 className="font-bold text-lg mb-4 text-gray-800">Chọn KTV để chuyển trạng thái</h3>
+                        <div className="space-y-2 mb-6">
+                            {ktvSelectorState.availableKtvs.map(kId => (
+                                <button
+                                    key={kId}
+                                    onClick={() => {
+                                        onUpdateStatus(ktvSelectorState.orderId, ktvSelectorState.nextStatus, ktvSelectorState.itemIds, false, [kId]);
+                                        setKtvSelectorState(null);
+                                    }}
+                                    className="w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-left flex justify-between items-center transition-all"
+                                >
+                                    <span>KTV {kId}</span>
+                                    <span>👉</span>
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => {
+                                onUpdateStatus(ktvSelectorState.orderId, ktvSelectorState.nextStatus, ktvSelectorState.itemIds, false, ktvSelectorState.availableKtvs);
+                                setKtvSelectorState(null);
+                            }}
+                            className="w-full py-3 px-4 bg-gray-800 hover:bg-gray-900 text-white font-bold rounded-xl mb-3 transition-all"
+                        >
+                            Chọn Tất Cả ({ktvSelectorState.availableKtvs.length})
+                        </button>
+                        <button
+                            onClick={() => setKtvSelectorState(null)}
+                            className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-xl transition-all"
+                        >
+                            Hủy Bỏ
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
         </>
