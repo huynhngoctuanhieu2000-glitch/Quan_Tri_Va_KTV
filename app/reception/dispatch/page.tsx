@@ -1684,7 +1684,44 @@ if (!hasPermission('dispatch_board')) {
                   ...o,
                   services: o.services.map(s => {
                       if (itemIds.includes(s.id)) {
-                          return { ...s, status: newStatus };
+                          let newSegments = (s as any).segments;
+                          try {
+                              let segs = typeof (s as any).segments === 'string' ? JSON.parse((s as any).segments) : ((s as any).segments || []);
+                              if (newStatus === 'IN_PROGRESS') {
+                                  segs = segs.map((seg: any) => {
+                                      if (!targetKtvIds || targetKtvIds.length === 0 || targetKtvIds.includes(seg.ktvId)) {
+                                          return { ...seg, actualStartTime: customStartTime || new Date().toISOString() };
+                                      }
+                                      return seg;
+                                  });
+                              } else if (['PREPARING', 'WAITING', 'NEW'].includes(newStatus) && forceBackward) {
+                                  segs = segs.map((seg: any) => {
+                                      if (!targetKtvIds || targetKtvIds.length === 0 || targetKtvIds.includes(seg.ktvId)) {
+                                          const copy = { ...seg };
+                                          delete copy.actualStartTime;
+                                          delete copy.actualEndTime;
+                                          delete copy.feedbackTime;
+                                          delete copy.reviewTime;
+                                          return copy;
+                                      }
+                                      return seg;
+                                  });
+                              } else if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK', 'COMPLETED'].includes(newStatus)) {
+                                  segs = segs.map((seg: any) => {
+                                      if (!targetKtvIds || targetKtvIds.length === 0 || targetKtvIds.includes(seg.ktvId)) {
+                                          const copy = { ...seg };
+                                          copy.actualEndTime = copy.actualEndTime || new Date().toISOString();
+                                          if (['FEEDBACK', 'DONE'].includes(newStatus)) {
+                                              copy.feedbackTime = copy.feedbackTime || new Date().toISOString();
+                                          }
+                                          return copy;
+                                      }
+                                      return seg;
+                                  });
+                              }
+                              newSegments = JSON.stringify(segs);
+                          } catch (e) {}
+                          return { ...s, status: newStatus, segments: newSegments } as any;
                       }
                       return s;
                   })

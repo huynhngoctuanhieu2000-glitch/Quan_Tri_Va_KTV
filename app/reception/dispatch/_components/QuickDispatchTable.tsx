@@ -89,13 +89,12 @@ export const QuickDispatchTable = ({
   const initialGroups = useMemo(() => {
     const map = new Map<string, ServiceBlock[]>();
     services.filter(s => !s.mergedIntoId).forEach(svc => {
-      // Utilities (like Phòng Riêng) are still grouped but have isUtility flag
-      const isUtil = !!(svc as any).isUtility;
+      const isUtil = svc.is_utility || (svc as any).isUtility || svc.serviceId === 'NHS0900' || (String(svc.serviceName || '').toLowerCase().includes('phòng riêng') && !String(svc.serviceName || '').includes('+'));
       
       // Calculate display name and duration by including any merged services
       const mergedSvcs = services.filter(s => svc.mergedServiceIds?.includes(s.id));
-      const combinedDuration = svc.duration + mergedSvcs.reduce((acc, curr) => acc + curr.duration, 0);
-      const combinedName = [`${svc.serviceName} (${svc.duration}p)`, ...mergedSvcs.map(s => `${s.serviceName} (${s.duration}p)`)].join(' + ');
+      const combinedDuration = svc.duration + mergedSvcs.reduce((acc, curr) => acc + ((curr.is_utility || (curr as any).isUtility || curr.serviceId === 'NHS0900' || String(curr.serviceName || '').toLowerCase().includes('phòng riêng')) ? 0 : curr.duration), 0);
+      const combinedName = [`${svc.serviceName} (${svc.duration}p)`, ...mergedSvcs.map(s => (s.is_utility || (s as any).isUtility || s.serviceId === 'NHS0900' || String(s.serviceName || '').toLowerCase().includes('phòng riêng')) ? s.serviceName : `${s.serviceName} (${s.duration}p)`)].join(' + ');
 
       // Hack to inject combined data for UI rendering without altering the real object
       const combinedNote = Array.from(new Set([svc.customerNote, ...mergedSvcs.map(s => s.customerNote)].filter(Boolean))).join(' | ');
@@ -352,7 +351,7 @@ export const QuickDispatchTable = ({
             ktvDisplayNames: Object.keys(ktvDisplayNames).length > 0 ? ktvDisplayNames : undefined,
             note: items[0]?.staffList?.[0]?.noteForKtv || '',
             duration,
-            isUtility: !!(items[0] as any).isUtility,
+            isUtility: items[0]?.is_utility || (items[0] as any)?.isUtility || items[0]?.serviceId === 'NHS0900' || (String(items[0]?.serviceName || '').toLowerCase().includes('phòng riêng') && !String(items[0]?.serviceName || '').includes('+')),
             isMergedGroup,
             workMode: initialWorkMode
           });

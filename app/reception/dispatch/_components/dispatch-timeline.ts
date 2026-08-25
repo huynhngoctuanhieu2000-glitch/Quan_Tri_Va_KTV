@@ -429,7 +429,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 });
                 subOrderRating = maxRating;
 
-                if (!phaseCalculatedStart) phaseCalculatedStart = order.timeStart || order.time || '';
+                if (!phaseCalculatedStart) phaseCalculatedStart = order.timeBooking || order.time || '';
 
                 // Create a unique ID for this SubOrder split by Phase, so they render as distinct cards
                 // Also factor in _splitTime to ensure uniqueness
@@ -492,7 +492,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     guest: null,
                     ktvSignature: 'utility',
                     ktvIds: [],
-                    calculatedStart: order.timeStart || '',
+                    calculatedStart: order.timeBooking || order.time || '',
                     rating: utilityRating
                 });
             }
