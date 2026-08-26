@@ -10,6 +10,7 @@ import {
   CheckCircle2, XCircle, Globe, Package, DollarSign, AlertTriangle,
 } from 'lucide-react';
 import { WebBooking } from './actions';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -225,9 +226,9 @@ const WebBookingDetailPanel = ({ booking, onClose, onConfirm, onReject, isLoadin
                         {item.options && (item.options.strength || item.options.focus?.length > 0 || item.options.avoid?.length > 0 || item.options.tags?.length > 0 || item.options.note || item.options.customerNotes || (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên')) && (
                           <div className="flex flex-col gap-1.5 mt-2 text-[12px] text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
                              {(item.options.therapist && item.options.therapist !== 'Ngẫu nhiên') && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400"></span> <span className="font-medium">Giới tính KTV:</span> <span className="text-pink-600 font-bold">{item.options.therapist}</span></p>}
-                             {item.options.strength && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> <span className="font-medium">Lực massage:</span> {item.options.strength}</p>}
-                             {item.options.focus && item.options.focus.length > 0 && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> <span className="font-medium">Tập trung:</span> {item.options.focus.join(', ')}</p>}
-                             {item.options.avoid && item.options.avoid.length > 0 && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400"></span> <span className="font-medium">Tránh vùng:</span> {item.options.avoid.join(', ')}</p>}
+                             {item.options.strength && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> <span className="font-medium">Lực massage:</span> {normalizeStrength(item.options.strength)}</p>}
+                             {item.options.focus && formatBodyAreas(item.options.focus) && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> <span className="font-medium">Tập trung:</span> {formatBodyAreas(item.options.focus)}</p>}
+                             {item.options.avoid && formatBodyAreas(item.options.avoid) && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400"></span> <span className="font-medium">Tránh vùng:</span> {formatBodyAreas(item.options.avoid)}</p>}
                              {item.options.tags && item.options.tags.length > 0 && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span> <span className="font-medium">Yêu cầu khác:</span> {item.options.tags.join(', ')}</p>}
                              {(item.options.note || item.options.customerNotes) && <p className="flex gap-1 mt-0.5 text-gray-500 italic">" {item.options.note || item.options.customerNotes} "</p>}
                           </div>

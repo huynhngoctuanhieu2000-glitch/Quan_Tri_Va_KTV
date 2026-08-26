@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { parseDbDate } from '@/lib/utils';
 import { getDispatchData } from './actions';
 import { StaffData, TurnQueueData, PendingOrder, DispatchStatus, WorkSegment } from './types';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 // Helpers copied from page.tsx for internal hook usage
 const getCurrentTime = () => {
@@ -331,9 +332,9 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                 staffList: staffList,
                                 adminNote: finalAdminNote,
                                 genderReq: parsedOptions?.therapist || 'Ngẫu nhiên',
-                                strength: parsedOptions?.strength || '',
-                                focus: Array.isArray(parsedOptions?.focus) ? parsedOptions.focus.join(', ') : (parsedOptions?.focus || b.focusAreaNote || ''),
-                                avoid: Array.isArray(parsedOptions?.avoid) ? parsedOptions.avoid.join(', ') : (parsedOptions?.avoid || ''),
+                                strength: normalizeStrength(parsedOptions?.strength || ''),
+                                focus: formatBodyAreas(parsedOptions?.focus || b.focusAreaNote || ''),
+                                avoid: formatBodyAreas(parsedOptions?.avoid || ''),
                                 customerNote: [
                                     parsedOptions?.note || parsedOptions?.customerNotes,
                                     Array.isArray(parsedOptions?.tags) && parsedOptions.tags.length > 0 ? `Yêu cầu đặc biệt: ${parsedOptions.tags.join(', ')}` : '',

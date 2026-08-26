@@ -5,6 +5,7 @@ import { Trash2, AlertCircle, CheckCircle2, ChevronDown, Plus, Printer, X } from
 import { motion, AnimatePresence } from 'motion/react';
 import { StaffData, TurnQueueData, WorkSegment } from '../types';
 import { DispatchSegmentRow } from './DispatchSegmentRow';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 interface StaffAssignment {
     id: string;
@@ -700,22 +701,17 @@ export const DispatchStaffRow = ({
                                             )}
                                             {strength && (
                                                 <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
-                                                    💪 Lực: {strength}
+                                                    💪 Lực: {normalizeStrength(strength)}
                                                 </span>
                                             )}
-                                            {focus && (() => {
-                                                const FULL_BODY_THRESHOLD = 8;
-                                                const areas = focus.split(',').map(s => s.trim()).filter(Boolean);
-                                                const displayText = areas.length >= FULL_BODY_THRESHOLD ? 'Full Body' : focus;
-                                                return (
-                                                    <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
-                                                        🎯 Tập trung: {displayText}
-                                                    </span>
-                                                );
-                                            })()}
+                                            {focus && (
+                                                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
+                                                    🎯 Tập trung: {formatBodyAreas(focus)}
+                                                </span>
+                                            )}
                                             {avoid && (
                                                 <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
-                                                    🚫 Tránh: {avoid}
+                                                    🚫 Tránh: {formatBodyAreas(avoid)}
                                                 </span>
                                             )}
                                         </div>

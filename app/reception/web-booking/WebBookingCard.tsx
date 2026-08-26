@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Clock, User, Phone, DollarSign, MessageSquare, CheckCircle2, XCircle, ChevronRight, CalendarDays, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 import { WebBooking } from './actions';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 
@@ -201,9 +202,9 @@ const WebBookingCard = ({ booking, onConfirm, onReject, onViewDetail, isLoading 
                   {item.options && (item.options.strength || item.options.focus?.length > 0 || item.options.avoid?.length > 0 || item.options.note || item.options.customerNotes || (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên')) && (
                       <div className="text-[9.5px] text-gray-500 truncate mt-0.5 mb-0.5">
                          {[
-                           item.options.strength && `Lực: ${item.options.strength}`,
-                           item.options.focus?.length > 0 && `Tập trung: ${item.options.focus.join(', ')}`,
-                           item.options.avoid?.length > 0 && `Né: ${item.options.avoid.join(', ')}`,
+                           item.options.strength && `Lực: ${normalizeStrength(item.options.strength)}`,
+                           item.options.focus && formatBodyAreas(item.options.focus) && `Tập trung: ${formatBodyAreas(item.options.focus)}`,
+                           item.options.avoid && formatBodyAreas(item.options.avoid) && `Né: ${formatBodyAreas(item.options.avoid)}`,
                            (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên') && `KTV: ${item.options.therapist}`,
                            (item.options.note || item.options.customerNotes) && `Ghi chú: ${item.options.note || item.options.customerNotes}`
                          ].filter(Boolean).join(' | ')}

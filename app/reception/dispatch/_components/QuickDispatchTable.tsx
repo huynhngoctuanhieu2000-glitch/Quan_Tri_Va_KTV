@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Printer, X, ChevronDown, ChevronUp, Plus, Clock, AlertCircle, CheckCircle2, Send, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ReminderData, ServiceBlock, StaffData, TurnQueueData, WorkSegment } from '../types';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 // 🛠 UI CONFIGURATION
 const TAG_COLORS = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700', 'bg-cyan-100 text-cyan-700'];
@@ -1243,12 +1244,12 @@ const ServiceGroupCard = ({
                     )}
                     {customerReqs?.strength && (
                         <span className="bg-orange-50 text-orange-700 border border-orange-100 px-2 py-0.5 rounded text-[10px] font-bold shrink-0">
-                            💪 Lực: {customerReqs.strength}
+                            💪 Lực: {normalizeStrength(customerReqs.strength)}
                         </span>
                     )}
                     {(customerReqs?.focus || customerReqs?.avoid) && (
                         <span className="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-bold shrink-0 truncate max-w-[150px]">
-                            🎯 {customerReqs.focus || ''} {customerReqs.avoid ? `(Tránh ${customerReqs.avoid})` : ''}
+                            🎯 {customerReqs.focus ? formatBodyAreas(customerReqs.focus) : ''} {customerReqs.avoid ? `(Tránh ${formatBodyAreas(customerReqs.avoid)})` : ''}
                         </span>
                     )}
                     {customerReqs?.customerNote && (
@@ -1627,22 +1628,17 @@ const ServiceGroupCard = ({
                     {/* Giới tính KTV: Không cần in ra phiếu cho KTV */}
                     {customerReqs.strength && (
                         <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
-                            💪 Lực: {customerReqs.strength}
+                            💪 Lực: {normalizeStrength(customerReqs.strength)}
                         </span>
                     )}
-                    {customerReqs.focus && (() => {
-                        const FULL_BODY_THRESHOLD = 8;
-                        const areas = customerReqs.focus.split(',').map(s => s.trim()).filter(Boolean);
-                        const displayText = areas.length >= FULL_BODY_THRESHOLD ? 'Full Body' : customerReqs.focus;
-                        return (
-                            <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
-                                🎯 Tập trung: {displayText}
-                            </span>
-                        );
-                    })()}
+                    {customerReqs.focus && (
+                        <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
+                            🎯 Tập trung: {formatBodyAreas(customerReqs.focus)}
+                        </span>
+                    )}
                     {customerReqs.avoid && (
                         <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
-                            🚫 Tránh: {customerReqs.avoid}
+                            🚫 Tránh: {formatBodyAreas(customerReqs.avoid)}
                         </span>
                     )}
                   </div>

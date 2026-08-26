@@ -21,6 +21,7 @@ import { useNotifications } from '@/components/NotificationProvider';
 import { supabase } from '@/lib/supabase';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 // 🔧 UI CONFIGURATION
 const THEME = {
@@ -1880,21 +1881,17 @@ function CollapsibleRequirements({ booking }: { booking: any }) {
                   {/* Giới tính KTV: ẩn vì KTV không cần xem thông tin này */}
                   {item.strength && (
                     <div className="px-4 py-2 bg-orange-50 text-orange-700 rounded-xl text-[13px] font-black border border-orange-100 flex items-center gap-2">
-                      <Dumbbell size={16} /> Lực: {item.strength}
+                      <Dumbbell size={16} /> Lực: {normalizeStrength(item.strength)}
                     </div>
                   )}
-                  {item.focus && (() => {
-                    const parts = item.focus.split(',').map((p: string) => p.trim());
-                    const isFull = item.focus === 'full_body' || parts.length >= 8;
-                    return (
-                      <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[13px] font-black border border-emerald-100 flex items-center gap-2">
-                        <Target size={16} /> Tập trung: {isFull ? 'Toàn thân' : item.focus}
-                      </div>
-                    );
-                  })()}
+                  {item.focus && (
+                    <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-[13px] font-black border border-emerald-100 flex items-center gap-2">
+                      <Target size={16} /> Tập trung: {formatBodyAreas(item.focus)}
+                    </div>
+                  )}
                   {item.avoid && (
                     <div className="px-4 py-2 bg-rose-50 text-rose-700 rounded-xl text-[13px] font-black border border-rose-100 flex items-center gap-2">
-                      <Ban size={16} /> Tránh: {item.avoid}
+                      <Ban size={16} /> Tránh: {formatBodyAreas(item.avoid)}
                     </div>
                   )}
                 </div>

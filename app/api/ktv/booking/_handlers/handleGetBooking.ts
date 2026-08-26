@@ -35,6 +35,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { getBusinessDate, ktvMatchesSeg } from '../_shared/utils';
 import { HandoverService } from '@/lib/services/HandoverService';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 export async function handleGetBooking(request: Request): Promise<NextResponse> {
     const { searchParams } = new URL(request.url);
@@ -334,9 +335,9 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 const noteForKtv = (technicianCode && notesForKtvs[technicianCode]) 
                     ? notesForKtvs[technicianCode] 
                     : (opts.noteForKtv || '');
-                const focusAreas = Array.isArray(opts.focus) ? opts.focus.join(', ') : (i.focus || opts.focusArea || '');
-                const avoidAreas = Array.isArray(opts.avoid) ? opts.avoid.join(', ') : (opts.avoid || '');
-                const strength = opts.strength || '';
+                const focusAreas = formatBodyAreas(opts.focus || i.focus || opts.focusArea || '');
+                const avoidAreas = formatBodyAreas(opts.avoid || i.avoid || '');
+                const strength = normalizeStrength(opts.strength || '');
                 const therapistGender = opts.therapist || ''; 
 
                 let finalDuration = svc?.duration || (sId.includes('nhs0000') ? 1 : 60);

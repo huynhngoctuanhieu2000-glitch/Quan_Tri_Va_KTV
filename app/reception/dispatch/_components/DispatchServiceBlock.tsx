@@ -4,6 +4,7 @@ import React from 'react';
 import { Plus, AlertTriangle, UserCheck, Trash2, Pencil, SplitSquareHorizontal, Bed as BedIcon } from 'lucide-react';
 import { DispatchStaffRow } from './DispatchStaffRow';
 import { ReminderData, ServiceBlock, StaffAssignment, StaffData, TurnQueueData } from '../types';
+import { formatBodyAreas, normalizeStrength } from '@/lib/booking.logic';
 
 interface Bed {
     id: string;
@@ -237,17 +238,17 @@ export const DispatchServiceBlock = ({
                                 )}
                                 {svc.strength && (
                                     <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-orange-50 text-orange-700 border-orange-100 shadow-sm">
-                                        💪 {svc.strength}
+                                        💪 {normalizeStrength(svc.strength)}
                                     </span>
                                 )}
                                 {svc.focus && (
                                     <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm">
-                                        🎯 {svc.focus}
+                                        🎯 {formatBodyAreas(svc.focus)}
                                     </span>
                                 )}
                                 {svc.avoid && (
                                     <span className="px-3 py-1.5 rounded-xl text-[10px] font-black border bg-rose-50 text-rose-700 border-rose-100 shadow-sm">
-                                        🚫 {svc.avoid}
+                                        🚫 {formatBodyAreas(svc.avoid)}
                                     </span>
                                 )}
                             </div>
