@@ -109,7 +109,23 @@ export class HandoverService {
 
         // Ưu tiên dùng code/category truyền vào, nếu không có thì lấy từ DB (serviceRes)
         const finalCode = (serviceCode || fallbackSvc?.code || '').trim().toUpperCase();
-        const finalCat = (serviceCategory || fallbackSvc?.category || '').trim().toLowerCase();
+        
+        const finalCats: string[] = [];
+        const catSource = serviceCategory || fallbackSvc?.category;
+        if (Array.isArray(catSource)) {
+            finalCats.push(...catSource.map(c => String(c).trim().toLowerCase()));
+        } else if (typeof catSource === 'string') {
+            try {
+                const parsed = JSON.parse(catSource);
+                if (Array.isArray(parsed)) {
+                    finalCats.push(...parsed.map(c => String(c).trim().toLowerCase()));
+                } else {
+                    finalCats.push(catSource.trim().toLowerCase());
+                }
+            } catch {
+                finalCats.push(catSource.trim().toLowerCase());
+            }
+        }
 
         if (configRow?.value) {
             let mapping: HandoverMappingConfig;
@@ -124,7 +140,7 @@ export class HandoverService {
             // 4. Match by category OR service code
             for (const group of Object.values(mapping)) {
                 const matchesCat = group.apply_categories?.some(
-                    (cat: string) => cat.toLowerCase() === finalCat
+                    (cat: string) => finalCats.includes(cat.toLowerCase())
                 );
                 const matchesSvc = group.apply_services?.some(
                     (code: string) => code.toUpperCase() === finalCode

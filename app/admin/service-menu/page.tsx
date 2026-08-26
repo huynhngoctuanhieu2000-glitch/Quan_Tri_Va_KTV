@@ -87,11 +87,31 @@ export default function ServiceMenuPage() {
     );
   }
 
-  const categories = ['Tất cả', ...Array.from(new Set(services.map(s => s.category).filter(Boolean)))];
+  const categories = ['Tất cả', ...Array.from(new Set(
+    services.flatMap(s => {
+      if (Array.isArray(s.category)) return s.category;
+      if (typeof s.category === 'string') {
+        try {
+          const parsed = JSON.parse(s.category);
+          if (Array.isArray(parsed)) return parsed;
+        } catch(e) {}
+        return [s.category];
+      }
+      return [];
+    }).filter(Boolean)
+  ))];
   
   const filteredServices = activeCategory === 'Tất cả' 
     ? services 
-    : services.filter(s => s.category === activeCategory);
+    : services.filter(s => {
+        let cats: string[] = [];
+        if (Array.isArray(s.category)) cats = s.category;
+        else if (typeof s.category === 'string') {
+          try { cats = JSON.parse(s.category); } 
+          catch(e) { cats = [s.category]; }
+        }
+        return cats.includes(activeCategory);
+      });
 
   return (
     <AppLayout title="Menu Dịch Vụ">
@@ -222,6 +242,7 @@ export default function ServiceMenuPage() {
         isOpen={isDrawerOpen}
         onClose={handleDrawerClose}
         service={selectedService}
+        allCategories={categories.filter(c => c !== 'Tất cả')}
         onSuccess={() => {
           fetchData(); // reload on success
         }}

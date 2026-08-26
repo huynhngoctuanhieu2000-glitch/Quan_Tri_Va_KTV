@@ -186,7 +186,7 @@ export interface Service {
   nameJP?: string;
   nameKR?: string;
   
-  category: string;
+  category: any; // Mảng string hoặc string (để parse dữ liệu cũ)
   duration: number;
   price: number; // legacy fallback
   priceVND?: number;

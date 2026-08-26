@@ -10,6 +10,7 @@ interface EditServiceDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   service: Service | null;
+  allCategories: string[];
   onSuccess: () => void;
 }
 
@@ -40,17 +41,27 @@ const FOCUS_AREAS = [
   { id: 'FOOT', label: 'Bàn chân' },
 ];
 
-export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditServiceDrawerProps) {
+export function EditServiceDrawer({ isOpen, onClose, service, allCategories, onSuccess }: EditServiceDrawerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isBulkSync, setIsBulkSync] = useState(true);
 
   const [formData, setFormData] = useState<Partial<Service>>({});
+  const [newCategory, setNewCategory] = useState('');
 
   useEffect(() => {
     if (service) {
+      let parsedCats: string[] = [];
+      if (Array.isArray(service.category)) {
+        parsedCats = service.category;
+      } else if (typeof service.category === 'string') {
+        try { parsedCats = JSON.parse(service.category); } 
+        catch(e) { parsedCats = service.category ? [service.category] : []; }
+      }
+
       setFormData({
         ...service,
+        category: parsedCats,
         focusConfig: service.focusConfig || {},
         tags: service.tags || [],
         description: typeof service.description === 'string' 
@@ -99,6 +110,23 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
         : [...currentTags, tagId];
       return { ...prev, tags: newTags };
     });
+  };
+
+  const handleCategoryToggle = (cat: string) => {
+    setFormData(prev => {
+      const current = Array.isArray(prev.category) ? prev.category : [];
+      if (current.includes(cat)) {
+        return { ...prev, category: current.filter(c => c !== cat) };
+      }
+      return { ...prev, category: [...current, cat] };
+    });
+  };
+
+  const handleAddCategory = () => {
+    if (newCategory.trim()) {
+      handleCategoryToggle(newCategory.trim());
+      setNewCategory('');
+    }
   };
 
   const getMultiTags = () => {
@@ -231,9 +259,41 @@ export function EditServiceDrawer({ isOpen, onClose, service, onSuccess }: EditS
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Ảnh đại diện (URL)</label>
                     <input type="text" name="imageUrl" value={formData.imageUrl || formData.image_url || ''} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Danh mục</label>
-                    <input type="text" name="category" value={formData.category || ''} onChange={handleChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm" />
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Danh mục</label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {Array.from(new Set([...allCategories, ...(Array.isArray(formData.category) ? formData.category : [])])).map(cat => {
+                        const isSelected = Array.isArray(formData.category) && formData.category.includes(cat);
+                        return (
+                          <label key={cat} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                            isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-200 hover:bg-gray-50'
+                          }`}>
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={() => handleCategoryToggle(cat)}
+                              className="w-4 h-4 accent-indigo-600"
+                            />
+                            <span className={`text-sm ${isSelected ? 'font-medium text-indigo-900' : 'text-gray-700'}`}>
+                              {cat}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={newCategory} 
+                        onChange={e => setNewCategory(e.target.value)} 
+                        placeholder="Thêm danh mục mới..."
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }}
+                      />
+                      <button type="button" onClick={handleAddCategory} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">
+                        Thêm
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Thời lượng (Phút)</label>

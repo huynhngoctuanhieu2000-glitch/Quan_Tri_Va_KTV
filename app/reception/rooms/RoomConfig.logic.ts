@@ -239,9 +239,22 @@ export const useRoomConfig = () => {
 
     // Group services by category
     const servicesByCategory = services.reduce((acc, svc) => {
-        const cat = svc.category || 'Khác';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(svc);
+        let cats: string[] = [];
+        if (Array.isArray(svc.category)) {
+            cats = svc.category;
+        } else if (typeof svc.category === 'string') {
+            try { cats = JSON.parse(svc.category); } 
+            catch(e) { cats = svc.category ? [svc.category] : ['Khác']; }
+        } else {
+            cats = ['Khác'];
+        }
+        
+        if (cats.length === 0) cats = ['Khác'];
+
+        cats.forEach(cat => {
+            if (!acc[cat]) acc[cat] = [];
+            acc[cat].push(svc);
+        });
         return acc;
     }, {} as Record<string, ServiceData[]>);
 
