@@ -13,6 +13,7 @@ import { EditServiceDrawer } from './EditServiceDrawer';
 export default function ServiceMenuPage() {
   const { hasPermission } = useAuth();
   const [activeCategory, setActiveCategory] = useState('Tất cả');
+  const [statusFilter, setStatusFilter] = useState<'Tất cả' | 'Đang bật' | 'Đang ẩn'>('Tất cả');
   const [mounted, setMounted] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,17 +102,24 @@ export default function ServiceMenuPage() {
     }).filter(Boolean)
   ))];
   
-  const filteredServices = activeCategory === 'Tất cả' 
-    ? services 
-    : services.filter(s => {
-        let cats: string[] = [];
-        if (Array.isArray(s.category)) cats = s.category;
-        else if (typeof s.category === 'string') {
-          try { cats = JSON.parse(s.category); } 
-          catch(e) { cats = [s.category]; }
-        }
-        return cats.includes(activeCategory);
-      });
+  const filteredServices = services.filter(s => {
+    // Lọc theo Category
+    if (activeCategory !== 'Tất cả') {
+      let cats: string[] = [];
+      if (Array.isArray(s.category)) cats = s.category;
+      else if (typeof s.category === 'string') {
+        try { cats = JSON.parse(s.category); } 
+        catch(e) { cats = [s.category]; }
+      }
+      if (!cats.includes(activeCategory)) return false;
+    }
+    
+    // Lọc theo Trạng Thái
+    if (statusFilter === 'Đang bật' && s.isActive === false) return false;
+    if (statusFilter === 'Đang ẩn' && s.isActive !== false) return false;
+    
+    return true;
+  });
 
   return (
     <AppLayout title="Menu Dịch Vụ">
@@ -152,7 +160,17 @@ export default function ServiceMenuPage() {
                   <th className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-sm">Danh Mục</th>
                   <th className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-sm text-right">Giá Tiền</th>
                   <th className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-sm text-center">Thời Lượng</th>
-                  <th className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-sm text-center">Trạng Thái</th>
+                  <th className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-sm text-center">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as any)}
+                      className="bg-transparent font-semibold text-gray-700 text-sm focus:outline-none cursor-pointer hover:text-indigo-600 transition-colors"
+                    >
+                      <option value="Tất cả">Trạng Thái</option>
+                      <option value="Đang bật">Đang bán</option>
+                      <option value="Đang ẩn">Tạm ngừng</option>
+                    </select>
+                  </th>
                   <th className="p-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700 text-sm w-24"></th>
                 </tr>
               </thead>
