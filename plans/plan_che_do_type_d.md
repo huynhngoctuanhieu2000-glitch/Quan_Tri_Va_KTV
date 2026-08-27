@@ -394,7 +394,7 @@ Thuật toán ưu tiên TYPE_D:
 - `simulate_type_d_discipline.mjs`: Test trừ giờ (4 loại vi phạm)
 - `simulate_type_d_turn_order.mjs`: Test sort DESC, busy fallback, tie-breaker
 
-### Manual Verification
+### Manual Verification (Dùng tài khoản T001-T011)
 1. Admin tạo KTV TYPE_D → Kiểm tra badge & sổ tua
 2. Dispatch đơn VIP cho TYPE_D → Tiền tua theo milestones B + khấu trừ
 3. Đánh giá 3★ → Trừ 25% tiền tua
@@ -408,12 +408,166 @@ Thuật toán ưu tiên TYPE_D:
 
 ---
 
-## 11. Ước Lượng & Phân Chia
+## 11. Phase 0 — Test Branch & Test Accounts (LÀM ĐẦU TIÊN)
+
+### 11.1 Git Branch
+
+```bash
+git checkout -b feature/type-d-regime
+```
+
+Tất cả code TYPE_D sẽ được phát triển trên nhánh `feature/type-d-regime`. Chỉ merge vào `main` sau khi test đầy đủ.
+
+### 11.2 Test Accounts — Clone từ KTV thật
+
+Tạo **11 tài khoản test** (ID prefix `T`) clone từ nhân viên thật (NH). Giữ nguyên `avatar_url`, `skills`, `feature_flags` để đảm bảo VIP menu hoạt động.
+
+| Test ID | Clone từ | Tên gốc | Work Type | VIP | Avatar |
+|---|---|---|---|---|---|
+| `T001` | `NH001` | Phát | **TYPE_D** | ✅ bật | ✅ `NH001.jpg` |
+| `T002` | `NH002` | NHI | **TYPE_D** | ✅ giữ | ✅ `NH002.jpg` |
+| `T011` | `NH011` | Yully | **TYPE_D** | ✅ giữ | ✅ `NH011.jpg` |
+| `T014` | `NH014` | Tea | **TYPE_D** | ✅ giữ | ✅ `NH014.jpg` |
+| `T016` | `NH016` | Tieu Kim Nghi | **TYPE_D** | ✅ bật | ✅ `NH016.jpg` |
+| `T018` | `NH018` | Cherry | **TYPE_D** | ✅ giữ | ✅ `NH018.jpg` |
+| `T021` | `NH021` | Ua | **TYPE_D** | ✅ giữ | ✅ `NH021.jpg` |
+| `T025` | `NH025` | Rose | **TYPE_D** | ✅ giữ | ✅ `NH025.jpg` |
+| `T027` | `NH027` | Sunny | **TYPE_D** | ✅ giữ | ✅ `NH027.png` |
+| `T069` | `NH069` | JK | **TYPE_D** | ✅ bật | ✅ external |
+| `T079` | `NH079` | Hiếu | **TYPE_D** | ✅ giữ | ✅ external |
+
+**Script tạo**: `scripts/seed_type_d_test_accounts.js`
+
+```javascript
+// Flow:
+// 1. Đọc Staff NH001, NH002, ... (select *)
+// 2. Clone sang T001, T002, ... với:
+//    - id: thay NH → T
+//    - full_name: giữ nguyên + " (Test D)"
+//    - work_type: 'TYPE_D'
+//    - is_active_vip_menu: true (tất cả đều bật VIP)
+//    - status: 'ĐANG LÀM'
+//    - avatar_url: giữ nguyên URL gốc (ảnh NH)
+//    - skills: giữ nguyên
+//    - feature_flags: merge với TYPE_D defaults
+//    - Không clone: phone, id_card, bank_account (bảo mật)
+// 3. Upsert vào Staff table (conflict on id → update)
+```
+
+### 11.3 Dọn dẹp sau test
+
+Script `scripts/cleanup_type_d_test_accounts.js`:
+- Xóa tất cả Staff có `id LIKE 'T%'`
+- Xóa TurnQueue, KTVServiceHoursLedger, KTVDailyLedger, KTVBonusLedger có `staff_id LIKE 'T%'`
+- Chạy trước khi merge vào `main`
+
+---
+
+## 12. ⚠️ Phản Biện & Phân Tích Rủi Ro
+
+### 🔴 RỦI RO CAO
+
+#### R1: Dispatch Board lẫn TYPE_D với TYPE_A/B/C
+
+**Vấn đề**: `TurnQueue` chứa MỌI loại KTV. Nếu không filter đúng, dispatch sẽ sort lẫn (TYPE_A theo `turns_completed` ASC, TYPE_D theo `accumulated_service_hours` DESC) → gán sai người.
+
+**Giải pháp**: Dispatch Board phải JOIN `Staff.work_type` và **tách 2 danh sách riêng biệt**:
+- List A/B/C: Sort `turns_completed` ASC (logic cũ)
+- List D: Sort `accumulated_service_hours` DESC (logic mới)
+
+Lễ tân nhìn 2 tab riêng hoặc 2 section riêng trên cùng board.
+
+---
+
+#### R2: Tiền tua bị tính sai khi rating chưa có
+
+**Vấn đề**: TYPE_D khấu trừ tiền tua theo rating. Nhưng rating thường được nhập **sau khi đơn hoàn tất** (khách đánh giá sau). Lúc đơn vừa DONE, rating = 0 → hệ thống tính sao?
+
+**Giải pháp 2 bước**:
+1. **Tạm tính 100%**: Khi đơn DONE mà chưa có rating → tạm ghi nhận 100% tiền tua (giả định 4★)
+2. **Truy thu/hoàn**: Khi rating được nhập → Cron hoặc webhook recalculate → ghi `rating_deduction` chênh lệch vào `KTVDailyLedger`
+
+> [!WARNING]
+> Nếu khách KHÔNG đánh giá (rating = 0 mãi), cần policy: Mặc định tính 4★? Hay 0★? → **Đề xuất: Mặc định 4★ (100%)** — giống hệ thống hiện tại cho bonus.
+
+---
+
+#### R3: Tính giờ tích lũy bị trôi khi BookingItems bị sửa sau
+
+**Vấn đề**: `syncServiceHoursForDate()` quét BookingItems để tổng hợp giờ. Nhưng Admin có thể sửa `segments`, thay đổi `duration`, hoặc cancel đơn cũ → giờ tích lũy bị lệch mà KTV không biết.
+
+**Giải pháp**:
+- `syncServiceHoursForDate()` luôn **tính lại từ đầu** (full re-scan) mỗi lần gọi, không dùng incremental
+- Lưu `KTVServiceHoursLedger` chỉ ghi `hours_earned` từ scan gần nhất (idempotent upsert)
+- Admin log khi sửa đơn cũ → notification cho KTV bị ảnh hưởng
+
+---
+
+### 🟡 RỦI RO TRUNG BÌNH
+
+#### R4: `work_type_snapshot` quên stamp khi tạo bút toán
+
+**Vấn đề**: Nếu bất kỳ API nào tạo record vào `KTVDailyLedger` / `KTVBonusLedger` mà quên ghi `work_type_snapshot`, record đó sẽ là `NULL` → fallback vào TYPE_A → TYPE_D mất tiền.
+
+**Giải pháp**:
+- Tạo helper function `getWorkTypeSnapshot(supabase, staffId)` → dùng ở MỌI nơi tạo ledger record
+- Thêm DB trigger (optional): `BEFORE INSERT ON KTVDailyLedger → SET work_type_snapshot = (SELECT work_type FROM Staff WHERE id = NEW.staff_id)` — phòng trường hợp code quên
+
+---
+
+#### R5: KTV TYPE_D bấm rút tiền ngoài buổi sáng
+
+**Vấn đề**: PDF nói "yêu cầu rút tiền phải đăng ký buổi sáng". Nếu hệ thống không enforce → KTV bấm bất kỳ lúc nào → vi phạm quy chế.
+
+**Giải pháp**: 
+- Feature flag `withdraw_morning_only = true` trên Staff
+- API `/api/ktv/wallet/withdraw` kiểm tra: Nếu TYPE_D + flag ON + giờ hiện tại > 12:00 VN → reject với message "Vui lòng đăng ký rút tiền vào buổi sáng"
+- Admin có thể tắt flag cho từng KTV nếu cần linh hoạt
+
+---
+
+#### R6: Bonus 0đ khi làm chung KTV khác chế độ — KTV phản đối
+
+**Vấn đề**: Luật TYPE_D: "Tua có sự tham gia của nhân sự KHÔNG cùng chế độ → không cộng bonus". Nếu KTV TYPE_D bị dispatch chung với TYPE_A (do thiếu người), TYPE_D mất bonus → bất mãn.
+
+**Giải pháp**:
+- Dispatch Board nên **ưu tiên ghép KTV cùng chế độ** khi cần 2 KTV
+- Nếu buộc phải ghép khác chế độ → hiện cảnh báo cho lễ tân: "⚠️ Ghép khác chế độ: KTV TYPE_D sẽ không nhận bonus"
+- KTV thấy lý do trên timeline ví: "Không nhận bonus — tua ghép với KTV khác chế độ"
+
+---
+
+### 🟢 RỦI RO THẤP
+
+#### R7: Reset giờ cuối tháng bị lỡ (Cron fail)
+
+**Vấn đề**: Nếu cron `reset-type-d-hours` fail vào ngày 1 → KTV mang giờ tháng cũ sang tháng mới → ưu tiên sai.
+
+**Giải pháp**:
+- Cron retry 3 lần nếu fail
+- API manual trigger cho Admin: "Reset giờ tích lũy TYPE_D" (nút trên Admin tab D)
+- Cron ghi log chi tiết → notification Admin nếu fail
+
+---
+
+#### R8: Test accounts T001-T011 lọt vào production data
+
+**Vấn đề**: Nếu quên cleanup, tài khoản test xuất hiện trên báo cáo tài chính, dispatch board thật.
+
+**Giải pháp**:
+- Tên hiển thị có suffix `(Test D)` → dễ nhận biết
+- Script cleanup chạy trước merge
+- Báo cáo tài chính có thể filter `WHERE staff_id NOT LIKE 'T%'` (optional)
+
+---
+
+## 13. Ước Lượng & Phân Chia
 
 | Phase | Effort | Ưu tiên |
 |---|---|---|
-| Phase 1: DB Migration | 🟢 Nhỏ | P0 — Làm trước |
-| Phase 2: Types & Constants | 🟢 Nhỏ | P0 — Làm trước |
+| **Phase 0: Branch + Test Accounts** | 🟢 Nhỏ | **P0 — LÀM ĐẦU TIÊN** |
+| Phase 1: DB Migration | 🟢 Nhỏ | P0 |
+| Phase 2: Types & Constants | 🟢 Nhỏ | P0 |
 | Phase 3: 4 Service Classes | 🔴 Lớn (~400-600 LOC) | P0 — Core logic |
 | Phase 4: API Routes | 🟡 Trung bình | P1 |
 | Phase 5: Admin UI (Tab D) | 🟡 Trung bình | P1 |
@@ -424,6 +578,6 @@ Thuật toán ưu tiên TYPE_D:
 **Tổng**: ~2-3 ngày, nên chia 3-4 Executor windows.
 
 **Gợi ý chia team**:
-- **Executor 1**: Phase 1-3 (DB + Types + 4 Services) — Backend core
+- **Executor 1**: Phase 0-3 (Branch + DB + Types + 4 Services) — Backend core
 - **Executor 2**: Phase 4-5 (API Routes + Admin UI) — Backend + Admin
 - **Executor 3**: Phase 6-8 (Reception + KTV App + Cron) — Frontend + Jobs

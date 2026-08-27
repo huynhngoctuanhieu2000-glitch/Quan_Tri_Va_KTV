@@ -51,6 +51,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 🛡️ BẢO MẬT: Lắng nghe Realtime để ép đăng xuất nếu bị Admin vô hiệu hóa hoặc đổi mật khẩu
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const supabase = createClient();
+    let isLoggedOut = false;
+    
+    // 1. Giám sát trạng thái hoạt động (bảng Staff)
+    const staffSub = supabase
+      .channel(`public:Staff:id=eq.${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'Staff', filter: `id=eq.${user.id}` },
+        (payload) => {
+          if (payload.new.status === 'ĐÃ NGHỈ' && !isLoggedOut) {
+            console.warn('⚠️ Tài khoản bị vô hiệu hóa bởi Admin. Đang ép đăng xuất...');
+            isLoggedOut = true;
+            // Dọn dẹp storage ngay lập tức để tránh reload loop
+            sessionStorage.removeItem('spa_auth_user');
+            localStorage.removeItem('spa_auth_user');
+            window.location.href = '/login';
+          }
+        }
+      )
+      .subscribe();
+
+    // 2. Giám sát thay đổi mật khẩu (bảng Users)
+    const usersSub = supabase
+      .channel(`public:Users:id=eq.${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'Users', filter: `id=eq.${user.id}` },
+        (payload) => {
+          if (payload.new.password && payload.new.password !== user.password && !isLoggedOut) {
+            console.warn('⚠️ Mật khẩu đã bị thay đổi ở nơi khác. Đang ép đăng xuất...');
+            isLoggedOut = true;
+            sessionStorage.removeItem('spa_auth_user');
+            localStorage.removeItem('spa_auth_user');
+            window.location.href = '/login';
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(staffSub);
+      supabase.removeChannel(usersSub);
+    };
+  }, [user?.id, user?.password]);
+
   const login = async (userId: string, password?: string) => {
     try {
       // Use the Server Action to query public."Users" table
