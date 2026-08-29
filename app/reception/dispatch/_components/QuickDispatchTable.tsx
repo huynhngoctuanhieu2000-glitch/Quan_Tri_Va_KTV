@@ -97,12 +97,18 @@ export const QuickDispatchTable = ({
       const combinedDuration = svc.duration + mergedSvcs.reduce((acc, curr) => acc + ((curr.is_utility || (curr as any).isUtility || curr.serviceId === 'NHS0900' || String(curr.serviceName || '').toLowerCase().includes('phòng riêng')) ? 0 : curr.duration), 0);
       const combinedName = [`${svc.serviceName} (${svc.duration}p)`, ...mergedSvcs.map(s => (s.is_utility || (s as any).isUtility || s.serviceId === 'NHS0900' || String(s.serviceName || '').toLowerCase().includes('phòng riêng')) ? s.serviceName : `${s.serviceName} (${s.duration}p)`)].join(' + ');
 
+      const validForKtvReqs = [svc, ...mergedSvcs].filter(s => {
+          const isRoom = String(s.serviceName || '').toLowerCase().includes('phòng riêng') && !String(s.serviceName || '').includes('+');
+          const isUtil = s.is_utility || (s as any).isUtility || s.serviceId === 'NHS0900';
+          return !isRoom && !isUtil;
+      });
+
       // Hack to inject combined data for UI rendering without altering the real object
       const combinedNote = Array.from(new Set([svc.customerNote, ...mergedSvcs.map(s => s.customerNote)].filter(Boolean))).join(' | ');
-      const combinedGender = Array.from(new Set([svc.genderReq, ...mergedSvcs.map(s => s.genderReq)].filter(Boolean))).join(' | ');
-      const combinedStrength = Array.from(new Set([svc.strength, ...mergedSvcs.map(s => s.strength)].filter(Boolean))).join(' | ');
-      const combinedFocus = Array.from(new Set([svc.focus, ...mergedSvcs.map(s => s.focus)].filter(Boolean))).join(' | ');
-      const combinedAvoid = Array.from(new Set([svc.avoid, ...mergedSvcs.map(s => s.avoid)].filter(Boolean))).join(' | ');
+      const combinedGender = Array.from(new Set(validForKtvReqs.map(s => s.genderReq).filter(Boolean))).join(' | ');
+      const combinedStrength = Array.from(new Set(validForKtvReqs.map(s => s.strength).filter(Boolean))).join(' | ');
+      const combinedFocus = Array.from(new Set(validForKtvReqs.map(s => s.focus).filter(Boolean))).join(' | ');
+      const combinedAvoid = Array.from(new Set(validForKtvReqs.map(s => s.avoid).filter(Boolean))).join(' | ');
 
       const svcForUI = {
          ...svc,
