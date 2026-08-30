@@ -280,7 +280,7 @@ export async function getDispatchData(date: string, _timestamp?: number) {
             const bookingIds = bookings.map(b => b.id);
             const { data: items, error: iError } = await supabase
                 .from('BookingItems')
-                .select('*, segments, Services(is_utility, nameVN, nameEN)')
+                .select('*, segments, Services!BookingItems_serviceId_fkey(is_utility, nameVN, nameEN)')
                 .in('bookingId', bookingIds);
 
             if (iError) {
