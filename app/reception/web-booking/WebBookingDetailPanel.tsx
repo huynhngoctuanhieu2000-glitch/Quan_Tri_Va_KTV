@@ -1,6 +1,5 @@
-import { isUtilityService } from '@/lib/booking.logic';
 'use client';
-
+import { isUtilityService } from '@/lib/booking.logic';
 // 🔧 UI CONFIGURATION
 const PANEL_ANIMATION_DURATION = 0.25;
 

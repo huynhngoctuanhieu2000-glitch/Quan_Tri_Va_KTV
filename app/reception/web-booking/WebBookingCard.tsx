@@ -1,6 +1,5 @@
-import { isUtilityService } from '@/lib/booking.logic';
 'use client';
-
+import { isUtilityService } from '@/lib/booking.logic';
 // 🔧 UI CONFIGURATION
 const ANIMATION_DURATION = 0.2;
 const CARD_BORDER_RADIUS = 'rounded-2xl';

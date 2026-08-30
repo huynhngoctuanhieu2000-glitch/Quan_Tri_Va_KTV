@@ -1,5 +1,5 @@
-import { isUtilityService } from '@/lib/booking.logic';
 'use client';
+import { isUtilityService } from '@/lib/booking.logic';
 import { parseDbDate } from "@/lib/utils";
 
 // 🔧 UI CONFIGURATION

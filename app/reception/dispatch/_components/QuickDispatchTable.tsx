@@ -1,6 +1,5 @@
-import { isUtilityService } from '@/lib/booking.logic';
 'use client';
-
+import { isUtilityService } from '@/lib/booking.logic';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Printer, X, ChevronDown, ChevronUp, Plus, Clock, AlertCircle, CheckCircle2, Send, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
