@@ -1288,6 +1288,7 @@ if (!hasPermission('dispatch_board')) {
       
       const dispatchPayloads: Array<{
           bookingId: string;
+          dbBookingId: string;
           itemUpdates: any[];
           mergedAssignments: any[];
           bedId?: string | null;
@@ -1366,10 +1367,12 @@ if (!hasPermission('dispatch_board')) {
           }
 
           // ⚠️ "keepalive" entries
-          const otherServicesInGroup = clonedOrder.services.filter(s => group.svcIds.includes(s.id) && !groupTargetSvcIds.includes(s.id));
+          const ktvsBeingDispatched = new Set(allStaffAssignments.map(a => a.ktvId));
+          const otherServicesInGroup = clonedOrder.services.filter(s => !groupTargetSvcIds.includes(s.id));
           for (const svc of otherServicesInGroup) {
               for (const row of svc.staffList) {
                   if (!row.ktvId) continue;
+                  if (!ktvsBeingDispatched.has(row.ktvId)) continue;
                   if (allStaffAssignments.some(a => a.ktvId === row.ktvId && a.bookingItemId === svc.id)) continue;
                   const firstSeg = row.segments[0];
                   const lastSeg = row.segments[row.segments.length - 1];
@@ -1429,6 +1432,7 @@ if (!hasPermission('dispatch_board')) {
 
           dispatchPayloads.push({
               bookingId: group.bookingId,
+              dbBookingId: clonedOrder.parentBookingId || clonedOrder.id,
               itemUpdates,
               mergedAssignments: allStaffAssignments,
               bedId: isPartial ? undefined : (primarySeg?.bedId || null),
@@ -1438,7 +1442,7 @@ if (!hasPermission('dispatch_board')) {
 
       // 🚀 BƯỚC 3: GỌI API CHO TỪNG PAYLOAD
       for (const payload of dispatchPayloads) {
-          const res = await processDispatch(payload.bookingId, {
+          const res = await processDispatch(payload.dbBookingId, {
               status: bookingStatus as any,
               bedId: payload.bedId,
               roomName: payload.roomName,
