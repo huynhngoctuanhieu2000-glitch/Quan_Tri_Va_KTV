@@ -273,8 +273,17 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     
                     if (staffByTime.size > 1) {
                         // Split into multiple virtual service blocks
-                        staffByTime.forEach((staffs, time) => {
-                            splitGroupServices.push({ ...svc, staffList: staffs, _splitTime: time });
+                        const sortedTimes = Array.from(staffByTime.keys()).sort();
+                        sortedTimes.forEach((time, index) => {
+                            const staffs = staffByTime.get(time)!;
+                            const isFirst = index === 0;
+                            splitGroupServices.push({ 
+                                ...svc, 
+                                staffList: staffs, 
+                                _splitTime: time,
+                                price: isFirst ? svc.price : 0,
+                                _isSequentialFollowUp: !isFirst
+                            });
                         });
                     } else {
                         splitGroupServices.push(svc);

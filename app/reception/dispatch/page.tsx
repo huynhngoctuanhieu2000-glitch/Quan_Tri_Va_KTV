@@ -2171,7 +2171,14 @@ if (!hasPermission('dispatch_board')) {
                                 <option value="Card">Quẹt thẻ</option>
                                 <option value="Unpaid">Chưa TT</option>
                             </select>
-                          <span title={(subOrder.services.reduce((acc, svc) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0)).toLocaleString('vi-VN') + 'đ'}>{formatCompactPrice(subOrder.services.reduce((acc, svc) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0))}</span>
+                            {(() => {
+                              const isAllSequential = subOrder.services.length > 0 && subOrder.services.every(s => (s as any)._isSequentialFollowUp);
+                              if (isAllSequential) {
+                                return <span className="text-[10px] text-gray-500 italic">Đã tính trước</span>;
+                              }
+                              const sum = subOrder.services.reduce((acc, svc) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0);
+                              return <span title={sum.toLocaleString('vi-VN') + 'đ'}>{formatCompactPrice(sum)}</span>;
+                            })()}
                           <span className="opacity-30">·</span>
                           <span>{order.paymentMethod === 'Cash' || order.paymentMethod === 'cash_vnd' ? 'cash' : (order.paymentMethod === 'Transfer' ? 'ck' : order.paymentMethod)}</span>
                         </div>

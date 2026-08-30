@@ -44,6 +44,7 @@ export interface ServiceBlock {
   serviceId?: string;
   serviceName: string;
   _splitTime?: string;
+  _isSequentialFollowUp?: boolean;
   displayName?: string; // Tên hiển thị (đặc biệt khi gộp)
   serviceDescription?: string;
   is_utility?: boolean;

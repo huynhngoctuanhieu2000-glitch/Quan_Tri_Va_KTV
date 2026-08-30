@@ -643,6 +643,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                     </div>
                                                     {(() => {
                                                         const subOrderTotal = services.reduce((acc: number, svc: any) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0);
+                                                        const isAllSequential = services.length > 0 && services.every((s: any) => s._isSequentialFollowUp);
                                                         const pm = order.paymentMethod;
                                                         let pmIcon = null;
                                                         let pmText = '';
@@ -678,7 +679,11 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
 
                                                         return (
                                                           <div className="flex flex-col items-end shrink-0 gap-1.5">
-                                                            <p className="text-sm font-black text-gray-900 leading-none" title={formatVND(subOrderTotal)}>{formatCompactPrice(subOrderTotal)}</p>
+                                                            {isAllSequential ? (
+                                                                <p className="text-[10px] font-bold text-gray-400 italic">Đã tính ở thẻ trước</p>
+                                                            ) : (
+                                                                <p className="text-sm font-black text-gray-900 leading-none" title={formatVND(subOrderTotal)}>{formatCompactPrice(subOrderTotal)}</p>
+                                                            )}
                                                             <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border ${bgClass}`} title={pmText}>
                                                               {pmIcon}
                                                               <span className={`text-[9px] font-bold ${colorClass}`}>{pmText}</span>
