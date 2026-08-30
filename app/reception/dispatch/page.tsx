@@ -2199,9 +2199,9 @@ if (!hasPermission('dispatch_board')) {
                                 const childIds: string[] = opts.mergedServiceIds || s.mergedServiceIds || [];
                                 const childDur = childIds.reduce((sum: number, cId: string) => {
                                   const child = subOrder.services.find(cs => cs.id === cId);
-                                  return sum + (child?.duration || 0);
+                                  return sum + (child && !isUtilityService(child) ? (child.duration || 0) : 0);
                                 }, 0);
-                                return acc + (s.duration || 0) + childDur;
+                                return acc + (!isUtilityService(s) ? (s.duration || 0) : 0) + childDur;
                               }, 0)}p`;
                             })()
                           : 'Chưa có dịch vụ'
