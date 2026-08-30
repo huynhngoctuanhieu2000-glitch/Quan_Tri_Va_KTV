@@ -271,7 +271,9 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                         staffByTime.get(t)!.push(st);
                     });
                     
-                    if (staffByTime.size > 1) {
+                    // Chỉ xem là ca nối tiếp nếu thực sự có nhiều KTV (có ktvId) với giờ bắt đầu khác nhau
+                    const validKtvTimes = Array.from(staffByTime.entries()).filter(([time, staffs]) => staffs.some(st => st.ktvId));
+                    if (validKtvTimes.length > 1) {
                         // Split into multiple virtual service blocks
                         const sortedTimes = Array.from(staffByTime.keys()).sort();
                         sortedTimes.forEach((time, index) => {
@@ -281,7 +283,6 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                                 ...svc, 
                                 staffList: staffs, 
                                 _splitTime: time,
-                                price: isFirst ? svc.price : 0,
                                 _isSequentialFollowUp: !isFirst
                             });
                         });
@@ -471,7 +472,9 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         if (privateRooms.length > 0) {
             const utilityServices = privateRooms.map(pr => ({ ...pr, isUtility: true }));
             if (resultForOrder.length > 0) {
-                resultForOrder[0].services.push(...utilityServices as ServiceBlock[]);
+                let targetBlock = resultForOrder.find(ro => ro.services.some(s => !(s as any)._isSequentialFollowUp));
+                if (!targetBlock) targetBlock = resultForOrder[0];
+                targetBlock.services.push(...utilityServices as ServiceBlock[]);
             } else {
                 const statuses = utilityServices.map(s => s.status || 'NEW');
                 let dStatus = 'PREPARING';
