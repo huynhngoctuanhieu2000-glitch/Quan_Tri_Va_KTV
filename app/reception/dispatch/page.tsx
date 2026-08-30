@@ -429,7 +429,7 @@ if (!hasPermission('dispatch_board')) {
 
   const pendingOrders = orders.filter(o => o.dispatchStatus === 'pending');
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null;
-  let selectedSubOrder = subOrders.find(so => so.id === selectedSubOrderId);
+  let selectedSubOrder: SubOrder | null | undefined = subOrders.find(so => so.id === selectedSubOrderId);
   
   if (!selectedSubOrder && selectedSubOrderId && selectedOrder) {
       // Tìm fallback bằng cách so khớp baseId (bỏ qua suffix phase/thời gian)
