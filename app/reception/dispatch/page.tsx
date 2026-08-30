@@ -1121,7 +1121,7 @@ if (!hasPermission('dispatch_board')) {
               id: svc.id,
               roomName: allSegments[0]?.roomId || primarySeg?.roomId, 
               bedId: allSegments[0]?.bedId || primarySeg?.bedId,
-              technicianCodes: svc.staffList.map(r => r.ktvId).filter(Boolean),
+              technicianCodes: (svc.mergedIntoId || isUtilityService(svc)) ? [] : svc.staffList.map(r => r.ktvId).filter(Boolean),
               segments: allSegments,
               options: {
                   ...safeParseOptions(svc.options),
@@ -1423,7 +1423,7 @@ if (!hasPermission('dispatch_board')) {
                   id: svc.id,
                   roomName: allSegments[0]?.roomId || primarySeg?.roomId, 
                   bedId: allSegments[0]?.bedId || primarySeg?.bedId,
-                  technicianCodes: svc.mergedIntoId ? [] : svc.staffList.map(r => r.ktvId).filter(Boolean),
+                  technicianCodes: (svc.mergedIntoId || isUtilityService(svc)) ? [] : svc.staffList.map(r => r.ktvId).filter(Boolean),
                   status: svc.mergedIntoId ? 'WAITING' : ((svc.status && !['NEW', 'WAITING'].includes(svc.status)) ? svc.status : 'PREPARING'), 
                   segments: allSegments,
                   options: {

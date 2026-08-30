@@ -150,3 +150,154 @@ Cả hai item **phải cùng một `guest_id`** sau mọi lần gửi. Nếu tá
 
 Đối chiếu thêm trên Kanban: chỉ được hiện **một thẻ cho một khách**, và số tiền phải
 khớp `Bookings.totalAmount`, không cộng dồn.
+
+---
+
+# BỔ SUNG VÒNG 5 — Sau khi test thật đơn `TEST-260830-RPQ5`
+
+> Kết quả test: **Điểm 6 ĐẠT** — sau khi gửi từng thẻ, hai item vẫn chung một
+> `guest_id`, `BookingGuests` chỉ 1 dòng. Tên riêng theo KTV cũng lưu và hiện đúng
+> ở cả 4 tầng. Hai lỗi dưới đây là phát hiện MỚI trong lượt test đó.
+
+## Điểm 9: Thẻ nối tiếp cộng trùng tiền dịch vụ dùng chung ⚠️ ƯU TIÊN CAO (chạm tới tiền)
+
+### Bằng chứng
+
+Đơn `TEST-260830-RPQ5` (`d89b64e2-...`), `totalAmount = 895.000`, đúng 1 khách:
+
+```
+NHS1002  790.000  tech = ["NH016","NH079"]   ← 1 dịch vụ, 2 KTV làm nối tiếp
+NHS0900  105.000  tech = ["NH016"]           ← Phòng riêng
+```
+
+Trên Kanban lại hiện:
+
+```
+Thẻ #TEST   (NH016) → 895k     = 790k + 105k
+Thẻ #TEST-A (NH079) → 790k     = 790k  ← ĐẾM LẠI dịch vụ đã tính ở thẻ trước
+                      ------
+                      1.685.000  trong khi khách chỉ trả 895.000
+```
+
+### Nguyên nhân
+
+`KanbanBoard.tsx:645` cộng giá mọi dịch vụ nằm trong thẻ:
+
+```ts
+const subOrderTotal = services.reduce((acc, svc) => acc + (svc.price || 0) * (svc.quantity || 1), 0);
+```
+
+Với ca nối tiếp, `dispatch-timeline.ts:276` chẻ **một** dịch vụ thành **hai** khối ảo
+(`{ ...svc, staffList: staffs, _splitTime: time }`) — cả hai giữ nguyên `price` gốc.
+Nên dịch vụ 790k xuất hiện đủ giá trên cả hai thẻ.
+
+Phòng riêng thì bị `dispatch-timeline.ts:463` đẩy vào thẻ đầu tiên
+(`resultForOrder[0].services.push(...utilityServices)`), làm thẻ 1 thành 895k.
+
+### Yêu cầu (đã chốt với chủ tiệm)
+
+**Chỉ thẻ ĐẦU TIÊN trong nhóm nối tiếp hiện giá. Các thẻ sau ghi "Đã tính ở thẻ trước".**
+
+Chỗ sửa: `KanbanBoard.tsx:681` — nơi render `formatCompactPrice(subOrderTotal)`.
+
+### Ràng buộc bắt buộc
+
+1. **Chỉ áp cho thẻ nối tiếp cùng một dịch vụ.** Phải phân biệt được hai tình huống:
+   - *Nối tiếp*: cùng `bookingId`, cùng khách, chung một `svc.id`, khác `_splitTime`
+     → thẻ sau ghi "Đã tính ở thẻ trước".
+   - *Nhiều khách thật* (đơn `-A`, `-B` có `parent_booking_id`): mỗi khách trả tiền
+     riêng → **mọi thẻ đều phải hiện giá của mình**. Nhầm chỗ này là giấu mất tiền thật.
+
+2. **Xác định "thẻ đầu tiên" theo thời gian**, không theo thứ tự mảng. Dùng `_splitTime`
+   nhỏ nhất, hoặc `calculatedStart` sớm nhất. Thứ tự mảng có thể đổi giữa các lần render.
+
+3. **Giữ nguyên `title={formatVND(subOrderTotal)}`** (tooltip khi rê chuột) hoặc đổi
+   thành tổng đơn — để Lễ tân vẫn tra được số thật khi cần.
+
+4. **Không đụng cách tính `subOrderTotal`.** Chỉ đổi phần *hiển thị*. Con số vẫn phải
+   dùng được cho các mục đích khác.
+
+### Cách kiểm chứng
+
+- Đơn nối tiếp 1 khách 2 KTV → thẻ đầu hiện giá, thẻ sau ghi "Đã tính ở thẻ trước".
+  Tổng nhìn thấy trên bảng = `Bookings.totalAmount`.
+- Đơn nhiều khách thật (`-A`, `-B`) → **cả hai thẻ vẫn hiện giá riêng**, không thẻ nào
+  bị ghi "đã tính".
+- Đơn thường 1 KTV 1 dịch vụ → không đổi gì.
+
+## Điểm 10: Dịch vụ tiện ích bị gán KTV ⚠️ ƯU TIÊN CAO (rò rỉ hoa hồng)
+
+### Bằng chứng
+
+Cùng đơn test:
+
+```
+NHS0900 (Phòng riêng, is_utility = true)   tech = ["NH016"]   segs = NH016@02:17:0p
+```
+
+Trái với thiết kế đã ghi trong `TableInSupabase.md`:
+*"`is_utility` — Không gán KTV, không tính hoa hồng, không hiện timer KTV"*.
+
+### Nguyên nhân
+
+`page.tsx:1426` loại trừ dựa vào **`mergedIntoId`**, không phải **`is_utility`**:
+
+```ts
+technicianCodes: svc.mergedIntoId ? [] : svc.staffList.map(r => r.ktvId).filter(Boolean),
+```
+
+- Phòng riêng **có gộp** (đơn 011) → `mergedIntoId` có → `[]` → đúng.
+- Phòng riêng **không gộp** (đơn TEST) → rơi vào nhánh else → **nhận KTV** → sai.
+
+### Vì sao đây là lỗi tiền, không chỉ dữ liệu bẩn
+
+**Đường 1 — cửa hậu trong ví tua.** `KtvWalletService.ts:96-99`:
+
+```ts
+let relevantItems = relevantItemsOriginal.filter(i => !svcUtilityMap[String(i.serviceId)]);
+if (relevantItems.length === 0 && relevantItemsOriginal.length > 0) {
+    relevantItems = relevantItemsOriginal;   // tiện ích lọt lại vào tính tiền
+}
+```
+
+Nếu một KTV chỉ được gán **mỗi** Phòng riêng và không dịch vụ nào khác, fallback đưa
+item tiện ích trở lại → KTV đó **được tính hoa hồng cho Phòng riêng**.
+
+**Đường 2 — loãng điểm bonus.** `KtvCommissionService.calculateBookingBonus` quét
+`technicianCodes` của **mọi** item để đếm số KTV chia điểm, **không lọc tiện ích**.
+Một KTV chỉ đứng tên Phòng riêng vẫn làm tăng mẫu số → mọi người bị chia điểm ít đi.
+
+### Yêu cầu
+
+Sửa `page.tsx:1426`: điều kiện loại trừ phải bao gồm cả tiện ích. Dùng hàm
+`isUtilityService()` đã có sẵn trong `lib/booking.logic.ts` thay vì viết lại điều kiện.
+
+### Ràng buộc
+
+- **KHÔNG đụng cửa hậu ở `KtvWalletService.ts:97` lúc này.** Nó sinh ra để cứu dữ liệu cũ
+  (đơn mà mọi item đều bị đánh dấu tiện ích nhầm). Bỏ đi có thể làm mất tiền của đơn lịch sử.
+  Sửa `page.tsx:1426` là chặn được nguồn. Cửa hậu rà riêng sau, khi đã khảo sát dữ liệu cũ.
+- **KHÔNG đụng `lib/services/KtvWalletService.ts`** trong đợt này.
+- Sau khi sửa, item tiện ích phải có `technicianCodes = []` **bất kể** có gộp hay không.
+
+### Cách kiểm chứng
+
+Tạo đơn mới có Phòng riêng **không gộp**, gán KTV, bấm Gửi:
+
+```sql
+SELECT "serviceId", "technicianCodes" FROM public."BookingItems"
+WHERE "bookingId" = '<mã đơn>' ORDER BY id;
+```
+
+`NHS0900` phải có `technicianCodes = {}` (rỗng). Làm lại với Phòng riêng **có gộp** —
+kết quả phải giống hệt.
+
+### Dữ liệu cần dọn
+
+Đơn `d89b64e2-...` đang có `NHS0900 tech = ["NH016"]`. Nếu là đơn thử thì xóa;
+nếu giữ để đối chiếu thì cần SQL gỡ KTV khỏi item tiện ích. **Chưa làm.**
+
+## Thứ tự đề nghị
+
+Điểm 10 trước (rò rỉ hoa hồng, sửa một dòng), rồi Điểm 9 (hiển thị, phức tạp hơn vì
+phải phân biệt nối tiếp với nhiều khách thật).
