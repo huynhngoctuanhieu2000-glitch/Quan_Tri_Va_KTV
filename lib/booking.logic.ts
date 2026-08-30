@@ -264,3 +264,25 @@ export const normalizeStrength = (s: string | null | undefined): string => {
   return STRENGTH_MAP[key] || s.trim();
 };
 
+/**
+ * Kiểm tra xem một service item có phải là tiện ích (như Phòng riêng) hay không.
+ * Cơ chế: Dựa vào cờ is_utility trong DB, fallback về các check string cũ nếu dữ liệu cũ chưa migrate.
+ */
+export function isUtilityService(item: any): boolean {
+    if (!item) return false;
+    
+    // 1. Chuẩn mực: DB flag
+    if (item.is_utility === true || item.isUtility === true || item.Services?.is_utility === true) return true;
+    
+    // 2. Fallback: Mã dịch vụ cũ
+    if (item.serviceId === 'NHS0900' || item.id === 'NHS0900') return true;
+    
+    // 3. Fallback: Kiểm tra string tên
+    const name = String(item.serviceName || item.service_name || item.name || item.Services?.nameVN || item.Services?.nameEN || '').toLowerCase();
+    if (name.includes('phòng riêng') || name.includes('phong rieng')) {
+        // Tránh trùng các dịch vụ có dấu + (combo)
+        if (!name.includes('+')) return true;
+    }
+    
+    return false;
+}

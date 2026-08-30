@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 'use client';
 
 // 🔧 UI CONFIGURATION
@@ -223,7 +224,7 @@ const WebBookingDetailPanel = ({ booking, onClose, onConfirm, onReject, isLoadin
                         </div>
 
                         {/* Chi tiết Options từ Web Booking Giỏ hàng */}
-                        {item.options && !(item.isUtility || item.serviceId === 'NHS0900' || String(item.serviceName || '').toLowerCase().includes('phòng riêng')) && (item.options.strength || item.options.focus?.length > 0 || item.options.avoid?.length > 0 || item.options.tags?.length > 0 || item.options.note || item.options.customerNotes || (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên')) && (
+                        {item.options && !(isUtilityService(item)) && (item.options.strength || item.options.focus?.length > 0 || item.options.avoid?.length > 0 || item.options.tags?.length > 0 || item.options.note || item.options.customerNotes || (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên')) && (
                           <div className="flex flex-col gap-1.5 mt-2 text-[12px] text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
                              {(item.options.therapist && item.options.therapist !== 'Ngẫu nhiên') && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400"></span> <span className="font-medium">Giới tính KTV:</span> <span className="text-pink-600 font-bold">{item.options.therapist}</span></p>}
                              {item.options.strength && <p className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> <span className="font-medium">Lực massage:</span> {normalizeStrength(item.options.strength)}</p>}

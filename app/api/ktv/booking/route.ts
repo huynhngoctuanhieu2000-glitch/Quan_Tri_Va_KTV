@@ -36,6 +36,7 @@ import { handleGetBooking } from './_handlers/handleGetBooking';
 import { handleStartTimer } from './_handlers/handleStartTimer';
 import { handleFinishService } from './_handlers/handleFinishService';
 import { handleReleaseKTV } from './_handlers/handleReleaseKTV';
+import { isUtilityService } from '@/lib/booking.logic';
 
 export const dynamic = 'force-dynamic';
 
@@ -156,11 +157,7 @@ export async function PATCH(request: Request) {
                     .eq('bookingId', bookingId);
                 if (latestItems && latestItems.length > 0) {
                     const validItems = latestItems.filter((i: any) => {
-                        const name = i.Services?.nameVN || '';
-                        return i.Services?.is_utility !== true
-                            && i.serviceId !== 'NHS0900'
-                            && !name.toLowerCase().includes('phòng riêng')
-                            && !name.toLowerCase().includes('phong rieng');
+                        return !isUtilityService(i);
                     });
                     const finalItems = validItems.length > 0 ? validItems : latestItems;
                     const statuses = finalItems.map((i: any) => i.status);

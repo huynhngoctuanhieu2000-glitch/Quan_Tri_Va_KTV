@@ -38,6 +38,7 @@
  */
 
 import { HandlerContext, HandlerResult, ktvMatchesSeg } from '../_shared/utils';
+import { isUtilityService } from '@/lib/booking.logic';
 
 export async function handleFinishService(ctx: HandlerContext): Promise<HandlerResult> {
     const { supabase, bookingId, technicianCode, status, allItemIdsForThisKTV } = ctx;
@@ -282,10 +283,7 @@ export async function handleFinishService(ctx: HandlerContext): Promise<HandlerR
         const validItems = allItems.filter((i: any) => {
             const svcInfo = (itemsWithServices || []).find((is: any) => is.id === i.id);
             const name = svcInfo?.Services?.nameVN || '';
-            return svcInfo?.Services?.is_utility !== true 
-                && svcInfo?.serviceId !== 'NHS0900'  // Legacy fallback
-                && !name.toLowerCase().includes('phòng riêng')
-                && !name.toLowerCase().includes('phong rieng');
+            return !isUtilityService(svcInfo);
         });
         const finalItems = validItems.length > 0 ? validItems : allItems;
         const statuses = finalItems.map((i: any) => i.status);

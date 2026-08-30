@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 /**
  * ============================================================
  * 📋 HANDLER: GET BOOKING FOR KTV
@@ -362,7 +363,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                     guest_label: guest_label,
                     guest_index: guest_index,
                     guest_customer_name: guest_customer_name,
-                    service_name: opts._generatedDisplayName || opts.displayName || getI18nStr(svc?.nameVN || svc?.nameEN || svc?.name, `Dịch vụ ${rawSId}`),
+                    service_name: opts?.serviceNamesForKtvs?.[technicianCode] || opts._generatedDisplayName || opts.displayName || getI18nStr(svc?.nameVN || svc?.nameEN || svc?.name, `Dịch vụ ${rawSId}`),
                     service_description: svc?.service_description || getI18nStr(svc?.description, ''),
                     procedure: svc?.procedure || null,
                     focusConfig: svc?.focusConfig || null,
@@ -482,7 +483,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         // Collect only THIS KTV's segments (not all KTVs)
         const mySegments: { origStart: string; duration: number; actualStartTime?: string; actualEndTime?: string }[] = [];
         itemsWithService.forEach((item: any) => {
-            if (item.is_utility === true || item.serviceId === 'NHS0900' || item.service_name?.toLowerCase().includes('phòng riêng') || item.service_name?.toLowerCase().includes('phong rieng')) return;
+            if (isUtilityService(item)) return;
             
             // 🔥 GUARD: Nếu dịch vụ này đã bị gộp (có mergedIntoId), KTV không cần quan tâm chặng ảo của nó
             const opts = typeof item.options === 'string' ? JSON.parse(item.options) : (item.options || {});

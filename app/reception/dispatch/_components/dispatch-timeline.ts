@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 import { PendingOrder, ServiceBlock, GuestBlock } from '../types';
 
 export const formatToHourMinute = (isoString: string | null | undefined): string => {
@@ -70,7 +71,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
         
         order.services.forEach(svc => {
             const name = svc.serviceName?.toLowerCase() || '';
-            const isPrivateRoom = (svc as any).is_utility === true || svc.serviceId === 'NHS0900' || (name.includes('phòng riêng') && !name.includes('+')) || (name.includes('phong rieng') && !name.includes('+'));
+            const isPrivateRoom = isUtilityService(svc);
             if (isPrivateRoom) return;
             
             const opts = typeof (svc as any).options === 'string' ? JSON.parse((svc as any).options) : ((svc as any).options || {});
@@ -142,7 +143,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
 
         order.services.forEach(svc => {
             const name = svc.serviceName?.toLowerCase() || '';
-            const isPrivateRoom = (svc as any).is_utility === true || svc.serviceId === 'NHS0900' || (name.includes('phòng riêng') && !name.includes('+')) || (name.includes('phong rieng') && !name.includes('+'));
+            const isPrivateRoom = isUtilityService(svc);
             if (isPrivateRoom) return; 
 
             const opts = typeof (svc as any).options === 'string' ? JSON.parse((svc as any).options) : ((svc as any).options || {});
@@ -195,7 +196,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
 
         order.services.forEach(svc => {
             const name = svc.serviceName?.toLowerCase() || '';
-            const isPrivateRoom = (svc as any).is_utility === true || svc.serviceId === 'NHS0900' || (name.includes('phòng riêng') && !name.includes('+')) || (name.includes('phong rieng') && !name.includes('+'));
+            const isPrivateRoom = isUtilityService(svc);
             if (isPrivateRoom) return; 
 
             const opts = typeof (svc as any).options === 'string' ? JSON.parse((svc as any).options) : ((svc as any).options || {});
@@ -455,7 +456,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
 
         const privateRooms = order.services.filter(svc => {
             const name = svc.serviceName?.toLowerCase() || '';
-            return (svc as any).is_utility === true || svc.serviceId === 'NHS0900' || (name.includes('phòng riêng') && !name.includes('+')) || (name.includes('phong rieng') && !name.includes('+'));
+            return isUtilityService(svc);
         });
         
         if (privateRooms.length > 0) {

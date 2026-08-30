@@ -725,3 +725,18 @@
 | total_bookings | INTEGER | |
 | total_minutes | INTEGER | |
 | synced_at | TIMESTAMPTZ | |
+
+### 12. PreBookings 
+**Nhi?m v?**: Luu danh sách khách h?n tru?c (Khách liên h? tru?c) ch? du?c di?u ph?i/t?o don chính th?c.
+
+| C?t | Ki?u | Mô t? ch?c nang |
+|-----|------|-----------------|
+| `id` | uuid PK | Mã khách h?n |
+| `customer_name` | text | H? tên khách hàng |
+| `customer_phone` | text | S? di?n tho?i khách hàng |
+| `guest_count` | int | S? lu?ng khách |
+| `booking_date` | date | Ngày h?n |
+| `booking_time` | time | Gi? h?n |
+| `notes` | text | Ghi chú thêm |
+| `status` | text | Tr?ng thái ('PENDING', 'CONVERTED', 'CANCELLED') |
+| `created_at` | timestamp | Th?i di?m t?o |

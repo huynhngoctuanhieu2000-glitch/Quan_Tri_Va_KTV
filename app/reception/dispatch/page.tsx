@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 'use client';
 import { parseDbDate } from "@/lib/utils";
 
@@ -428,8 +429,26 @@ if (!hasPermission('dispatch_board')) {
 
   const pendingOrders = orders.filter(o => o.dispatchStatus === 'pending');
   const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null;
-  const selectedSubOrder = subOrders.find(so => so.id === selectedSubOrderId) 
-      || (selectedOrder ? { id: selectedOrder.id, bookingId: selectedOrder.id, originalOrder: selectedOrder, services: selectedOrder.services, dispatchStatus: selectedOrder.dispatchStatus, ktvSignature: '', ktvIds: [], calculatedStart: '' } : null);
+  let selectedSubOrder = subOrders.find(so => so.id === selectedSubOrderId);
+  
+  if (!selectedSubOrder && selectedSubOrderId && selectedOrder) {
+      // Tìm fallback bằng cách so khớp baseId (bỏ qua suffix phase/thời gian)
+      const fallback = subOrders.find(so => 
+          selectedSubOrderId.startsWith(so.id + '_') || 
+          so.id.startsWith(selectedSubOrderId + '_')
+      );
+      
+      if (fallback) {
+          selectedSubOrder = fallback;
+          // Tùy chọn: có thể setSelectedSubOrderId(fallback.id) ở useEffect nếu cần, nhưng gán thẳng ở đây cũng đủ để UI không mất thẻ
+      } else {
+          selectedSubOrder = { id: selectedOrder.id, bookingId: selectedOrder.id, originalOrder: selectedOrder, services: selectedOrder.services, dispatchStatus: selectedOrder.dispatchStatus, ktvSignature: '', ktvIds: [], calculatedStart: '' } as any;
+      }
+  } else if (!selectedSubOrder && !selectedSubOrderId && selectedOrder) {
+      selectedSubOrder = { id: selectedOrder.id, bookingId: selectedOrder.id, originalOrder: selectedOrder, services: selectedOrder.services, dispatchStatus: selectedOrder.dispatchStatus, ktvSignature: '', ktvIds: [], calculatedStart: '' } as any;
+  } else if (!selectedSubOrder) {
+      selectedSubOrder = null;
+  }
 
   const LEFT_TABS: { id: DispatchStatus; label: string; color: string; activeBg: string; dot: string; badgeBg: string; badgeText: string }[] = [
     { id: 'pending', label: 'Chờ điều phối', color: 'text-rose-600', activeBg: 'bg-rose-500', dot: 'bg-rose-500', badgeBg: 'bg-rose-100', badgeText: 'text-rose-700' },
@@ -2167,6 +2186,12 @@ if (!hasPermission('dispatch_board')) {
                               const displayServices = parentServices.length > 0 ? parentServices : subOrder.services;
                               return `${displayServices.map(s => {
                                 const opts = typeof s.options === 'string' ? JSON.parse(s.options) : (s.options || {});
+                                if (s.staffList && s.staffList.length > 0) {
+                                    const customNames = s.staffList.map((st: any) => opts.serviceNamesForKtvs?.[st.ktvId] || st.serviceNameForKtv).filter(Boolean);
+                                    if (customNames.length > 0) {
+                                        return Array.from(new Set(customNames)).join(' + ');
+                                    }
+                                }
                                 return opts.displayName || s.serviceName || 'Dịch vụ';
                               }).join(', ')} · ${displayServices.reduce((acc, s) => {
                                 const opts = typeof s.options === 'string' ? JSON.parse(s.options) : (s.options || {});
@@ -2268,7 +2293,7 @@ if (!hasPermission('dispatch_board')) {
                             
                             (selectedSubOrder.originalOrder.services || []).forEach((svc: any) => {
                                  const name = String(svc.serviceName || '').toLowerCase();
-                                 const isUtility = svc.is_utility || (svc as any).isUtility || svc.serviceId === 'NHS0900' || (name.includes('phòng riêng') && !name.includes('+')) || (name.includes('phong rieng') && !name.includes('+'));
+                                 const isUtility = isUtilityService(svc);
                                  const isChild = !!(svc.options?.mergedIntoId || svc.mergedIntoId);
                                  
                                  if (!isUtility && !isChild) {
@@ -2471,7 +2496,18 @@ if (!hasPermission('dispatch_board')) {
                       updateOrder(selectedSubOrder.bookingId, o => {
                           let mergedServices = o.services.map(origSvc => {
                               const found = updatedServices.find(u => u.id === origSvc.id);
-                              return found ? found : origSvc;
+                              if (found) {
+                                  // Bảo tồn các KTV thuộc phạm vi của thẻ khác (không nằm trong thẻ đang edit)
+                                  const originalSubset = selectedSubOrder.services.find(sub => sub.id === origSvc.id);
+                                  let finalStaffList = found.staffList;
+                                  if (originalSubset) {
+                                      const managedIds = new Set(originalSubset.staffList.map(st => st.id));
+                                      const unmanagedStaffs = origSvc.staffList.filter(st => !managedIds.has(st.id));
+                                      finalStaffList = [...unmanagedStaffs, ...found.staffList];
+                                  }
+                                  return { ...found, staffList: finalStaffList };
+                              }
+                              return origSvc;
                           });
                           
                           // Thêm các dịch vụ mới (ví dụ khi tách KTV)
@@ -2867,7 +2903,7 @@ if (!hasPermission('dispatch_board')) {
                     const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || svc.nameVN) : (svc.nameVN || svc.nameEN || `Dịch vụ ${svc.code || svc.id}`);
                     const dur = svc.duration ?? 60;
                     const price = svc.priceVND || 0;
-                    const isUtilitySvc = svc.is_utility === true || svc.id === 'NHS0900' || (String(name).toLowerCase().includes('phòng riêng') && !String(name).includes('+')) || (String(name).toLowerCase().includes('phong rieng') && !String(name).includes('+')); // Legacy fallback
+                    const isUtilitySvc = isUtilityService(svc); // Legacy fallback
                     return (
                       <button 
                         key={svc.id} 
@@ -2907,7 +2943,7 @@ if (!hasPermission('dispatch_board')) {
             const assignedKTVs = svc.staffList.filter((st: any) => st.ktvId).length;
             const minKtv = typeof svc.min_ktv_required === 'number' ? svc.min_ktv_required : 1;
               const nameStr = String(svc.serviceName || '').toLowerCase();
-              const isUtility = svc.is_utility || svc.isUtility || svc.serviceId === 'NHS0900' || (nameStr.includes('phòng riêng') && !nameStr.includes('+')) || (nameStr.includes('phong rieng') && !nameStr.includes('+'));
+              const isUtility = isUtilityService(svc);
               return assignedKTVs < minKtv && !isUtility;
           });
 
@@ -2971,7 +3007,7 @@ if (!hasPermission('dispatch_board')) {
                             const assignedKTVs = svc.staffList.filter((st: any) => st.ktvId).length;
                             const minKtv = typeof svc.min_ktv_required === 'number' ? svc.min_ktv_required : 1;
                               const nameStr = String(svc.serviceName || '').toLowerCase();
-                              const isUtility = svc.is_utility || (svc as any).isUtility || svc.serviceId === 'NHS0900' || (nameStr.includes('phòng riêng') && !nameStr.includes('+')) || (nameStr.includes('phong rieng') && !nameStr.includes('+'));
+                              const isUtility = isUtilityService(svc);
                               if (assignedKTVs < minKtv && !isUtility) {
                                 return (
                                     <p className="text-xs text-rose-500 font-bold mt-1">

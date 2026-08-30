@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 'use client';
 
 // 🔧 UI CONFIGURATION
@@ -198,7 +199,7 @@ const WebBookingCard = ({ booking, onConfirm, onReject, onViewDetail, isLoading 
                     <span className="text-[11px] text-gray-600 font-medium truncate">{item.serviceName}</span>
                     <span className="text-[10px] text-gray-400 shrink-0">{item.duration}p</span>
                   </div>
-                  {item.options && !(item.isUtility || item.serviceId === 'NHS0900' || String(item.serviceName || '').toLowerCase().includes('phòng riêng')) && (item.options.strength || item.options.focus?.length > 0 || item.options.avoid?.length > 0 || item.options.note || item.options.customerNotes || (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên')) && (
+                  {item.options && !(isUtilityService(item)) && (item.options.strength || item.options.focus?.length > 0 || item.options.avoid?.length > 0 || item.options.note || item.options.customerNotes || (item.options.therapist && item.options.therapist !== 'Ngẫu nhiên')) && (
                       <div className="text-[9.5px] text-gray-500 truncate mt-0.5 mb-0.5">
                          {[
                            item.options.strength && `Lực: ${normalizeStrength(item.options.strength)}`,

@@ -269,20 +269,7 @@ export const DispatchServiceBlock = ({
                                 onChange={e => {
                                     onUpdateSvc(orderId, svc.id, { options: { ...(svc.options || {}), displayName: e.target.value } });
                                 }}
-                                onBlur={async () => {
-                                    // Tự động lưu ngay khi click ra ngoài (Blur) để chống mất dữ liệu
-                                    try {
-                                        const { getSupabaseAdmin } = await import('@/lib/supabaseAdmin');
-                                        const supabase = getSupabaseAdmin();
-                                        if (supabase) {
-                                            await supabase.from('BookingItems').update({
-                                                options: { ...(svc.options || {}), displayName: svc.options?.displayName || svc.serviceName }
-                                            }).eq('id', svc.id);
-                                        }
-                                    } catch (e) {
-                                        console.error("Auto-save displayName failed:", e);
-                                    }
-                                }}
+
                                 placeholder={svc.serviceName}
                                 className="w-full px-4 py-2 border border-gray-100 rounded-xl text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none bg-white transition-all shadow-sm text-gray-800 placeholder:text-gray-300"
                             />

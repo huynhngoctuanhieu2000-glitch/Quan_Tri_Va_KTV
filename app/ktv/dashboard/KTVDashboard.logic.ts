@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ktvMatchesSeg } from '@/lib/ktvUtils';
 import { apiClient } from '@/lib/apiClient';
@@ -1918,9 +1919,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             const serviceItems = assignedItems.filter((item: any) => {
                 const sId = String(item.serviceId || '').toUpperCase();
                 const sName = String(item.service_name || '').toLowerCase();
-                return item.is_utility !== true
-                       && sId !== 'NHS0900'  // Legacy fallback
-                       && !sName.includes('phòng riêng') 
+                return !isUtilityService(item) 
                        && !sName.includes('phong rieng');
             });
 

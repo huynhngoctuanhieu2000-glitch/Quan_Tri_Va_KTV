@@ -1,0 +1,152 @@
+# Kế hoạch sửa lỗi UI Điều phối (Dispatch Board)
+
+Kế hoạch này giải quyết các triệu chứng lỗi hiển thị trên giao diện Lễ tân, được cập nhật theo "Bản thống nhất" (Vòng 3).
+**Nguyên tắc thi công:** Làm từng điểm một, test xong mới làm tiếp.
+
+## Điểm 2 TỔNG HỢP: Khối ảo nối tiếp dùng chung `svc.id` khiến các thẻ ghi đè lẫn nhau - ✅ Đã Xong (tại `page.tsx`)
+- **Nguyên nhân gốc rễ (Hợp nhất NN3, NN4):** `dispatch-timeline.ts` chẻ 1 dịch vụ thành 2 thẻ UI nhưng vẫn giữ chung 1 mã `svc.id`. Khi `QuickDispatchTable` (của từng thẻ) lưu dữ liệu về, nó dùng `svc.id` làm khóa và ghi đè toàn bộ `staffList` lên đơn gốc. Thẻ nào lưu sau sẽ đè chết KTV của thẻ trước (NN4). Tương tự, nếu thẻ 1 sửa tên, tên đó cũng áp lên toàn bộ dịch vụ (NN3).
+- **Giải pháp đã triển khai:** Đã áp dụng cơ chế "Ghi đè có phạm vi" (Scoped Overwrite) tại `page.tsx:2488`. Hàm merge bây giờ đối chiếu với `originalSubset` (những gì thẻ được giao):
+  - **Với staffList:** Chỉ thay thế/xóa những dòng KTV thuộc quyền thẻ hiện tại quản lý. Các KTV thuộc thẻ khác (của `_splitTime` khác) được giữ nguyên vẹn (`unmanagedStaffs`).
+  - **Với options.displayName:** Vẫn áp dụng chung cho toàn dịch vụ (vì về bản chất vẫn là 1 dịch vụ gốc).
+
+## Điểm 3 (NN1 & NN2): Bệnh mất thẻ đơn do fallback nuốt lỗi - ✅ Đã Xong
+- **Tình trạng:** Đã fix bằng fallback tìm thẻ theo baseId (`.startsWith()`). Thẻ không còn bị rơi về đơn cha khi mã phase bị lệch.
+
+## Điểm 5 (NN6): Autosave nguy hiểm - ✅ Đã Xong
+- **Tình trạng:** Đoạn code chết `onBlur` trong `DispatchServiceBlock` đã bị xóa bỏ.
+
+## Điểm 4 (NN5): Sai lệch index của tên DV - 🚫 ĐÃ HỦY BỎ
+- **Lý do hủy:** Khi thẻ được tách, số lượng KTV trên mỗi thẻ con chỉ còn 1 (idx luôn = 0). Lỗi lệch chỉ số (index shifting) chỉ xảy ra khi một thẻ có nhiều KTV và user xóa KTV ở giữa. Do thiết kế chia tách thẻ nối tiếp đã ngăn ngừa triệt để tình huống này, việc refactor mảng thành Dictionary là không còn cần thiết. Vấn đề "không nhập được tên riêng" đã được giải quyết bằng cách hiển thị lại ô input (ở dưới).
+
+## Điểm 4 (Mới bổ sung): Ô "Tên DV" bị ẩn sai điều kiện - ✅ Đã Xong
+- **Tình trạng:** Đã xóa bỏ điều kiện ẩn `selectedKtvIds.length > 1` cứng ngắc. Hiện tại ô "Tên DV..." sẽ tự động hiện ra cho các thẻ đã gộp (Merged Group) hoặc đã tách (Split Group), kèm theo placeholder là tên dịch vụ gốc để Lễ tân dễ hình dung.
+
+---
+
+# NHÓM LỖI "PHÒNG RIÊNG" (Dịch vụ tiện ích) — Bổ sung Vòng 4
+
+> Vai trò tài liệu: nêu NGUYÊN NHÂN và RÀNG BUỘC. Người thi công tự chọn cách sửa.
+> Lý do bổ sung: Phòng riêng (`NHS0900`, `is_utility = true`) gây lỗi lặp đi lặp lại
+> ở nhiều tầng khác nhau. Gom lại một chỗ để xử lý dứt điểm.
+
+## Điểm 6: Đơn bị tách khách sai → hiện 2 thẻ, tiền cộng gấp đôi ⚠️ ƯU TIÊN CAO (chạm tới tiền)
+
+### Bằng chứng thực tế (đơn `11NDK-011-30082026`, ngày 30/08)
+
+```
+Bookings: totalAmount = 1.210.000 | guestCount = 1 | khách James
+
+  NHS0900 (Phòng riêng)   price =   105.000  guest_id = a327c2ec...
+  NHS1007 (dịch vụ chính) price = 1.105.000  guest_id = 36212368...
+```
+
+Một khách duy nhất nhưng **hai `guest_id` khác nhau**. Hậu quả trên bảng Kanban:
+thẻ `#011` hiện **1tr210**, thẻ `#011-A` hiện **1tr105** → cộng lại 2.315.000
+trong khi khách chỉ trả 1.210.000.
+
+Đầu phiên làm việc hôm nay, hai item này **dùng chung một `guest_id`**. Chúng bị
+tách ra trong quá trình thao tác.
+
+### Nguyên nhân: cùng một đoạn logic tồn tại HAI BẢN, một bản đã sửa, một bản còn lỗi
+
+**Bản CÒN LỖI** — trong `processDispatch()` (luồng điều phối thật), `actions.ts:654-655`:
+
+```ts
+// Ưu tiên kế thừa guest_id của chính các item trong nhóm, KHÔNG BỊ ẢNH HƯỞNG BỞI LOCK
+let targetGuestId = itemIds.map(id => dbItemsMap.get(id)).find(id => id && !usedGuestIds.has(id));
+```
+
+**Bản ĐÚNG** — trong `saveDraftDispatch()` (luồng lưu nháp), `actions.ts:882-883`:
+
+```ts
+// Ưu tiên kế thừa guest_id của chính các item trong nhóm
+let targetGuestId = itemIds.map(id => dbItemsMap.get(id)).find(id => id);
+```
+
+Comment ở bản lỗi ghi rõ "không bị ảnh hưởng bởi lock", nhưng code lại **có** áp lock
+(`!usedGuestIds.has(id)`). Code mâu thuẫn với chính chú thích của nó. Ai đó đã sửa bản
+nháp mà quên bản điều phối.
+
+### Cơ chế đổ vỡ
+
+1. Thẻ Kanban đã tách → bấm Gửi chỉ đưa **một item** vào `itemUpdates`.
+2. Khối "lock" `actions.ts:645-651` đánh dấu `guest_id` của mọi item **không nằm trong**
+   lần cập nhật này là "đã bị chiếm".
+3. Vì Phòng riêng không nằm trong payload, `guest_id` chung bị đánh dấu đã chiếm.
+4. Dòng 655 áp lock → không kế thừa được `guest_id` của chính mình → rơi xuống nhánh
+   `crypto.randomUUID()` ở dòng 664 → **cấp một khách hoàn toàn mới**.
+
+### Ràng buộc khi sửa
+
+- Hai bản logic này phải **giống hệt nhau**. Sửa xong nên gom thành một hàm dùng chung
+  để không tái diễn cảnh lệch bản.
+- `guest_id` là khóa dùng cho **tách bill, chia tua, chia bonus** (xem `KTV_BONUS_LOGIC_README.md`).
+  Sửa sai chỗ này ảnh hưởng trực tiếp tới tiền của KTV, không chỉ hiển thị.
+- Khối lock (dòng 645-651) sinh ra để chống việc hai nhóm giành nhau một khách. Đừng xóa
+  nó — chỉ cần cho phép một nhóm **kế thừa lại khách của chính nó**, đúng như comment mô tả.
+
+### Dữ liệu cần dọn sau khi sửa
+
+Đơn `11NDK-011-30082026` đang có 2 `guest_id` cho 1 khách. Cần gộp về một.
+**Chưa làm** — chờ sửa code xong để tránh bị tách lại lần nữa.
+
+## Điểm 7: Nhận diện "tiện ích" bị chép tay ở 6+ nơi 🔵 Ưu tiên thấp — nợ kỹ thuật
+
+Cùng một biểu thức được chép lặp ở nhiều file:
+
+```ts
+is_utility === true
+  || serviceId === 'NHS0900'
+  || name.includes('phòng riêng')
+  || name.includes('phong rieng')
+```
+
+Các nơi đã tìm thấy: `dispatch-timeline.ts` (4 chỗ: dòng 73, 145, 198, 458),
+`KTVDashboard.logic.ts:1918`, `handleGetBooking.ts:485`, `handleFinishService.ts:282`,
+`KtvWalletService.ts:96`, `QuickDispatchTable.tsx`, `DispatchServiceBlock.tsx`.
+
+**Rủi ro:** thêm một dịch vụ tiện ích mới (xông hơi, nước uống...) và chỉ bật cờ
+`is_utility` trong Admin thì vẫn chạy được — nhưng nếu ai đó **tắt** cờ `is_utility`
+của Phòng riêng để thử nghiệm, ba điều kiện dò tên vẫn ép nó thành tiện ích. Cờ trong
+Admin mất tác dụng, không ai hiểu vì sao.
+
+**Ràng buộc:** đây là dọn nợ, không phải sửa lỗi đang cháy. Chỉ làm khi Điểm 6 đã xong
+và ổn định. Gom thành một hàm `isUtilityService(item)` rồi bỏ dần phần dò tên tiếng Việt.
+
+## Điểm 8: Item tiện ích kẹt trạng thái và mang chặng rác 🔵 Ưu tiên thấp — theo dõi
+
+Quan sát trên hai đơn khác nhau:
+
+- Đơn `11NDK-005-30082026`: item Phòng riêng còn `status = IN_PROGRESS` trong khi dịch vụ
+  chính đã `DONE`, kèm chặng rác `NH027 @14:31→14:31 duration=0`.
+- Đơn `11NDK-011-30082026`: item Phòng riêng mang chặng `NH016 @23:28 duration=0`
+  dù `technicianCodes = []`.
+
+**Đã kiểm chứng là vô hại về tiền:** mọi truy vấn tính công/tính tiền đều lọc theo
+`technicianCodes`, mà cột này rỗng nên không ai đọc tới các chặng đó. `TurnQueue` của
+KTV liên quan cũng ở trạng thái `off` bình thường, không bị kẹt.
+
+**Vì sao vẫn ghi nhận:** nó khiến đơn treo `IN_PROGRESS` trên bảng Lễ tân dù đã xong,
+và là mầm lỗi nếu sau này có đoạn code nào đọc `segments` mà không kiểm tra
+`technicianCodes` trước.
+
+## Thứ tự đề nghị
+
+1. **Điểm 6 trước** — chạm tới tiền và tách bill.
+2. Kiểm chứng bằng một đơn **hoàn toàn mới** (đơn 011 đã lệch dữ liệu, không dùng để test được nữa).
+3. Điểm 7 và 8 để sau, khi không còn lỗi nào đang cháy.
+
+## Cách kiểm chứng Điểm 6
+
+Tạo đơn mới còn `pending`, có dịch vụ chính + Phòng riêng gộp chung, 2 KTV làm nối tiếp.
+Bấm Gửi **từng thẻ một**. Sau mỗi lần bấm, kiểm tra:
+
+```sql
+SELECT id, "serviceId", guest_id FROM public."BookingItems"
+WHERE "bookingId" = '<mã đơn>' ORDER BY id;
+```
+
+Cả hai item **phải cùng một `guest_id`** sau mọi lần gửi. Nếu tách ra là chưa hết bệnh.
+
+Đối chiếu thêm trên Kanban: chỉ được hiện **một thẻ cho một khách**, và số tiền phải
+khớp `Bookings.totalAmount`, không cộng dồn.

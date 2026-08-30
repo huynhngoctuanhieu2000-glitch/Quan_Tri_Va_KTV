@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -90,16 +91,16 @@ export const QuickDispatchTable = ({
   const initialGroups = useMemo(() => {
     const map = new Map<string, ServiceBlock[]>();
     services.filter(s => !s.mergedIntoId).forEach(svc => {
-      const isUtil = svc.is_utility || (svc as any).isUtility || svc.serviceId === 'NHS0900' || (String(svc.serviceName || '').toLowerCase().includes('phòng riêng') && !String(svc.serviceName || '').includes('+'));
+      const isUtil = isUtilityService(svc);
       
       // Calculate display name and duration by including any merged services
       const mergedSvcs = services.filter(s => svc.mergedServiceIds?.includes(s.id));
-      const combinedDuration = svc.duration + mergedSvcs.reduce((acc, curr) => acc + ((curr.is_utility || (curr as any).isUtility || curr.serviceId === 'NHS0900' || String(curr.serviceName || '').toLowerCase().includes('phòng riêng')) ? 0 : curr.duration), 0);
-      const combinedName = [`${svc.serviceName} (${svc.duration}p)`, ...mergedSvcs.map(s => (s.is_utility || (s as any).isUtility || s.serviceId === 'NHS0900' || String(s.serviceName || '').toLowerCase().includes('phòng riêng')) ? s.serviceName : `${s.serviceName} (${s.duration}p)`)].join(' + ');
+      const combinedDuration = svc.duration + mergedSvcs.reduce((acc, curr) => acc + ((isUtilityService(curr)) ? 0 : curr.duration), 0);
+      const combinedName = [`${svc.serviceName} (${svc.duration}p)`, ...mergedSvcs.map(s => (isUtilityService(s)) ? s.serviceName : `${s.serviceName} (${s.duration}p)`)].join(' + ');
 
       const validForKtvReqs = [svc, ...mergedSvcs].filter(s => {
           const isRoom = String(s.serviceName || '').toLowerCase().includes('phòng riêng') && !String(s.serviceName || '').includes('+');
-          const isUtil = s.is_utility || (s as any).isUtility || s.serviceId === 'NHS0900';
+          const isUtil = isUtilityService(s);
           return !isRoom && !isUtil;
       });
 
@@ -332,6 +333,16 @@ export const QuickDispatchTable = ({
             });
           }
         });
+
+        console.log('--- [BƯỚC 0 VÒNG 3] Thu thập KTV ---');
+        console.log('groupKey:', groupKey);
+        console.log('items (detailed):', JSON.stringify(items.map(i => ({ 
+            id: i.id, 
+            staffCount: i.staffList?.length, 
+            ktvs: i.staffList?.map(s => s.ktvId) 
+        })), null, 2));
+        console.log('ktvIds thu duoc:', ktvIds);
+
         if (ktvIds.length === 0) {
           startTimes.push(defaultTime);
           endTimes.push(calcEndTime(defaultTime, duration));
@@ -358,7 +369,7 @@ export const QuickDispatchTable = ({
             ktvDisplayNames: Object.keys(ktvDisplayNames).length > 0 ? ktvDisplayNames : undefined,
             note: items[0]?.staffList?.[0]?.noteForKtv || '',
             duration,
-            isUtility: items[0]?.is_utility || (items[0] as any)?.isUtility || items[0]?.serviceId === 'NHS0900' || (String(items[0]?.serviceName || '').toLowerCase().includes('phòng riêng') && !String(items[0]?.serviceName || '').includes('+')),
+            isUtility: isUtilityService(items[0]),
             isMergedGroup,
             workMode: initialWorkMode
           });
@@ -394,6 +405,12 @@ export const QuickDispatchTable = ({
       if (!items) return;
       const ktvCount = state.selectedKtvIds.length;
       const itemCount = items.length;
+
+      console.log('--- [BƯỚC 0 CHẨN ĐOÁN] syncToServices ---');
+      console.log('groupKey:', groupKey);
+      console.log('ktvCount:', ktvCount, '| itemCount:', itemCount);
+      console.log('isMergedGroup:', state.isMergedGroup);
+      console.log('Vào nhánh if?:', ktvCount <= itemCount && !state.isMergedGroup);
 
       if (ktvCount <= itemCount && !state.isMergedGroup) {
         // Normal: 1 KTV per service item
@@ -431,7 +448,7 @@ export const QuickDispatchTable = ({
           updatedServices[svcIdx] = {
             ...updatedServices[svcIdx],
             staffList: [{ id: updatedServices[svcIdx].staffList?.[0]?.id || `st-${item.id}-${ktvId}`, ktvId, ktvName, segments: [segment], noteForKtv: state.ktvNotes?.[idx] || '', serviceNameForKtv: state.ktvServiceNames?.[idx] || '' }],
-            options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
+            options: { ...updatedServices[svcIdx].options, displayName: state.displayName ? state.displayName : updatedServices[svcIdx].options?.displayName },
           };
         });
       } else {
@@ -499,7 +516,7 @@ export const QuickDispatchTable = ({
               noteForKtv: (state.ktvNotes && state.ktvNotes[state.selectedKtvIds.indexOf(e.ktvId)] !== undefined) ? state.ktvNotes[state.selectedKtvIds.indexOf(e.ktvId)] : '',
               serviceNameForKtv: state.ktvServiceNames?.[state.selectedKtvIds.indexOf(e.ktvId)] || '',
             })),
-            options: { ...updatedServices[svcIdx].options, displayName: state.displayName || undefined },
+            options: { ...updatedServices[svcIdx].options, displayName: state.displayName ? state.displayName : updatedServices[svcIdx].options?.displayName },
           };
         });
       }
@@ -716,7 +733,12 @@ export const QuickDispatchTable = ({
                       const isFirstInGroup = idx === 0;
                       const isLastInGroup = idx === block.items.length - 1;
                       const firstSvc = items[0];
-                      const displayServiceName = state.displayName || firstSvc?.options?._generatedDisplayName || firstSvc?.options?.displayName || firstSvc?.serviceName || groupKey.split('_')[0];
+                      let singleCustomName = null;
+                      if (!state.isUtility && state.selectedKtvIds?.length === 1) {
+                          const singleKtvId = state.selectedKtvIds[0];
+                          singleCustomName = firstSvc?.options?.serviceNamesForKtvs?.[singleKtvId] || firstSvc?.staffList?.find((st: any) => st.ktvId === singleKtvId)?.serviceNameForKtv;
+                      }
+                      const displayServiceName = singleCustomName || state.displayName || firstSvc?.options?._generatedDisplayName || firstSvc?.options?.displayName || firstSvc?.serviceName || groupKey.split('_')[0];
                       
                       const count = items.length;
                       const duration = items[0]?.duration || 0;
@@ -1470,9 +1492,9 @@ const ServiceGroupCard = ({
                   </div>
                   {/* Row 2: Per-KTV Note | Reminder Button | Dispatch button */}
                   <div className="flex items-center gap-2 ml-6">
-                    {state.selectedKtvIds.length > 1 && (
+                    {(state.isMergedGroup || groupItems?.some((item: any) => item._splitTime !== undefined) || state.selectedKtvIds.length > 1) && (
                         <div className="flex-1 relative">
-                            <input type="text" value={state.ktvServiceNames?.[idx] || ''} onChange={e => updateServiceNameForIdx(idx, e.target.value)} placeholder="Tên DV..." className="w-full px-2.5 py-1.5 border border-indigo-100 rounded-xl text-[11px] font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500/10 outline-none bg-indigo-50/30 placeholder:text-indigo-300 pr-8" />
+                            <input type="text" value={state.ktvServiceNames?.[idx] || ''} onChange={e => updateServiceNameForIdx(idx, e.target.value)} placeholder={groupItems?.[0]?.serviceName || "Tên DV..."} className="w-full px-2.5 py-1.5 border border-indigo-100 rounded-xl text-[11px] font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500/10 outline-none bg-indigo-50/30 placeholder:text-indigo-300 pr-8" />
                             {state.ktvServiceNames?.[idx] && (
                                 <button onClick={() => updateServiceNameForIdx(idx, '')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-indigo-300 hover:text-indigo-500"><X size={12} /></button>
                             )}

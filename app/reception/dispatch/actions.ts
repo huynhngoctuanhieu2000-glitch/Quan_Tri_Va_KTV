@@ -1,3 +1,4 @@
+import { isUtilityService } from '@/lib/booking.logic';
 'use server';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
@@ -8,6 +9,82 @@ import { BookingModificationService } from '@/lib/services/BookingModificationSe
 import { recalculateEstimatedEndTime } from '@/lib/time-helper';
 import { COMPLETED_STATUSES, isDummyPhone, isDummyEmail, isReturningCustomer, isNameMatch } from '@/lib/customer.logic';
 import { unstable_noStore as noStore } from 'next/cache';
+
+async function resolveGuestIdsForUpdate(
+    supabase: any,
+    bookingId: string,
+    itemUpdates: any[],
+    existingItemsBefore: any[]
+) {
+    const { data: currentGuests } = await supabase.from('BookingGuests').select('id').eq('booking_id', bookingId);
+    const dbItemsMap = new Map(existingItemsBefore?.map(i => [i.id, i.guest_id]) || []);
+    const guestIdsDb = currentGuests?.map((g: any) => g.id) || [];
+    
+    const updatesToApply: { itemId: string, guestId: string }[] = [];
+    
+    // Group by UI grouping
+    const groups = new Map<string, string[]>();
+    for (const update of itemUpdates) {
+        const uiGroupId = update.options?.customerGroupId || update.options?.mergedIntoId;
+        if (uiGroupId) {
+            if (!groups.has(uiGroupId)) groups.set(uiGroupId, []);
+            groups.get(uiGroupId)!.push(update.id);
+        } else {
+            if (!groups.has(update.id)) groups.set(update.id, []);
+            groups.get(update.id)!.push(update.id);
+        }
+    }
+    
+    let availableGuests = [...guestIdsDb];
+    const usedGuestIds = new Set<string>();
+    
+    // ĐÁNH DẤU CÁC GUEST_ID ĐÃ BỊ CHIẾM BỞI CÁC DỊCH VỤ KHÔNG NẰM TRONG LẦN CẬP NHẬT NÀY
+    const updatedItemIds = new Set(itemUpdates.map(u => u.id));
+    for (const [id, gId] of dbItemsMap.entries()) {
+        if (gId && !updatedItemIds.has(id)) {
+            usedGuestIds.add(gId);
+        }
+    }
+    
+    for (const [groupId, itemIds] of groups.entries()) {
+        // Ưu tiên kế thừa guest_id của chính các item trong nhóm
+        let targetGuestId = itemIds.map(id => dbItemsMap.get(id)).find(id => id);
+        
+        if (!targetGuestId) {
+            targetGuestId = availableGuests.find(id => !usedGuestIds.has(id));
+            if (targetGuestId) {
+                availableGuests = availableGuests.filter(id => id !== targetGuestId);
+            } else {
+                if (guestIdsDb.length === 1) {
+                    targetGuestId = guestIdsDb[0];
+                } else {
+                    const crypto = require('crypto');
+                    targetGuestId = crypto.randomUUID();
+                    const nextIndex = guestIdsDb.length + 1;
+                    await supabase.from('BookingGuests').insert({
+                        id: targetGuestId,
+                        booking_id: bookingId,
+                        guest_index: nextIndex,
+                        guest_label: `Khách ${nextIndex}`,
+                        status: 'PENDING'
+                    });
+                    guestIdsDb.push(targetGuestId);
+                }
+            }
+        }
+        
+        usedGuestIds.add(targetGuestId);
+        
+        for (const id of itemIds) {
+            if (dbItemsMap.get(id) !== targetGuestId) {
+                updatesToApply.push({ itemId: id, guestId: targetGuestId! });
+                dbItemsMap.set(id, targetGuestId);
+            }
+        }
+    }
+
+    return updatesToApply;
+}
 
 
 
@@ -619,71 +696,12 @@ export async function processDispatch(bookingId: string, dispatchData: {
         // 🔥 ĐỒNG BỘ GUEST_ID TỪ UI GỘP DỊCH VỤ CŨ
         if (dispatchData.itemUpdates && dispatchData.itemUpdates.length > 0) {
             try {
-                const { data: currentGuests } = await supabase.from('BookingGuests').select('id').eq('booking_id', bookingId);
-                const dbItemsMap = new Map(existingItemsBefore?.map(i => [i.id, i.guest_id]) || []);
-                const guestIdsDb = currentGuests?.map(g => g.id) || [];
-                
-                const updatesToApply: { itemId: string, guestId: string }[] = [];
-                
-                // Group by UI grouping
-                const groups = new Map<string, string[]>();
-                for (const update of dispatchData.itemUpdates) {
-                    const uiGroupId = update.options?.customerGroupId || update.options?.mergedIntoId;
-                    if (uiGroupId) {
-                        if (!groups.has(uiGroupId)) groups.set(uiGroupId, []);
-                        groups.get(uiGroupId)!.push(update.id);
-                    } else {
-                        // Independent item
-                        if (!groups.has(update.id)) groups.set(update.id, []);
-                        groups.get(update.id)!.push(update.id);
-                    }
-                }
-                
-                let availableGuests = [...guestIdsDb];
-                const usedGuestIds = new Set<string>();
-                
-                // 🔥 ĐÁNH DẤU CÁC GUEST_ID ĐÃ BỊ CHIẾM BỞI CÁC DỊCH VỤ KHÔNG NẰM TRONG LẦN CẬP NHẬT NÀY
-                const updatedItemIds = new Set(dispatchData.itemUpdates.map(u => u.id));
-                for (const [id, gId] of dbItemsMap.entries()) {
-                    if (gId && !updatedItemIds.has(id)) {
-                        usedGuestIds.add(gId);
-                    }
-                }
-                
-                for (const [groupId, itemIds] of groups.entries()) {
-                    // Try to find an existing guest_id among these items (Ưu tiên kế thừa guest_id của chính các item trong nhóm, không bị ảnh hưởng bởi lock)
-                    let targetGuestId = itemIds.map(id => dbItemsMap.get(id)).find(id => id && !usedGuestIds.has(id));
-                    
-                    if (!targetGuestId) {
-                        // Find an unused available guest
-                        targetGuestId = availableGuests.find(id => !usedGuestIds.has(id));
-                        
-                        if (targetGuestId) {
-                            availableGuests = availableGuests.filter(id => id !== targetGuestId);
-                        } else {
-                            targetGuestId = crypto.randomUUID();
-                            const nextIndex = guestIdsDb.length + 1;
-                            await supabase.from('BookingGuests').insert({
-                                id: targetGuestId,
-                                booking_id: bookingId,
-                                guest_index: nextIndex,
-                                guest_label: `Khách ${nextIndex}`,
-                                status: 'PENDING'
-                            });
-                            guestIdsDb.push(targetGuestId);
-                        }
-                    }
-                    
-                    usedGuestIds.add(targetGuestId);
-                    
-                    for (const id of itemIds) {
-                        if (dbItemsMap.get(id) !== targetGuestId) {
-                            updatesToApply.push({ itemId: id, guestId: targetGuestId! });
-                            dbItemsMap.set(id, targetGuestId);
-                        }
-                    }
-                }
-                
+                const updatesToApply = await resolveGuestIdsForUpdate(
+                    supabase,
+                    bookingId,
+                    dispatchData.itemUpdates,
+                    existingItemsBefore || []
+                );
                 if (updatesToApply.length > 0) {
                     for (const { itemId, guestId } of updatesToApply) {
                         await supabase.from('BookingItems').update({ guest_id: guestId }).eq('id', itemId);
@@ -848,72 +866,12 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
             
             // 🔥 ĐỒNG BỘ GUEST_ID TỪ UI GỘP DỊCH VỤ CŨ
             try {
-                const dbItemsMap = new Map(currentItems?.map(i => [i.id, i.guest_id]) || []);
-                const guestIdsDb = currentGuests?.map(g => g.id) || [];
-                
-                const updatesToApply: { itemId: string, guestId: string }[] = [];
-                
-                // Group by UI grouping
-                const groups = new Map<string, string[]>();
-                for (const update of dispatchData.itemUpdates) {
-                    const uiGroupId = update.options?.customerGroupId || update.options?.mergedIntoId;
-                    if (uiGroupId) {
-                        if (!groups.has(uiGroupId)) groups.set(uiGroupId, []);
-                        groups.get(uiGroupId)!.push(update.id);
-                    } else {
-                        // Independent item
-                        if (!groups.has(update.id)) groups.set(update.id, []);
-                        groups.get(update.id)!.push(update.id);
-                    }
-                }
-                
-                let availableGuests = [...guestIdsDb];
-                const usedGuestIds = new Set<string>();
-                
-                // 🔥 ĐÁNH DẤU CÁC GUEST_ID ĐÃ BỊ CHIẾM BỞI CÁC DỊCH VỤ KHÔNG NẰM TRONG LẦN CẬP NHẬT NÀY
-                const updatedItemIds = new Set(dispatchData.itemUpdates.map(u => u.id));
-                for (const [id, gId] of dbItemsMap.entries()) {
-                    if (gId && !updatedItemIds.has(id)) {
-                        usedGuestIds.add(gId);
-                    }
-                }
-                
-                for (const [groupId, itemIds] of groups.entries()) {
-                    // Ưu tiên kế thừa guest_id của chính các item trong nhóm
-                    let targetGuestId = itemIds.map(id => dbItemsMap.get(id)).find(id => id);
-                    
-                    if (!targetGuestId) {
-                        targetGuestId = availableGuests.find(id => !usedGuestIds.has(id));
-                        if (targetGuestId) {
-                            availableGuests = availableGuests.filter(id => id !== targetGuestId);
-                        } else {
-                            if (guestIdsDb.length === 1) {
-                                targetGuestId = guestIdsDb[0];
-                            } else {
-                                targetGuestId = crypto.randomUUID();
-                                const nextIndex = guestIdsDb.length + 1;
-                                await supabase.from('BookingGuests').insert({
-                                    id: targetGuestId,
-                                    booking_id: bookingId,
-                                    guest_index: nextIndex,
-                                    guest_label: `Khách ${nextIndex}`,
-                                    status: 'PENDING'
-                                });
-                                guestIdsDb.push(targetGuestId);
-                            }
-                        }
-                    }
-                    
-                    usedGuestIds.add(targetGuestId);
-                    
-                    for (const id of itemIds) {
-                        if (dbItemsMap.get(id) !== targetGuestId) {
-                            updatesToApply.push({ itemId: id, guestId: targetGuestId! });
-                            dbItemsMap.set(id, targetGuestId);
-                        }
-                    }
-                }
-                
+                const updatesToApply = await resolveGuestIdsForUpdate(
+                    supabase,
+                    bookingId,
+                    dispatchData.itemUpdates,
+                    currentItems || []
+                );
                 if (updatesToApply.length > 0) {
                     for (const { itemId, guestId } of updatesToApply) {
                         await supabase.from('BookingItems').update({ guest_id: guestId }).eq('id', itemId);
@@ -1297,9 +1255,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
             if (allItemsAfterPartial && allItemsAfterPartial.length > 0) {
                 const validItems = allItemsAfterPartial.filter((i: any) => {
                     const name = i.Services?.nameVN || '';
-                    return i.Services?.is_utility !== true 
-                        && i.serviceId !== 'NHS0900'
-                        && !name.toLowerCase().includes('phòng riêng')
+                    return !isUtilityService(i)
                         && !name.toLowerCase().includes('phong rieng');
                 });
                 // Tránh mảng rỗng nếu toàn bộ đơn là dịch vụ tiện ích
@@ -1689,9 +1645,7 @@ export async function updateBookingItemStatus(itemIds: string[], newStatus: stri
         if (allItems && allItems.length > 0) {
             const validItems = allItems.filter((i: any) => {
                 const name = i.Services?.nameVN || '';
-                return i.Services?.is_utility !== true 
-                    && i.serviceId !== 'NHS0900' // Legacy fallback
-                    && !name.toLowerCase().includes('phòng riêng') 
+                return !isUtilityService(i) 
                     && !name.toLowerCase().includes('phong rieng');
             });
             const finalItems = validItems.length > 0 ? validItems : allItems;
@@ -1824,7 +1778,7 @@ export async function submitCustomerRating(bookingId: string, rating: number, fe
                 const { recomputeBookingStatus } = await import('@/lib/dispatch-status');
                 const { data: refreshedItems } = await supabase.from('BookingItems').select('status, serviceId, Services!BookingItems_serviceId_fkey(nameVN, is_utility)').eq('bookingId', bookingId);
                 if (refreshedItems && refreshedItems.length > 0) {
-                    const validItems = refreshedItems.filter((i: any) => i.Services?.is_utility !== true && i.serviceId !== 'NHS0900');
+                    const validItems = refreshedItems.filter((i: any) => !isUtilityService(i));
                     const finalItems = validItems.length > 0 ? validItems : refreshedItems;
                     const bStatus = recomputeBookingStatus(finalItems.map((i: any) => i.status));
                     updatePayload.status = bStatus;
@@ -1901,7 +1855,7 @@ export async function syncOrderTimelineToDb(bookingId: string) {
         const allSegments: any[] = [];
         items.forEach(item => {
             // Bỏ qua phòng riêng
-            if ((item as any).is_utility === true || item.serviceId === 'NHS0900' || item.serviceName?.toLowerCase().includes('phòng riêng') || item.serviceName?.toLowerCase().includes('phong rieng')) return; // Legacy fallback
+            if (isUtilityService(item)) return; // Legacy fallback
             
             let segs = [];
             try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}

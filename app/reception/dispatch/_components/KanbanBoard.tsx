@@ -739,7 +739,6 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                 const lastSeg = lastSt?.segments?.[0];
                                                                 if (lastSeg) {
                                                                     const kStart = lastSeg.actualStartTime || lastSeg.startTime || displayStart;
-                                                                    // 🔥 FIX: Luôn tính dynamic từ kStart thay vì dùng endTime cũ (stale từ lúc dispatch)
                                                                     displayEnd = lastSeg.actualEndTime ? lastSeg.actualEndTime : getDynamicEndTime(kStart, Number(lastSeg.duration) || 60);
                                                                 }
                                                             }
@@ -751,7 +750,9 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                 <div className="flex flex-col min-w-0 pr-2 flex-1">
                                                                     <span className={`font-black line-clamp-2 leading-tight ${s.isUtility ? 'text-amber-600/80 italic' : 'text-gray-700'}`}>
                                                                         {s.isUtility && <span className="text-amber-500 font-bold mr-1">[Tiện ích]</span>}
-                                                                        {s.options?.displayName || s.serviceName}
+                                                                        {(!s.isUtility && s.staffList?.length === 1 && (s.options?.serviceNamesForKtvs?.[s.staffList[0].ktvId] || s.staffList[0].serviceNameForKtv)) 
+                                                                            ? (s.options?.serviceNamesForKtvs?.[s.staffList[0].ktvId] || s.staffList[0].serviceNameForKtv)
+                                                                            : (s.options?.displayName || s.serviceName)}
                                                                     </span>
                                                                     {s.mergedServiceIds && s.mergedServiceIds.length > 0 && (
                                                                         <span className="text-[9px] text-indigo-500/90 mt-0.5 leading-tight italic font-medium">

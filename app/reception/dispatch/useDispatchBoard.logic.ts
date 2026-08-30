@@ -271,7 +271,8 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                             ktvId: tCode,
                                             ktvName: parsedOptions?.external_technician_name?.[tCode] || staff?.full_name || tCode,
                                             segments: segments,
-                                            noteForKtv: bi.options?.notesForKtvs?.[tCode] || bi.options?.noteForKtv || ''
+                                            noteForKtv: bi.options?.notesForKtvs?.[tCode] || bi.options?.noteForKtv || '',
+                                            serviceNameForKtv: bi.options?.serviceNamesForKtvs?.[tCode] || ''
                                         };
                                 });
                             }
@@ -298,7 +299,8 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                         ktvId: t.employee_id,
                                         ktvName: parsedOptions?.external_technician_name?.[t.employee_id] || staff?.full_name || 'KTV',
                                         segments: segments,
-                                        noteForKtv: bi.options?.notesForKtvs?.[t.employee_id] || bi.options?.noteForKtv || ''
+                                        noteForKtv: bi.options?.notesForKtvs?.[t.employee_id] || bi.options?.noteForKtv || '',
+                                        serviceNameForKtv: bi.options?.serviceNamesForKtvs?.[t.employee_id] || ''
                                     };
                                 });
                             } else if (staffList.length === 0) {
@@ -317,7 +319,8 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                         duration: fallbackDur,
                                         endTime: dbSeg?.endTime || calcEndTime(fallbackStart, fallbackDur)
                                     }],
-                                    noteForKtv: ''
+                                    noteForKtv: '',
+                                    serviceNameForKtv: ''
                                 }];
                             }
 
