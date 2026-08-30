@@ -94,7 +94,7 @@ export const QuickDispatchTable = ({
       
       // Calculate display name and duration by including any merged services
       const mergedSvcs = services.filter(s => svc.mergedServiceIds?.includes(s.id));
-      const combinedDuration = svc.duration + mergedSvcs.reduce((acc, curr) => acc + ((isUtilityService(curr)) ? 0 : curr.duration), 0);
+      const combinedDuration = (isUtilityService(svc) ? 0 : svc.duration) + mergedSvcs.reduce((acc, curr) => acc + ((isUtilityService(curr)) ? 0 : curr.duration), 0);
       const combinedName = [`${svc.serviceName} (${svc.duration}p)`, ...mergedSvcs.map(s => (isUtilityService(s)) ? s.serviceName : `${s.serviceName} (${s.duration}p)`)].join(' + ');
 
       const validForKtvReqs = [svc, ...mergedSvcs].filter(s => {

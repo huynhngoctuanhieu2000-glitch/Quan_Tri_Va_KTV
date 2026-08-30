@@ -328,6 +328,7 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                 id: bi.id,
                                 serviceId: bi.serviceId,
                                 serviceName: bi.serviceName || bi.service_name || 'Dịch vụ',
+                                is_utility: bi.Services?.is_utility ?? false,
                                 serviceDescription: bi.serviceDescription || bi.service_description || '',
                                 duration: parsedOptions?.vipDuration || Number(bi.duration) || 0,
                                 selectedRoomId: bi.roomName || b.roomName || null,
