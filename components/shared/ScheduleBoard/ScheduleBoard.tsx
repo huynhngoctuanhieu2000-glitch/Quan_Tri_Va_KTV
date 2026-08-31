@@ -48,6 +48,7 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
   const [newPbPhone, setNewPbPhone] = React.useState('');
   const [newPbPhoneCode, setNewPbPhoneCode] = React.useState('+84');
   const [newPbEmail, setNewPbEmail] = React.useState('');
+  const [newPbMenuType, setNewPbMenuType] = React.useState('standard');
   const [newPbGuests, setNewPbGuests] = React.useState<number | ''>(1);
   const [newPbDate, setNewPbDate] = React.useState(() => {
      const today = new Date();
@@ -118,6 +119,7 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
         customer_name: newPbName,
         customer_phone: newPbPhoneCode + newPbPhone,
         customer_email: newPbEmail,
+        menu_type: newPbMenuType,
         guest_count: Number(newPbGuests) || 1,
         booking_date: newPbDate,
         booking_time: formattedTime,
@@ -128,7 +130,7 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
      setIsSubmitting(false);
      if (!error) {
        setIsAddModalOpen(false);
-       setNewPbName(''); setNewPbPhone(''); setNewPbEmail(''); setNewPbGuests(1); setNewPbNotes('');
+       setNewPbName(''); setNewPbPhone(''); setNewPbEmail(''); setNewPbMenuType('standard'); setNewPbGuests(1); setNewPbNotes('');
        fetchPreBookings();
      } else {
        console.error("Lỗi khi thêm khách hẹn:", error);
@@ -137,11 +139,12 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
 
   const handlePreBookingClick = (pb: any) => {
      const baseUrl = process.env.NEXT_PUBLIC_WEB_NOI_BO_URL || 'http://localhost:3000';
-     const url = new URL(`${baseUrl}/en/new-user/standard/menu`);
+     const url = new URL(`${baseUrl}/en/new-user/${pb.menu_type || 'standard'}/menu`);
      url.searchParams.set('preBookingId', pb.id);
      if (pb.customer_name) url.searchParams.set('name', pb.customer_name);
      if (pb.customer_phone) url.searchParams.set('phone', pb.customer_phone);
      if (pb.customer_email) url.searchParams.set('email', pb.customer_email);
+     if (pb.menu_type) url.searchParams.set('menuType', pb.menu_type);
      if (pb.guest_count) url.searchParams.set('guests', pb.guest_count.toString());
      if (pb.notes) url.searchParams.set('notes', pb.notes);
      window.open(url.toString(), '_blank');
@@ -566,18 +569,18 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
                      </div>
                      <div className="flex gap-2">
                         <select value={newPbPhoneCode} onChange={e => setNewPbPhoneCode(e.target.value)} className="p-3 w-28 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-emerald-500 font-bold text-gray-700">
-                           <option value="+84">???? +84</option>
-                           <option value="+82">???? +82</option>
-                           <option value="+81">???? +81</option>
-                           <option value="+86">???? +86</option>
-                           <option value="+886">???? +886</option>
-                           <option value="+1">???? +1</option>
+                           <option value="+84">🇻🇳 +84</option>
+                           <option value="+82">🇰🇷 +82</option>
+                           <option value="+81">🇯🇵 +81</option>
+                           <option value="+86">🇨🇳 +86</option>
+                           <option value="+886">🇹🇼 +886</option>
+                           <option value="+1">🇺🇸 +1</option>
                         </select>
                         <input type="text" value={newPbPhone} onChange={e => setNewPbPhone(e.target.value)} className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-emerald-500 font-medium" placeholder="09..." />
                      </div>
                   </div>
                   <div>
-                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (Tu? ch?n)</label>
+                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (T�y ch?n)</label>
                      <input type="email" value={newPbEmail} onChange={e => setNewPbEmail(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-emerald-500 font-medium" placeholder="example@email.com" />
                   </div>
                   <div className="flex gap-3">

@@ -727,16 +727,16 @@
 | synced_at | TIMESTAMPTZ | |
 
 ### 12. PreBookings 
-**Nhi?m v?**: Luu danh sách khách h?n tru?c (Khách liên h? tru?c) ch? du?c di?u ph?i/t?o don chính th?c.
+**Nhi?m v?**: Luu danh sï¿½ch khï¿½ch h?n tru?c (Khï¿½ch liï¿½n h? tru?c) ch? du?c di?u ph?i/t?o don chï¿½nh th?c.
 
-| C?t | Ki?u | Mô t? ch?c nang |
+| C?t | Ki?u | Mï¿½ t? ch?c nang |
 |-----|------|-----------------|
-| `id` | uuid PK | Mã khách h?n |
-| `customer_name` | text | H? tên khách hàng |
-| `customer_phone` | text | S? di?n tho?i khách hàng |
-| `guest_count` | int | S? lu?ng khách |
-| `booking_date` | date | Ngày h?n |
+| `id` | uuid PK | Mï¿½ khï¿½ch h?n |
+| `customer_name` | text | H? tï¿½n khï¿½ch hï¿½ng |
+| `customer_phone` | text | S? di?n tho?i khï¿½ch hï¿½ng |
+| `guest_count` | int | S? lu?ng khï¿½ch |
+| `booking_date` | date | Ngï¿½y h?n |
 | `booking_time` | time | Gi? h?n |
-| `notes` | text | Ghi chú thêm |
-| `status` | text | Tr?ng thái ('PENDING', 'CONVERTED', 'CANCELLED') |
+| `notes` | text | Ghi chï¿½ thï¿½m |
+| `status` | text | Tr?ng thï¿½i ('PENDING', 'CONVERTED', 'CANCELLED') |
 | `created_at` | timestamp | Th?i di?m t?o |
