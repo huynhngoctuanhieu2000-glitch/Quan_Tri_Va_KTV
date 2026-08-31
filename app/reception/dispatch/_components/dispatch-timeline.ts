@@ -276,9 +276,10 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                     if (validKtvTimes.length > 1) {
                         // Split into multiple virtual service blocks
                         const sortedTimes = Array.from(staffByTime.keys()).sort();
-                        sortedTimes.forEach((time, index) => {
+                        const firstValidTime = sortedTimes.find(time => staffByTime.get(time)!.some(st => st.ktvId)) || sortedTimes[0];
+                        sortedTimes.forEach(time => {
                             const staffs = staffByTime.get(time)!;
-                            const isFirst = index === 0;
+                            const isFirst = time === firstValidTime;
                             splitGroupServices.push({ 
                                 ...svc, 
                                 staffList: staffs, 
