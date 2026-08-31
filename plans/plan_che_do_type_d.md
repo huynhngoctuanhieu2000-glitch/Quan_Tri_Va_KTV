@@ -1,11 +1,12 @@
 # 🆕 Chế Độ KTV TYPE_D — Bản Kế Hoạch FINAL
 
-> **Trạng thái**: Kiến trúc đã chốt ✅ — **Còn 15 câu hỏi nghiệp vụ chưa chốt** (xem §14) ⚠️
-> **Cập nhật**: 2026-08-31 (rà soát đối chiếu codebase)
-> **Lịch sử**: 2026-08-27 00:07 (bản gốc) → 2026-08-27 23:29 (chốt công thức giá tại `bao_cao_bang_gia_type_d.md`) → 2026-08-31 (rà soát kỹ thuật lần 1) → 2026-08-31 (rà soát lần 2: DB production + tên feature flag) → 2026-08-31 (rà soát lần 3: tài khoản test + chu kỳ TurnQueue)
+> **Trạng thái**: ✅ Kiến trúc + Nghiệp vụ đã chốt — **SẴN SÀNG CODE**
+> **Cập nhật**: 2026-08-31 13:17 (đồng bộ lần cuối — sửa xung đột ghi đè)
+> **Lịch sử**: 2026-08-27 (bản gốc) → 2026-08-27 23:29 (báo cáo giá) → 2026-08-31 (rà soát kỹ thuật 4 lần) → 2026-08-31 10:07 (chốt nghiệp vụ FINAL) → 2026-08-31 13:17 (đồng bộ xung đột)
 
 > [!IMPORTANT]
-> **Đọc §14 trước khi bắt đầu code.** Phần lớn plan đã sẵn sàng triển khai, nhưng có 15 điểm nghiệp vụ chưa được định nghĩa — trong đó **câu 1 (thang 5★) sẽ gây bug ngay tua đầu tiên** nếu bỏ qua.
+> **Công thức giá ĐÃ CHỐT Cách B**: `phút × 1,667` (PT) / `phút × 3,000` (VIP), **không làm tròn**.
+> `phút = min(thời_gian_thực, thời_gian_gán)`. Thang 4★ (không có 5★). Rating theo booking-level.
 >
 > Các mục có gắn nhãn **[BỔ SUNG]** trong tài liệu là phát hiện từ đợt rà soát 31/08, đã đối chiếu với code thật.
 
@@ -18,8 +19,8 @@
 | **Tên hiển thị** | Cơ bản / Hợp tác / Nhập tay | **D** |
 | **Xếp thứ tự tua** | Theo `turns_completed` (ít tua → ưu tiên) | Theo **tổng thời gian làm tua** (**nhiều giờ → ưu tiên gán trước**). Bận → gán người kế |
 | **Reset sổ tua** | Không rõ / thủ công | **Reset cuối mỗi tháng** về 0 giờ |
-| **Khung giá tua** | Milestones riêng per-type | **Hệ số phẳng theo giờ**: VIP = `(phút/60) × 180.000đ`, PT = `(phút/60) × 100.000đ`. **Floor hàng trăm** |
-| **Khấu trừ theo sao** | Không có (chỉ trừ bonus) | **5★=100%, 4★=100%, 3★=75%, 2★=50%, 1★=25%** tiền tua |
+| **Khung giá tua** | Milestones riêng per-type | **Hệ số cố định per-minute**: VIP = `phút × 3,000đ`, PT = `phút × 1,667đ`. **Không làm tròn.** `phút = min(thực, gán)` |
+| **Khấu trừ theo sao** | Không có (chỉ trừ bonus) | **4★=100%, 3★=75%, 2★=50%, 1★=25%** tiền tua. TYPE_D dùng thang 4★ (TYPE_C dùng 5★) |
 | **Bonus** | Shift-based, gộp chung service | **TÁCH RIÊNG**: 20đ/tua flat nếu 4★. Chia đôi nếu 2 KTV cùng TYPE_D. 0đ nếu làm chung KTV khác chế độ |
 | **Kỷ luật** | Phạt tiền + Điểm chuyên cần | **Trừ giờ tích lũy** (không phạt tiền) |
 | **Giáng chức** | Tự động B→A khi điểm < 80 | **KHÔNG tự động**. Chỉ Admin thủ công + chốt sổ |
@@ -30,6 +31,8 @@
 | **Phí bảo trì** | 50k/tháng | **CÓ** — 50k/tháng (cài đặt được) |
 | **Quỹ nội bộ** | Không | **CÓ** — 250k/tháng, có toggle bật/tắt (cài đặt được) |
 | **Rút tiền** | Bất kỳ lúc nào | Phải đăng ký từ sáng |
+
+> ⚠️ **[BỔ SUNG] Hai ô "cài đặt được" ở bảng trên cần đọc kèm §4.** Phí giặt đồ và phí bảo trì hiện **không** cấu hình được riêng theo loại KTV — code đọc key global bằng `.eq()` cứng. TYPE_D sẽ dùng chung mức 20k/50k với A/B/C, trừ khi chấp nhận sửa code dùng chung (xem §14 câu 14).
 
 ---
 
@@ -76,33 +79,46 @@ Mỗi bút toán ghi nhận `work_type_snapshot` = chế độ KTV **tại thờ
 
 - Không dùng `KTVDisciplinePoints` (điểm chuyên cần)
 - Chỉ Admin thủ công chuyển chế độ + hệ thống chốt sổ
-- Cơ chế phạt duy nhất: Khóa tài khoản khi nghỉ không đăng ký OFF → Phí kích hoạt lại (cài đặt được)
+- Cơ chế phạt nặng nhất: Khóa tài khoản khi nghỉ không đăng ký OFF → Phí kích hoạt lại (cài đặt được)
 
-### 2.4 Bảng `TurnQueue` — Sort DESC
+> ⚠️ **[BỔ SUNG] Mâu thuẫn cần làm rõ.** Bản gốc ghi đây là *"cơ chế phạt **duy nhất**"*, nhưng §5.3 lại liệt kê **4 loại phạt trừ giờ**. Hai chỗ này mâu thuẫn nhau.
+>
+> Thêm nữa, riêng lỗi *"nghỉ không đăng ký OFF"* hiện bị **ba tầng phạt cùng lúc**: (1) trừ 10 giờ tích lũy [§5.3], (2) khóa tài khoản, (3) phí kích hoạt lại 1.000.000đ. Trong đó tầng (1) còn kéo dài ảnh hưởng suốt phần còn lại của tháng qua thứ tự xếp tua.
+>
+> **Cần chốt**: §2.3 và §5.3 đang nói về **cùng một lỗi hay hai lỗi khác nhau?** Đọc plan hiện tại không phân biệt được. (Xem §14 câu 16)
 
-- Thêm cột `accumulated_service_hours` (numeric, default 0)
-- TYPE_D sort **DESC** — nhiều giờ nhất → auto gán trước
+### 2.4 Bảng `TurnQueue` — Sort DESC (ĐÃ SỬA 31/08)
+
+> [!IMPORTANT]
+> **KHÔNG thêm cột `accumulated_service_hours` vào TurnQueue.** (Bỏ PHASE B migration)
+>
+> Lý do: TurnQueue có `UNIQUE(employee_id, date)` — mỗi sáng tạo dòng mới với DEFAULT 0.
+> Nếu lưu giờ tích lũy trên đây, mỗi sáng KTV TYPE_D đều reset về 0, sort DESC vô nghĩa.
+> Phải sync ở 3 nơi (attendance, booking done, sửa đơn cũ) — thiếu 1 chỗ = sai thứ tự.
+
+**Giải pháp đã chốt: JOIN lúc đọc**
+
+```
+getTurnOrder() cho TYPE_D:
+  SELECT tq.*, COALESCE(SUM(shl.hours_earned - shl.hours_penalty), 0) AS monthly_hours
+  FROM "TurnQueue" tq
+  LEFT JOIN "KTVServiceHoursLedger" shl
+    ON tq.employee_id = shl.staff_id
+    AND EXTRACT(MONTH FROM shl.date) = EXTRACT(MONTH FROM CURRENT_DATE)
+    AND EXTRACT(YEAR FROM shl.date) = EXTRACT(YEAR FROM CURRENT_DATE)
+  JOIN "Staff" s ON tq.employee_id = s.id
+  WHERE tq.date = CURRENT_DATE
+    AND s.work_type = 'TYPE_D'
+  GROUP BY tq.id
+  ORDER BY monthly_hours DESC, tq.check_in_order ASC
+```
+
+- **Luôn đúng real-time** — không cần sync
+- **Miễn nhiễm R3** (sửa đơn cũ → ledger tự cập nhật → sort tự đúng)
+- **Cost**: 1 aggregate query / ~145 rows — không đáng kể
+- TYPE_A/B/C vẫn sort theo `turns_completed` ASC như cũ (không ảnh hưởng)
 - Nếu KTV đang bận (`status = 'working'`) → gán người kế tiếp
 - Nếu giờ bằng nhau → xét `check_in_order`
-- TYPE_A/B/C vẫn sort theo `turns_completed` ASC như cũ
-
-> [!CAUTION]
-> **[BỔ SUNG] Xung đột chu kỳ: `TurnQueue` là bảng THEO NGÀY, nhưng giờ tích lũy là số liệu THEO THÁNG.**
->
-> `TurnQueue` có `UNIQUE(employee_id, date)` — **mỗi KTV một dòng mới mỗi ngày**. Dòng này được tạo lúc duyệt điểm danh ([attendance/confirm/route.ts:103](../app/api/ktv/attendance/confirm/route.ts#L103)) với `turns_completed: 0` và **không truyền `accumulated_service_hours`** → cột này nhận `DEFAULT 0`.
->
-> **Hệ quả**: mỗi sáng, **toàn bộ KTV TYPE_D đều bắt đầu lại ở 0 giờ**. Sort DESC lúc đó hoàn toàn vô nghĩa — thứ tự rơi về `check_in_order`. Giờ tích lũy của cả tháng chỉ xuất hiện lại **sau khi** `syncServiceHoursForDate()` chạy, mà plan gốc **không nói hàm này được gọi lúc nào**.
->
-> **Hai hướng xử lý:**
->
-> **(a) Giữ cột trên `TurnQueue`** — phải nạp lại giá trị ở đúng 3 thời điểm, thiếu một chỗ là sai thứ tự:
-> 1. Ngay khi tạo dòng TurnQueue lúc duyệt điểm danh (nếu không, KTV xếp bét cả buổi sáng)
-> 2. Sau mỗi lần một tua hoàn tất
-> 3. Sau khi Admin sửa/huỷ đơn cũ (xem R3)
->
-> **(b) KHÔNG lưu trên `TurnQueue` — khuyến nghị.** Để `getTurnOrder()` JOIN sang `KTVServiceHoursLedger` (hoặc `KTVMonthlyServiceHours`) và tính tổng tại thời điểm đọc. Số liệu **luôn đúng, không bao giờ lệch**, không cần đồng bộ ở 3 nơi, và tự khắc miễn nhiễm với R3. Đánh đổi: mỗi lần đọc bảng tua tốn thêm một phép aggregate — không đáng kể với quy mô ~145 nhân viên.
->
-> Nếu chọn (b) thì **bỏ luôn PHASE B của migration** (không cần thêm cột vào `TurnQueue`).
 
 ---
 
@@ -138,10 +154,9 @@ ALTER TABLE "WalletAdjustments" ADD COLUMN IF NOT EXISTS "work_type_snapshot" TE
 ALTER TABLE "KTVWithdrawals"    ADD COLUMN IF NOT EXISTS "work_type_snapshot" TEXT DEFAULT NULL;
 
 -- ================================================
--- PHASE B: TURNQUEUE — Cột giờ tích lũy
+-- PHASE B: ĐÃ BỎ — không thêm cột vào TurnQueue
+-- Lý do: dùng JOIN sang KTVServiceHoursLedger lúc đọc (xem §2.4)
 -- ================================================
-ALTER TABLE "TurnQueue" 
-  ADD COLUMN IF NOT EXISTS "accumulated_service_hours" NUMERIC DEFAULT 0;
 
 -- ================================================
 -- PHASE C: RATING DEDUCTION
@@ -260,14 +275,13 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
 +    ORDER_REJECT_MULTIPLIER: 3
 +} as const;
 
-+// TYPE_D Commission: Rating-based deduction (cài đặt được trên Admin)
++// TYPE_D Commission: Rating-based deduction — THANG 4★ (cài đặt được trên Admin)
 +export const TYPE_D_RATING_DEDUCTION = {
-+    5: 0,     // 5★: 100%  ⚠️ BẮT BUỘC CÓ — xem ghi chú bên dưới
 +    4: 0,     // 4★: 100%
 +    3: 0.25,  // 3★: 75%
 +    2: 0.50,  // 2★: 50%
 +    1: 0.75,  // 1★: 25%
-+    0: 0      // Chưa đánh giá: tạm tính 100% (xem R2)
++    0: 0      // Chưa đánh giá: tạm tính 100%
 +} as const;
 
 +// TYPE_D Bonus: Flat points (cài đặt được trên Admin)
@@ -285,13 +299,13 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
 
 | Key | Default | Mô tả | Cài đặt được |
 |---|---|---|---|
-| `ktv_type_d_vip_rate_per_hour` | `180000` | Rate VIP (đ/**giờ**) | ✅ |
-| `ktv_type_d_pt_rate_per_hour` | `100000` | Rate Phổ thông (đ/**giờ**) | ✅ |
-| `ktv_deposit_amount_TYPE_D` | `500000` | Tiền cọc ví | ✅ |
+| `ktv_type_d_vip_rate_per_min` | `3000` | Rate VIP (đ/phút) | ✅ |
+| `ktv_type_d_pt_rate_per_min` | `1667` | Rate Phổ thông (đ/phút) | ✅ |
+| `ktv_deposit_amount_TYPE_D` | `1000000` | Tiền cọc ví (= bằng A/B) | ✅ |
 | `enable_ktv_bonus_TYPE_D` | `true` | Bật/tắt bonus | ✅ Toggle |
-| `ktv_type_d_bonus_points` | `20` | Điểm bonus mỗi tua rating **>= 4★** (gồm 5★) | ✅ |
-| `ktv_type_d_rating_deduction` | `{5:0, 4:0, 3:0.25, 2:0.5, 1:0.75, 0:0}` | Bảng khấu trừ theo sao (**phải đủ 0–5**) | ✅ |
-| `ktv_bonus_rate_TYPE_D` | `1000` | Quy đổi 1 điểm bonus → VNĐ. **Đã có sẵn convention**: DB hiện có `ktv_bonus_rate` = 1000 và `ktv_bonus_rate_TYPE_A/B/C` = 1000 → chỉ cần thêm bản `_TYPE_D` | ✅ |
+| `ktv_type_d_bonus_points` | `20` | Điểm bonus mỗi tua rating **≥ 4★** | ✅ |
+| `ktv_type_d_rating_deduction` | `{4:0, 3:0.25, 2:0.5, 1:0.75, 0:0}` | Bảng khấu trừ (thang 4★) | ✅ |
+| `ktv_bonus_rate_TYPE_D` | `1000` | Quy đổi 1 điểm bonus → VNĐ. Khớp convention hiện có | ✅ |
 | `ktv_type_d_discipline_rules` | `{ABSENT_NO_NOTICE:10,...}` | Mức trừ giờ kỷ luật | ✅ |
 | `ktv_type_d_internal_fund` | `250000` | Quỹ nội bộ/tháng | ✅ |
 | `ktv_type_d_internal_fund_enabled` | `true` | Toggle quỹ nội bộ | ✅ Toggle |
@@ -311,13 +325,13 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
 >
 > **Hệ quả**: nếu chỉ insert key `laundry_fee_TYPE_D` / `maintenance_fee_TYPE_D` như bản gốc, chúng sẽ nằm chết trong DB và **không đoạn code nào đọc tới**. TYPE_D sẽ dùng chung mức phí global với A/B/C.
 >
-> **Chọn 1 trong 2 hướng:**
-> - **(a) Đơn giản — khuyến nghị**: TYPE_D dùng chung mức phí global (20k/50k đúng như plan mong muốn), chỉ bật/tắt qua feature flag. **Không cần thêm key, không cần sửa code.**
-> - **(b) Nếu muốn TYPE_D có mức phí RIÊNG**: phải sửa 2 chỗ đọc `.eq()` cứng thành resolve theo `typeSuffix` giống `getCommissionConfig()`. Đây là **sửa code dùng chung cho cả A/B/C** → rủi ro hồi quy, phải test lại phí của các loại cũ.
+> **Chọn 1 trong 2 hướng:** ✅ **ĐÃ CHỐT: Hướng (b) — RIÊNG**
+> - ~~**(a) Đơn giản**: TYPE_D dùng chung mức phí global~~
+> - **(b) TYPE_D có mức phí RIÊNG** ✅: phải sửa 2 chỗ đọc `.eq()` cứng thành resolve theo `typeSuffix` giống `getCommissionConfig()`. Đây là **sửa code dùng chung cho cả A/B/C** → rủi ro hồi quy, phải test lại phí của các loại cũ.
 >
 > Ghi chú thêm: DB có sẵn `enable_maintenance_fee_TYPE_A/B/C` và `maintenance_fee_deduct_deposit_TYPE_A`, nhưng `KtvLedgerSyncService` chỉ đọc bản **global**. Đây là điểm không nhất quán **có sẵn từ trước**, không phải do TYPE_D — nhưng nên biết để không đi theo vết cũ.
 
-> **Đối chiếu giá trị DB production (31/08)**: `ktv_deposit_amount` = **1.000.000** (TYPE_A/B = 1tr, TYPE_C = 0). Plan đặt TYPE_D = 500.000 → **thấp hơn một nửa so với A/B**. Cần xác nhận đây là chủ ý, không phải nhầm lẫn.
+> **Đối chiếu giá trị DB production (31/08)**: `ktv_deposit_amount` = **1.000.000** (TYPE_A/B = 1tr, TYPE_C = 0). ✅ **ĐÃ CHỐT**: TYPE_D = **1.000.000** (bằng A/B).
 
 > **[NEW] Bước seed config còn thiếu.** Plan mới chỉ *liệt kê* key, chưa có bước ghi giá trị mặc định xuống `SystemConfigs`. Nếu không seed, mọi hàm `getConfig()` sẽ rơi về fallback và Admin UI hiện ô trống. Cần thêm script `scripts/insert_type_d_configs.js` (theo mẫu `scripts/insert_maintenance_fee_configs.js` đã có).
 
@@ -327,56 +341,59 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
 
 ### 5.1 [NEW] `KtvTypeDCommissionService.ts` — Tiền tua
 
-> **Hệ số phẳng theo GIỜ**, KHÔNG dùng milestones. Có khấu trừ theo đánh giá sao, floor đến hàng trăm.
->
-> ⚠️ **Bản này đã sync theo [`bao_cao_bang_gia_type_d.md`](./bao_cao_bang_gia_type_d.md) (27/08 23:29 — chốt sau plan gốc).** Phiên bản cũ của mục này ghi `phút × 1.667đ, không làm tròn` là **SAI** — cho ra 60p PT 3★ = 75.015đ thay vì 75.000đ.
+> **Hệ số cố định per-minute**, KHÔNG dùng milestones. Có khấu trừ theo đánh giá sao.
+> **KHÔNG làm tròn.** Thang **4★** (không có 5★).
 
 ```
-Công thức chốt (FINAL — khớp báo cáo giá):
+Công thức chốt (FINAL 31/08 — Cách B):
 ┌──────────────────────────────────────────────────────────────┐
-│ VIP_RATE_PER_HOUR = 180,000 đ/giờ  (cài đặt được)           │
-│ PT_RATE_PER_HOUR  = 100,000 đ/giờ  (cài đặt được)           │
+│ VIP_RATE_PER_MIN  = 3,000 đ/phút  (cài đặt được)            │
+│ PT_RATE_PER_MIN   = 1,667 đ/phút  (cài đặt được)            │
 │                                                               │
-│ giá_gốc    = (phút / 60) × RATE_PER_HOUR                     │
-│ giá_sau_sao = giá_gốc × (1 - deduction[rating])              │
-│ finalPay    = Math.floor(giá_sau_sao / 100) × 100  ← floor   │
+│ phút = min(thời_gian_thực, thời_gian_gán)                    │
+│   → VD: gán 60p, xong lúc 50p → tính 50p                    │
+│   → VD: gán 60p, xong lúc 65p → tính 60p (cap tại gán)      │
 │                                                               │
-│ VD: 90p VIP 4★ = 90/60 × 180,000       = 270,000đ           │
-│ VD: 60p PT  3★ = 60/60 × 100,000 × 0.75 =  75,000đ           │
-│ VD: 40p PT  4★ = 40/60 × 100,000 = 66,666.67 → 66,600đ       │
+│ basePay   = phút × RATE_PER_MIN   (integer math)             │
+│ finalPay  = basePay × (1 - deduction[rating])                │
+│ // KHÔNG làm tròn                                             │
+│                                                               │
+│ VD: 90p VIP 4★ = 90 × 3,000             = 270,000đ          │
+│ VD: 60p PT  3★ = 60 × 1,667 × 0.75      = 75,015đ           │
+│ VD: 50p PT  4★ = 50 × 1,667             = 83,350đ (ra sớm)  │
 └──────────────────────────────────────────────────────────────┘
 ```
-
-**Vì sao floor hàng trăm, không phải round?** Rate VIP 180k/h chia hết cho mọi mốc phút thông dụng nên không bao giờ lẻ. Rate PT 100k/h lẻ ở 3 mốc (40p, 70p, 100p) — floor cắt tối đa **67đ**, đổi lại KTV không bao giờ thấy số lẻ hàng chục trong ví.
 
 ```
 Flow tính tiền tua TYPE_D:
 1. Đọc rate từ SystemConfigs:
-   - `ktv_type_d_vip_rate_per_hour` (default 180000)
-   - `ktv_type_d_pt_rate_per_hour`  (default 100000)
+   - `ktv_type_d_vip_rate_per_min` (default 3000)
+   - `ktv_type_d_pt_rate_per_min` (default 1667)
 2. Xác định service type:
-   - VIP (NHP/NHT): dùng VIP_RATE_PER_HOUR
-   - Phổ thông (NHS): dùng PT_RATE_PER_HOUR
-3. giá_gốc = (phút / 60) × rate
-4. Lấy rating KTV cho item này (xem quy tắc phân giải bên dưới)
-5. finalPay = Math.floor(giá_gốc × (1 - deduction[rating]) / 100) × 100
+   - VIP (NHP/NHT): dùng VIP_RATE_PER_MIN
+   - Phổ thông (NHS): dùng PT_RATE_PER_MIN
+3. phút = min(thời_gian_thực_làm, thời_gian_dịch_vụ_gán)
+4. basePay = phút × rate (integer math, không chia 60)
+5. Lấy rating THEO KHÁCH (booking-level):
+   - 1 KTV làm nhiều DV cho 1 khách → dùng chung rating của khách
+   - 1 KTV làm 2+ đơn con trong 1 đơn cha → mỗi đơn con tính riêng
+6. finalPay = basePay × (1 - deduction[rating])
 ```
 
-**Quy tắc phân giải rating — tái dùng logic 3 tầng đã có** (`calculateBookingBonus`, [KtvCommissionService.ts:349](../lib/services/KtvCommissionService.ts#L349)):
-
+**Quy tắc rating TYPE_D (KHÁC A/B/C):**
 ```
-Ưu tiên 1: item.ktvRatings[techCode]   (sao chấm riêng cho KTV này)
-Ưu tiên 2: item.itemRating              (sao của item)
-Ưu tiên 3: booking.rating               (sao của cả đơn)
-Không có  : 0 → tạm tính 100% (xem R2)
+TYPE_D: Rating tính theo KHÁCH (booking-level), không phải per-item.
+1 KTV × 1 khách × nhiều DV → tính 1 lần rating = rating booking
+1 KTV × 2+ đơn con trong đơn cha → mỗi đơn con tính riêng
 ```
 
-> ⚠️ **Khác biệt so với bonus A/B/C**: hàm bonus cũ lấy `maxKtvRating` — **sao CAO NHẤT** trong các item của KTV. TYPE_D **không được** dùng max, vì đây là khấu trừ tiền chứ không phải điều kiện nhận thưởng: KTV làm 2 item (4★ và 1★) mà lấy max thì được hưởng 100% cả hai. → **Khấu trừ tính riêng cho từng `BookingItem`.**
+> ⚠️ TYPE_A/B/C dùng per-item rating (`ktvRatings[techCode]`).
+> TYPE_D dùng **booking-level rating** → đơn giản hơn, phù hợp "1 khách = 1 đánh giá".
 
 **Methods:**
-- `getConfig(supabase)`: Đọc VIP rate, PT rate, rating deduction table từ SystemConfigs
-- `calcCommission(durationMins, serviceId, ktvRating, config)`: Tính tiền tua sau khấu trừ
-- `calcItemCommission(item, techCode, config)`: Tính cho 1 BookingItem cụ thể
+- `getConfig(supabase)`: Đọc VIP rate/min, PT rate/min, rating deduction table từ SystemConfigs
+- `calcCommission(actualMins, assignedMins, serviceId, bookingRating, config)`: Tính tiền tua
+- `calcBookingCommission(booking, techCode, config)`: Tính cho 1 Booking (gộp tất cả items)
 
 ---
 
@@ -436,21 +453,20 @@ Bảng phạt TYPE_D (cài đặt được trên Admin):
 ### 5.4 [NEW] `KtvTypeDTurnService.ts` — Xếp tua theo giờ
 
 ```
-Thuật toán ưu tiên TYPE_D:
+Thuật toán ưu tiên TYPE_D (đã đồng bộ với quyết định JOIN ở §2.4):
 1. Lấy tất cả KTV TYPE_D có status = 'waiting' trong TurnQueue
-2. Sort theo accumulated_service_hours DESC
-   (nhiều giờ nhất → đứng đầu → auto gán trước)
+2. Sort theo monthly_hours DESC
+   — giá trị này KHÔNG lưu sẵn, mà tính bằng JOIN sang KTVServiceHoursLedger
+     và SUM(hours_earned - hours_penalty) của tháng hiện tại (xem SQL §2.4)
 3. Nếu KTV #1 đang bận (working) → gán KTV #2
 4. Tie-breaker: check_in_order (ai điểm danh trước)
 ```
 
 **Methods:**
-- `syncServiceHoursForDate(date)`: Quét BookingItems tháng hiện tại → cập nhật `TurnQueue.accumulated_service_hours`
-- `getTurnOrder(supabase, date)`: Trả về danh sách KTV TYPE_D đã sort
+- `getTurnOrder(supabase, date)`: Trả về danh sách KTV TYPE_D đã sort (JOIN + aggregate lúc đọc)
+- `getMonthlyHours(supabase, staffId)`: Tổng giờ tháng hiện tại của 1 KTV (dùng cho app KTV)
 
-> ⚠️ **Chỉ cần 2 method này nếu chọn hướng (a) ở §2.4.** Nếu chọn hướng **(b) — khuyến nghị**, bỏ `syncServiceHoursForDate()` và để `getTurnOrder()` tự JOIN + aggregate từ `KTVServiceHoursLedger` tại thời điểm đọc.
->
-> **Bắt buộc phải ghi rõ thời điểm gọi.** Bản gốc định nghĩa hàm sync nhưng không nói được gọi ở đâu — đây chính là nguyên nhân của lỗ hổng mô tả ở §2.4.
+> ✅ **`syncServiceHoursForDate()` ĐÃ BỎ.** Theo quyết định §2.4, không còn cột nào cần đồng bộ nên không cần hàm sync, cũng không cần xác định "gọi lúc nào". Ghi giờ vào `KTVServiceHoursLedger` ngay khi tua hoàn tất là đủ.
 
 ---
 
@@ -463,7 +479,7 @@ Thuật toán ưu tiên TYPE_D:
 | `POST /api/ktv/attendance` | CHECK_IN: **CÓ** trừ phí giặt đồ. Nghỉ ĐX: gọi `KtvTypeDDisciplineService.deductHours()` thay vì phạt tiền |
 | `GET /api/ktv/wallet/balance` | Branch: Gọi `KtvTypeDCommissionService`, filter `work_type_snapshot = 'TYPE_D'`, include rating deduction |
 | `GET /api/ktv/wallet/bonus/balance` | Branch: Gọi `KtvTypeDBonusService`, filter `work_type_snapshot = 'TYPE_D'` |
-| `GET /api/turns` | Branch: TYPE_D sort `accumulated_service_hours` DESC |
+| `GET /api/turns` | Branch: TYPE_D sort **`monthly_hours` DESC** — giá trị tính bằng JOIN sang `KTVServiceHoursLedger` lúc đọc (§2.4), **không** đọc cột trên TurnQueue |
 | `POST /api/finance/adjustment` | Hỗ trợ `wallet_type: 'HOURS'` để admin điều chỉnh giờ tích lũy. Luôn stamp `work_type_snapshot` |
 | `GET /api/finance/ktv-summary` | Thêm cột: giờ tích lũy, rating deduction, quỹ nội bộ cho TYPE_D |
 
@@ -509,7 +525,7 @@ Thuật toán ưu tiên TYPE_D:
 | Cron | Thay đổi |
 |---|---|
 | `sync-daily-ledger` (hàng đêm) | TYPE_D: Ghi `rating_deduction`, `work_type_snapshot = 'TYPE_D'`. Trừ quỹ nội bộ nếu toggle = ON. Trừ phí bảo trì cuối tháng |
-| **[NEW]** `reset-type-d-hours` (00:00 ngày 1 hàng tháng) | Chốt sổ → `KTVMonthlyServiceHours`, Reset `accumulated_service_hours` = 0 |
+| **[NEW]** `reset-type-d-hours` (00:00 ngày 1 hàng tháng) | **CHỈ chốt sổ** → `KTVMonthlyServiceHours`. ~~Reset `accumulated_service_hours` = 0~~ — **không còn cần**: query §2.4 đã lọc theo tháng hiện tại nên sang tháng mới tổng tự về 0 |
 
 ### ⚠️ [BỔ SUNG] Đăng ký cron trong `vercel.json`
 
@@ -598,7 +614,7 @@ if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}
 - `simulate_type_d_discipline.mjs`: Test trừ giờ (4 loại vi phạm)
 - `simulate_type_d_turn_order.mjs`: Test sort DESC, busy fallback, tie-breaker
 
-### Manual Verification (Dùng tài khoản T001-T011)
+### Manual Verification (Dùng 11 tài khoản test T001–T079)
 1. Admin tạo KTV TYPE_D → Kiểm tra badge & sổ tua
 2. Dispatch đơn VIP cho TYPE_D → Tiền tua theo hệ số 180k/giờ + khấu trừ sao + floor 100
 3. Đánh giá 3★ → Trừ 25% tiền tua
@@ -685,11 +701,11 @@ Script `scripts/cleanup_type_d_test_accounts.js`:
 
 #### R1: Dispatch Board lẫn TYPE_D với TYPE_A/B/C
 
-**Vấn đề**: `TurnQueue` chứa MỌI loại KTV. Nếu không filter đúng, dispatch sẽ sort lẫn (TYPE_A theo `turns_completed` ASC, TYPE_D theo `accumulated_service_hours` DESC) → gán sai người.
+**Vấn đề**: `TurnQueue` chứa MỌI loại KTV. Nếu không filter đúng, dispatch sẽ sort lẫn (TYPE_A theo `turns_completed` ASC, TYPE_D theo `monthly_hours` DESC) → gán sai người.
 
 **Giải pháp**: Dispatch Board phải JOIN `Staff.work_type` và **tách 2 danh sách riêng biệt**:
 - List A/B/C: Sort `turns_completed` ASC (logic cũ)
-- List D: Sort `accumulated_service_hours` DESC (logic mới)
+- List D: Sort `monthly_hours` DESC (tính bằng JOIN lúc đọc — xem §2.4)
 
 Lễ tân nhìn 2 tab riêng hoặc 2 section riêng trên cùng board.
 
@@ -755,18 +771,17 @@ Lễ tân nhìn 2 tab riêng hoặc 2 section riêng trên cùng board.
 
 ### 🟢 RỦI RO THẤP
 
-#### R7: Reset giờ cuối tháng bị lỡ (Cron fail)
+#### ~~R7: Reset giờ cuối tháng bị lỡ (Cron fail)~~ — ĐÃ TRIỆT TIÊU ✅
 
-**Vấn đề**: Nếu cron `reset-type-d-hours` fail vào ngày 1 → KTV mang giờ tháng cũ sang tháng mới → ưu tiên sai.
+**Rủi ro này không còn tồn tại** sau quyết định JOIN lúc đọc (§2.4).
 
-**Giải pháp**:
-- Cron retry 3 lần nếu fail
-- API manual trigger cho Admin: "Reset giờ tích lũy TYPE_D" (nút trên Admin tab D)
-- Cron ghi log chi tiết → notification Admin nếu fail
+Lý do: query xếp tua lọc `EXTRACT(MONTH FROM shl.date) = EXTRACT(MONTH FROM CURRENT_DATE)`, nên **sang tháng mới tổng giờ tự động về 0** — không có thao tác reset nào để mà fail.
+
+Cron `reset-type-d-hours` giờ chỉ còn nhiệm vụ **chốt sổ lưu trữ** vào `KTVMonthlyServiceHours`. Nếu nó fail thì chỉ thiếu dữ liệu báo cáo lịch sử, **không ảnh hưởng thứ tự xếp tua**. Vẫn nên giữ log và nút chạy tay cho Admin, nhưng hạ từ rủi ro xuống mức ghi nhận.
 
 ---
 
-#### R8: Test accounts T001-T011 lọt vào production data
+#### R8: Test accounts T001–T079 lọt vào production data
 
 **Vấn đề**: Nếu quên cleanup, tài khoản test xuất hiện trên báo cáo tài chính, dispatch board thật.
 
@@ -800,45 +815,36 @@ Lễ tân nhìn 2 tab riêng hoặc 2 section riêng trên cùng board.
 
 ---
 
-## 14. ⏳ Câu Hỏi Nghiệp Vụ Chưa Chốt (BỔ SUNG 31/08)
+## 14. ⏳ Câu Hỏi Nghiệp Vụ — ĐÃ CHỐT 31/08 ✅
 
-> Đây là những điểm **không thể suy ra từ code hay từ plan** — cần quyết định của chủ doanh nghiệp. Cột "Hậu quả nếu bỏ qua" mô tả điều gì xảy ra nếu executor tự đoán.
+> Cập nhật: 31/08 10:04 — User đã trả lời tất cả câu hỏi.
 
-### 🔴 Bắt buộc chốt trước khi code
+### 🟢 ĐÃ CHỐT
 
-| # | Câu hỏi | Hậu quả nếu bỏ qua | Đề xuất |
+| # | Câu hỏi | Quyết định | Ghi chú |
 |---|---|---|---|
-| **1** | **5★ khấu trừ bao nhiêu %?** Bảng gốc chỉ có 4/3/2/1, nhưng hệ thống chấm thang 1–5 | `deduction[5]` = `undefined` → `basePay × (1 - undefined)` = **`NaN`** ghi thẳng vào ví KTV, ngay tua 5★ đầu tiên | **5★ = 100%** (bằng 4★). Đã tạm ghi vào §4, cần bạn xác nhận |
-| **2** | **Khấu trừ theo từng item hay theo cả booking?** | Nếu lấy max như code bonus cũ: KTV làm 2 item (4★ + 1★) được hưởng 100% cả hai → thất thoát | **Theo từng `BookingItem`** (đã ghi vào §5.1) |
-| **3** | **Chính sách khi ví ÂM.** Chi phí cố định ~820k/tháng (quỹ 250k + bảo trì 50k + giặt đồ 20k×26 ngày). KTV ít tua sẽ âm ví | Chưa có định nghĩa → hệ thống trừ thẳng vào cọc 500k, cọc cạn thì hành vi **không xác định** | Cần chốt: trừ vào cọc → cạn thì khoá? cho nợ? tạm ngưng trừ quỹ? |
-| **4** | **Chuyển chế độ có hiệu lực ngay hay từ ngày hôm sau?** (xem cảnh báo §2.2) | Ví bị tính lại sai toàn bộ cửa sổ realtime khi Admin đổi chế độ giữa ngày | **Hiệu lực từ 00:00 hôm sau** — đơn giản nhất, không phải sửa nhánh realtime |
-
-### 🟡 Cần chốt trước khi làm UI/Bonus
-
-| # | Câu hỏi | Ghi chú |
-|---|---|---|
-| **5** | ~~1 điểm bonus = bao nhiêu VNĐ?~~ **ĐÃ CÓ ĐÁP ÁN** ✅ | Hệ thống đã có sẵn `ktv_bonus_rate` = **1000** (1 điểm = 1.000đ), và cả 3 bản per-type `ktv_bonus_rate_TYPE_A/B/C` = 1000 (kiểm tra DB production 31/08). → Chỉ cần thêm `ktv_bonus_rate_TYPE_D = 1000`. **Bonus TYPE_D 20đ/tua = 20.000đ/tua** — tương đương ~11% một tua VIP 60p (180k) hoặc 20% một tua PT 60p (100k). Đây là khoản đáng kể, **cần bạn xác nhận có đúng ý không** trước khi chốt |
-| **6** | **Luật "ghép khác chế độ → bonus 0đ"** (xem R6) | Điều khoản này phạt KTV vì quyết định của **lễ tân**, không phải của họ. 3 hướng: (a) chặn cứng ở dispatch không cho ghép khác chế độ, (b) vẫn trả 20đ/2 như ghép cùng chế độ, (c) giữ nguyên luật và chấp nhận rủi ro bất mãn |
-| **7** | **Hàng rào quản trị cho rating.** Ở A/B/C rating chỉ ảnh hưởng bonus 20đ; ở D nó cắt **25–75% lương** (một tua 90p VIP tụt 4★→3★ mất 67.500đ) | Cần chốt: ai được quyền nhập/sửa? Có khoá sau X giờ không? Có audit log ai sửa không? Quy trình khiếu nại? Đây là nguồn tranh chấp lao động lớn nhất của chế độ D |
-| **8** | **Phạt giờ có carry-over sang tháng sau không?** | Do reset về 0 mỗi đầu tháng, cùng một mức phạt có sức nặng chênh nhau ~10 lần tùy phạm lỗi ngày 3 hay ngày 28. Đây là vấn đề của **cơ chế reset**, độc lập với con số phạt (con số đã xác nhận là chỉnh được ở Admin) |
-
-### 🟢 Định nghĩa kỹ thuật cần làm rõ (ảnh hưởng số liệu, không chặn)
-
-| # | Câu hỏi | Chi tiết |
-|---|---|---|
-| **9** | **Giờ dự kiến hay giờ thực tế?** | Code có **2 hàm khác nhau**: `calculateItemExpectedDuration()` ([KtvCommissionService.ts:248](../lib/services/KtvCommissionService.ts#L248)) và `calculateItemDuration()` (`:265`). Chúng cho kết quả khác nhau khi khách về sớm hoặc KTV làm quá giờ. **Tiền tua D** dùng cái nào? **Giờ tích lũy** dùng cái nào? (Có thể khác nhau — ví dụ tiền theo dự kiến, giờ xếp hạng theo thực tế) |
-| **10** | **Tua ghép 2 KTV: giờ tích lũy tính sao?** | Mỗi người cộng **đủ** giờ, hay **chia đôi**? Ảnh hưởng trực tiếp tới thứ hạng hàng đợi — cộng đủ thì KTV hay được ghép sẽ leo top rất nhanh |
-| **11** | **Dịch vụ tiện ích (`is_utility`) có tính không?** | Hệ thống hiện xử lý riêng nhóm này (`svcUtilityMap` trong `sync-daily-ledger`). D có tính tiền tua + giờ tích lũy cho dịch vụ tiện ích không? |
-| **12** | **Chuyển ra rồi chuyển vào lại chế độ D** | §2.2 nói giờ bị "freeze" khi chuyển ra. Khi vào lại: nhận lại giờ đã freeze, hay bắt đầu từ 0? Nếu nhận lại thì có kẽ hở chuyển ra/vào để né phạt hoặc giữ hạng |
-| **13** | **Tiền cọc ví TYPE_D: 500k hay 1 triệu?** | Plan ghi 500.000. Nhưng DB production đang là `ktv_deposit_amount_TYPE_A` = **1.000.000**, `_TYPE_B` = **1.000.000**, `_TYPE_C` = 0. Đặt D = 500k tức **thấp hơn một nửa so với A/B** — cần xác nhận là chủ ý |
-| **14** | **Phí giặt đồ & bảo trì: dùng chung mức global hay đặt mức riêng cho D?** | Hiện code đọc key global bằng `.eq()` cứng, không hỗ trợ per-type (xem cảnh báo §4). Hướng (a) dùng chung 20k/50k → **không phải sửa code**. Hướng (b) mức riêng → phải sửa code dùng chung của A/B/C, có rủi ro hồi quy |
-| **15** | **Giờ tích lũy: lưu trên `TurnQueue` hay tính lúc đọc?** (xem §2.4) | `TurnQueue` là bảng theo ngày, giờ tích lũy là số theo tháng → lưu cột trên đó sẽ reset về 0 mỗi sáng. Hướng (a) giữ cột + đồng bộ ở 3 thời điểm. Hướng (b) **khuyến nghị**: bỏ cột, JOIN từ `KTVServiceHoursLedger` lúc đọc — luôn đúng, miễn nhiễm R3, và **bỏ được PHASE B của migration** |
+| **1** | Thang sao TYPE_D? | **Thang 4★** (không có 5★). TYPE_C dùng 5★ | `deduction = {4:0, 3:0.25, 2:0.5, 1:0.75, 0:0}` |
+| **2** | Khấu trừ theo item hay booking? | **Theo KHÁCH (booking-level)**. 1 KTV × 1 khách × nhiều DV = rating 1 lần. 1 KTV × 2+ đơn con trong đơn cha = mỗi đơn con tính riêng | Khác A/B/C (per-item) |
+| **3** | Chính sách ví âm | **HOÃN** — không implement tính năng này ở phase đầu | Chi phí cố định ~820k/tháng, cần xem thực tế trước |
+| **4** | Chuyển chế độ hiệu lực khi nào? | **Ngày 1/9/2026 áp dụng** — có ngày cụ thể, không cần cơ chế "hiệu lực hôm sau" | Tất cả KTV TYPE_D bắt đầu từ 1/9 |
+| **5** | 1 điểm bonus = bao nhiêu VNĐ? | **1.000đ/điểm** (= `ktv_bonus_rate` đã có). 20đ/tua = **20.000đ/tua** | Thêm `ktv_bonus_rate_TYPE_D = 1000` |
+| **6** | Ghép khác chế độ → bonus 0đ? | **Giữ nguyên luật.** Đã được nhân viên đồng ý. VD: 5 DV 5 khách, 4 TYPE_D + 1 TYPE_A/B/C → cả 4 TYPE_D đều 0đ bonus | Dù được quầy xin FB vẫn 0đ |
+| **7** | Ai nhập/sửa rating? | **Admin** (trước mắt). Chưa cần khoá sau X giờ hay audit log ở phase đầu | Mở rộng sau nếu có tranh chấp |
+| **8** | Phạt giờ carry-over? | **Không carry-over** — reset sạch đầu tháng. Phạt ngày 28 chỉ tác dụng 3 ngày | Đúng tinh thần PDF "reset hàng tháng" |
+| **9** | Giờ dự kiến hay thực tế? | **`min(thời_gian_thực, thời_gian_gán)`**. VD: gán 60p, xong 50p → tính 50p. Gán 60p, xong 65p → tính 60p (cap tại gán) | Áp dụng CHO CẢ tiền tua lẫn giờ tích lũy |
+| **10** | Tua ghép: giờ tích lũy tính sao? | Phụ thuộc **song song hay nối tiếp**. Cách tính thời gian giống câu 9: `min(thực, gán)` cho mỗi KTV | Cộng đủ giờ cho mỗi KTV (không chia đôi) |
+| **11** | Dịch vụ tiện ích (`is_utility`)? | **KHÔNG tính giờ tích lũy** cho tiện ích | Tiện ích = dịch vụ phụ |
+| **12** | Chuyển ra rồi vào lại TYPE_D? | **Bắt đầu từ 0** — giờ cũ là lịch sử, không dùng xếp hạng | Chặn kẽ hở chuyển ra/vào né phạt |
+| **13** | Tiền cọc TYPE_D? | **1.000.000đ** (= bằng A/B) | Sửa từ 500k lên 1tr |
+| **14** | Phí giặt đồ & bảo trì: chung hay riêng? | **RIÊNG** — chỗ nào liên quan tiền/bonus phải dùng riêng, không chung chạ | **Hướng (b)**: cần sửa code `.eq()` cứng → resolve theo `work_type`. Rủi ro hồi quy — test lại A/B/C |
+| ~~**15**~~ | Giờ tích lũy: lưu TurnQueue hay JOIN? | **JOIN lúc đọc** ✅ | Đã cập nhật §2.4, §3, bỏ PHASE B |
+| **16** | §2.3 "phạt duy nhất" vs §5.3 "4 loại phạt"? | **CẦN LÀM RÕ khi code** — 3 tầng phạt chồng nhau cho cùng 1 lỗi | Ghi nhận, không chặn code |
 
 ---
 
 ## 15. ✅ Checklist Trước Khi Bắt Đầu Phase 0
 
-- [ ] Trả lời xong câu 1–4 ở §14 (bắt buộc)
+- [x] ~~Trả lời xong câu 1–14 ở §14~~ — **ĐÃ CHỐT TẤT CẢ 31/08**
 - [x] ~~Xác nhận CHECK constraint `check_work_type` trên DB thật~~ — **ĐÃ KIỂM TRA 31/08 trên production**:
       `CHECK (work_type = ANY (ARRAY['TYPE_A','TYPE_B','TYPE_C']))` — constraint **đang sống thật**, khớp file migration,
       không ai sửa qua dashboard. → **PHASE 0 của migration là bắt buộc.**
@@ -846,7 +852,8 @@ Lễ tân nhìn 2 tab riêng hoặc 2 section riêng trên cùng board.
 - [ ] **Sửa `.env.local`**: host pooler còn là `aws-0-ap-southeast-1...` (đã cũ), phải đổi thành `aws-1-...`
       ở cả `DATABASE_URL` và `DIRECT_URL`. Hiện mọi script node chạy local đều fail với lỗi
       `(ENOTFOUND) tenant/user postgres.xxx not found`. Không ảnh hưởng app trên Vercel.
-- [ ] Xác nhận công thức giá lấy theo `bao_cao_bang_gia_type_d.md`, **không** theo bản plan gốc
+- [x] ~~Xác nhận công thức giá~~ — **Cách B** (`phút × 1,667 / 3,000`, không làm tròn)
 - [ ] Tạo nhánh `feature/type-d-regime`
 - [ ] Migration đặt tại `supabase/migrations/`, **không** phải `migrations/`
 - [ ] Có script seed SystemConfigs, không chỉ liệt kê key
+- [ ] Sửa code `.eq()` cứng cho phí giặt đồ & bảo trì → resolve per-type (câu 14: RIÊNG)

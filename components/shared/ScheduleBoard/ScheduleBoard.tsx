@@ -39,7 +39,14 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
 
   // --- THÊM: STATE CHO LỊCH HẸN ---
-  const [preBookings, setPreBookings] = React.useState<any[]>([]);
+    /**
+   * [TÍNH NĂNG ĐẶT LỊCH HẸN TRƯỚC (PRE-BOOKING)]
+   * - Quản lý việc tạo nhanh lịch hẹn cho khách gọi điện/đặt qua fanpage.
+   * - Tự động nhận diện Khách Cũ (kiểm tra SĐT trong bảng Customers).
+   * - Khi Lễ Tân bấm vào Thẻ Lịch Hẹn -> Hệ thống tạo link trỏ sang Web Nội Bộ (qua biến NEXT_PUBLIC_WEB_NOI_BO_URL).
+   * - Dữ liệu (Tên, SĐT, Email, Khách) được truyền qua URL, Web Nội Bộ sẽ autofill khi Thanh Toán.
+   */
+const [preBookings, setPreBookings] = React.useState<any[]>([]);
   const [oldCustomerPhones, setOldCustomerPhones] = React.useState<Set<string>>(new Set());
   
   // State cho Add Modal
