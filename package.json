@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "clean": "rm -rf .next",
     "pack-context": "npx repomix --style markdown",
-    "gen-map": "npx codebase-context map"
+    "gen-map": "npx codebase-context map",
+    "test:type-d": "ts-node -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/simulate_type_d_commission.ts && ts-node -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/simulate_type_d_bonus.ts && ts-node -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/simulate_type_d_discipline.ts && ts-node -O \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/simulate_type_d_turn_order.ts"
   },
   "dependencies": {
     "@google/genai": "^1.17.0",
