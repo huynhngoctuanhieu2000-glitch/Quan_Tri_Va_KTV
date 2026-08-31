@@ -5,7 +5,7 @@
 > **Lịch sử**: 2026-08-27 (bản gốc) → 2026-08-27 23:29 (báo cáo giá) → 2026-08-31 (rà soát kỹ thuật 4 lần) → 2026-08-31 10:07 (chốt nghiệp vụ FINAL) → 2026-08-31 13:17 (đồng bộ xung đột)
 
 > [!IMPORTANT]
-> **Công thức giá ĐÃ CHỐT Cách B**: `phút × 1,667` (PT) / `phút × 3,000` (VIP), **không làm tròn**.
+> **Công thức giá ĐÃ CHỐT (31/08 lần 2)**: `phút × (rate_giờ / 60)` — PT `100.000đ/giờ`, VIP `180.000đ/giờ`. Không milestones, không làm tròn theo mốc, `Math.round` đến đồng khi ghi sổ. Xem §5.1.
 > `phút = min(thời_gian_thực, thời_gian_gán)`. Thang 4★ (không có 5★). Rating theo booking-level.
 >
 > Các mục có gắn nhãn **[BỔ SUNG]** trong tài liệu là phát hiện từ đợt rà soát 31/08, đã đối chiếu với code thật.
@@ -19,7 +19,7 @@
 | **Tên hiển thị** | Cơ bản / Hợp tác / Nhập tay | **D** |
 | **Xếp thứ tự tua** | Theo `turns_completed` (ít tua → ưu tiên) | Theo **tổng thời gian làm tua** (**nhiều giờ → ưu tiên gán trước**). Bận → gán người kế |
 | **Reset sổ tua** | Không rõ / thủ công | **Reset cuối mỗi tháng** về 0 giờ |
-| **Khung giá tua** | Milestones riêng per-type | **Hệ số cố định per-minute**: VIP = `phút × 3,000đ`, PT = `phút × 1,667đ`. **Không làm tròn.** `phút = min(thực, gán)` |
+| **Khung giá tua** | Milestones riêng per-type | **Hệ số theo giờ, chia 60**: VIP = `phút × (180.000/60)`, PT = `phút × (100.000/60)`. `phút = min(thực, gán)`. Không milestones |
 | **Khấu trừ theo sao** | Không có (chỉ trừ bonus) | **4★=100%, 3★=75%, 2★=50%, 1★=25%** tiền tua. TYPE_D dùng thang 4★ (TYPE_C dùng 5★) |
 | **Bonus** | Shift-based, gộp chung service | **TÁCH RIÊNG**: 20đ/tua flat nếu 4★. Chia đôi nếu 2 KTV cùng TYPE_D. 0đ nếu làm chung KTV khác chế độ |
 | **Kỷ luật** | Phạt tiền + Điểm chuyên cần | **Trừ giờ tích lũy** (không phạt tiền) |
@@ -57,7 +57,9 @@ Mỗi bút toán ghi nhận `work_type_snapshot` = chế độ KTV **tại thờ
 **Khi Admin chuyển chế độ giữa chừng**:
 1. Chốt sổ ví cũ (bút toán cũ giữ nguyên `work_type_snapshot`)
 2. Bút toán mới ghi snapshot mới
-3. Giờ tích lũy TYPE_D bị freeze nếu chuyển ra
+3. **Giờ tích lũy TYPE_D reset về 0 khi chuyển chế độ** (cả chuyển ra lẫn chuyển vào lại — xem §14 câu 12). Bản ghi cũ trong `KTVServiceHoursLedger` vẫn giữ nguyên làm lịch sử, nhưng **không tính vào xếp hạng** nữa
+   - Cách làm: query xếp tua ở §2.4 chỉ cộng các bản ghi có `date >= ngày bắt đầu chế độ D hiện tại`, nên cần lưu mốc này (cột `work_type_effective_from` trên `Staff`, hoặc bảng lịch sử chuyển chế độ)
+   - Hệ quả: **chặn được kẽ hở** chuyển ra/vào để né phạt hoặc giữ hạng
 4. KTV vẫn xem lại lịch sử ví cũ
 
 > [!CAUTION]
@@ -202,7 +204,26 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
   "synced_at" TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE("staff_id", "month", "year")
 );
+
+-- ================================================
+-- PHASE F: MỐC BẮT ĐẦU CHẾ ĐỘ  ⚠️ [BỔ SUNG 31/08]
+-- ================================================
+-- Bắt buộc để thực hiện §14 câu 12: "chuyển chế độ → giờ tích lũy reset về 0".
+-- Không có cột này thì query §2.4 sẽ cộng cả giờ KTV làm ở chế độ trước đó
+-- → kẽ hở chuyển ra/vào để giữ hạng vẫn còn nguyên.
+ALTER TABLE "Staff"
+  ADD COLUMN IF NOT EXISTS "work_type_effective_from" DATE DEFAULT NULL;
+
+-- Backfill cho dữ liệu cũ: coi như đã ở chế độ hiện tại từ rất lâu
+UPDATE "Staff" SET "work_type_effective_from" = '2020-01-01'
+  WHERE "work_type_effective_from" IS NULL;
 ```
+
+> **Cách dùng `work_type_effective_from`:**
+> - Admin đổi `work_type` → set luôn cột này = ngày áp dụng.
+> - Query xếp tua §2.4 thêm điều kiện: `AND shl.date >= s.work_type_effective_from`.
+> - Nhờ vậy giờ tích lũy của chế độ cũ **không được cộng** vào xếp hạng, nhưng bản ghi vẫn còn nguyên trong `KTVServiceHoursLedger` để tra lịch sử.
+> - Với đợt áp dụng đầu tiên: set `work_type_effective_from = '2026-09-01'` cho toàn bộ KTV chuyển sang TYPE_D.
 
 ---
 
@@ -291,16 +312,22 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
 ```
 
 > [!CAUTION]
-> **Bảng khấu trừ BẮT BUỘC phải phủ đủ 0–5 sao.** Hệ thống chấm thang **1–5 sao** (`Bookings.rating` numeric 1-5, `BookingItems.ktvRatings` jsonb). Bảng gốc chỉ định nghĩa 4/3/2/1 → khi KTV được **5★**, `deduction[5]` trả về `undefined`, phép tính `basePay × (1 - undefined)` cho ra **`NaN`** và ghi thẳng vào ví KTV. Đây là bug chắc chắn xảy ra ngay tua 5★ đầu tiên.
+> **TYPE_D dùng thang 4★, nhưng CỘT DB vẫn cho phép 5 → BẮT BUỘC có fallback.**
 >
-> Khi đọc bảng từ SystemConfigs cũng phải có fallback: `const d = table[rating] ?? 0;` — không được để `undefined` lọt vào phép nhân.
+> §14 câu 1 đã chốt TYPE_D chỉ dùng thang 4 sao. Tuy nhiên `Bookings.rating` là numeric 1–5 và `BookingItems.ktvRatings` là jsonb tự do — **cùng cột dùng chung với TYPE_C (thang 5★)**. Nghĩa là giá trị `5` **vẫn có thể lọt vào** một đơn của KTV TYPE_D qua: dữ liệu cũ, Admin nhập nhầm, hoặc form đánh giá dùng chung.
+>
+> Nếu điều đó xảy ra mà bảng chỉ có 4/3/2/1/0 thì `deduction[5]` = `undefined` → `basePay × (1 - undefined)` = **`NaN`** ghi thẳng vào ví KTV.
+>
+> **Bắt buộc khi code:** `const d = table[rating] ?? 0;` — mọi giá trị ngoài thang (5, 6, null, chuỗi rỗng) đều rơi về 0% khấu trừ. Không được để `undefined` lọt vào phép nhân. Đây là hàng rào an toàn, không phải mở rộng thang sao.
 
 ### SystemConfigs Keys mới cho TYPE_D:
 
 | Key | Default | Mô tả | Cài đặt được |
 |---|---|---|---|
-| `ktv_type_d_vip_rate_per_min` | `3000` | Rate VIP (đ/phút) | ✅ |
-| `ktv_type_d_pt_rate_per_min` | `1667` | Rate Phổ thông (đ/phút) | ✅ |
+| `ktv_type_d_vip_rate_per_60m` | `180000` | Rate VIP (đ/**giờ**) — chia 60 khi tính | ✅ |
+| `ktv_type_d_pt_rate_per_60m` | `100000` | Rate Phổ thông (đ/**giờ**) — chia 60 khi tính | ✅ |
+| ~~`ktv_type_d_vip_rate_per_min`~~ | ~~3000~~ | ⛔ **ĐÃ BỎ** — phải XOÁ khỏi SystemConfigs | ❌ |
+| ~~`ktv_type_d_pt_rate_per_min`~~ | ~~1667~~ | ⛔ **ĐÃ BỎ** — phải XOÁ khỏi SystemConfigs | ❌ |
 | `ktv_deposit_amount_TYPE_D` | `1000000` | Tiền cọc ví (= bằng A/B) | ✅ |
 | `enable_ktv_bonus_TYPE_D` | `true` | Bật/tắt bonus | ✅ Toggle |
 | `ktv_type_d_bonus_points` | `20` | Điểm bonus mỗi tua rating **≥ 4★** | ✅ |
@@ -341,43 +368,54 @@ CREATE TABLE IF NOT EXISTS "KTVMonthlyServiceHours" (
 
 ### 5.1 [NEW] `KtvTypeDCommissionService.ts` — Tiền tua
 
-> **Hệ số cố định per-minute**, KHÔNG dùng milestones. Có khấu trừ theo đánh giá sao.
-> **KHÔNG làm tròn.** Thang **4★** (không có 5★).
+> **Hệ số theo GIỜ, chia 60 khi tính**. KHÔNG dùng milestones. Có khấu trừ theo đánh giá sao.
+> **KHÔNG làm tròn theo mốc.** Thang **4★** (không có 5★).
+
+> [!IMPORTANT]
+> **ĐÃ CHỐT LẠI 31/08 (lần 2)**: lưu rate theo **giờ** rồi chia 60, **không** lưu rate theo phút.
+>
+> Lý do: `1667 đ/phút × 60 = 100.020đ/giờ` — lệch +20đ/giờ so với mức "100k/60p" trong quy chế, và làm mọi số tiền phổ thông lẻ đến hàng chục (75.015đ, 150.030đ). Lưu `100000` rồi chia 60 thì 60 phút ra **đúng 100.000đ**.
+>
+> Bản chất vẫn là Cách B — nhân theo phút, không milestones, không làm tròn theo mốc. Chỉ đổi **cách biểu diễn rate** để hết sai số.
 
 ```
-Công thức chốt (FINAL 31/08 — Cách B):
+Công thức chốt (FINAL 31/08 lần 2):
 ┌──────────────────────────────────────────────────────────────┐
-│ VIP_RATE_PER_MIN  = 3,000 đ/phút  (cài đặt được)            │
-│ PT_RATE_PER_MIN   = 1,667 đ/phút  (cài đặt được)            │
+│ VIP_RATE_PER_60M = 180,000 đ/giờ   (cài đặt được)           │
+│ PT_RATE_PER_60M  = 100,000 đ/giờ   (cài đặt được)           │
 │                                                               │
-│ phút = min(thời_gian_thực, thời_gian_gán)                    │
-│   → VD: gán 60p, xong lúc 50p → tính 50p                    │
-│   → VD: gán 60p, xong lúc 65p → tính 60p (cap tại gán)      │
+│ phút    = min(thời_gian_thực, thời_gian_gán)                 │
+│ basePay = phút × (RATE_PER_60M / 60)                         │
+│ finalPay = basePay × (1 - deduction[rating])                 │
 │                                                               │
-│ basePay   = phút × RATE_PER_MIN   (integer math)             │
-│ finalPay  = basePay × (1 - deduction[rating])                │
-│ // KHÔNG làm tròn                                             │
-│                                                               │
-│ VD: 90p VIP 4★ = 90 × 3,000             = 270,000đ          │
-│ VD: 60p PT  3★ = 60 × 1,667 × 0.75      = 75,015đ           │
-│ VD: 50p PT  4★ = 50 × 1,667             = 83,350đ (ra sớm)  │
+│ VD: 90p VIP 4★ = 90 × (180000/60)        = 270,000đ         │
+│ VD: 60p PT  4★ = 60 × (100000/60)        = 100,000đ  ← tròn │
+│ VD: 60p PT  3★ = 60 × (100000/60) × 0.75 =  75,000đ         │
+│ VD: 50p PT  4★ = 50 × (100000/60)        =  83,333.33đ      │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+> ⚠️ **Số thập phân**: phép chia 60 sinh số lẻ ở các mốc phút không chia hết (50p → `83333.33333333334`). **Không được ghi nguyên giá trị dấu phẩy động vào ví KTV.** Làm tròn đến đơn vị đồng (`Math.round`) tại lớp ghi sổ. "Không làm tròn" trong quy chế nghĩa là không làm tròn theo mốc/milestone, không phải giữ 14 chữ số thập phân.
 
 ```
 Flow tính tiền tua TYPE_D:
 1. Đọc rate từ SystemConfigs:
-   - `ktv_type_d_vip_rate_per_min` (default 3000)
-   - `ktv_type_d_pt_rate_per_min` (default 1667)
+   - `ktv_type_d_vip_rate_per_60m` (default 180000)
+   - `ktv_type_d_pt_rate_per_60m`  (default 100000)
+   ⚠️ KHÔNG dùng key `*_rate_per_min` — đã bỏ, xem cảnh báo ở §4
 2. Xác định service type:
-   - VIP (NHP/NHT): dùng VIP_RATE_PER_MIN
-   - Phổ thông (NHS): dùng PT_RATE_PER_MIN
+   - VIP (NHP/NHT): dùng VIP_RATE_PER_60M
+   - Phổ thông (NHS): dùng PT_RATE_PER_60M
 3. phút = min(thời_gian_thực_làm, thời_gian_dịch_vụ_gán)
-4. basePay = phút × rate (integer math, không chia 60)
+   - Lấy từ `segments`, lọc theo `ktvId`. ⚠️ `BookingItems.segments` có thể là
+     CHUỖI JSON (57% dữ liệu production) → phải `JSON.parse` trước khi `.filter`
+   - Segment có `customCommissionDuration` → dùng thẳng giá trị đó
+   - Segment thiếu `actualStartTime`/`actualEndTime` → dùng `seg.duration` (giờ gán)
+4. basePay = phút × (rate_per_60m / 60)
 5. Lấy rating THEO KHÁCH (booking-level):
    - 1 KTV làm nhiều DV cho 1 khách → dùng chung rating của khách
    - 1 KTV làm 2+ đơn con trong 1 đơn cha → mỗi đơn con tính riêng
-6. finalPay = basePay × (1 - deduction[rating])
+6. finalPay = Math.round(basePay × (1 - deduction[rating]))
 ```
 
 **Quy tắc rating TYPE_D (KHÁC A/B/C):**
@@ -557,7 +595,7 @@ if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}
 | # | File | Mô tả |
 |---|---|---|
 | 1 | `migrations/add_type_d_support.sql` | Migration DB (5 phase) |
-| 2 | `lib/services/KtvTypeDCommissionService.ts` | Tiền tua: **hệ số phẳng đ/giờ + floor 100** + rating deduction (KHÔNG milestones) |
+| 2 | `lib/services/KtvTypeDCommissionService.ts` | Tiền tua: **phút × rate/phút, KHÔNG làm tròn** (Cách B, §5.1) + rating deduction theo khách |
 | 3 | `lib/services/KtvTypeDBonusService.ts` | **Bonus TÁCH RIÊNG**: 20đ flat, luật chia riêng |
 | 4 | `lib/services/KtvTypeDDisciplineService.ts` | Kỷ luật: trừ giờ tích lũy |
 | 5 | `lib/services/KtvTypeDTurnService.ts` | Xếp tua: DESC theo giờ |
@@ -609,14 +647,17 @@ if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}
 ## 10. Verification Plan
 
 ### Automated Tests
-- `simulate_type_d_commission.mjs`: Test hệ số phẳng + floor 100 + rating deduction (**6 mức sao 0★–5★** × VIP/Phổ thông × 10 mốc phút). Đối chiếu trực tiếp với bảng A2/B2 trong `bao_cao_bang_gia_type_d.md` — phải khớp 100%. Bắt buộc có case **5★** và case **40p/70p/100p PT** (3 mốc bị floor)
+- `simulate_type_d_commission.mjs`: Test công thức **Cách B** — `phút × rate/phút × (1 - deduction)`, **không làm tròn** (**5 mức sao 0★–4★** × VIP/Phổ thông × nhiều mốc phút).
+  - ⚠️ **Nguồn đối chiếu là §5.1 của plan này**, KHÔNG dùng bảng A2/B2 trong `bao_cao_bang_gia_type_d.md` (báo cáo đó tính theo công thức cũ, số sẽ lệch).
+  - Bắt buộc có case `min(thực, gán)`: gán 60p xong 50p → 50p; gán 60p xong 65p → 60p.
+  - Bắt buộc có case rating = 5 lọt vào → phải rơi về fallback `?? 0`, không được ra `NaN`.
 - `simulate_type_d_bonus.mjs`: Test bonus riêng (solo, 2 KTV cùng D, KTV khác chế độ, tua < 60p)
 - `simulate_type_d_discipline.mjs`: Test trừ giờ (4 loại vi phạm)
 - `simulate_type_d_turn_order.mjs`: Test sort DESC, busy fallback, tie-breaker
 
 ### Manual Verification (Dùng 11 tài khoản test T001–T079)
 1. Admin tạo KTV TYPE_D → Kiểm tra badge & sổ tua
-2. Dispatch đơn VIP cho TYPE_D → Tiền tua theo hệ số 180k/giờ + khấu trừ sao + floor 100
+2. Dispatch đơn VIP cho TYPE_D → Tiền tua = phút × 3.000 + khấu trừ sao, không làm tròn
 3. Đánh giá 3★ → Trừ 25% tiền tua
 4. Đánh giá 4★ → Bonus cộng 20đ
 5. 2 KTV TYPE_D cùng 1 khách → Bonus chia đôi (10đ)
@@ -852,7 +893,9 @@ Cron `reset-type-d-hours` giờ chỉ còn nhiệm vụ **chốt sổ lưu trữ
 - [ ] **Sửa `.env.local`**: host pooler còn là `aws-0-ap-southeast-1...` (đã cũ), phải đổi thành `aws-1-...`
       ở cả `DATABASE_URL` và `DIRECT_URL`. Hiện mọi script node chạy local đều fail với lỗi
       `(ENOTFOUND) tenant/user postgres.xxx not found`. Không ảnh hưởng app trên Vercel.
-- [x] ~~Xác nhận công thức giá~~ — **Cách B** (`phút × 1,667 / 3,000`, không làm tròn)
+- [x] ~~Xác nhận công thức giá~~ — **`phút × (rate_giờ / 60)`**, PT 100.000đ/giờ, VIP 180.000đ/giờ (chốt lần 2, 31/08)
+- [ ] **XOÁ 2 key rate cũ khỏi SystemConfigs**: `ktv_type_d_vip_rate_per_min`, `ktv_type_d_pt_rate_per_min` — hiện đang tồn tại song song với bộ `_per_60m`, nguy cơ Phase 3 lấy nhầm → trả sai gấp 60 lần
+- [ ] **Sửa lại 2 config bị hỏng**: `ktv_type_d_rating_deduction` và `ktv_type_d_discipline_rules` đang lưu chuỗi `[object Object]` — mất dữ liệu, phải seed lại bằng `JSON.stringify()`
 - [ ] Tạo nhánh `feature/type-d-regime`
 - [ ] Migration đặt tại `supabase/migrations/`, **không** phải `migrations/`
 - [ ] Có script seed SystemConfigs, không chỉ liệt kê key
