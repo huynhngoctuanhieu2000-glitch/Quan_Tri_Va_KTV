@@ -223,16 +223,11 @@ export default function DispatchBoardPage() {
     if (!mounted) return;
     const fetchWebBookingCount = async () => {
         try {
-            const startOfRange = `${selectedDate} 00:00:00`;
-            const endOfRange = `${selectedDate} 23:59:59`;
-            
             const { count, error } = await supabase
                 .from('Bookings')
                 .select('*', { count: 'exact', head: true })
-                .gte('bookingDate', startOfRange)
-                .lte('bookingDate', endOfRange)
                 .neq('status', 'CANCELLED')
-                .in('source', ['WEB_BOOKING', 'HOME_BOOKING', 'VIP_BOOKING', 'STANDARD_BOOKING', 'MIXED_BOOKING'])
+                .in('source', ['WEB_BOOKING', 'HOME_BOOKING', 'VIP_BOOKING', 'STANDARD_BOOKING', 'MIXED_BOOKING', 'STANDARD_MENU', 'VIP_MENU', 'MIXED_MENU'])
                 .eq('status', 'NEW');
 
             if (count !== null && !error) {

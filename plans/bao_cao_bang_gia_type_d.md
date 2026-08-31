@@ -1,7 +1,18 @@
 # 📊 Báo Cáo Bảng Giá TYPE_D — So Sánh 2 Cách Tính
 
-> Cập nhật: 2026-08-27 23:29
-> Trạng thái: **Công thức đã chốt ✅** — Cách 2 Hệ số + Floor hàng trăm
+> [!WARNING]
+> ## ⛔ TÀI LIỆU ĐÃ HẾT HIỆU LỰC — KHÔNG DÙNG SỐ TRONG FILE NÀY
+>
+> **Cập nhật 31/08/2026**: Công thức đã đổi sang **Cách B — `phút × rate/phút`, KHÔNG làm tròn**.
+>
+> **Nguồn đúng duy nhất: §5.1 của [`plan_che_do_type_d.md`](./plan_che_do_type_d.md).**
+>
+> Mọi bảng số trong file này (A1, A2, B1, B2, và phần Tổng kết) tính theo công thức cũ `(phút/60) × rate/giờ` + floor hàng trăm → **sẽ lệch với hệ thống**. Đừng dùng để đối chiếu test.
+>
+> File được giữ lại chỉ để tham khảo lịch sử quá trình cân nhắc giữa Milestones và Hệ số.
+
+> ~~Cập nhật: 2026-08-27 23:29~~
+> ~~Trạng thái: **Công thức đã chốt ✅** — Cách 2 Hệ số + Floor hàng trăm~~ *(đã bị thay thế)*
 
 ---
 
