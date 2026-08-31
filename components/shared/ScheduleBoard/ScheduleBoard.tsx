@@ -117,7 +117,7 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
      
      const { error } = await supabase.from('PreBookings').insert([{
         customer_name: newPbName,
-        customer_phone: newPbPhoneCode + newPbPhone,
+        customer_phone: (newPbPhoneCode || "").replace(/\s+/g, "") + (newPbPhone || "").replace(/\s+/g, ""),
         customer_email: newPbEmail,
         menu_type: newPbMenuType,
         guest_count: Number(newPbGuests) || 1,
@@ -580,7 +580,7 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
                      </div>
                   </div>
                   <div>
-                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (T�y ch?n)</label>
+                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email (Tuỳ chọn)</label>
                      <input type="email" value={newPbEmail} onChange={e => setNewPbEmail(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-emerald-500 font-medium" placeholder="example@email.com" />
                   </div>
                   <div className="flex gap-3">
