@@ -301,3 +301,78 @@ nếu giữ để đối chiếu thì cần SQL gỡ KTV khỏi item tiện ích
 
 Điểm 10 trước (rò rỉ hoa hồng, sửa một dòng), rồi Điểm 9 (hiển thị, phức tạp hơn vì
 phải phân biệt nối tiếp với nhiều khách thật).
+
+---
+
+# Điểm 11: Cho phép tạo khách chỉ có dịch vụ tiện ích 🟡 Nghiệp vụ — KHÔNG chặn deploy
+
+> Phát hiện khi test đơn `TEST-260830-OY3N` ngày 31/08.
+> Đây là lỗi **quy tắc nghiệp vụ**, không phải lỗi kỹ thuật. Điểm 9 và 10 vẫn chạy đúng
+> trên đơn này. Ghi lại để xử lý sau khi deploy.
+
+## Hiện trạng
+
+```
+TEST-260830-OY3N     SPLIT  total = 0        (đơn cha)
+  ├─ OY3N-A  NEW  790.000   NHS1002  tech = ["NH016","NH079"]   ← Khách A: dịch vụ chính
+  └─ OY3N-B  NEW  105.000   NHS0900  tech = []                  ← Khách B: CHỈ Phòng riêng
+```
+
+Lễ tân tách thành hai khách, nhưng **Khách B chỉ có mỗi Phòng riêng**, không có dịch vụ
+chính nào.
+
+## Vì sao đây là sai nghiệp vụ
+
+Phòng riêng (`NHS0900`, `is_utility = true`) là dịch vụ **phụ trợ**. Nó không thể tồn tại
+độc lập cho một người khách — khách phải mua dịch vụ chính rồi mới cộng thêm phòng.
+
+Một "khách" chỉ có tiện ích thì:
+- Không có KTV nào phục vụ (đúng, vì tiện ích không gán KTV — xem Điểm 10)
+- Không sinh tua, không sinh hoa hồng, không sinh bonus
+- Nhưng vẫn chiếm một `guest_id`, một dòng `BookingGuests`, một thẻ trên Kanban
+- Và `guestCount` của đơn cha bị đếm thành 2 thay vì 1
+
+`guestCount` là tham số dùng trong công thức chia bonus
+(`KtvCommissionService.calculateBookingBonus`), nên đếm sai khách **có thể ảnh hưởng
+điểm thưởng** của KTV ở các đơn tương tự.
+
+## Yêu cầu (đã chốt với chủ tiệm)
+
+**Cảnh báo hoặc chặn, không cho tạo một khách chỉ gồm dịch vụ tiện ích.**
+
+## Vị trí
+
+`app/reception/dispatch/_components/QuickDispatchTable.tsx`
+
+- `handleSplitServices()` — dòng 209. Nút "✂ TÁCH KHÁCH (HỦY GỘP)". Đây là nơi Lễ tân
+  xé nhóm ra thành từng khách riêng. Hiện chỉ kiểm tra `selectedGroupKeys.length === 0`,
+  không kiểm tra nội dung nhóm sau khi tách.
+- `handleGroupServices()` — dòng 187. Nút "GỘP ĐƠN KHÁC KTV". Cần rà xem thao tác gộp
+  có thể gián tiếp để lại một nhóm chỉ còn tiện ích không.
+
+## Ràng buộc
+
+1. **Dùng `isUtilityService()`** trong `lib/booking.logic.ts`, không viết lại điều kiện
+   nhận diện tiện ích.
+
+2. **Cảnh báo hay chặn cứng — cần chủ tiệm quyết.** Chặn cứng an toàn hơn nhưng có thể
+   cản trở tình huống ngoại lệ hợp lệ mà ta chưa lường tới. Nếu chọn cảnh báo thì phải
+   là hộp thoại xác nhận, không phải toast thoáng qua.
+
+3. **Không tự động gộp lại.** Đừng để hệ thống tự quyết Phòng riêng thuộc về khách nào —
+   sai chỗ này sẽ gán tiền vào nhầm khách. Để Lễ tân tự chọn.
+
+4. **Không đụng dữ liệu đã có.** Đơn `OY3N` cứ để nguyên làm chứng cứ.
+
+## Kiểm chứng
+
+- Tạo đơn có 1 dịch vụ chính + Phòng riêng → bấm "TÁCH KHÁCH" → phải cảnh báo/chặn.
+- Tạo đơn có 2 dịch vụ chính + Phòng riêng → tách 2 dịch vụ chính thành 2 khách → phải
+  cho phép (vì mỗi khách đều có dịch vụ chính), Phòng riêng đi theo một trong hai.
+- Đơn thường không có tiện ích → tách bình thường, không cảnh báo gì.
+
+## Ghi chú về mức độ ưu tiên
+
+Không chặn deploy. Điểm 9 (tiền nối tiếp) và Điểm 10 (tiện ích không nhận KTV) đã kiểm
+chứng đạt trên chính đơn này — `OY3N-B` có `merged = KHÔNG` mà `technicianCodes = []`,
+đó là lần đầu vế `isUtilityService` mới được thực sự kích hoạt.

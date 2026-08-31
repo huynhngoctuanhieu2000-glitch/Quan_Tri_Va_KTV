@@ -1,11 +1,11 @@
 # 🆕 Chế Độ KTV TYPE_D — Bản Kế Hoạch FINAL
 
-> **Trạng thái**: Kiến trúc đã chốt ✅ — **Còn 13 câu hỏi nghiệp vụ chưa chốt** (xem §14) ⚠️
+> **Trạng thái**: Kiến trúc đã chốt ✅ — **Còn 15 câu hỏi nghiệp vụ chưa chốt** (xem §14) ⚠️
 > **Cập nhật**: 2026-08-31 (rà soát đối chiếu codebase)
-> **Lịch sử**: 2026-08-27 00:07 (bản gốc) → 2026-08-27 23:29 (chốt công thức giá tại `bao_cao_bang_gia_type_d.md`) → 2026-08-31 (rà soát kỹ thuật lần 1) → 2026-08-31 (rà soát lần 2: đối chiếu DB production + tên feature flag thật)
+> **Lịch sử**: 2026-08-27 00:07 (bản gốc) → 2026-08-27 23:29 (chốt công thức giá tại `bao_cao_bang_gia_type_d.md`) → 2026-08-31 (rà soát kỹ thuật lần 1) → 2026-08-31 (rà soát lần 2: DB production + tên feature flag) → 2026-08-31 (rà soát lần 3: tài khoản test + chu kỳ TurnQueue)
 
 > [!IMPORTANT]
-> **Đọc §14 trước khi bắt đầu code.** Phần lớn plan đã sẵn sàng triển khai, nhưng có 13 điểm nghiệp vụ chưa được định nghĩa — trong đó **câu 1 (thang 5★) sẽ gây bug ngay tua đầu tiên** nếu bỏ qua.
+> **Đọc §14 trước khi bắt đầu code.** Phần lớn plan đã sẵn sàng triển khai, nhưng có 15 điểm nghiệp vụ chưa được định nghĩa — trong đó **câu 1 (thang 5★) sẽ gây bug ngay tua đầu tiên** nếu bỏ qua.
 >
 > Các mục có gắn nhãn **[BỔ SUNG]** trong tài liệu là phát hiện từ đợt rà soát 31/08, đã đối chiếu với code thật.
 
@@ -85,6 +85,24 @@ Mỗi bút toán ghi nhận `work_type_snapshot` = chế độ KTV **tại thờ
 - Nếu KTV đang bận (`status = 'working'`) → gán người kế tiếp
 - Nếu giờ bằng nhau → xét `check_in_order`
 - TYPE_A/B/C vẫn sort theo `turns_completed` ASC như cũ
+
+> [!CAUTION]
+> **[BỔ SUNG] Xung đột chu kỳ: `TurnQueue` là bảng THEO NGÀY, nhưng giờ tích lũy là số liệu THEO THÁNG.**
+>
+> `TurnQueue` có `UNIQUE(employee_id, date)` — **mỗi KTV một dòng mới mỗi ngày**. Dòng này được tạo lúc duyệt điểm danh ([attendance/confirm/route.ts:103](../app/api/ktv/attendance/confirm/route.ts#L103)) với `turns_completed: 0` và **không truyền `accumulated_service_hours`** → cột này nhận `DEFAULT 0`.
+>
+> **Hệ quả**: mỗi sáng, **toàn bộ KTV TYPE_D đều bắt đầu lại ở 0 giờ**. Sort DESC lúc đó hoàn toàn vô nghĩa — thứ tự rơi về `check_in_order`. Giờ tích lũy của cả tháng chỉ xuất hiện lại **sau khi** `syncServiceHoursForDate()` chạy, mà plan gốc **không nói hàm này được gọi lúc nào**.
+>
+> **Hai hướng xử lý:**
+>
+> **(a) Giữ cột trên `TurnQueue`** — phải nạp lại giá trị ở đúng 3 thời điểm, thiếu một chỗ là sai thứ tự:
+> 1. Ngay khi tạo dòng TurnQueue lúc duyệt điểm danh (nếu không, KTV xếp bét cả buổi sáng)
+> 2. Sau mỗi lần một tua hoàn tất
+> 3. Sau khi Admin sửa/huỷ đơn cũ (xem R3)
+>
+> **(b) KHÔNG lưu trên `TurnQueue` — khuyến nghị.** Để `getTurnOrder()` JOIN sang `KTVServiceHoursLedger` (hoặc `KTVMonthlyServiceHours`) và tính tổng tại thời điểm đọc. Số liệu **luôn đúng, không bao giờ lệch**, không cần đồng bộ ở 3 nơi, và tự khắc miễn nhiễm với R3. Đánh đổi: mỗi lần đọc bảng tua tốn thêm một phép aggregate — không đáng kể với quy mô ~145 nhân viên.
+>
+> Nếu chọn (b) thì **bỏ luôn PHASE B của migration** (không cần thêm cột vào `TurnQueue`).
 
 ---
 
@@ -430,6 +448,10 @@ Thuật toán ưu tiên TYPE_D:
 - `syncServiceHoursForDate(date)`: Quét BookingItems tháng hiện tại → cập nhật `TurnQueue.accumulated_service_hours`
 - `getTurnOrder(supabase, date)`: Trả về danh sách KTV TYPE_D đã sort
 
+> ⚠️ **Chỉ cần 2 method này nếu chọn hướng (a) ở §2.4.** Nếu chọn hướng **(b) — khuyến nghị**, bỏ `syncServiceHoursForDate()` và để `getTurnOrder()` tự JOIN + aggregate từ `KTVServiceHoursLedger` tại thời điểm đọc.
+>
+> **Bắt buộc phải ghi rõ thời điểm gọi.** Bản gốc định nghĩa hàm sync nhưng không nói được gọi ở đâu — đây chính là nguyên nhân của lỗ hổng mô tả ở §2.4.
+
 ---
 
 ## 6. API Routes
@@ -618,6 +640,18 @@ Tạo **11 tài khoản test** (ID prefix `T`) clone từ nhân viên thật (NH
 | `T069` | `NH069` | JK | **TYPE_D** | ✅ bật | ✅ external |
 | `T079` | `NH079` | Hiếu | **TYPE_D** | ✅ giữ | ✅ external |
 
+> [!NOTE]
+> **✅ [ĐÃ KIỂM CHỨNG trên DB production 31/08]** — bảng trên chính xác, có thể dùng luôn:
+> - **Đủ 11/11 mã nguồn tồn tại**, tên khớp hoàn toàn với plan (NH079 tên đầy đủ là "Huỳnh Ngọc Tuấn Hiếu").
+> - Cả 11 đều có `status = 'ĐANG LÀM'` và `avatar_url` khác NULL → clone giữ nguyên là được.
+> - Cột VIP khớp: NH001, NH016, NH069 đang `is_active_vip_menu = false` → đúng như plan ghi "✅ **bật**"; 8 mã còn lại đã `true` → đúng như plan ghi "✅ giữ".
+> - **Không có Staff nào có `id` bắt đầu bằng `T`** → dải mã `T001`–`T079` an toàn, không đụng dữ liệu thật.
+> - Giá trị `status` hợp lệ là `'ĐANG LÀM'` (141 NV). Lưu ý DB còn lẫn `'active'` (2) và `'working'` (2) — **không dùng 2 giá trị này** cho tài khoản test.
+>
+> ⚠️ Một điểm cần biết: **NH027 (Sunny) và NH079 (Hiếu) đang là `TYPE_B`**, 9 mã còn lại là `TYPE_A`. Khi clone sang TYPE_D, `feature_flags` nguồn của 2 mã này khác 9 mã kia → **đừng copy nguyên `feature_flags`**, hãy ghi đè bằng `DEFAULT_FEATURE_FLAGS_TYPE_D` ở §4.
+>
+> Nhắc lại: 2 bảng `KTVServiceHoursLedger` và `KTVMonthlyServiceHours` **chưa tồn tại** trên DB — phải chạy migration §3 trước khi seed.
+
 **Script tạo**: `scripts/seed_type_d_test_accounts.js`
 
 ```javascript
@@ -798,6 +832,7 @@ Lễ tân nhìn 2 tab riêng hoặc 2 section riêng trên cùng board.
 | **12** | **Chuyển ra rồi chuyển vào lại chế độ D** | §2.2 nói giờ bị "freeze" khi chuyển ra. Khi vào lại: nhận lại giờ đã freeze, hay bắt đầu từ 0? Nếu nhận lại thì có kẽ hở chuyển ra/vào để né phạt hoặc giữ hạng |
 | **13** | **Tiền cọc ví TYPE_D: 500k hay 1 triệu?** | Plan ghi 500.000. Nhưng DB production đang là `ktv_deposit_amount_TYPE_A` = **1.000.000**, `_TYPE_B` = **1.000.000**, `_TYPE_C` = 0. Đặt D = 500k tức **thấp hơn một nửa so với A/B** — cần xác nhận là chủ ý |
 | **14** | **Phí giặt đồ & bảo trì: dùng chung mức global hay đặt mức riêng cho D?** | Hiện code đọc key global bằng `.eq()` cứng, không hỗ trợ per-type (xem cảnh báo §4). Hướng (a) dùng chung 20k/50k → **không phải sửa code**. Hướng (b) mức riêng → phải sửa code dùng chung của A/B/C, có rủi ro hồi quy |
+| **15** | **Giờ tích lũy: lưu trên `TurnQueue` hay tính lúc đọc?** (xem §2.4) | `TurnQueue` là bảng theo ngày, giờ tích lũy là số theo tháng → lưu cột trên đó sẽ reset về 0 mỗi sáng. Hướng (a) giữ cột + đồng bộ ở 3 thời điểm. Hướng (b) **khuyến nghị**: bỏ cột, JOIN từ `KTVServiceHoursLedger` lúc đọc — luôn đúng, miễn nhiễm R3, và **bỏ được PHASE B của migration** |
 
 ---
 

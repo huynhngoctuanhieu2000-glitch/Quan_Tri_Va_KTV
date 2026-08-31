@@ -202,6 +202,31 @@ export const QuickDispatchTable = ({
         return svc;
     });
 
+    // 🛡️ CHẶN: Kiểm tra sau khi gộp, có nhóm khách nào chỉ còn toàn tiện ích không
+    const postGroupGroups = new Map<string, typeof updatedServices>();
+    updatedServices.filter(s => !s.mergedIntoId).forEach(svc => {
+      const grpId = svc.customerGroupId || svc.id;
+      if (!postGroupGroups.has(grpId)) postGroupGroups.set(grpId, []);
+      postGroupGroups.get(grpId)!.push(svc);
+    });
+    if (postGroupGroups.size > 1) {
+      const utilityOnlyNames: string[] = [];
+      postGroupGroups.forEach((svcs) => {
+        const hasMainService = svcs.some(s => !isUtilityService(s));
+        if (!hasMainService) {
+          utilityOnlyNames.push(svcs.map(s => s.serviceName || 'Tiện ích').join(', '));
+        }
+      });
+      if (utilityOnlyNames.length > 0) {
+        const ok = confirm(
+          `⚠️ Sau khi gộp, có khách chỉ còn dịch vụ tiện ích:\n\n` +
+          utilityOnlyNames.map(n => `• ${n}`).join('\n') +
+          `\n\nDịch vụ tiện ích (Phòng riêng...) không thể đứng một mình. Vui lòng gộp thêm vào khách có dịch vụ chính.\n\nBấm OK để vẫn gộp (tự chịu trách nhiệm), hoặc Hủy để quay lại.`
+        );
+        if (!ok) return;
+      }
+    }
+
     onUpdateServices(updatedServices);
     setSelectedGroupKeys([]);
   };
@@ -238,6 +263,31 @@ export const QuickDispatchTable = ({
             return svc;
         });
     });
+
+    // 🛡️ CHẶN: Kiểm tra sau khi tách, có nhóm khách nào chỉ còn toàn tiện ích không
+    const postSplitGroups = new Map<string, typeof updatedServices>();
+    updatedServices.filter(s => !s.mergedIntoId).forEach(svc => {
+      const grpId = svc.customerGroupId || svc.id;
+      if (!postSplitGroups.has(grpId)) postSplitGroups.set(grpId, []);
+      postSplitGroups.get(grpId)!.push(svc);
+    });
+    if (postSplitGroups.size > 1) {
+      const utilityOnlyNames: string[] = [];
+      postSplitGroups.forEach((svcs) => {
+        const hasMainService = svcs.some(s => !isUtilityService(s));
+        if (!hasMainService) {
+          utilityOnlyNames.push(svcs.map(s => s.serviceName || 'Tiện ích').join(', '));
+        }
+      });
+      if (utilityOnlyNames.length > 0) {
+        const ok = confirm(
+          `⚠️ Sau khi tách, có khách chỉ còn dịch vụ tiện ích:\n\n` +
+          utilityOnlyNames.map(n => `• ${n}`).join('\n') +
+          `\n\nDịch vụ tiện ích (Phòng riêng...) không thể đứng một mình. Vui lòng gộp vào khách có dịch vụ chính.\n\nBấm OK để vẫn tách (tự chịu trách nhiệm), hoặc Hủy để quay lại.`
+        );
+        if (!ok) return;
+      }
+    }
     
     onUpdateServices(updatedServices);
     setSelectedGroupKeys([]);
