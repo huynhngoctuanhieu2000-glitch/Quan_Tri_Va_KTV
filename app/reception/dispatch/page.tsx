@@ -1259,6 +1259,33 @@ if (!hasPermission('dispatch_board')) {
         alert(`⚠️ Vui lòng điền đầy đủ thông tin:\n\n${missing.map(m => `• ${m}`).join('\n')}`);
         return;
       }
+
+      // 🛡️ CHẶN: Khách chỉ có dịch vụ tiện ích (Phòng riêng) mà không có dịch vụ chính
+      const allSvcs = orderToDispatch.services.filter(s => !s.mergedIntoId && !s.options?.mergedIntoId);
+      const guestGroupsForValidation = new Map<string, typeof allSvcs>();
+      const firstPrimarySvc = allSvcs.find(s => !isUtilityService(s));
+      const defaultGrpId = firstPrimarySvc?.customerGroupId || firstPrimarySvc?.id || 'default';
+      allSvcs.forEach(svc => {
+        const grpId = svc.customerGroupId || (isUtilityService(svc) ? defaultGrpId : svc.id);
+        if (!guestGroupsForValidation.has(grpId)) guestGroupsForValidation.set(grpId, []);
+        guestGroupsForValidation.get(grpId)!.push(svc);
+      });
+      if (guestGroupsForValidation.size > 1) {
+        const utilityOnlyGuests: string[] = [];
+        let guestIdx = 0;
+        guestGroupsForValidation.forEach((svcs) => {
+          guestIdx++;
+          const hasMainService = svcs.some(s => !isUtilityService(s));
+          if (!hasMainService) {
+            const utilNames = svcs.map(s => s.serviceName || 'Tiện ích').join(', ');
+            utilityOnlyGuests.push(`Khách ${guestIdx} chỉ có tiện ích (${utilNames})`);
+          }
+        });
+        if (utilityOnlyGuests.length > 0) {
+          alert(`⚠️ Không thể điều phối!\n\nDịch vụ tiện ích (Phòng riêng...) không thể đứng một mình cho một khách. Vui lòng thêm dịch vụ chính hoặc gộp vào khách khác.\n\n${utilityOnlyGuests.map(m => `• ${m}`).join('\n')}`);
+          return;
+        }
+      }
     }
 
     if (!skipSave) {
