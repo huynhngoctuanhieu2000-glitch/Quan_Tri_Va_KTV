@@ -43,6 +43,16 @@ export const FEATURE_FLAG_DEFS = [
         key: 'kpi_target_hours',
         label: '⏱️ KPI Demo',
         description: 'Bật hiển thị KPI cho KTV Loại A/C',
+    },
+    {
+        key: 'internal_fund_enabled',
+        label: 'Quỹ nội bộ',
+        description: 'Tự động trừ tiền quỹ nội bộ TYPE_D',
+    },
+    {
+        key: 'withdraw_morning_only',
+        label: 'Rút tiền buổi sáng',
+        description: 'Chỉ cho phép đăng ký rút tiền buổi sáng TYPE_D',
     }
 ] as const;
 
@@ -53,7 +63,7 @@ interface StaffFeature {
     full_name: string;
     status: string;
     feature_flags: Record<string, boolean>;
-    work_type: 'TYPE_A' | 'TYPE_B' | 'TYPE_C';
+    work_type: 'TYPE_A' | 'TYPE_B' | 'TYPE_C' | 'TYPE_D';
 }
 
 export const getDefaultFlagsForType = (workType: string): Record<string, boolean> => {
@@ -87,6 +97,18 @@ export const getDefaultFlagsForType = (workType: string): Record<string, boolean
                 bonus_wallet: false,
                 savings_wallet: false,
                 maintenance_fee: true,
+            };
+        case 'TYPE_D':
+            return {
+                laundry_deduction: true,
+                sudden_leave_penalty: false,
+                allow_on_call: false,
+                enable_employee_tasks: false,
+                bonus_wallet: true,
+                savings_wallet: false,
+                maintenance_fee: true,
+                internal_fund_enabled: true,
+                withdraw_morning_only: true,
             };
         default:
             return {};
@@ -156,7 +178,7 @@ export const useStaffFeatures = (activeTab?: string) => {
         }
     }, []);
 
-    const updateWorkType = useCallback(async (staffId: string, newWorkType: 'TYPE_A' | 'TYPE_B' | 'TYPE_C') => {
+    const updateWorkType = useCallback(async (staffId: string, newWorkType: 'TYPE_A' | 'TYPE_B' | 'TYPE_C' | 'TYPE_D') => {
         const updateKey = `${staffId}-worktype`;
         setUpdating(updateKey);
 
