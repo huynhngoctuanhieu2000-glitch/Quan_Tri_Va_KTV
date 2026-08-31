@@ -138,7 +138,7 @@ export const ScheduleBoard: React.FC<ScheduleBoardProps> = ({ orders, staffs = [
   };
 
   const handlePreBookingClick = (pb: any) => {
-     const baseUrl = process.env.NEXT_PUBLIC_WEB_NOI_BO_URL || 'http://localhost:3000';
+     const baseUrl = process.env.NEXT_PUBLIC_WEB_NOI_BO_URL || 'http://localhost:3001';
      const url = new URL(`${baseUrl}/en/new-user/${pb.menu_type || 'standard'}/menu`);
      url.searchParams.set('preBookingId', pb.id);
      if (pb.customer_name) url.searchParams.set('name', pb.customer_name);
