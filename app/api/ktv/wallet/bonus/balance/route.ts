@@ -174,15 +174,15 @@ export async function GET(request: Request) {
 
 
         // 4. Calculate Balance
-        let totalPoints = (earns || []).reduce((sum, record) => sum + Number(record.total_bonus || 0), 0) + rt_bonus;
+        let totalPoints = (earns || []).reduce((sum: number, record: any) => sum + Number(record.total_bonus || 0), 0) + rt_bonus;
         
-        (adjustments || []).forEach(tx => {
+        (adjustments || []).forEach((tx: any) => {
             const amt = Number(tx.amount || 0);
             if (tx.type === 'GIFT' || amt > 0) totalPoints += Math.abs(amt);
             else totalPoints -= Math.abs(amt);
         });
 
-        const totalRedeemed = (withdrawals || []).reduce((sum, record) => sum + (Number(record.amount || 0) / 1000), 0);
+        const totalRedeemed = (withdrawals || []).reduce((sum: number, record: any) => sum + (Number(record.amount || 0) / 1000), 0);
         
         totalPoints -= totalRedeemed;
         if (totalPoints < 0) totalPoints = 0;

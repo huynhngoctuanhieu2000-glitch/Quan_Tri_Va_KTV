@@ -27,12 +27,12 @@ async function run() {
         try {
             const balance = await runRoute(getBalance, ktv);
             console.log(`[Balance] Available: ${balance.available_balance}`);
-        } catch(e) { console.error('Balance err:', e.message); }
+        } catch(e: any) { console.error('Balance err:', e.message); }
 
         try {
             const bonus = await runRoute(getBonusBalance, ktv);
             console.log(`[Bonus Balance] Available: ${bonus.available_balance}`);
-        } catch(e) { console.error('Bonus Balance err:', e.message); }
+        } catch(e: any) { console.error('Bonus Balance err:', e.message); }
 
         try {
             const timeline = await runRoute(getTimeline, ktv);
@@ -40,7 +40,7 @@ async function run() {
             if (timeline.timeline) timelineItems = timeline.timeline.length;
             else timelineItems = timeline.length || 0; // sometimes it returns array directly
             console.log(`[Timeline] Items count: ${timelineItems}`);
-        } catch(e) { console.error('Timeline err:', e.message); }
+        } catch(e: any) { console.error('Timeline err:', e.message); }
 
         try {
             const bonusTimeline = await runRoute(getBonusTimeline, ktv);
@@ -48,7 +48,7 @@ async function run() {
             if (bonusTimeline.timeline) timelineItems = bonusTimeline.timeline.length;
             else timelineItems = bonusTimeline.length || 0;
             console.log(`[Bonus Timeline] Items count: ${timelineItems}`);
-        } catch(e) { console.error('Bonus Timeline err:', e.message); }
+        } catch(e: any) { console.error('Bonus Timeline err:', e.message); }
     }
 }
 

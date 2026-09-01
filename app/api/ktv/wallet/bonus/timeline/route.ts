@@ -186,7 +186,7 @@ export async function GET(request: Request) {
             }
         }
 
-        (earns || []).forEach(e => {
+        (earns || []).forEach((e: any) => {
             timeline.push({
                 id: `earn-${e.date}`,
                 date: `${e.date}T23:59:59+07:00`,
@@ -196,7 +196,7 @@ export async function GET(request: Request) {
             });
         });
 
-        (adjs || []).forEach(a => {
+        (adjs || []).forEach((a: any) => {
             const amt = Number(a.amount);
             const isGift = a.type === 'GIFT' || amt > 0;
             timeline.push({
@@ -208,7 +208,7 @@ export async function GET(request: Request) {
             });
         });
 
-        (wths || []).forEach(w => {
+        (wths || []).forEach((w: any) => {
             timeline.push({
                 id: `wth-${w.request_date}`,
                 date: w.request_date,

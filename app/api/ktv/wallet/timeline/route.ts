@@ -64,11 +64,11 @@ export async function GET(request: Request) {
         let realtimeStartStr = `${GLOBAL_START_DATE_STR}T00:00:00+07:00`;
 
         if (ledgers && ledgers.length > 0) {
-            const pastLedgers = ledgers.filter(l => l.date < todayStr);
+            const pastLedgers = ledgers.filter((l: any) => l.date < todayStr);
             
             if (pastLedgers.length > 0) {
                 let maxDateStr = pastLedgers[0].date;
-                pastLedgers.forEach(l => {
+                pastLedgers.forEach((l: any) => {
                     if (l.date > maxDateStr) maxDateStr = l.date;
                     
                     if (Number(l.total_commission) > 0) {
@@ -264,7 +264,7 @@ export async function GET(request: Request) {
         )
             .gte('created_at', START_DATE);
         
-        (adjustments || []).forEach(a => {
+        (adjustments || []).forEach((a: any) => {
             // Smart title based on reason content
             let title = Number(a.amount) >= 0 ? 'Thưởng hệ thống' : 'Trừ tiền hệ thống';
             const reason = (a.reason || '').toLowerCase();
@@ -290,7 +290,7 @@ export async function GET(request: Request) {
             .or('wallet_type.eq.TUA,wallet_type.is.null')
             .gte('request_date', START_DATE);
 
-        (withdrawals || []).forEach(w => {
+        (withdrawals || []).forEach((w: any) => {
             const isIntent = Math.abs(Number(w.amount)) === 1 && w.note && w.note.includes('Báo trước');
             if (isIntent) return; // Ẩn giao dịch "Báo trước" khỏi timeline của KTV
             
