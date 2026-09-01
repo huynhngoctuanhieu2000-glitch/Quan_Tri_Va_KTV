@@ -129,7 +129,8 @@ async function processLedgerSync(targetDateStr: string) {
         let total_tip = 0;
         let total_bonus = 0;
         let total_penalty = 0; // Penalty now handled via WalletAdjustments (attendance API)
-        
+        const commissionBreakdown: any[] = [];
+
         for (const b of validBookings) {
             // 🧠 Filter theo ITEM STATUS thay vì Booking cha — tránh kẹt tiền khi Booking cha chưa cập nhật
             const DONE_STATUSES = ['DONE', 'COMPLETED', 'CLEANING', 'FEEDBACK'];
@@ -152,13 +153,31 @@ async function processLedgerSync(targetDateStr: string) {
                     const fallbackDuration = svcDurationMap[String(item.serviceId)] || 60;
                     let itemDuration = KtvCommissionService.calculateItemDuration(item, techCode, fallbackDuration);
                     if (itemDuration <= 0) itemDuration = 60;
-                    bookingCommission += KtvCommissionService.calcCommission(itemDuration, allConfigs, workType, item.serviceId);
+                    const itemCommission = KtvCommissionService.calcCommission(itemDuration, allConfigs, workType, item.serviceId);
+                    bookingCommission += itemCommission;
                     bookingTip += (Number(item.tip) || 0);
+                    commissionBreakdown.push({
+                        bookingId: b.id,
+                        itemId: item.id,
+                        serviceId: item.serviceId || null,
+                        duration: itemDuration,
+                        workType,
+                        commission: itemCommission
+                    });
                 }
             }
 
             if (bookingCommission === 0 && passedItemCount > 0) {
                 bookingCommission = KtvCommissionService.calcCommission(60, allConfigs, workType, '');
+                commissionBreakdown.push({
+                    bookingId: b.id,
+                    itemId: null,
+                    serviceId: null,
+                    duration: 60,
+                    workType,
+                    commission: bookingCommission,
+                    fallback: true // ⚠️ Nhánh dự phòng: các item của booking này không tính được commission theo item, dùng mặc định 60p
+                });
             }
 
 
@@ -194,6 +213,7 @@ async function processLedgerSync(targetDateStr: string) {
             total_penalty,
             total_adjustment,
             total_withdrawn,
+            commission_breakdown: commissionBreakdown,
             updated_at: new Date().toISOString()
         });
     }
