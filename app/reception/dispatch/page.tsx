@@ -1361,7 +1361,8 @@ if (!hasPermission('dispatch_board')) {
               finalNotesToSave = clonedOrder.services[0]?.adminNote || '';
           }
       }
-      const isPending = !clonedOrder.rawStatus || ['NEW', 'pending', 'WAITING'].includes(clonedOrder.rawStatus);
+      // 'SPLIT' là trạng thái của đơn cha, không bao giờ được gán xuống đơn con
+      const isPending = !clonedOrder.rawStatus || ['NEW', 'pending', 'WAITING', 'SPLIT'].includes(clonedOrder.rawStatus);
       const bookingStatus = isPartial ? null : (isPending ? 'PREPARING' : clonedOrder.rawStatus);
 
       for (const group of bookingGroups) {
@@ -1474,7 +1475,10 @@ if (!hasPermission('dispatch_board')) {
 
           dispatchPayloads.push({
               bookingId: group.bookingId,
-              dbBookingId: clonedOrder.parentBookingId || clonedOrder.id,
+              // ⚠️ Phải bắn vào đúng đơn ĐANG GIỮ dịch vụ. Sau khi tách, BookingItems đã chuyển sang
+              // đơn con, còn đơn cha chuyển sang SPLIT và bị RPC dispatch_confirm_booking chặn
+              // ("Đơn đã tách thành đơn con. Vui lòng điều phối từng đơn con riêng") -> KTV không nhận được đơn.
+              dbBookingId: group.bookingId,
               itemUpdates,
               mergedAssignments: allStaffAssignments,
               bedId: isPartial ? undefined : (primarySeg?.bedId || null),
@@ -2669,9 +2673,12 @@ if (!hasPermission('dispatch_board')) {
                     const hasStartedService = selectedSubOrder.services.some(
                       (s: any) => s.status && ['IN_PROGRESS', 'CLEANING', 'FEEDBACK', 'DONE', 'COMPLETED'].includes(s.status)
                     );
+                    // Đơn đã điều phối vẫn phải đổi/gỡ KTV được: processDispatch đã chặn lùi trạng thái và giữ mốc giờ thực tế
+                    const isRedispatch = selectedSubOrder.dispatchStatus !== 'pending';
+                    const isBlockedByStartedService = hasStartedService && !isRedispatch;
                     // Check readiness only for the services in the current sub-order, not the entire parent
                     const subOrderAsOrder = { ...selectedSubOrder.originalOrder, services: selectedSubOrder.services };
-                    const ready = isDispatchReady(subOrderAsOrder) && !hasStartedService;
+                    const ready = isDispatchReady(subOrderAsOrder) && !isBlockedByStartedService;
                     
                     return (
                       <button
@@ -2688,7 +2695,7 @@ if (!hasPermission('dispatch_board')) {
                           }
                         }}
                         disabled={!ready}
-                        title={hasStartedService ? "Đã có dịch vụ bắt đầu, vui lòng điều phối lẻ từng dịch vụ!" : ""}
+                        title={isBlockedByStartedService ? "Đã có dịch vụ bắt đầu, vui lòng tách đơn rồi gửi cho từng khách!" : ""}
                         className={`flex-[2] flex-col py-3 rounded-3xl font-black text-sm lg:text-base tracking-widest uppercase transition-all flex items-center justify-center gap-1 shadow-2xl ${ready
                           ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 active:scale-95'
                           : 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
@@ -2697,8 +2704,8 @@ if (!hasPermission('dispatch_board')) {
                         <div className="flex items-center gap-3">
                            <Send size={20} strokeWidth={3} /> {selectedSubOrder?.dispatchStatus !== 'pending' ? 'CẬP NHẬT KTV & GỬI LẠI' : 'GỬI ĐƠN CHO KTV'}
                         </div>
-                        {hasStartedService && (
-                          <span className="text-[10px] text-rose-500 font-bold normal-case tracking-normal">(Vui lòng điều phối lẻ vì đã có DV chạy)</span>
+                        {isBlockedByStartedService && (
+                          <span className="text-[10px] text-rose-500 font-bold normal-case tracking-normal">(Đã có DV đang chạy — hãy tách đơn rồi gửi từng khách)</span>
                         )}
                       </button>
                     )
