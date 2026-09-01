@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { KtvCommissionService } from '@/lib/services/KtvCommissionService';
+import { KtvWalletService } from '@/lib/services/KtvWalletService';
+import { KtvTypeDCommissionService } from '@/lib/services/KtvTypeDCommissionService';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +28,23 @@ export async function GET(request: Request) {
         }
 
         const commConfigs = await KtvCommissionService.getAllConfigs(supabase);
+        let rateVIP = 180000;
+        let ratePT = 100000;
+        let ratingDeductions: Record<string, number> = { "0": 0, "1": 0.75, "2": 0.5, "3": 0.25, "4": 0 };
+        if (workType === 'TYPE_D') {
+            const { data: configsData } = await supabase.from('SystemConfigs').select('key, value').ilike('key', '%type_d%');
+            const configs: Record<string, any> = {};
+            (configsData || []).forEach(c => { configs[c.key] = c.value; });
+            rateVIP = Number(configs['ktv_type_d_vip_rate_per_60m']) || 180000;
+            ratePT = Number(configs['ktv_type_d_pt_rate_per_60m']) || 100000;
+            try {
+                if (configs['ktv_type_d_rating_deduction']) {
+                    ratingDeductions = typeof configs['ktv_type_d_rating_deduction'] === 'string' 
+                        ? JSON.parse(configs['ktv_type_d_rating_deduction']) 
+                        : configs['ktv_type_d_rating_deduction'];
+                }
+            } catch (e) {}
+        }
 
         const GLOBAL_START_DATE_STR = '2026-05-04';
         const START_DATE = `${GLOBAL_START_DATE_STR}T00:00:00.000Z`;
@@ -36,10 +55,10 @@ export async function GET(request: Request) {
         const todayStr = nowVnDate.toISOString().split('T')[0];
 
         // 1. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
-        const { data: ledgers } = await supabase
-            .from('KTVDailyLedger')
-            .select('date, total_commission, total_tip')
-            .eq('staff_id', techCode)
+        const { data: ledgers } = await KtvWalletService.applySnapshotFilter(
+            supabase.from('KTVDailyLedger').select('date, total_commission, total_tip').eq('staff_id', techCode),
+            workType
+        )
             .gte('date', GLOBAL_START_DATE_STR);
 
         let realtimeStartStr = `${GLOBAL_START_DATE_STR}T00:00:00+07:00`;
@@ -144,33 +163,61 @@ export async function GET(request: Request) {
             let allHoldReasons = new Set<string>();
             let passedCount = 0;
 
-            for (const item of relevantItems) {
-                const fallbackDuration = svcDurationMap[String(item.serviceId)] || 0;
-                let itemDuration = KtvCommissionService.calculateItemDuration(item, techCode, fallbackDuration);
-                if (itemDuration <= 0) itemDuration = 60;
+            
+            if (workType === 'TYPE_D') {
+                const vipItems = relevantItems.filter((i: any) => {
+                    const svcId = String(i.serviceId).toUpperCase();
+                    return svcId.startsWith('NHP') || svcId.startsWith('NHT') || svcId.startsWith('VIP');
+                });
+                const ptItems = relevantItems.filter((i: any) => {
+                    const svcId = String(i.serviceId).toUpperCase();
+                    return !(svcId.startsWith('NHP') || svcId.startsWith('NHT') || svcId.startsWith('VIP'));
+                });
                 
-                const commissionForItem = KtvCommissionService.calcCommission(itemDuration, commConfigs, workType, item.serviceId);
+                passedCommission = KtvTypeDCommissionService.calculateGuestCommission(vipItems, techCode, b.rating, rateVIP, ratingDeductions) + 
+                                   KtvTypeDCommissionService.calculateGuestCommission(ptItems, techCode, b.rating, ratePT, ratingDeductions);
+                
+                // For TYPE_D, we don't hold commission (no HOLD logic defined in requirements)
+                heldCommission = 0;
+                
+                // Approximate passedDuration
+                passedDuration = relevantItems.reduce((sum: number, item: any) => {
+                    const fallbackDuration = svcDurationMap[String(item.serviceId)] || 0;
+                    let itemDuration = KtvCommissionService.calculateItemDuration(item, techCode, fallbackDuration);
+                    return sum + (itemDuration <= 0 ? 60 : itemDuration);
+                }, 0);
+                
+                passedCount = relevantItems.length;
+            } else {
+                for (const item of relevantItems) {
+                    const fallbackDuration = svcDurationMap[String(item.serviceId)] || 0;
+                    let itemDuration = KtvCommissionService.calculateItemDuration(item, techCode, fallbackDuration);
+                    if (itemDuration <= 0) itemDuration = 60;
+                    
+                    const commissionForItem = KtvCommissionService.calcCommission(itemDuration, commConfigs, workType, item.serviceId);
 
-                const { isPassed, reasons } = KtvCommissionService.checkIsItemPassed(item, b, techCode);
+                    const { isPassed, reasons } = KtvCommissionService.checkIsItemPassed(item, b, techCode);
+                    
+                    if (isPassed) {
+                        passedDuration += itemDuration;
+                        passedCommission += commissionForItem;
+                        passedCount++;
+                    } else {
+                        heldDuration += itemDuration;
+                        heldCommission += commissionForItem;
+                        reasons.forEach(r => allHoldReasons.add(r));
+                    }
+                }
                 
-                if (isPassed) {
-                    passedDuration += itemDuration;
-                    passedCommission += commissionForItem;
-                    passedCount++;
-                } else {
-                    heldDuration += itemDuration;
-                    heldCommission += commissionForItem;
-                    reasons.forEach(r => allHoldReasons.add(r));
+                // Fallback for TYPE_A if total passed commission is 0 but they did work
+                if (passedCommission === 0 && passedCount > 0) {
+                    passedCommission = KtvCommissionService.calcCommission(60, commConfigs, workType, '');
+                }
+                if (heldCommission === 0 && relevantItems.length > passedCount && passedCount === 0) {
+                    heldCommission = KtvCommissionService.calcCommission(60, commConfigs, workType, '');
                 }
             }
-            
-            // Fallback for TYPE_A if total passed commission is 0 but they did work
-            if (passedCommission === 0 && passedCount > 0) {
-                passedCommission = KtvCommissionService.calcCommission(60, commConfigs, workType, '');
-            }
-            if (heldCommission === 0 && relevantItems.length > passedCount && passedCount === 0) {
-                heldCommission = KtvCommissionService.calcCommission(60, commConfigs, workType, '');
-            }
+
 
             if (passedCommission > 0) {
                 timeline.push({
@@ -211,10 +258,10 @@ export async function GET(request: Request) {
         }
 
         // 3. Adjustments
-        const { data: adjustments } = await supabase
-            .from('WalletAdjustments')
-            .select('id, amount, reason, type, created_at')
-            .eq('staff_id', techCode)
+        const { data: adjustments } = await KtvWalletService.applySnapshotFilter(
+            supabase.from('WalletAdjustments').select('id, amount, reason, type, created_at').eq('staff_id', techCode),
+            workType
+        )
             .gte('created_at', START_DATE);
         
         (adjustments || []).forEach(a => {
@@ -236,10 +283,10 @@ export async function GET(request: Request) {
         });
 
         // 4. Withdrawals
-        const { data: withdrawals } = await supabase
-            .from('KTVWithdrawals')
-            .select('id, amount, note, request_date, status')
-            .eq('staff_id', techCode)
+        const { data: withdrawals } = await KtvWalletService.applySnapshotFilter(
+            supabase.from('KTVWithdrawals').select('id, amount, note, request_date, status').eq('staff_id', techCode),
+            workType
+        )
             .or('wallet_type.eq.TUA,wallet_type.is.null')
             .gte('request_date', START_DATE);
 

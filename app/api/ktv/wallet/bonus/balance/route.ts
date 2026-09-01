@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { KtvCommissionService } from '@/lib/services/KtvCommissionService';
+import { KtvWalletService } from '@/lib/services/KtvWalletService';
+import { KtvTypeDBonusService } from '@/lib/services/KtvTypeDBonusService';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -41,30 +43,30 @@ export async function GET(request: Request) {
         const enableBonus = bonusConfigData.enableBonus;
 
         // 1. Fetch Earned Bonus
-        const { data: earns, error: earnErr } = await supabase
-            .from('KTVDailyLedger')
-            .select('total_bonus')
-            .eq('staff_id', techCode)
+        const { data: earns, error: earnErr } = await KtvWalletService.applySnapshotFilter(
+            supabase.from('KTVDailyLedger').select('total_bonus').eq('staff_id', techCode),
+            workType
+        )
             .gte('date', START_DATE)
             .gt('total_bonus', 0);
 
         if (earnErr) throw earnErr;
 
         // 2. Fetch Deducted Bonus
-        const { data: adjustments, error: adjErr } = await supabase
-            .from('WalletAdjustments')
-            .select('amount, type')
-            .eq('staff_id', techCode)
+        const { data: adjustments, error: adjErr } = await KtvWalletService.applySnapshotFilter(
+            supabase.from('WalletAdjustments').select('amount, type').eq('staff_id', techCode),
+            workType
+        )
             .eq('wallet_type', 'BONUS')
             .gte('created_at', `${START_DATE}T00:00:00+07:00`);
 
         if (adjErr) throw adjErr;
 
         // 3. Fetch Redeemed Bonus
-        const { data: withdrawals, error: wthErr } = await supabase
-            .from('KTVWithdrawals')
-            .select('amount')
-            .eq('staff_id', techCode)
+        const { data: withdrawals, error: wthErr } = await KtvWalletService.applySnapshotFilter(
+            supabase.from('KTVWithdrawals').select('amount').eq('staff_id', techCode),
+            workType
+        )
             .eq('wallet_type', 'BONUS')
             .gte('request_date', `${START_DATE}T00:00:00+07:00`)
             .in('status', ['PENDING', 'APPROVED']);
@@ -124,20 +126,52 @@ export async function GET(request: Request) {
         const svcUtilityMap: Record<string, boolean> = {};
         (services || []).forEach(s => { svcUtilityMap[String(s.id)] = s.is_utility === true; });
 
+        
         const bonusConfig = { s1Bonus, s2Bonus, s3Bonus, enableBonus };
+        
+        const { data: dConfigs } = await supabase.from('SystemConfigs').select('key, value').ilike('key', '%type_d%');
+        const typeDConfigs: Record<string, any> = {};
+        (dConfigs || []).forEach((c: any) => { typeDConfigs[c.key] = c.value; });
+        const basePointsTypeD = Number(typeDConfigs['ktv_type_d_bonus_points']) || 20;
+        const pointRateTypeD = Number(typeDConfigs['ktv_bonus_rate_TYPE_D']) || 1000;
+        const enableBonusTypeD = typeDConfigs['enable_ktv_bonus_TYPE_D'] === true || typeDConfigs['enable_ktv_bonus_TYPE_D'] === 'true';
 
+
+        
         let rt_bonus = 0;
         (bookings || []).forEach(b => {
-            const bDate = new Date(b.timeStart || (b as any).createdAt || todayStr);
-            const isNewRule = bDate >= new Date('2026-08-05T00:00:00+07:00');
-            let bForBonus = b;
-            if (!isNewRule) {
-                const filteredItemsForBonus = (b.BookingItems || []).filter((i: any) => !svcUtilityMap[String(i.serviceId)]);
-                bForBonus = { ...b, BookingItems: filteredItemsForBonus };
+            if (workType === 'TYPE_D') {
+                if (enableBonusTypeD) {
+                    const ktvWorkTypesForGuest: string[] = [];
+                    (b.BookingItems || []).forEach((i: any) => {
+                        if (i.technicianCodes && Array.isArray(i.technicianCodes)) {
+                            i.technicianCodes.forEach((tc: string) => {
+                                const wt = staffWorkTypeMap[tc.toLowerCase()] || 'TYPE_A';
+                                ktvWorkTypesForGuest.push(wt);
+                            });
+                        }
+                    });
+                    const bonusPts = KtvTypeDBonusService.calculateBonusForTypeD(
+                        ktvWorkTypesForGuest,
+                        b.rating,
+                        basePointsTypeD,
+                        pointRateTypeD
+                    );
+                    rt_bonus += bonusPts;
+                }
+            } else {
+                const bDate = new Date(b.timeStart || (b as any).createdAt || todayStr);
+                const isNewRule = bDate >= new Date('2026-08-05T00:00:00+07:00');
+                let bForBonus = b;
+                if (!isNewRule) {
+                    const filteredItemsForBonus = (b.BookingItems || []).filter((i: any) => !svcUtilityMap[String(i.serviceId)]);
+                    bForBonus = { ...b, BookingItems: filteredItemsForBonus };
+                }
+                const bonusPts = KtvCommissionService.calculateBookingBonus(bForBonus, techCode, todayStr, shiftsData || [], bonusConfig, staffWorkTypeMap, staffBonusMap, isNewRule);
+                rt_bonus += bonusPts;
             }
-            const bonusPts = KtvCommissionService.calculateBookingBonus(bForBonus, techCode, todayStr, shiftsData || [], bonusConfig, staffWorkTypeMap, staffBonusMap, isNewRule);
-            rt_bonus += bonusPts;
         });
+
 
         // 4. Calculate Balance
         let totalPoints = (earns || []).reduce((sum, record) => sum + Number(record.total_bonus || 0), 0) + rt_bonus;

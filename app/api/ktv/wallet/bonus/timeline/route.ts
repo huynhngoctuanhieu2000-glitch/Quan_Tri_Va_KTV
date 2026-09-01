@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { KtvCommissionService } from '@/lib/services/KtvCommissionService';
+import { KtvTypeDBonusService } from '@/lib/services/KtvTypeDBonusService';
+import { KtvWalletService } from '@/lib/services/KtvWalletService';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -15,12 +17,13 @@ export async function GET(request: Request) {
         if (!supabase) return NextResponse.json({ success: false, error: 'Lỗi máy chủ' }, { status: 500 });
 
         const START_DATE = '2026-06-01';
+        let workType = await KtvWalletService.getWorkTypeSnapshot(supabase as any, techCode);
 
         // 1. Fetch Earned
-        const { data: earns, error: earnErr } = await supabase
-            .from('KTVDailyLedger')
-            .select('date, total_bonus, staff_id')
-            .eq('staff_id', techCode)
+        const { data: earns, error: earnErr } = await KtvWalletService.applySnapshotFilter(
+        supabase.from('KTVDailyLedger').select('date, total_bonus, staff_id').eq('staff_id', techCode),
+        workType
+    )
             .gte('date', START_DATE)
             .gt('total_bonus', 0)
             .order('date', { ascending: false });
@@ -28,21 +31,19 @@ export async function GET(request: Request) {
         if (earnErr) throw earnErr;
 
         // 2. Fetch Adjustments (GIFT/PENALTY)
-        const { data: adjs, error: adjErr } = await supabase
-            .from('WalletAdjustments')
-            .select('created_at, amount, type, reason')
-            .eq('staff_id', techCode)
-            .eq('wallet_type', 'BONUS')
+        const { data: adjs, error: adjErr } = await KtvWalletService.applySnapshotFilter(
+        supabase.from('WalletAdjustments').select('created_at, amount, type, reason').eq('staff_id', techCode).eq('wallet_type', 'BONUS'),
+        workType
+    )
             .gte('created_at', `${START_DATE}T00:00:00+07:00`);
 
         if (adjErr) throw adjErr;
 
         // 3. Fetch Withdrawals (REDEEM)
-        const { data: wths, error: wthErr } = await supabase
-            .from('KTVWithdrawals')
-            .select('request_date, amount, status')
-            .eq('staff_id', techCode)
-            .eq('wallet_type', 'BONUS')
+        const { data: wths, error: wthErr } = await KtvWalletService.applySnapshotFilter(
+        supabase.from('KTVWithdrawals').select('request_date, amount, status').eq('staff_id', techCode).eq('wallet_type', 'BONUS'),
+        workType
+    )
             .gte('request_date', `${START_DATE}T00:00:00+07:00`);
 
         const nowVn = new Date(Date.now() + 7 * 60 * 60 * 1000);
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
             .from('Staff')
             .select('id, work_type, feature_flags');
             
-        let workType = 'TYPE_A';
+        // let workType removed
         const staffWorkTypeMap: Record<string, string> = {};
         const staffBonusMap: Record<string, boolean> = {};
         (allStaffData || []).forEach(s => {
