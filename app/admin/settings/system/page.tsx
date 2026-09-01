@@ -7,6 +7,7 @@ import { motion } from 'motion/react';
 import { SystemConfigsTable } from './SystemConfigsTable';
 import { MilestonesEditor } from './MilestonesEditor';
 import { KtvFeaturesTable } from './KtvFeaturesTable';
+import { KtvTypeDSettingsBlock } from './KtvTypeDSettingsBlock';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
 
@@ -53,7 +54,7 @@ export default function SystemSettingsPage() {
         enable_web_advance_booking_email: false
     });
     const [initialConfigs, setInitialConfigs] = useState<any>({});
-    const [activeTab, setActiveTab] = useState<'TYPE_A' | 'TYPE_B' | 'TYPE_C'>('TYPE_A');
+    const [activeTab, setActiveTab] = useState<'TYPE_A' | 'TYPE_B' | 'TYPE_C' | 'TYPE_D'>('TYPE_A');
     
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -158,7 +159,7 @@ export default function SystemSettingsPage() {
 
                 {/* Tabs KTV Types */}
                 <div className="flex gap-2 p-1.5 bg-gray-100/80 backdrop-blur rounded-2xl w-fit">
-                    {(['TYPE_A', 'TYPE_B', 'TYPE_C'] as const).map(type => (
+                    {(['TYPE_A', 'TYPE_B', 'TYPE_C', 'TYPE_D'] as const).map(type => (
                         <button
                             key={type}
                             onClick={() => setActiveTab(type)}
@@ -168,12 +169,16 @@ export default function SystemSettingsPage() {
                                     : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
                             }`}
                         >
-                            KTV {type === 'TYPE_A' ? 'Loại A (Cố định)' : type === 'TYPE_B' ? 'Loại B (Hợp tác)' : 'Loại C (Tự do)'}
+                            KTV {type === 'TYPE_A' ? 'Loại A (Cố định)' : type === 'TYPE_B' ? 'Loại B (Hợp tác)' : type === 'TYPE_C' ? 'Loại C (Tự do)' : 'Loại D (Khoán)'}
                         </button>
                     ))}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {activeTab === 'TYPE_D' ? (
+                    <KtvTypeDSettingsBlock />
+                ) : (
+                    <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Card: Điểm Thưởng */}
                     <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-6">
@@ -548,6 +553,8 @@ export default function SystemSettingsPage() {
                 <div className="mt-8">
                     <KtvFeaturesTable activeTab={activeTab} />
                 </div>
-            </div>
+            </>
+            )}
+        </div>
     );
 }
