@@ -17,6 +17,10 @@ export async function POST(request: Request) {
 
         const { staff_id, amount, reason, type, wallet_type } = parseResult.data;
 
+        
+        const { data: staffData } = await supabase.from('Staff').select('work_type').eq('id', staff_id).single();
+        const workType = staffData?.work_type || 'TYPE_A';
+
         const { error } = await supabase
             .from('WalletAdjustments')
             .insert({
@@ -25,8 +29,10 @@ export async function POST(request: Request) {
                 type,
                 wallet_type,
                 reason,
-                created_by: 'Admin'
+                created_by: 'Admin',
+                work_type_snapshot: workType
             });
+
 
         if (error) {
             console.error('Lỗi insert WalletAdjustments:', error);

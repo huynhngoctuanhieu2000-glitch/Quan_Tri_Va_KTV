@@ -168,7 +168,8 @@ export async function GET(request: Request) {
         );
 
         // 6. Calculate per KTV
-        const summaries = ktvs.map(ktv => {
+        const summaries = [];
+        for (const ktv of ktvs) {
             const techCode = ktv.id;
             let at_rt_commission = 0;
             let at_rt_tip = 0;
@@ -298,7 +299,25 @@ export async function GET(request: Request) {
             const available_balance = Math.max(0, net_balance - min_deposit);
             const effective_balance = Math.max(0, net_balance);
 
-            return {
+            let accumulated_hours = 0;
+            let rating_deduction = 0;
+            let internal_fund = 0;
+
+            if (workType === 'TYPE_D') {
+                const now = new Date();
+                const month = now.getMonth() + 1;
+                const year = now.getFullYear();
+                const { data: mh } = await supabase.from('KTVMonthlyServiceHours')
+                    .select('net_hours').eq('staff_id', ktv.id).eq('month', month).eq('year', year).maybeSingle();
+                accumulated_hours = mh?.net_hours || 0;
+                
+                // Fetch bonus wallet total
+                const { data: hw } = await supabase.from('WalletAdjustments')
+                    .select('amount').eq('staff_id', ktv.id).eq('wallet_type', 'BONUS');
+                internal_fund = (hw || []).reduce((sum, r) => sum + Number(r.amount), 0);
+            }
+
+            summaries.push({
                 id: ktv.id,
                 name: ktv.full_name,
                 position: ktv.position,
@@ -314,9 +333,12 @@ export async function GET(request: Request) {
                 min_deposit,
                 net_balance,
                 available_balance,
-                effective_balance
-            };
-        });
+                effective_balance,
+                accumulated_hours,
+                rating_deduction,
+                internal_fund
+            });
+        }
 
         return NextResponse.json({ success: true, data: summaries });
     } catch (err: any) {

@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/cleanup-online",
       "schedule": "0 2,4,8,10,12,14,17 * * *"
+    },
+    {
+      "path": "/api/cron/reset-type-d-hours",
+      "schedule": "0 17 1 * *"
     }
   ]
 }

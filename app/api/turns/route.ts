@@ -38,9 +38,40 @@ export async function GET(request: Request) {
             .order('turns_completed', { ascending: true })
             .order('queue_position', { ascending: true });
 
+        
         if (newError) throw newError;
 
-        return NextResponse.json({ success: true, data: newData });
+        // --- TYPE_D Sorting Logic ---
+        const employeeIds = newData.map((r: any) => r.employee_id);
+        const { data: staffData } = await supabase.from('Staff').select('id, work_type').in('id', employeeIds);
+        const staffWorkTypeMap: Record<string, string> = {};
+        (staffData || []).forEach((s: any) => { staffWorkTypeMap[s.id] = s.work_type || 'TYPE_A'; });
+
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        
+        const typeDIds = (staffData || []).filter((s: any) => s.work_type === 'TYPE_D').map((s: any) => s.id);
+        const monthlyHoursMap: Record<string, number> = {};
+        if (typeDIds.length > 0) {
+            const { data: mhData } = await supabase.from('KTVMonthlyServiceHours')
+                .select('staff_id, net_hours')
+                .in('staff_id', typeDIds)
+                .eq('month', month)
+                .eq('year', year);
+            (mhData || []).forEach((m: any) => { monthlyHoursMap[m.staff_id] = Number(m.net_hours) || 0; });
+        }
+
+        const others = newData.filter((r: any) => staffWorkTypeMap[r.employee_id] !== 'TYPE_D');
+        const typeD = newData.filter((r: any) => staffWorkTypeMap[r.employee_id] === 'TYPE_D');
+        
+        // Output TYPE_D sorted by monthly_hours DESC
+        typeD.sort((a: any, b: any) => (monthlyHoursMap[b.employee_id] || 0) - (monthlyHoursMap[a.employee_id] || 0));
+
+        const finalData = [...others, ...typeD];
+
+        return NextResponse.json({ success: true, data: finalData });
+
     } catch (error: any) {
         console.error('API Error (Turns):', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });

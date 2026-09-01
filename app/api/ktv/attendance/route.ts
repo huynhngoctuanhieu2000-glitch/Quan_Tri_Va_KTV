@@ -437,11 +437,12 @@ export async function POST(request: Request) {
                 // Fetch feature_flags for this KTV
                 const { data: staffRow } = await supabase
                     .from('Staff')
-                    .select('feature_flags')
+                    .select('feature_flags, work_type')
                     .eq('id', staffCode)
                     .maybeSingle();
 
                 const featureFlags = (staffRow?.feature_flags || {}) as Record<string, boolean>;
+                const workType = staffRow?.work_type || 'TYPE_A';
 
                 // 🧦 Laundry Deduction: on CHECK_IN / LATE_CHECKIN, once per day
                 if ((checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') && featureFlags.laundry_deduction === true) {
@@ -475,6 +476,7 @@ export async function POST(request: Request) {
                                 type: 'PENALTY',
                                 reason: `Giặt đồ ngày ${today.split('-').reverse().join('/')}`,
                                 created_by: 'SYSTEM',
+                                work_type_snapshot: workType,
                             });
                         if (laundryErr) console.error('❌ [Laundry Deduction] Insert Error:', laundryErr);
                         else console.log(`🧦 [Laundry] Trừ ${laundryFee}đ cho ${staffCode} ngày ${today}`);
@@ -483,25 +485,36 @@ export async function POST(request: Request) {
 
                 // ⚠️ Sudden Leave Penalty: on SUDDEN_OFF or SUDDEN_OFF_CHECKOUT
                 if ((checkType === 'SUDDEN_OFF' || selectedShiftType === 'SUDDEN_OFF_CHECKOUT') && featureFlags.sudden_leave_penalty === true) {
-                    // Fetch penalty amount from SystemConfigs
-                    const { data: penaltyConf } = await supabase
-                        .from('SystemConfigs')
-                        .select('value')
-                        .eq('key', 'ktv_sudden_off_penalty')
-                        .maybeSingle();
-                    const penaltyAmount = Number(String(penaltyConf?.value || '500000').replace(/"/g, ''));
+                    if (workType === 'TYPE_D') {
+                        try {
+                            const { KtvTypeDDisciplineService } = await import('@/lib/services/KtvTypeDDisciplineService');
+                            await KtvTypeDDisciplineService.deductDailyViolation(supabase, staffCode, today, 'ABSENT_NO_NOTICE', 'Nghỉ đột xuất');
+                            console.log(`⚠️ [Penalty D] Trừ 10 giờ cho ${staffCode} ngày ${today}`);
+                        } catch (e) {
+                            console.error('❌ [Penalty D] Error:', e);
+                        }
+                    } else {
+                        // Fetch penalty amount from SystemConfigs
+                        const { data: penaltyConf } = await supabase
+                            .from('SystemConfigs')
+                            .select('value')
+                            .eq('key', 'ktv_sudden_off_penalty')
+                            .maybeSingle();
+                        const penaltyAmount = Number(String(penaltyConf?.value || '500000').replace(/"/g, ''));
 
-                    const { error: penaltyErr } = await supabase
-                        .from('WalletAdjustments')
-                        .insert({
-                            staff_id: staffCode,
-                            amount: -Math.abs(penaltyAmount),
-                            type: 'PENALTY',
-                            reason: `Phạt nghỉ đột xuất ngày ${today.split('-').reverse().join('/')}`,
-                            created_by: 'SYSTEM',
-                        });
-                    if (penaltyErr) console.error('❌ [Sudden Off Penalty] Insert Error:', penaltyErr);
-                    else console.log(`⚠️ [Penalty] Trừ ${penaltyAmount}đ cho ${staffCode} ngày ${today}`);
+                        const { error: penaltyErr } = await supabase
+                            .from('WalletAdjustments')
+                            .insert({
+                                staff_id: staffCode,
+                                amount: -Math.abs(penaltyAmount),
+                                type: 'PENALTY',
+                                reason: `Phạt nghỉ đột xuất ngày ${today.split('-').reverse().join('/')}`,
+                                created_by: 'SYSTEM',
+                                work_type_snapshot: workType,
+                            });
+                        if (penaltyErr) console.error('❌ [Sudden Off Penalty] Insert Error:', penaltyErr);
+                        else console.log(`⚠️ [Penalty] Trừ ${penaltyAmount}đ cho ${staffCode} ngày ${today}`);
+                    }
                 }
             } catch (deductionErr) {
                 // Non-blocking: log error but don't fail the attendance request

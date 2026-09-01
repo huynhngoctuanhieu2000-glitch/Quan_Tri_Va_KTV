@@ -16,7 +16,25 @@ export async function POST(request: Request) {
         }
         const { techCode, amount, walletType } = parseResult.data;
 
+        
         const requestAmount = Number(amount);
+
+        const { data: staffData } = await supabase.from('Staff').select('work_type').eq('id', techCode).single();
+        const workType = staffData?.work_type || 'TYPE_A';
+
+        if (workType === 'TYPE_D') {
+            const { data: configRows } = await supabase.from('SystemConfigs').select('key, value').ilike('key', '%type_d%');
+            const configs: Record<string, string> = {};
+            (configRows || []).forEach(c => { configs[c.key] = c.value; });
+            if (configs['ktv_type_d_withdraw_morning_only'] === 'true') {
+                const vnOffset = 7 * 60 * 60 * 1000;
+                const vnNow = new Date(Date.now() + vnOffset);
+                if (vnNow.getUTCHours() >= 12) {
+                    return NextResponse.json({ success: false, error: 'Chế độ Cố định theo ca chỉ được phép rút tiền trước 12:00 trưa.' }, { status: 400 });
+                }
+            }
+        }
+
 
         // 1. Chống Spam: Đã được yêu cầu tắt
         // KTV có thể gửi thông báo rút tiền nhiều lần dù cho lệnh cũ chưa được duyệt.
@@ -52,7 +70,8 @@ export async function POST(request: Request) {
                 staff_id: techCode,
                 amount: requestAmount,
                 wallet_type: walletType,
-                status: 'PENDING'
+                status: 'PENDING',
+                work_type_snapshot: workType
             })
             .select()
             .single();
