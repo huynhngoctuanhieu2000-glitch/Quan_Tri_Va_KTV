@@ -54,10 +54,23 @@ export class KtvCommissionService {
             `ktv_type_b_fixed_order_bonus`
         ];
         
-        const { data: configs } = await supabase
-            .from('SystemConfigs')
-            .select('key, value')
-            .in('key', keysToFetch);
+        // 🛡️ Retry + throw thay vì âm thầm rơi về bảng giá mặc định (bảng mặc định trùng giá Loại A,
+        // nên nếu fetch lỗi thoáng qua mà không throw, KTV Loại B sẽ bị tính nhầm như Loại A mà không ai biết).
+        let configs: { key: string; value: any }[] | null = null;
+        let fetchError: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            const { data, error } = await supabase
+                .from('SystemConfigs')
+                .select('key, value')
+                .in('key', keysToFetch);
+            if (!error) { configs = data; fetchError = null; break; }
+            fetchError = error;
+            if (attempt < 3) await new Promise(r => setTimeout(r, 300 * attempt));
+        }
+        if (fetchError) {
+            console.error(`[KtvCommissionService] Fetch SystemConfigs that bai sau 3 lan cho workType=${workType}:`, fetchError);
+            throw new Error(`Khong the lay cau hinh bang gia (${workType}) tu SystemConfigs: ${fetchError.message}`);
+        }
 
         const configMap: Record<string, any> = {};
         (configs || []).forEach(c => { configMap[c.key] = c.value; });
