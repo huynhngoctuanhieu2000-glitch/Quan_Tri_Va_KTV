@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
+import { useToast } from '@/components/ui/Toast';
 
 // 🔧 UI CONFIGURATION
 const WEEKDAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
@@ -40,6 +41,7 @@ export type ScheduleTab = 'off' | 'shift';
 
 export const useKTVSchedule = () => {
     const { hasPermission, user } = useAuth();
+    const { addToast } = useToast();
 
     // Common
     const [mounted, setMounted] = useState(false);
@@ -52,50 +54,114 @@ export const useKTVSchedule = () => {
     const [selectedDates, setSelectedDates] = useState<string[]>([]);
     const [isSubmittingOff, setIsSubmittingOff] = useState(false);
     const [leaveList, setLeaveList] = useState<LeaveRequest[]>([]);
-    const [isLoadingLeaves, setIsLoadingLeaves] = useState(true);
+    const [workRegistrationList, setWorkRegistrationList] = useState<any[]>([]);
+    
+    // D1: Giờ riêng từng ngày
+    const [expectedTimes, setExpectedTimes] = useState<Record<string, string>>({});
+    
+    // A1: Màn xác nhận đăng ký
+    const [pendingSubmit, setPendingSubmit] = useState<{ type: 'WORKING' | 'OFF', dates: string[] } | null>(null);
+
+    // E1: Màn sửa lịch
+    const [editingReg, setEditingReg] = useState<{ date: string, expected_time: string, status: string, step?: 'EDIT' | 'CONFIRM_CANCEL' } | null>(null);
+
+    const [isLoadingLeaves, setIsLoadingLeaves] = useState(false);
     const [offError, setOffError] = useState<string | null>(null);
     const [offSuccess, setOffSuccess] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState<{
+        isOpen: boolean;
+        type: 'SUDDEN_OFF_WARNING' | 'EXTENSION_CONFIRM';
+        message: string;
+        remaining?: number;
+    } | null>(null);
 
-    const [calendarMonth, setCalendarMonth] = useState(() => {
-        const now = new Date();
-        return { year: now.getFullYear(), month: now.getMonth() }; // 0-indexed
-    });
-    
-    // Warning confirmation state
-    const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean, type: string, message: string, remaining: number } | null>(null);
-
-    // ── Shift state ──
-    const [currentShift, setCurrentShift] = useState<ShiftRecord | null>(null);
-    const [tomorrowShift, setTomorrowShift] = useState<ShiftRecord | null>(null);
-    const [pendingRequest, setPendingRequest] = useState<ShiftRecord | null>(null);
-    const [shiftHistory, setShiftHistory] = useState<ShiftRecord[]>([]);
+    // ── SHIFT state ──
+    const [currentShift, setCurrentShift] = useState<{ type: string; start: string; end: string } | null>(null);
+    const [tomorrowShift, setTomorrowShift] = useState<{ type: string; start: string; end: string } | null>(null);
+    const [pendingRequest, setPendingRequest] = useState<any | null>(null);
+    const [shiftHistory, setShiftHistory] = useState<any[]>([]);
     const [shiftTypes, setShiftTypes] = useState<ShiftTypes>({});
-    const [isLoadingShift, setIsLoadingShift] = useState(true);
-    const [newShiftType, setNewShiftType] = useState('');
+    const [isLoadingShift, setIsLoadingShift] = useState(false);
+
+    const [newShiftType, setNewShiftType] = useState<string>('');
     const [shiftReason, setShiftReason] = useState('');
     const [isSubmittingShift, setIsSubmittingShift] = useState(false);
     const [shiftError, setShiftError] = useState<string | null>(null);
     const [shiftSuccess, setShiftSuccess] = useState(false);
 
-    useEffect(() => { setMounted(true); }, []);
+    // Calendar state
+    const [calendarMonth, setCalendarMonth] = useState(() => {
+        const d = new Date();
+        return { year: d.getFullYear(), month: d.getMonth() };
+    });
 
-    // ── Fetch leave schedule (by calendar month) ──
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const fetchLeaveList = useCallback(async () => {
+        if (!user?.id) return;
         setIsLoadingLeaves(true);
         try {
-            const { year, month } = calendarMonth;
-            const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-            const lastDay = new Date(year, month + 1, 0).getDate();
-            const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            const y = calendarMonth.year;
+            const m = calendarMonth.month;
+            const startStr = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+            // Ngày cuối tháng thật, không hard-code 31 (tránh 30/2, 31/4...)
+            const endStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, '0')}`;
 
-            const result = await apiClient.get<any>(`${API.KTV.LEAVE}?from=${from}&to=${to}`);
-            setLeaveList(result.data || []);
-        } catch (err: any) {
-            console.error('❌ [Schedule] Fetch leave failed:', err.message || err);
+            // ⚠️ Cả 2 API đều đọc tham số `from` / `to` — KHÔNG phải start_date/end_date.
+            // Dùng sai tên thì server bỏ qua bộ lọc và trả về khoảng mặc định.
+            if (user.work_type === 'TYPE_D') {
+                const res = await apiClient.get<any>(`${API.KTV.DAILY_REGISTRATION}?from=${startStr}&to=${endStr}`);
+                setWorkRegistrationList(res?.data || []);
+            } else {
+                // API trả về { success, data } chứ không phải mảng trần.
+                const res = await apiClient.get<any>(`${API.KTV.LEAVE}?from=${startStr}&to=${endStr}`);
+                setLeaveList(Array.isArray(res?.data) ? res.data : []);
+            }
+            
+        } catch (err) {
+            console.error('Lỗi khi tải lịch:', err);
         } finally {
             setIsLoadingLeaves(false);
         }
-    }, [calendarMonth]);
+    }, [calendarMonth, user?.id, user?.work_type]);
+
+    const fetchShiftData = useCallback(async () => {
+        if (!user?.id) return;
+        setIsLoadingShift(true);
+        try {
+            const data = await apiClient.get<any>(API.KTV.SHIFT);
+            setCurrentShift(data.currentShift || null);
+            setTomorrowShift(data.tomorrowShift || null);
+            setPendingRequest(data.pendingRequest || null);
+            setShiftHistory(data.history || []);
+            setShiftTypes(data.shiftTypes || {});
+        } catch (err) {
+            console.error('Lỗi khi tải ca làm việc:', err);
+        } finally {
+            setIsLoadingShift(false);
+        }
+    }, [user?.id]);
+
+    useEffect(() => {
+        if (mounted && canAccessPage) {
+            fetchLeaveList();
+            if (user?.work_type !== 'TYPE_D') {
+                fetchShiftData();
+            }
+        }
+    }, [mounted, canAccessPage, fetchLeaveList, fetchShiftData, user?.work_type]);
+
+    const toggleDate = (date: string) => {
+        setSelectedDates(prev => {
+            if (prev.includes(date)) {
+                return prev.filter(d => d !== date);
+            } else {
+                return [...prev, date];
+            }
+        });
+    };
 
     // Calendar navigation
     const goToPrevMonth = useCallback(() => {
@@ -117,76 +183,140 @@ export const useKTVSchedule = () => {
         setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
     }, []);
 
-    // ── Fetch shift data ──
-    const fetchShiftData = useCallback(async () => {
-        if (!user?.id) return;
-        setIsLoadingShift(true);
-        try {
-            const result = await apiClient.get<any>(`${API.KTV.SHIFT}?employeeId=${user.id}`);
-            setCurrentShift(result.data?.currentShift || null);
-            setTomorrowShift(result.data?.tomorrowShift || null);
-            setPendingRequest(result.data?.pendingRequest || null);
-            setShiftHistory(result.data?.history || []);
-            setShiftTypes(result.shiftTypes || {});
-        } catch (err: any) {
-            console.error('❌ [Schedule] Fetch shift failed:', err.message || err);
-        } finally {
-            setIsLoadingShift(false);
-        }
-    }, [user?.id]);
-
-    useEffect(() => {
-        if (mounted && canAccessPage) {
-            fetchLeaveList();
-            fetchShiftData();
-        }
-    }, [mounted, canAccessPage, fetchLeaveList, fetchShiftData]);
-
-    const toggleDate = (date: string) => {
-        setSelectedDates(prev => {
-            if (prev.includes(date)) {
-                return prev.filter(d => d !== date);
-            } else {
-                return [...prev, date];
-            }
-        });
+    // ── Submit OFF request ──
+    const handleSubmitWorkRegistration = () => {
+        if (selectedDates.length === 0 || !user?.id) return;
+        setPendingSubmit({ type: 'WORKING', dates: selectedDates });
     };
 
-    // ── Submit OFF request ──
+    const handleCancelWorkRegistration = async (dateStr: string) => {
+        setIsSubmittingOff(true);
+        setOffError(null);
+        try {
+            await apiClient.post(API.KTV.DAILY_REGISTRATION, {
+                type: "CANCEL",
+                dates: [dateStr],
+            });
+            fetchLeaveList();
+            setEditingReg(null);
+            addToast("Hủy lịch thành công", "success");
+        } catch(err: any) {
+            setOffError(err.message || "Có lỗi xảy ra khi hủy");
+        } finally {
+            setIsSubmittingOff(false);
+        }
+    };
+
+    const handleSaveEditRegistration = async () => {
+        if (!editingReg) return;
+        try {
+            setIsSubmittingOff(true);
+            setOffError(null);
+            await apiClient.post(API.KTV.DAILY_REGISTRATION, {
+                type: "WORKING",
+                entries: [
+                    { work_date: editingReg.date, expected_time: editingReg.expected_time }
+                ]
+            });
+            fetchLeaveList();
+            setEditingReg(null);
+            addToast("Cập nhật lịch thành công", "success");
+        } catch(err: any) {
+            setOffError(err.message || "Có lỗi xảy ra khi sửa");
+        } finally {
+            setIsSubmittingOff(false);
+        }
+    };
+
+    const confirmSubmitWorkRegistration = async () => {
+        if (!pendingSubmit || pendingSubmit.type !== 'WORKING' || !user?.id) return;
+        
+        const missingTimes = pendingSubmit.dates.filter(d => !expectedTimes[d]);
+        if (missingTimes.length > 0) {
+            setOffError("Vui lòng nhập giờ đến tiệm cho tất cả các ngày đã chọn");
+            return;
+        }
+
+        setIsSubmittingOff(true);
+        setOffError(null);
+        setOffSuccess(false);
+        try {
+            const entries = pendingSubmit.dates.map(d => ({
+                work_date: d,
+                expected_time: expectedTimes[d]
+            }));
+
+            await apiClient.post(API.KTV.DAILY_REGISTRATION, {
+                type: "WORKING",
+                entries
+            });
+            setOffSuccess(true);
+            setSelectedDates([]);
+            setExpectedTimes({});
+            setPendingSubmit(null);
+            fetchLeaveList();
+            setTimeout(() => setOffSuccess(false), 3000);
+        } catch (err: any) {
+            setOffError(err.message || "Có lỗi xảy ra");
+        } finally {
+            setIsSubmittingOff(false);
+        }
+    };
+
     const handleSubmitOff = async (isConfirming?: 'extension' | 'sudden_off') => {
         if (selectedDates.length === 0 || !user?.id) return;
+        
+        // Modal Flow cho OFF
+        if (!isConfirming && !pendingSubmit) {
+            setPendingSubmit({ type: 'OFF', dates: selectedDates });
+            return;
+        }
 
+        // Chạy đoạn code confirm cũ
         setIsSubmittingOff(true);
         setOffError(null);
         setOffSuccess(false);
 
         try {
-            const payload: any = {
-                employeeId: user.id,
-                employeeName: user.name || user.id,
-                dates: selectedDates,
-                reason: 'Xin nghỉ',
-            };
-            if (isConfirming === 'extension') payload.confirmExtension = true;
-            if (isConfirming === 'sudden_off') payload.confirmSuddenOff = true;
-
-            const result = await apiClient.post<any>(API.KTV.LEAVE, payload);
-
-            if (result.requireConfirmation) {
-                setConfirmDialog({
-                    isOpen: true,
-                    type: result.type,
-                    message: result.message,
-                    remaining: result.remaining
+            if (user.work_type === 'TYPE_D') {
+                await apiClient.post(API.KTV.DAILY_REGISTRATION, {
+                    type: "OFF",
+                    dates: pendingSubmit?.dates || selectedDates
                 });
-                return;
-            }
+                setOffSuccess(true);
+                setSelectedDates([]);
+                setPendingSubmit(null);
+                fetchLeaveList();
+                setTimeout(() => setOffSuccess(false), 3000);
+            } else {
+                const payload: any = {
+                    employeeId: user.id,
+                    employeeName: user.name || user.id,
+                    dates: pendingSubmit?.dates || selectedDates,
+                    reason: 'Xin nghỉ',
+                };
+                if (isConfirming === 'extension') payload.confirmExtension = true;
+                if (isConfirming === 'sudden_off') payload.confirmSuddenOff = true;
 
-            setConfirmDialog(null);
-            setOffSuccess(true);
-            setSelectedDates([]);
-            fetchLeaveList();
-            setTimeout(() => setOffSuccess(false), 3000);
+                const result = await apiClient.post<any>(API.KTV.LEAVE, payload);
+
+                if (result.requireConfirmation) {
+                    setConfirmDialog({
+                        isOpen: true,
+                        type: result.type,
+                        message: result.message,
+                        remaining: result.remaining
+                    });
+                    return;
+                }
+
+                setConfirmDialog(null);
+                setOffSuccess(true);
+                setSelectedDates([]);
+                setPendingSubmit(null);
+                fetchLeaveList();
+                setTimeout(() => setOffSuccess(false), 3000);
+            }
         } catch (err: any) {
             setOffError(err.message || 'Lỗi hệ thống');
         } finally {
@@ -241,6 +371,7 @@ export const useKTVSchedule = () => {
         toggleDate,
         isSubmittingOff,
         leaveList,
+        workRegistrationList,
         isLoadingLeaves,
         offError,
         offSuccess,
@@ -249,6 +380,17 @@ export const useKTVSchedule = () => {
         handleSubmitOff,
         confirmDialog,
         setConfirmDialog,
+        
+        expectedTimes,
+        setExpectedTimes,
+        pendingSubmit,
+        setPendingSubmit,
+        editingReg,
+        setEditingReg,
+        handleSaveEditRegistration,
+        handleSubmitWorkRegistration,
+        confirmSubmitWorkRegistration,
+        handleCancelWorkRegistration,
 
         // Calendar
         calendarMonth,

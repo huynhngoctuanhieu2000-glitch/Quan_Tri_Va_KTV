@@ -3,11 +3,12 @@
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
-    ShieldAlert, Loader2, CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle, ChevronRight, ChevronLeft, Send, Lock, Briefcase, CalendarDays, ArrowRightLeft
+    ShieldAlert, Loader2, CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle, ChevronRight, ChevronLeft, ChevronDown, Send, Briefcase, CalendarDays, ArrowRightLeft, Trash2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { useKTVSchedule, LeaveRequest } from './Schedule.logic';
+import { useKTVSchedule, LeaveRequest, ScheduleTab } from './Schedule.logic';
+import { canEditRegistration, vnToday } from '@/lib/vn-time';
 import { t } from './Schedule.i18n';
 
 // 🔧 UI CONFIGURATION
@@ -32,18 +33,11 @@ const MONTH_NAMES = [
     'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
 ];
 
-const STATUS_DOT_COLORS: Record<string, string> = {
-    PENDING: 'bg-amber-400',
-    APPROVED: 'bg-emerald-500',
-    REJECTED: 'bg-red-400',
-};
 
-const BLOCKED_HOLIDAYS = ['04-30', '05-01', '09-02', '01-01'];
 
 
 const SHIFT_LABELS: Record<string, string> = { SHIFT_1: t.SHIFT_1, SHIFT_2: t.SHIFT_2, SHIFT_3: t.SHIFT_3 };
 const SHIFT_COLORS: Record<string, string> = { SHIFT_1: 'bg-blue-600', SHIFT_2: 'bg-amber-600', SHIFT_3: 'bg-indigo-600' };
-type ScheduleTab = 'off' | 'shift';
 const TAB_CONFIG: { id: ScheduleTab; label: string; icon: React.ReactNode }[] = [
     { id: 'off', label: t.tabOff, icon: <CalendarOff size={16} /> },
     { id: 'shift', label: t.tabShift, icon: <Briefcase size={16} /> },
@@ -51,7 +45,11 @@ const TAB_CONFIG: { id: ScheduleTab; label: string; icon: React.ReactNode }[] = 
 
 const KTVSchedulePage = () => {
     const logic = useKTVSchedule();
-    const {
+    const { 
+        workRegistrationList, expectedTimes, setExpectedTimes, 
+        pendingSubmit, setPendingSubmit, confirmSubmitWorkRegistration, 
+        editingReg, setEditingReg, handleSaveEditRegistration,
+        handleSubmitWorkRegistration, handleCancelWorkRegistration,
         mounted, canAccessPage, user,
         activeTab, setActiveTab,
         currentShift, tomorrowShift, shiftHistory, isLoadingShift, newShiftType, isSubmittingShift, shiftError, shiftSuccess, setNewShiftType, setShiftError, handleSubmitShift,
@@ -61,6 +59,8 @@ const KTVSchedulePage = () => {
     } = logic;
 
     const [viewDate, setViewDate] = useState<string | null>(null);
+    const [isWorkListOpen, setIsWorkListOpen] = useState(true);
+    const [isOffListOpen, setIsOffListOpen] = useState(true);
 
     if (!mounted) return null;
 
@@ -82,6 +82,14 @@ const KTVSchedulePage = () => {
 
     let startDow = firstDayOfMonth.getDay(); 
     startDow = startDow === 0 ? 6 : startDow - 1; 
+
+    const workRegByDate: Record<string, any[]> = {};
+    if (workRegistrationList) {
+        workRegistrationList.forEach((reg: any) => {
+            if (!workRegByDate[reg.work_date]) workRegByDate[reg.work_date] = [];
+            workRegByDate[reg.work_date].push(reg);
+        });
+    }
 
     const leaveByDate: Record<string, LeaveRequest[]> = {};
     leaveList.forEach(leave => {
@@ -107,32 +115,27 @@ const KTVSchedulePage = () => {
         // Kiểm tra xem user hiện tại đã đăng ký ngày này chưa
         const dayLeaves = leaveByDate[dateStr] || [];
         const myLeave = dayLeaves.find(l => l.employeeId === user?.id);
-        const isBlocked = BLOCKED_HOLIDAYS.includes(dateStr.slice(5));
-
-        // Chỉ cho phép chọn/huỷ chọn những ngày > today VÀ chưa từng đăng ký VÀ không bị khoá
-        if (!myLeave && !isBlocked) {
+        const myWorkReg = workRegByDate[dateStr]?.find((r: any) => r.staff_id === user?.id);
+        
+        // Chỉ cho phép chọn/huỷ chọn những ngày > today VÀ chưa từng đăng ký
+        if (!myLeave) {
             const isSelected = selectedDates.includes(dateStr);
             
             // Nếu đang CHỌN THÊM (chưa có trong selectedDates)
             if (!isSelected) {
-                if (dateStr <= todayStr) {
-                    setOffError('Chỉ có thể đăng ký OFF từ ngày mai trở đi.');
+                if (dateStr <= vnToday()) {
+                    setOffError('Chỉ có thể đăng ký/chỉnh sửa lịch từ ngày mai trở đi.');
                     return;
                 }
                 
-                const nowHour = new Date().getHours();
-                if (dateStr === tomorrowStr && nowHour >= 19) {
-                    setOffError('Sau 19h00 không thể đăng ký OFF cho ngày mai.');
+                if (!canEditRegistration(dateStr)) {
+                    setOffError(`Đã qua 00:00 nên khóa sổ. Không thể đăng ký/sửa lịch cho ngày ${dateStr}.`);
                     return;
                 }
             }
             
-            // Cảnh báo nếu đã có 3 người OFF
-            if (!isSelected && dayLeaves.length >= 3) {
-                if (!window.confirm(`Ngày này đã có ${dayLeaves.length} người xin nghỉ. Bạn có chắc chắn muốn xin nghỉ thêm không?`)) {
-                    return;
-                }
-            }
+            // Bỏ cảnh báo ở đây, chuyển vào modal pendingSubmit
+
             // Clear error and toggle
             setOffError(null);
             toggleDate(dateStr);
@@ -160,12 +163,12 @@ const KTVSchedulePage = () => {
                     {TAB_CONFIG.map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                            {tab.icon}{tab.label}
+                            {tab.icon}{tab.id === "shift" && user?.work_type === "TYPE_D" ? "Đăng Ký Làm" : tab.label}
                         </button>
                     ))}
                 </div>
 
-                {activeTab === 'off' && (<>
+                {(activeTab === 'off' || (activeTab === 'shift' && user?.work_type === 'TYPE_D')) && (<>
                 {/* ── CALENDAR ── */}
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-lg overflow-hidden">
                     <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -207,20 +210,23 @@ const KTVSchedulePage = () => {
                                         const dayLeaves = leaveByDate[dateStr] || [];
                                         const isToday = dateStr === todayStr;
                                         const isPast = dateStr < todayStr;
-                                        const isBlocked = BLOCKED_HOLIDAYS.includes(dateStr.slice(5));
                                         const isSelected = selectedDates.includes(dateStr);
-                                        const hasLeaves = dayLeaves.length > 0;
                                         const dow = (startDow + i) % 7; 
                                         
                                         // Kiểm tra xem user hiện tại đã đăng ký ngày này chưa
                                         const myLeave = dayLeaves.find(l => l.employeeId === user?.id);
+                                        const myWorkReg = workRegByDate[dateStr]?.find((r: any) => r.staff_id === user?.id);
                                         
                                         let cellStyle = 'text-gray-500 hover:bg-gray-50';
                                         
-                                        if (isBlocked) {
-                                            cellStyle = 'bg-gray-100 text-gray-400 cursor-not-allowed';
+                                        if (myWorkReg && myWorkReg.status === "REGISTERED") {
+                                            cellStyle = "bg-emerald-500 text-white shadow-md shadow-emerald-200 font-bold";
+                                        } else if (myWorkReg && myWorkReg.status === "OFF_REGISTERED") {
+                                            cellStyle = "bg-rose-600 text-white shadow-md shadow-rose-200 font-bold";
                                         } else if (isSelected) {
-                                            cellStyle = 'bg-rose-500 text-white shadow-md shadow-rose-200 scale-105 font-bold';
+                                            cellStyle = activeTab === 'shift' 
+                                                ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200 scale-105 font-bold'
+                                                : 'bg-rose-500 text-white shadow-md shadow-rose-200 scale-105 font-bold';
                                         } else if (myLeave) {
                                             if (myLeave.status === 'APPROVED') {
                                                 cellStyle = 'bg-emerald-500 text-white shadow-md shadow-emerald-200 font-bold';
@@ -233,8 +239,6 @@ const KTVSchedulePage = () => {
                                             cellStyle = 'bg-indigo-50 text-indigo-700 border-2 border-indigo-300 font-black';
                                         } else if (isPast) {
                                             cellStyle = 'text-gray-300 bg-gray-50/30';
-                                        } else if (hasLeaves) {
-                                            cellStyle = 'bg-gray-50 text-gray-800 hover:bg-gray-100 font-bold';
                                         } else if (dow === 6) {
                                             cellStyle = 'text-red-300 hover:bg-red-50/50';
                                         } else if (dow === 5) {
@@ -244,35 +248,31 @@ const KTVSchedulePage = () => {
                                         return (
                                             <button
                                                 key={dateStr}
-                                                onClick={() => handleDateClick(dateStr)}
+                                                onClick={() => {
+                                                    if (myWorkReg) {
+                                                        if (dateStr <= vnToday() || !canEditRegistration(dateStr)) {
+                                                            setOffError(`Không thể sửa lịch ngày ${dateStr} vì đã qua 00:00, sổ đã khóa.`);
+                                                            return;
+                                                        }
+                                                        setOffError(null);
+                                                        setEditingReg({ date: dateStr, expected_time: myWorkReg.expected_time || "", status: myWorkReg.status });
+                                                    } else {
+                                                        handleDateClick(dateStr);
+                                                    }
+                                                }}
                                                 className={`aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all text-sm ${cellStyle}`}
                                             >
-                                                <span className={`leading-none ${isToday && !isSelected && !myLeave && !isBlocked ? 'text-indigo-700' : ''}`}>
+                                                <span className={`leading-none ${isToday && !isSelected && !myLeave ? 'text-indigo-700' : ''}`}>
                                                     {day}
                                                 </span>
 
-                                                {/* Dots cho KTV khác */}
-                                                {hasLeaves && !myLeave && !isSelected && !isBlocked && (
-                                                    <div className="flex gap-0.5 mt-0.5">
-                                                        {dayLeaves.filter(l => l.employeeId !== user?.id).slice(0, 3).map((leave, idx) => (
-                                                            <div key={idx} className={`w-1 h-1 rounded-full ${STATUS_DOT_COLORS[leave.status] || 'bg-gray-300'}`} />
-                                                        ))}
-                                                    </div>
-                                                )}
                                                 
                                                 {/* Icon check nếu mình đã off */}
-                                                {myLeave && !isSelected && !isBlocked && (
+                                                {myLeave && !isSelected && (
                                                     <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
                                                         {myLeave.status === 'APPROVED' ? <CheckCircle2 size={10} className="text-emerald-500" /> : 
                                                          myLeave.status === 'PENDING' ? <Clock size={10} className="text-amber-500" /> : 
                                                          <XCircle size={10} className="text-red-500" />}
-                                                    </div>
-                                                )}
-
-                                                {/* Lock icon cho ngày lễ */}
-                                                {isBlocked && (
-                                                    <div className="absolute -bottom-1 -right-1 bg-gray-100 rounded-full p-0.5 text-gray-400">
-                                                        <Lock size={10} />
                                                     </div>
                                                 )}
                                             </button>
@@ -292,7 +292,7 @@ const KTVSchedulePage = () => {
                 </div>
 
                 {/* ── REGISTRATION ACTIONS ── */}
-                {selectedDates.length > 0 && (
+                {selectedDates.length > 0 && activeTab === 'off' && (
                     <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-5 space-y-4 animate-in fade-in slide-in-from-bottom-4">
                         <div className="flex items-center gap-3">
                             <div className="bg-rose-100 text-rose-600 p-2 rounded-xl">
@@ -303,33 +303,383 @@ const KTVSchedulePage = () => {
                                 <p className="text-xs text-gray-500">Đã chọn {selectedDates.length} ngày</p>
                             </div>
                         </div>
-
-                        {offError && (
-                            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2 flex items-center gap-2">
-                                <AlertCircle size={14} className="shrink-0" />
-                                <span>{offError}</span>
-                                <button onClick={() => setOffError(null)} className="ml-auto"><XCircle size={14} /></button>
-                            </div>
-                        )}
-
-                        {offSuccess && (
-                            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-xl px-3 py-2 flex items-center gap-2">
-                                <CheckCircle2 size={14} className="shrink-0" />
-                                <span>Gửi đăng ký thành công!</span>
-                            </div>
-                        )}
-
                         <button
                             onClick={() => handleSubmitOff()}
-                            disabled={isSubmittingOff}
-                            className="w-full py-3.5 bg-rose-600 text-white font-bold rounded-2xl hover:bg-rose-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-md shadow-rose-200"
+                            className="w-full py-3.5 bg-rose-600 text-white font-bold rounded-2xl hover:bg-rose-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md shadow-rose-200"
                         >
-                            {isSubmittingOff ? (
-                                <><Loader2 size={18} className="animate-spin" /> {t.submitting}</>
-                            ) : (
-                                <><Send size={18} /> Gửi yêu cầu nghỉ</>
-                            )}
+                            <Send size={18} /> Chọn giờ & Xác nhận gửi
                         </button>
+                    </div>
+                )}
+
+                {selectedDates.length > 0 && activeTab === 'shift' && user?.work_type === 'TYPE_D' && (
+                    <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-5 space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+                                <Briefcase size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 text-sm">Đăng ký Đi Làm</h3>
+                                <p className="text-xs text-gray-500">Đã chọn {selectedDates.length} ngày</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => handleSubmitWorkRegistration()}
+                            className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-200"
+                        >
+                            <Send size={18} /> Chọn giờ & Xác nhận gửi
+                        </button>
+                    </div>
+                )}
+
+                {/* ── DANH SÁCH NGÀY ĐÃ ĐĂNG KÝ ĐI LÀM (ngày + giờ) ── */}
+                {user?.work_type === 'TYPE_D' && (() => {
+                    const myWorkDays = (workRegistrationList || [])
+                        .filter((r: any) => r.staff_id === user?.id && r.status === 'REGISTERED')
+                        .sort((a: any, b: any) => a.work_date.localeCompare(b.work_date));
+
+                    if (myWorkDays.length === 0) return null;
+
+                    return (
+                        <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-5">
+                            <button
+                                onClick={() => setIsWorkListOpen(v => !v)}
+                                aria-expanded={isWorkListOpen}
+                                className="w-full flex items-center gap-3 text-left"
+                            >
+                                <div className="bg-emerald-100 text-emerald-600 p-2 rounded-xl shrink-0">
+                                    <Briefcase size={20} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-bold text-gray-900 text-sm">Lịch đi làm đã đăng ký</h3>
+                                    <p className="text-xs text-gray-500">{myWorkDays.length} ngày trong tháng {month + 1}</p>
+                                </div>
+                                <ChevronDown
+                                    size={18}
+                                    className={`text-gray-400 shrink-0 transition-transform duration-200 ${isWorkListOpen ? 'rotate-180' : ''}`}
+                                />
+                            </button>
+
+                            <div className={`divide-y divide-gray-100 overflow-hidden transition-all duration-200 ${isWorkListOpen ? 'mt-3' : 'max-h-0 opacity-0'}`}>
+                                {myWorkDays.map((reg: any) => {
+                                    const canEdit = reg.work_date > vnToday() && canEditRegistration(reg.work_date);
+                                    const d = new Date(reg.work_date + 'T00:00:00');
+                                    const timeStr = (reg.expected_time || '').slice(0, 5) || '--:--';
+
+                                    return (
+                                        <button
+                                            key={reg.work_date}
+                                            onClick={() => {
+                                                if (!canEdit) {
+                                                    setOffError(`Không thể sửa lịch ngày ${reg.work_date} vì đã qua 00:00, sổ đã khóa.`);
+                                                    return;
+                                                }
+                                                setOffError(null);
+                                                setEditingReg({ date: reg.work_date, expected_time: reg.expected_time || '', status: reg.status });
+                                            }}
+                                            className="w-full flex items-center justify-between py-3 text-left group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex flex-col items-center justify-center leading-none shrink-0">
+                                                    <span className="text-[9px] font-medium opacity-80">{format(d, 'MM')}</span>
+                                                    <span className="text-sm font-bold">{format(d, 'dd')}</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-900 capitalize">{format(d, 'EEEE', { locale: vi })}</p>
+                                                    <p className="text-xs text-gray-500">{format(d, 'dd/MM/yyyy')}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-gray-400 font-medium">Giờ đến tiệm</p>
+                                                    <p className="text-sm font-bold text-emerald-600 flex items-center gap-1 justify-end">
+                                                        <Clock size={13} /> {timeStr}
+                                                    </p>
+                                                </div>
+                                                {canEdit
+                                                    ? <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                                                    : <span className="text-[9px] text-gray-400 font-bold uppercase w-4 text-center">đã<br />khóa</span>}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* ── DANH SÁCH NGÀY ĐÃ ĐĂNG KÝ OFF ── */}
+                {(() => {
+                    const isTypeD = user?.work_type === 'TYPE_D';
+
+                    // Loại D: OFF nằm ở KTVTypeDDailyRegistration. Loại khác: ở KTVLeaveRequests.
+                    const myOffDays = isTypeD
+                        ? (workRegistrationList || [])
+                            .filter((r: any) => r.staff_id === user?.id && r.status === 'OFF_REGISTERED')
+                            .map((r: any) => ({ date: r.work_date, status: null as string | null, raw: r }))
+                            .sort((a: any, b: any) => a.date.localeCompare(b.date))
+                        : (leaveList || [])
+                            .filter((l: any) => l.employeeId === user?.id)
+                            .map((l: any) => ({ date: l.date, status: l.status as string | null, raw: l }))
+                            .sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+                    if (myOffDays.length === 0) return null;
+
+                    return (
+                        <div className="bg-white rounded-3xl border border-gray-100 shadow-lg p-5">
+                            <button
+                                onClick={() => setIsOffListOpen(v => !v)}
+                                aria-expanded={isOffListOpen}
+                                className="w-full flex items-center gap-3 text-left"
+                            >
+                                <div className="bg-rose-100 text-rose-600 p-2 rounded-xl shrink-0">
+                                    <CalendarOff size={20} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-bold text-gray-900 text-sm">Lịch nghỉ OFF đã đăng ký</h3>
+                                    <p className="text-xs text-gray-500">{myOffDays.length} ngày trong tháng {month + 1}</p>
+                                </div>
+                                <ChevronDown
+                                    size={18}
+                                    className={`text-gray-400 shrink-0 transition-transform duration-200 ${isOffListOpen ? 'rotate-180' : ''}`}
+                                />
+                            </button>
+
+                            <div className={`divide-y divide-gray-100 overflow-hidden transition-all duration-200 ${isOffListOpen ? 'mt-3' : 'max-h-0 opacity-0'}`}>
+                                {myOffDays.map((item: any) => {
+                                    // Chỉ Loại D sửa được ngay tại đây; loại khác đi qua luồng duyệt nghỉ riêng.
+                                    const canEdit = isTypeD && item.date > vnToday() && canEditRegistration(item.date);
+                                    const d = new Date(item.date + 'T00:00:00');
+
+                                    return (
+                                        <button
+                                            key={item.date}
+                                            onClick={() => {
+                                                if (!isTypeD) return;
+                                                if (!canEdit) {
+                                                    setOffError(`Không thể sửa lịch ngày ${item.date} vì đã qua 00:00, sổ đã khóa.`);
+                                                    return;
+                                                }
+                                                setOffError(null);
+                                                setEditingReg({ date: item.date, expected_time: '', status: item.raw.status });
+                                            }}
+                                            className="w-full flex items-center justify-between py-3 text-left group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex flex-col items-center justify-center leading-none shrink-0">
+                                                    <span className="text-[9px] font-medium opacity-80">{format(d, 'MM')}</span>
+                                                    <span className="text-sm font-bold">{format(d, 'dd')}</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-900 capitalize">{format(d, 'EEEE', { locale: vi })}</p>
+                                                    <p className="text-xs text-gray-500">{format(d, 'dd/MM/yyyy')}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-bold text-rose-600">
+                                                    {item.status ? (STATUS_LABELS[item.status] || item.status) : 'Nghỉ OFF'}
+                                                </span>
+                                                {canEdit
+                                                    ? <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                                                    : <span className="w-4" />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* ── PENDING SUBMIT MODAL (A1 & D1) ── */}
+                {pendingSubmit && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+                            <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4 ${pendingSubmit.type === 'WORKING' ? 'bg-blue-100 text-blue-600' : 'bg-rose-100 text-rose-600'}`}>
+                                {pendingSubmit.type === 'WORKING' ? <Briefcase size={24} /> : <CalendarOff size={24} />}
+                            </div>
+                            <h3 className="text-lg font-bold text-center text-gray-900 mb-2">
+                                {pendingSubmit.type === 'WORKING' ? 'Xác nhận đăng ký đi làm' : 'Xác nhận đăng ký nghỉ OFF'}
+                            </h3>
+                            <p className="text-sm text-gray-500 text-center mb-4">
+                                Bạn đã chọn {pendingSubmit.dates.length} ngày. {pendingSubmit.type === 'WORKING' ? 'Vui lòng xác nhận thời gian đến làm.' : 'Kiểm tra lại danh sách ngày.'}
+                            </p>
+                            
+                            <div className="overflow-y-auto flex-1 mb-4 space-y-2 px-1">
+                                {pendingSubmit.dates.map(d => {
+                                    const fmt = (() => {
+                                        try { return format(new Date(d + 'T00:00:00'), 'EE, dd/MM', { locale: vi }); }
+                                        catch { return d; }
+                                    })();
+                                    
+                                    return (
+                                        <div key={d} className="flex flex-col gap-1 bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-gray-700 text-sm uppercase">{fmt}</span>
+                                                {pendingSubmit.type === 'WORKING' && (
+                                                    <input 
+                                                        type="time"
+                                                        value={expectedTimes[d] || ""}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            setExpectedTimes(prev => ({ ...prev, [d]: val }));
+                                                        }}
+                                                        className="w-32 px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-sm bg-white"
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {pendingSubmit.type === 'WORKING' && pendingSubmit.dates.length > 1 && (
+                                <button
+                                    onClick={() => {
+                                        const firstTime = expectedTimes[pendingSubmit.dates[0]];
+                                        if (!firstTime) return setOffError("Vui lòng nhập giờ cho ngày đầu tiên để áp dụng cho tất cả");
+                                        const newTimes = { ...expectedTimes };
+                                        pendingSubmit.dates.forEach(d => newTimes[d] = firstTime);
+                                        setExpectedTimes(newTimes);
+                                        setOffError(null);
+                                    }}
+                                    className="text-xs text-blue-600 font-bold mb-4 w-full text-center hover:underline"
+                                >
+                                    Áp dụng giờ đầu tiên cho tất cả
+                                </button>
+                            )}
+
+                            {offError && (
+                                <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2 mb-4 flex items-center gap-2">
+                                    <AlertCircle size={14} className="shrink-0" />
+                                    <span>{offError}</span>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-2">
+                                <button 
+                                    onClick={() => {
+                                        setPendingSubmit(null);
+                                        setOffError(null);
+                                    }}
+                                    className="flex-1 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-colors"
+                                >
+                                    Quay lại
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        if (pendingSubmit.type === 'WORKING') confirmSubmitWorkRegistration();
+                                        else handleSubmitOff();
+                                    }}
+                                    disabled={isSubmittingOff}
+                                    className={`flex-1 py-3.5 text-white font-bold rounded-2xl transition-all shadow-md ${pendingSubmit.type === 'WORKING' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'} disabled:opacity-50 flex justify-center items-center`}
+                                >
+                                    {isSubmittingOff ? <Loader2 size={18} className="animate-spin" /> : 'Xác nhận gửi'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {/* ── EDIT REGISTRATION MODAL (E1) ── */}
+                {editingReg && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in zoom-in-95 flex flex-col">
+                            {editingReg.step === 'CONFIRM_CANCEL' ? (
+                                <>
+                                    <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-red-100 text-red-600">
+                                        <AlertCircle size={24} />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-center text-gray-900 mb-2">
+                                        Xác nhận hủy lịch
+                                    </h3>
+                                    <p className="text-sm text-gray-500 text-center mb-6">
+                                        Bạn có chắc chắn muốn hủy đăng ký {editingReg.status === 'REGISTERED' ? 'ĐI LÀM' : 'OFF'} ngày {editingReg.date}? {editingReg.status === 'REGISTERED' && editingReg.expected_time ? `(Giờ đến: ${editingReg.expected_time})` : ''}
+                                    </p>
+                                    
+                                    {offError && (
+                                        <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2 mb-4 flex items-center gap-2">
+                                            <AlertCircle size={14} className="shrink-0" />
+                                            <span>{offError}</span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3">
+                                        <button 
+                                            onClick={() => { setEditingReg({ ...editingReg, step: 'EDIT' }); setOffError(null); }}
+                                            className="flex-1 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-colors"
+                                        >
+                                            Quay lại
+                                        </button>
+                                        <button 
+                                            onClick={() => handleCancelWorkRegistration(editingReg.date)}
+                                            disabled={isSubmittingOff}
+                                            className="flex-1 py-3.5 text-white font-bold rounded-2xl transition-all shadow-md bg-red-600 hover:bg-red-700 shadow-red-200 disabled:opacity-50 flex justify-center items-center gap-2"
+                                        >
+                                            {isSubmittingOff ? <Loader2 size={18} className="animate-spin" /> : 'Xác nhận hủy'}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-bold text-gray-900">
+                                            Sửa lịch ngày {editingReg.date}
+                                        </h3>
+                                        <button onClick={() => { setEditingReg(null); setOffError(null); }} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors">
+                                            <XCircle size={20} />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4 mb-6">
+                                        <div className={`flex items-center gap-3 p-3 rounded-2xl border ${editingReg.status === 'REGISTERED' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+                                            {editingReg.status === 'REGISTERED' ? <Briefcase size={20} /> : <CalendarOff size={20} />}
+                                            <span className="font-bold text-sm">
+                                                Đang đăng ký {editingReg.status === 'REGISTERED' ? 'ĐI LÀM' : 'OFF'}
+                                            </span>
+                                        </div>
+                                        
+                                        {editingReg.status === 'REGISTERED' && (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-700 mb-2">Giờ đến tiệm (Bắt buộc)</label>
+                                                <input 
+                                                    type="time"
+                                                    value={editingReg.expected_time || ""}
+                                                    onChange={e => setEditingReg({ ...editingReg, expected_time: e.target.value })}
+                                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {offError && (
+                                        <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2 mb-4 flex items-center gap-2">
+                                            <AlertCircle size={14} className="shrink-0" />
+                                            <span>{offError}</span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex flex-col gap-3">
+                                        {editingReg.status === 'REGISTERED' && (
+                                            <button 
+                                                onClick={() => handleSaveEditRegistration()}
+                                                disabled={isSubmittingOff || !editingReg.expected_time}
+                                                className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200 disabled:opacity-50 flex justify-center items-center gap-2"
+                                            >
+                                                {isSubmittingOff ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle2 size={18}/> Lưu thay đổi</>}
+                                            </button>
+                                        )}
+                                        <button 
+                                            onClick={() => setEditingReg({ ...editingReg, step: 'CONFIRM_CANCEL' })}
+                                            className="w-full py-3.5 bg-red-50 text-red-600 border border-red-200 font-bold rounded-2xl hover:bg-red-100 transition-colors flex justify-center items-center gap-2"
+                                        >
+                                            <Trash2 size={18} /> Hủy đăng ký này
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -372,7 +722,15 @@ const KTVSchedulePage = () => {
                 {sortedDisplayDates.length > 0 && (
                     <div className="space-y-3">
                         {sortedDisplayDates.map(date => {
-                            const leaves = leaveByDate[date] || [];
+                            // 🛡️ RIÊNG TƯ: chỉ hiển thị lịch nghỉ của chính mình, không xem của người khác.
+                            const leaves = (leaveByDate[date] || []).filter(l => l.employeeId === user?.id);
+                            const myReg = user?.work_type === 'TYPE_D'
+                                ? workRegByDate[date]?.find((r: any) => r.staff_id === user?.id)
+                                : null;
+
+                            // Không có gì của mình trong ngày này → không render thẻ rỗng.
+                            if (!myReg && leaves.length === 0) return null;
+
                             const formattedDate = (() => {
                                 try { return format(new Date(date + 'T00:00:00'), 'EEEE, dd/MM/yyyy', { locale: vi }); }
                                 catch { return date; }
@@ -384,9 +742,37 @@ const KTVSchedulePage = () => {
                                         <p className="text-xs font-bold text-gray-700 uppercase">{formattedDate}</p>
                                     </div>
                                     <div className="p-4">
-                                        {leaves.length === 0 ? (
-                                            <p className="text-xs text-gray-400 text-center py-2">Không có nhân sự nào OFF</p>
-                                        ) : (
+                                        
+                                        {myReg && (
+                                            (() => {
+                                                const isWork = myReg.status === "REGISTERED";
+                                                return (
+                                                    <div className={`flex flex-col gap-2 p-3 mb-3 rounded-2xl border ${isWork ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}>
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-2">
+                                                                {isWork ? <Briefcase size={16} className="text-emerald-600"/> : <CalendarOff size={16} className="text-rose-600"/>}
+                                                                <span className={`font-bold text-sm ${isWork ? "text-emerald-700" : "text-rose-700"}`}>
+                                                                    {isWork ? "ĐĂNG KÝ ĐI LÀM" : "ĐĂNG KÝ OFF"}
+                                                                </span>
+                                                            </div>
+                                                            {isWork && myReg.expected_time && (
+                                                                <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg shadow-sm border border-emerald-100">
+                                                                    <Clock size={12} className="text-emerald-600"/>
+                                                                    <span className="text-xs font-bold text-emerald-700">{myReg.expected_time.slice(0, 5)}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {myReg.late_report_count > 0 && (
+                                                            <p className="text-[10px] text-gray-500 italic mt-1">
+                                                                Số lần báo trễ: {myReg.late_report_count}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()
+                                        )}
+
+                                        {leaves.length > 0 && (
                                             <div className="space-y-2">
                                                 {leaves.map(leave => {
                                                     const cfg = STATUS_COLORS[leave.status as keyof typeof STATUS_COLORS] || STATUS_COLORS.PENDING;
@@ -395,7 +781,7 @@ const KTVSchedulePage = () => {
                                                         <div key={leave.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${cfg.border} ${cfg.bg}`}>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-bold text-sm text-gray-900 truncate">
-                                                                    {leave.employeeId} {leave.employeeId === user?.id ? '(Bạn)' : ''}
+                                                                    Lịch nghỉ của bạn
                                                                 </p>
                                                             </div>
                                                             <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.text} ${cfg.bg}`}>
@@ -415,7 +801,7 @@ const KTVSchedulePage = () => {
                 )}
             </>)}
 
-                {activeTab === 'shift' && (
+                {activeTab === 'shift' && user?.work_type !== 'TYPE_D' && (
                     <ShiftTab
                         currentShift={currentShift}
                         tomorrowShift={tomorrowShift}

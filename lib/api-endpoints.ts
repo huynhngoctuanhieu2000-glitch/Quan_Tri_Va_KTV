@@ -17,10 +17,12 @@ export const API = {
     },
     ATTENDANCE: '/api/ktv/attendance',
     ATTENDANCE_STATUS: (employeeId: string) => `/api/ktv/attendance/status?employeeId=${employeeId}`,
+    ATTENDANCE_ADJUSTMENT: '/api/ktv/attendance-adjustment',
     ATTENDANCE_CONFIRM: '/api/ktv/attendance/confirm',
     ATTENDANCE_PENDING: '/api/ktv/attendance/pending',
     ATTENDANCE_HISTORY: '/api/ktv/attendance/history',
     LEAVE: '/api/ktv/leave',
+    DAILY_REGISTRATION: '/api/ktv/daily-registration',
     SHIFT: '/api/ktv/shift',
     HISTORY: (techCode: string, from: string, to: string) =>
       `/api/ktv/history?techCode=${techCode}&dateFrom=${from}&dateTo=${to}`,

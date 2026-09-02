@@ -114,6 +114,7 @@ export interface User {
   password?: string;
   code?: string;
   featureFlags?: Record<string, boolean>;
+  work_type?: string;
 }
 
 export interface Customer {

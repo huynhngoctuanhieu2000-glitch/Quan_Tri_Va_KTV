@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { LeaveRequestSchema, LeavePatchSchema } from '@/lib/schemas/ktv.schema';
 import { createNotification } from '@/lib/notification-helper';
+import { requireBusinessUser } from '@/lib/auth-server';
 
 /**
  * GET /api/ktv/leave
@@ -25,12 +26,29 @@ export async function GET(request: NextRequest) {
         const from = searchParams.get('from') || defaultFrom;
         const to = searchParams.get('to') || defaultTo;
 
-        const { data, error } = await supabase
+        // 🛡️ RIÊNG TƯ: KTV chỉ được xem lịch nghỉ CỦA CHÍNH MÌNH.
+        // Lễ tân / Admin / Quản lý vẫn xem được toàn bộ để điều phối.
+        let onlyOwnerId: string | null = null;
+        try {
+            const bUser = await requireBusinessUser();
+            const rawRole = String(bUser?.role || '').toUpperCase();
+            if (bUser && (rawRole === 'TECHNICIAN' || rawRole === 'KTV')) {
+                onlyOwnerId = bUser.techCode || bUser.businessUserId;
+            }
+        } catch {
+            // Không xác định được người gọi → giữ nguyên hành vi cũ (client vẫn lọc lần nữa).
+        }
+
+        let query = supabase
             .from('KTVLeaveRequests')
             .select('*')
             .gte('date', from)
             .lte('date', to)
             .order('date', { ascending: true });
+
+        if (onlyOwnerId) query = query.eq('employeeId', onlyOwnerId);
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('❌ [Leave GET] Query error:', error);

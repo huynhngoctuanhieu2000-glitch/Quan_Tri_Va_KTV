@@ -37,6 +37,7 @@ export const viewport = {
 };
 
 import { NotificationProvider } from '@/components/NotificationProvider';
+import { ToastProvider } from '@/components/ui/Toast';
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
@@ -44,7 +45,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       <body suppressHydrationWarning className="font-sans antialiased">
         <AuthProvider>
           <NotificationProvider>
-            {children}
+            <ToastProvider>
+              {children}
+            </ToastProvider>
           </NotificationProvider>
         </AuthProvider>
       </body>
