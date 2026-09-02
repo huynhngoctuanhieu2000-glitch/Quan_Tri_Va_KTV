@@ -198,6 +198,49 @@ export default function DispatchBoardPage() {
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
   const [reviewModalService, setReviewModalService] = useState<ServiceBlock | null>(null);
   const { notifications, soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
+
+  // ─── Guest Arrival Lock ───
+  const [guestArrivalLock, setGuestArrivalLock] = useState<{ active: boolean; lockedBy: string; lockedAt: string; message: string }>({ active: false, lockedBy: '', lockedAt: '', message: '' });
+
+  const fetchGuestArrivalLock = async () => {
+    try {
+        const res = await apiClient.get<any>('/api/reception/guest-arrival');
+        if (res.success && res.data) {
+            setGuestArrivalLock(res.data);
+        } else {
+            setGuestArrivalLock({ active: false, lockedBy: '', lockedAt: '', message: '' });
+        }
+    } catch(err) {}
+  };
+
+  useEffect(() => {
+    fetchGuestArrivalLock();
+    const lockChannel = supabase
+        .channel('dispatch_guest_arrival_events')
+        .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'GuestArrivalEvents',
+        }, () => {
+            fetchGuestArrivalLock();
+        })
+        .subscribe();
+    return () => { supabase.removeChannel(lockChannel); };
+  }, []);
+
+  const toggleGuestArrivalLock = async () => {
+    try {
+        if (guestArrivalLock.active) {
+            await apiClient.delete<any>('/api/reception/guest-arrival');
+        } else {
+            if (!window.confirm('Khóa nút "Tan ca" của tất cả KTV (TYPE_D)?\nHãy bật khi khách đang xếp hàng nhưng KTV chưa kịp vào ca.')) return;
+            await apiClient.post<any>('/api/reception/guest-arrival', {});
+        }
+        await fetchGuestArrivalLock();
+    } catch(err) {
+        alert('Có lỗi xảy ra khi cập nhật khóa.');
+    }
+  };
   const [leftPanelTab, setLeftPanelTab] = useState<DispatchStatus>('pending');
   const [activeMode, setActiveMode] = useState<'DISPATCH' | 'MONITOR' | 'TURN_QUEUE' | 'ROOMS' | 'SCHEDULE' | 'WEB_BOOKING'>('DISPATCH');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -1814,6 +1857,25 @@ if (!hasPermission('dispatch_board')) {
 
     return (
       <div className="flex items-center gap-2">
+        <button
+          onClick={toggleGuestArrivalLock}
+          className={`px-3 py-2 h-11 rounded-full text-xs font-bold transition-all shadow-sm border flex items-center gap-2 ${
+              guestArrivalLock.active
+                  ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          }`}
+          title={guestArrivalLock.active ? `Khóa bởi ${guestArrivalLock.lockedBy} lúc ${new Date(guestArrivalLock.lockedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bật thông báo có khách'}
+        >
+          {guestArrivalLock.active ? (
+              <span className="flex items-center gap-1.5 animate-pulse">
+                  <Ban size={16} /> Đang khóa <span className="hidden sm:inline font-normal opacity-80">({guestArrivalLock.lockedBy})</span>
+              </span>
+          ) : (
+              <span className="flex items-center gap-1.5">
+                  <Bell size={16} /> Báo Khách
+              </span>
+          )}
+        </button>
         <button
           onClick={async () => {
             if (soundEnabled) {

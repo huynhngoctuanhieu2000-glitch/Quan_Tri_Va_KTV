@@ -112,13 +112,16 @@ export async function POST(request: Request) {
             }
 
             if (ktvRoles.length > 0) {
+                let ktvTitle = '🔔 Khách Mới';
                 let ktvMessage = cleanMessage;
                 // KTV không được xem chi tiết giá tiền/sđt của khách khi có đơn mới chung
                 if (record.type === 'NEW_ORDER') {
                     ktvMessage = 'Có khách mới vừa đặt lịch! Vui lòng chuẩn bị.';
+                } else if (record.type === 'GUEST_ARRIVAL') {
+                    ktvTitle = '🔔 CÓ KHÁCH';
                 }
                 await sendPushNotification({
-                    title: '🔔 Khách Mới',
+                    title: ktvTitle,
                     message: ktvMessage,
                     targetRoles: ktvRoles,
                     url: '/',

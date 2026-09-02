@@ -18,9 +18,10 @@ interface Props {
   onCheckOut: () => void;
   onRefreshStatus?: () => void;
   incompleteTasksCount?: number;
+  guestArrivalLock?: { active: boolean; message: string };
 }
 
-export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0 }: Props) {
+export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, guestArrivalLock }: Props) {
   const [state, setState] = useState<OnCallState | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -186,20 +187,28 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
         {/* Nếu đã tới tiệm (AT_VENUE) -> Tan Ca */}
         {isAtVenue && (
              <div className="w-full">
-               <button
-                  onClick={() => {
-                    if (incompleteTasksCount > 0) {
-                      alert(`Bạn còn ${incompleteTasksCount} công việc chưa hoàn thành. Vui lòng hoàn thành trước khi tan ca.`);
-                      return;
-                    }
-                    onCheckOut();
-                  }}
-                  disabled={actionLoading || incompleteTasksCount > 0}
-                  className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                  <LogOut size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin cảm ơn'}
-              </button>
-              {incompleteTasksCount > 0 && (
+               {guestArrivalLock?.active ? (
+                   <div className="w-full bg-red-50 border border-red-500 rounded-2xl px-4 py-3 text-center space-y-2 shadow-sm mb-4">
+                       <p className="text-red-700 text-base font-bold animate-pulse">
+                           🔔 {guestArrivalLock.message}
+                       </p>
+                   </div>
+               ) : (
+                   <button
+                      onClick={() => {
+                        if (incompleteTasksCount > 0) {
+                          alert(`Bạn còn ${incompleteTasksCount} công việc chưa hoàn thành. Vui lòng hoàn thành trước khi tan ca.`);
+                          return;
+                        }
+                        onCheckOut();
+                      }}
+                      disabled={actionLoading || incompleteTasksCount > 0}
+                      className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-rose-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                      <LogOut size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin cảm ơn'}
+                  </button>
+               )}
+              {incompleteTasksCount > 0 && !guestArrivalLock?.active && (
                   <p className="text-red-500 text-xs text-center mt-2 font-medium">Bạn còn {incompleteTasksCount} công việc chưa hoàn thành. Không thể tan ca.</p>
               )}
              </div>

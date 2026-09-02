@@ -121,6 +121,33 @@ export async function GET(request: Request) {
              }
         }
 
+        // ─── Fetch Guest Arrival Lock (Only for TYPE_D) ───
+        let guestArrivalLock = { active: false, lockedBy: '', lockedAt: '', message: '' };
+        if (workType === 'TYPE_D') {
+            const { data: lockConfig } = await supabase
+                .from('SystemConfigs')
+                .select('value')
+                .eq('key', 'guest_arrival_lock_enabled')
+                .maybeSingle();
+
+            if (lockConfig?.value === 'true') {
+                const { data: activeLock } = await supabase
+                    .from('GuestArrivalEvents')
+                    .select('created_by_name, created_at, note')
+                    .is('released_at', null)
+                    .maybeSingle();
+
+                if (activeLock) {
+                    guestArrivalLock = {
+                        active: true,
+                        lockedBy: activeLock.created_by_name,
+                        lockedAt: activeLock.created_at,
+                        message: activeLock.note || 'Quầy vừa báo có khách. Vui lòng giữ máy.'
+                    };
+                }
+            }
+        }
+
         // ─── Determine status from records ───
         if (!records || records.length === 0) {
             // CƠ CHẾ BẢO VỆ: Nếu KTV chưa điểm danh hôm nay nhưng bị kẹt AT_VENUE ở bảng Staff (do quên tan ca hôm trước) -> Auto reset về OFFLINE
@@ -131,7 +158,7 @@ export async function GET(request: Request) {
                     await KtvOnlineService.goOffline(supabase, userRow.code);
                 }
             }
-            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         // Find the most relevant record (most recent non-rejected, or fallback)
@@ -141,14 +168,14 @@ export async function GET(request: Request) {
             (r) => r.checkType === 'SUDDEN_OFF' && r.status === 'CONFIRMED'
         );
         if (confirmedOff) {
-            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedOff, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedOff, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         const pendingOff = records.find(
             (r) => r.checkType === 'SUDDEN_OFF' && r.status === 'PENDING'
         );
         if (pendingOff) {
-            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingOff, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingOff, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         // 2. Kiểm tra Tan ca
@@ -156,14 +183,14 @@ export async function GET(request: Request) {
             (r) => r.checkType === 'CHECK_OUT' && r.status === 'CONFIRMED'
         );
         if (confirmedCheckOut) {
-            return NextResponse.json({ success: true, checkStatus: 'CHECKED_OUT', record: confirmedCheckOut, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'CHECKED_OUT', record: confirmedCheckOut, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         const pendingCheckOut = records.find(
             (r) => r.checkType === 'CHECK_OUT' && r.status === 'PENDING'
         );
         if (pendingCheckOut) {
-            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckOut, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckOut, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         // 3. Kiểm tra Vào ca
@@ -171,18 +198,18 @@ export async function GET(request: Request) {
             (r) => (r.checkType === 'CHECK_IN' || r.checkType === 'LATE_CHECKIN' || r.checkType === 'OVERTIME') && r.status === 'CONFIRMED'
         );
         if (confirmedCheckIn) {
-            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedCheckIn, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedCheckIn, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         const pendingCheckIn = records.find(
             (r) => (r.checkType === 'CHECK_IN' || r.checkType === 'LATE_CHECKIN' || r.checkType === 'OVERTIME') && r.status === 'PENDING'
         );
         if (pendingCheckIn) {
-            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckIn, workType, availableUntil, incompleteTasksCount });
+            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckIn, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
         }
 
         // All records are REJECTED → allow retry
-        return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount });
+        return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
 
     } catch (error: any) {
         console.error('❌ [Attendance Status] Unhandled error:', error);

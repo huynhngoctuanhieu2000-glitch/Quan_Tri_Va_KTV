@@ -153,6 +153,30 @@ export async function POST(request: Request) {
                     }, { status: 403 });
                 }
             }
+
+            // ─── Step 0.6: Check Guest Arrival Lock (Only for TYPE_D) ─────────────
+            if (staffRow?.work_type === 'TYPE_D' && checkType === 'CHECK_OUT') {
+                const { data: lockConfig } = await supabase
+                    .from('SystemConfigs')
+                    .select('value')
+                    .eq('key', 'guest_arrival_lock_enabled')
+                    .maybeSingle();
+
+                if (lockConfig?.value === 'true') {
+                    const { data: activeLock } = await supabase
+                        .from('GuestArrivalEvents')
+                        .select('id, note')
+                        .is('released_at', null)
+                        .maybeSingle();
+
+                    if (activeLock) {
+                        return NextResponse.json({ 
+                            success: false, 
+                            error: activeLock.note || 'Quầy vừa báo có khách. Vui lòng giữ máy, chưa thể tan ca lúc này.'
+                        }, { status: 403 });
+                    }
+                }
+            }
         }
 
 

@@ -74,6 +74,12 @@ export const useKTVAttendance = () => {
     const [availableUntil, setAvailableUntil] = useState<string | null>(null);
     const [showOvertimeFeature, setShowOvertimeFeature] = useState(false);
     const [incompleteTasksCount, setIncompleteTasksCount] = useState(0);
+    const [guestArrivalLock, setGuestArrivalLock] = useState<{ active: boolean; lockedBy: string; lockedAt: string; message: string }>({
+        active: false,
+        lockedBy: '',
+        lockedAt: '',
+        message: ''
+    });
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -94,6 +100,7 @@ export const useKTVAttendance = () => {
                     if (statusRes.workType) setWorkType(statusRes.workType);
                     if (statusRes.availableUntil) setAvailableUntil(statusRes.availableUntil);
                     if (statusRes.incompleteTasksCount !== undefined) setIncompleteTasksCount(statusRes.incompleteTasksCount);
+                    if (statusRes.guestArrivalLock) setGuestArrivalLock(statusRes.guestArrivalLock);
                 }
                 
                 if (settingsRes.success && settingsRes.data) {
@@ -208,6 +215,21 @@ export const useKTVAttendance = () => {
 
         return () => { supabase.removeChannel(channel); };
     }, [user?.id, currentRecord?.id]);
+
+    useEffect(() => {
+        const lockChannel = supabase
+            .channel('guest_arrival_events')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'GuestArrivalEvents',
+            }, () => {
+                refreshAttendanceStatus();
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(lockChannel); };
+    }, [refreshAttendanceStatus]);
 
     // --- GPS Removed ---
     // GPS is completely disabled in favor of IP Whitelisting
@@ -397,5 +419,6 @@ export const useKTVAttendance = () => {
         availableUntil,
         refreshAttendanceStatus,
         incompleteTasksCount,
+        guestArrivalLock,
     };
 };

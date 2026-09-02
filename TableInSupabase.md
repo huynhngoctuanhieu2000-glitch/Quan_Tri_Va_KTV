@@ -740,3 +740,14 @@
 | `notes` | text | Ghi chï¿½ thï¿½m |
 | `status` | text | Tr?ng thï¿½i ('PENDING', 'CONVERTED', 'CANCELLED') |
 | `created_at` | timestamp | Th?i di?m t?o |
+
+### GuestArrivalEvents
+| C?t | Ki?u | Mô t? |
+|---|---|---|
+| id | uuid PK | ID b?n ghi |
+| created_by | text | Ngu?i b?t khóa |
+| created_by_name | text | Tên ngu?i b?t khóa |
+| created_at | timestamptz | Th?i di?m b?t |
+| released_at | timestamptz | Th?i di?m t?t |
+| released_by | text | Ngu?i t?t |
+| note | text | Ghi chú |

@@ -39,7 +39,8 @@ const KTVAttendancePage = () => {
         workType,
         availableUntil,
         refreshAttendanceStatus,
-        incompleteTasksCount
+        incompleteTasksCount,
+        guestArrivalLock
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
@@ -577,6 +578,12 @@ const KTVAttendancePage = () => {
                                                     <Loader2 size={16} className="animate-spin" />
                                                     Đang kiểm tra giờ ca...
                                                 </div>
+                                            ) : guestArrivalLock?.active ? (
+                                                <div className="w-full bg-red-50 border border-red-500 rounded-2xl px-4 py-3 text-center space-y-2 shadow-sm">
+                                                    <p className="text-red-700 text-base font-bold animate-pulse">
+                                                        🔔 {guestArrivalLock.message}
+                                                    </p>
+                                                </div>
                                             ) : incompleteTasksCount > 0 ? (
                                                 <div className="w-full bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center space-y-2">
                                                     <p className="text-red-700 text-sm font-semibold">
@@ -593,38 +600,41 @@ const KTVAttendancePage = () => {
                                                     </p>
                                                 </div>
                                             ) : null}
-                                            <button
-                                                onClick={() => {
-                                                    if (incompleteTasksCount > 0) return;
-                                                    
-                                                    const isEarly = activeShiftType !== 'FREE' && !canCheckOut && allowEarlyCheckout;
+                                            
+                                            {!guestArrivalLock?.active && (
+                                                <button
+                                                    onClick={() => {
+                                                        if (incompleteTasksCount > 0) return;
+                                                        
+                                                        const isEarly = activeShiftType !== 'FREE' && !canCheckOut && allowEarlyCheckout;
 
-                                                    // Thông báo nhắc nhở riêng cho Ca Tự Do nếu về sớm hơn giờ dự kiến
-                                                    if (activeShiftType === 'FREE' && currentRecord?.estimatedEndTime) {
-                                                        const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
-                                                        const [estH, estM] = currentRecord.estimatedEndTime.split(':').map(Number);
-                                                        
-                                                        const estDate = new Date(vnNow);
-                                                        estDate.setUTCHours(estH, estM, 0, 0); 
-                                                        
-                                                        if (vnNow.getTime() < estDate.getTime()) {
-                                                            if (!window.confirm(`⚠️ Bạn đang tan ca sớm hơn giờ dự kiến (${currentRecord.estimatedEndTime}).\n\nVui lòng thông báo cho lễ tân biết để sắp xếp khách nhé!\n\nNhấn OK để tiếp tục tan ca.`)) {
-                                                                return;
+                                                        // Thông báo nhắc nhở riêng cho Ca Tự Do nếu về sớm hơn giờ dự kiến
+                                                        if (activeShiftType === 'FREE' && currentRecord?.estimatedEndTime) {
+                                                            const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                                                            const [estH, estM] = currentRecord.estimatedEndTime.split(':').map(Number);
+                                                            
+                                                            const estDate = new Date(vnNow);
+                                                            estDate.setUTCHours(estH, estM, 0, 0); 
+                                                            
+                                                            if (vnNow.getTime() < estDate.getTime()) {
+                                                                if (!window.confirm(`⚠️ Bạn đang tan ca sớm hơn giờ dự kiến (${currentRecord.estimatedEndTime}).\n\nVui lòng thông báo cho lễ tân biết để sắp xếp khách nhé!\n\nNhấn OK để tiếp tục tan ca.`)) {
+                                                                    return;
+                                                                }
                                                             }
                                                         }
-                                                    }
 
-                                                    openForm('CHECK_OUT', isEarly);
-                                                }}
-                                                disabled={incompleteTasksCount > 0 || isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
-                                                className={`w-full py-4 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 ${
-                                                    incompleteTasksCount > 0
-                                                        ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
-                                                        : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md shadow-rose-200'
-                                                }`}
-                                            >
-                                                <LogOut size={22} /> {incompleteTasksCount > 0 ? 'CHƯA THỂ TAN CA' : 'Oria Xin Cảm ơn'}
-                                            </button>
+                                                        openForm('CHECK_OUT', isEarly);
+                                                    }}
+                                                    disabled={incompleteTasksCount > 0 || isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
+                                                    className={`w-full py-4 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 ${
+                                                        incompleteTasksCount > 0
+                                                            ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
+                                                            : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md shadow-rose-200'
+                                                    }`}
+                                                >
+                                                    <LogOut size={22} /> {incompleteTasksCount > 0 ? 'CHƯA THỂ TAN CA' : 'Oria Xin Cảm ơn'}
+                                                </button>
+                                            )}
                                             {showOvertimeFeature && ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].includes(activeShiftType || '') && (
                                                 <button
                                                     onClick={() => openForm('OVERTIME')}
