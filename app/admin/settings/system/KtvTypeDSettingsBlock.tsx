@@ -91,8 +91,8 @@ export function KtvTypeDSettingsBlock() {
                         <SaveButton group="rates" savingGroup={savingGroup} saveStatus={saveStatus} onClick={() => handleSaveGroup(['ktv_type_d_vip_rate_per_60m', 'ktv_type_d_pt_rate_per_60m'], 'rates')} />
                     </div>
                     <div className="space-y-4">
-                        <NumberInput label="Rate VIP (Phòng VIP/NHT/NHP)" value={configs.ktv_type_d_vip_rate_per_60m ?? 180000} onChange={(v: any) => handleChange('ktv_type_d_vip_rate_per_60m', v)} />
-                        <NumberInput label="Rate Phổ thông" value={configs.ktv_type_d_pt_rate_per_60m ?? 100000} onChange={(v: any) => handleChange('ktv_type_d_pt_rate_per_60m', v)} />
+                        <NumberInput label="Rate VIP - dịch vụ mã NHP / NHT / VIP" value={configs.ktv_type_d_vip_rate_per_60m ?? 180000} onChange={(v: any) => handleChange('ktv_type_d_vip_rate_per_60m', v)} suffix="VNĐ/giờ" />
+                        <NumberInput label="Rate Phổ thông - các dịch vụ còn lại (NHS...)" value={configs.ktv_type_d_pt_rate_per_60m ?? 100000} onChange={(v: any) => handleChange('ktv_type_d_pt_rate_per_60m', v)} suffix="VNĐ/giờ" />
                     </div>
                 </div>
 
