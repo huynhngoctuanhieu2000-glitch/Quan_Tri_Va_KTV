@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { AttendanceSchema } from '@/lib/schemas/ktv.schema';
 import { createNotification } from '@/lib/notification-helper';
 import { KtvOnlineService } from '@/lib/services/KtvOnlineService';
+import { KtvTypeDDisciplineService } from '@/lib/services/KtvTypeDDisciplineService';
 import sharp from 'sharp';
 
 // 🔧 CONFIG

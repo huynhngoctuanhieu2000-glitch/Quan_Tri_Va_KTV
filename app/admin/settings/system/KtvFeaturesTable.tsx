@@ -5,7 +5,7 @@ import { useStaffFeatures, FEATURE_FLAG_DEFS } from './KtvFeatures.logic';
 const ANIMATION_DURATION = '200ms';
 const TABLE_ROW_HEIGHT = '52px';
 
-export const KtvFeaturesTable = ({ activeTab }: { activeTab: 'TYPE_A' | 'TYPE_B' | 'TYPE_C' }) => {
+export const KtvFeaturesTable = ({ activeTab }: { activeTab: 'TYPE_A' | 'TYPE_B' | 'TYPE_C' | 'TYPE_D' }) => {
     const {
         staffList,
         allStaffCount,

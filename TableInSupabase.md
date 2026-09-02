@@ -410,6 +410,28 @@
 
 ---
 
+### 6.6. KTVDailyRegistration ✅ CHỦ LỰC (TYPE D LỊCH & BÁO VẮNG/TRỄ)
+**Nhiệm vụ**: Đăng ký lịch làm việc hằng ngày của KTV TYPE_D và ghi nhận trạng thái báo vắng, báo trễ, điểm danh.
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `staff_id` | text | Mã KTV |
+| `work_date` | date | Ngày đăng ký (YYYY-MM-DD) |
+| `expected_time` | time | Giờ dự kiến đến làm |
+| `registered_at` | timestamptz | Thời điểm đăng ký |
+| `status` | text | `REGISTERED`, `OFF_REGISTERED`, `ABSENT_REPORTED`, `LATE_REPORTED`, `COMPLETED` |
+| `absent_reported_at` | timestamptz | Thời gian bấm nút Báo Vắng |
+| `late_reported_at` | timestamptz | Thời gian bấm nút Báo Trễ |
+| `late_expected_time` | time | Giờ dự kiến đến mới sau khi báo trễ |
+| `late_report_count` | int | Số lần báo trễ (chặn spam) |
+| `check_in_at` | timestamptz | Thời gian check-in thực tế |
+| `penalty_applied` | text | Đánh dấu loại phạt đã áp dụng (tránh phạt double) |
+
+**Constraint**: `UNIQUE(staff_id, work_date)` — mỗi nhân viên 1 bản ghi mỗi ngày.
+
+---
+
 ## NHÓM 3: THÔNG BÁO & CẤU HÌNH (Notification & Config)
 
 
@@ -742,12 +764,12 @@
 | `created_at` | timestamp | Th?i di?m t?o |
 
 ### GuestArrivalEvents
-| C?t | Ki?u | M� t? |
+| C?t | Ki?u | M� t? |
 |---|---|---|
 | id | uuid PK | ID b?n ghi |
-| created_by | text | Ngu?i b?t kh�a |
-| created_by_name | text | T�n ngu?i b?t kh�a |
+| created_by | text | Ngu?i b?t kh�a |
+| created_by_name | text | T�n ngu?i b?t kh�a |
 | created_at | timestamptz | Th?i di?m b?t |
 | released_at | timestamptz | Th?i di?m t?t |
 | released_by | text | Ngu?i t?t |
-| note | text | Ghi ch� |
+| note | text | Ghi ch� |

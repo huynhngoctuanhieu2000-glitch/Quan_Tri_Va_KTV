@@ -175,7 +175,10 @@ export default function SystemSettingsPage() {
                 </div>
 
                 {activeTab === 'TYPE_D' ? (
-                    <KtvTypeDSettingsBlock />
+                    <div className="space-y-8">
+                        <KtvTypeDSettingsBlock />
+                        <KtvFeaturesTable activeTab="TYPE_D" />
+                    </div>
                 ) : (
                     <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
