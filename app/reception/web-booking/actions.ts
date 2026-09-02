@@ -322,7 +322,7 @@ export async function confirmWebBooking(bookingId: string) {
         ...sanitizePayload,
       })
       .eq('id', bookingId)
-      .eq('status', 'NEW'); // Safety: only update if still NEW
+      .in('status', ['NEW', 'WAITING']); // Cho phép cả NEW và WAITING
 
     if (error) throw error;
     
