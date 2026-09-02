@@ -28,11 +28,9 @@ export function KtvTypeDSettingsBlock() {
                 
                 // Defaults
                 if (!parsed.ktv_type_d_rating_deduction) {
-                    parsed.ktv_type_d_rating_deduction = { "0": 100, "1": 100, "2": 100, "3": 100, "4": 0 };
+                    parsed.ktv_type_d_rating_deduction = { "0": 1, "1": 1, "2": 1, "3": 1, "4": 0 };
                 }
-                if (!parsed.ktv_type_d_discipline_rules) {
-                    parsed.ktv_type_d_discipline_rules = [];
-                }
+                if (!parsed.ktv_type_d_discipline_rules) { parsed.ktv_type_d_discipline_rules = { "ABSENT_NO_NOTICE":10, "ABSENT_EARLY_NOTICE":5, "LATE_NO_UPDATE":5, "ORDER_REJECT_MULTIPLIER":3 }; }
                 setConfigs(parsed);
             }
         } catch (error) {
@@ -164,9 +162,9 @@ export function KtvTypeDSettingsBlock() {
                             <div key={star} className="flex items-center gap-4">
                                 <div className="w-16 font-bold text-gray-700">{star} Sao</div>
                                 <NumberInput
-                                    value={configs.ktv_type_d_rating_deduction?.[star] ?? (star === 4 ? 0 : 100)}
+                                    value={((configs.ktv_type_d_rating_deduction?.[star] !== undefined ? configs.ktv_type_d_rating_deduction[star] : (star === 4 ? 0 : 1))) * 100}
                                     onChange={(v: any) => {
-                                        const newVal = { ...configs.ktv_type_d_rating_deduction, [star]: v };
+                                        const newVal = { ...configs.ktv_type_d_rating_deduction, [star]: v / 100 };
                                         handleChange('ktv_type_d_rating_deduction', newVal);
                                     }}
                                     suffix="%"
@@ -189,49 +187,11 @@ export function KtvTypeDSettingsBlock() {
                     <SaveButton group="discipline" savingGroup={savingGroup} saveStatus={saveStatus} onClick={() => handleSaveGroup(['ktv_type_d_discipline_rules'], 'discipline')} />
                 </div>
                 
-                <div className="space-y-3 max-w-2xl">
-                    <div className="grid grid-cols-2 gap-4 mb-2">
-                        <div className="font-bold text-sm text-gray-500 uppercase">Trễ từ (Phút)</div>
-                        <div className="font-bold text-sm text-gray-500 uppercase">Phạt (VNĐ)</div>
-                    </div>
-                    {(configs.ktv_type_d_discipline_rules || []).map((rule: any, idx: number) => (
-                        <div key={idx} className="grid grid-cols-2 gap-4">
-                            <NumberInput
-                                value={rule.lateMinutes}
-                                onChange={(v: any) => {
-                                    const rules = [...configs.ktv_type_d_discipline_rules];
-                                    rules[idx].lateMinutes = v;
-                                    handleChange('ktv_type_d_discipline_rules', rules);
-                                }}
-                                suffix="Phút"
-                            />
-                            <div className="flex items-center gap-2">
-                                <div className="flex-1">
-                                    <NumberInput
-                                        value={rule.deduction}
-                                        onChange={(v: any) => {
-                                            const rules = [...configs.ktv_type_d_discipline_rules];
-                                            rules[idx].deduction = v;
-                                            handleChange('ktv_type_d_discipline_rules', rules);
-                                        }}
-                                        suffix="VNĐ"
-                                    />
-                                </div>
-                                <button onClick={() => {
-                                    const rules = [...configs.ktv_type_d_discipline_rules];
-                                    rules.splice(idx, 1);
-                                    handleChange('ktv_type_d_discipline_rules', rules);
-                                }} className="text-red-500 font-bold px-3 hover:bg-red-50 rounded-lg h-12">X</button>
-                            </div>
-                        </div>
-                    ))}
-                    <button onClick={() => {
-                        const rules = [...(configs.ktv_type_d_discipline_rules || [])];
-                        rules.push({ lateMinutes: 0, deduction: 0 });
-                        handleChange('ktv_type_d_discipline_rules', rules);
-                    }} className="mt-4 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-colors">
-                        + Thêm mốc kỷ luật
-                    </button>
+                <div className="space-y-4 max-w-2xl">
+                    <NumberInput label="Nghỉ không thông báo" value={configs.ktv_type_d_discipline_rules?.ABSENT_NO_NOTICE ?? 10} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, ABSENT_NO_NOTICE: v})} />
+                    <NumberInput label="Nghỉ có thông báo (trễ)" value={configs.ktv_type_d_discipline_rules?.ABSENT_EARLY_NOTICE ?? 5} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, ABSENT_EARLY_NOTICE: v})} />
+                    <NumberInput label="Đi trễ không cập nhật" value={configs.ktv_type_d_discipline_rules?.LATE_NO_UPDATE ?? 5} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, LATE_NO_UPDATE: v})} />
+                    <NumberInput label="Hệ số từ chối đơn" value={configs.ktv_type_d_discipline_rules?.ORDER_REJECT_MULTIPLIER ?? 3} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, ORDER_REJECT_MULTIPLIER: v})} />
                 </div>
             </div>
         </div>
