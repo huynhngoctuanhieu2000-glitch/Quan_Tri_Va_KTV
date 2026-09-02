@@ -31,10 +31,15 @@ export async function GET(request: Request) {
         let rateVIP = 180000;
         let ratePT = 100000;
         let ratingDeductions: Record<string, number> = { "0": 0, "1": 0.75, "2": 0.5, "3": 0.25, "4": 0 };
+        let taxEffectiveDate = '2099-01-01';
+
         if (workType === 'TYPE_D') {
             const { data: configsData } = await supabase.from('SystemConfigs').select('key, value').ilike('key', '%type_d%');
             const configs: Record<string, any> = {};
             (configsData || []).forEach(c => { configs[c.key] = c.value; });
+            
+            taxEffectiveDate = configs['ktv_type_d_tax_effective_from'] || '2099-01-01';
+
             rateVIP = Number(configs['ktv_type_d_vip_rate_per_60m']) || 180000;
             ratePT = Number(configs['ktv_type_d_pt_rate_per_60m']) || 100000;
             try {
@@ -71,12 +76,17 @@ export async function GET(request: Request) {
                 pastLedgers.forEach((l: any) => {
                     if (l.date > maxDateStr) maxDateStr = l.date;
                     
-                    if (Number(l.total_commission) > 0) {
+                    let dayComm = Number(l.total_commission) || 0;
+                    if (l.date >= taxEffectiveDate) {
+                        dayComm = dayComm * 0.9;
+                    }
+
+                    if (dayComm > 0) {
                         timeline.push({
                             id: `ledger_comm_${l.date}`,
                             type: 'COMMISSION',
                             title: `Tổng tiền tua ngày ${l.date.split('-').reverse().join('/')}`,
-                            amount: Number(l.total_commission),
+                            amount: dayComm,
                             note: 'Chốt sổ cái',
                             created_at: `${l.date}T23:59:59+07:00`,
                             status: 'APPROVED'
@@ -218,6 +228,11 @@ export async function GET(request: Request) {
                 }
             }
 
+            const bookingDate = (b.timeStart || b.createdAt || '').substring(0, 10);
+            if (workType === 'TYPE_D' && bookingDate >= taxEffectiveDate) {
+                passedCommission = passedCommission * 0.9;
+                heldCommission = heldCommission * 0.9;
+            }
 
             if (passedCommission > 0) {
                 timeline.push({

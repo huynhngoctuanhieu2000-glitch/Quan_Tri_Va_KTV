@@ -142,6 +142,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
+    const [workType, setWorkType] = useState('TYPE_A');
+    useEffect(() => {
+        if (!ktvId) return;
+        supabase.from('Staff').select('work_type').eq('id', ktvId).single().then(({data}) => {
+            if (data?.work_type) setWorkType(data.work_type);
+        });
+    }, [ktvId]);
+
     const lastAcknowledgedIdRef = useRef<string | null>(null);
     const prevBookingIdRef = useRef<string | null>(null);
     const postServiceBookingIdRef = useRef<string | null>(null);
@@ -713,7 +721,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     const unreadRewards = res.data.filter((n: any) => !n.isRead && n.type === 'REWARD');
                     if (unreadRewards.length > 0) {
                         const notify = unreadRewards[0];
-                        setBonusMessage(notify.message);
+                        let popupMsg = notify.message;
+                        if (workType === 'TYPE_D') {
+                            popupMsg = 'Tua đã hoàn thành. Xem ví để biết chi tiết.';
+                        }
+                        setBonusMessage(popupMsg);
                         
                         await apiClient.post('/api/ktv/notifications', { notificationIds: [notify.id] });
                         
@@ -748,7 +760,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             supabase.removeChannel(channel);
             clearInterval(interval);
         };
-    }, [ktvId, screen]);
+    }, [ktvId, screen, workType]);
 
     // ⚙️ Fetch Settings
     useEffect(() => {
@@ -2291,6 +2303,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         canStart,
         allowedStartTime,
         activeSegmentIndex,
+        workType,
         startPhotoBase64,
         setStartPhotoBase64,
         // Room procedures & issue reporting

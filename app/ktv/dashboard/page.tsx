@@ -1663,7 +1663,7 @@ function ScreenHandover({ logic }: { logic: any }) {
 
 
 function ScreenReward({ logic }: { logic: any }) {
-  const { commission, goToDashboard, booking, ktvId } = logic;
+  const { commission, goToDashboard, booking, ktvId, workType } = logic;
   const [rating, setRating] = React.useState(5);
   const [note, setNote] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -1732,13 +1732,22 @@ function ScreenReward({ logic }: { logic: any }) {
 
       <div className="space-y-1">
         <h2 className="text-lg font-black text-slate-800 tracking-tight">Chúc mừng!</h2>
-        <p className="text-xs text-slate-500 font-bold px-4">Bạn vừa nhận được tiền tua phục vụ</p>
+        <p className="text-xs text-slate-500 font-bold px-4">Bạn vừa hoàn thành xuất sắc tua phục vụ</p>
       </div>
 
-      <div className="bg-white border-2 border-amber-100 rounded-[24px] p-4 w-full shadow-lg max-w-[280px]">
-        <span className="text-[9px] font-black text-amber-600 uppercase tracking-[0.2em] block mb-1">Tua bạn nhận được</span>
-        <div className="text-3xl font-black text-slate-800 tabular-nums">+{commission.toLocaleString('vi-VN')}đ</div>
-      </div>
+      {workType === 'TYPE_D' ? (
+          <div className="bg-white border-2 border-indigo-100 rounded-[24px] p-4 w-full shadow-lg max-w-[280px]">
+              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.1em] block mb-1">TUA ĐÃ HOÀN THÀNH</span>
+              <div className="text-sm font-bold text-slate-600">
+                  Vui lòng xem trong Ví để biết chi tiết thu nhập.
+              </div>
+          </div>
+      ) : (
+          <div className="bg-white border-2 border-amber-100 rounded-[24px] p-4 w-full shadow-lg max-w-[280px]">
+            <span className="text-[9px] font-black text-amber-600 uppercase tracking-[0.2em] block mb-1">Tua bạn nhận được</span>
+            <div className="text-3xl font-black text-slate-800 tabular-nums">+{commission.toLocaleString('vi-VN')}đ</div>
+          </div>
+      )}
 
       {/* --- FORM ĐÁNH GIÁ QUẦY --- */}
       <div className="w-full max-w-[280px] bg-slate-50 border border-slate-100 p-4 rounded-3xl mt-4">

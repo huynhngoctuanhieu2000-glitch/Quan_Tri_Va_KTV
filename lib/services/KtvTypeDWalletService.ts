@@ -12,6 +12,9 @@ export class KtvTypeDWalletService {
         const configs: Record<string, any> = {};
         (configsData || []).forEach((c: any) => { configs[c.key] = c.value; });
 
+        const taxEffectiveDate = configs['ktv_type_d_tax_effective_from'] || '2099-01-01';
+        let total_tax_deducted = 0;
+
         const rateVIP = Number(configs['ktv_type_d_vip_rate_per_60m']) || 180000;
         const ratePT = Number(configs['ktv_type_d_pt_rate_per_60m']) || 100000;
         
@@ -48,9 +51,21 @@ export class KtvTypeDWalletService {
                 let maxDateStr = pastLedgers[0].date;
                 pastLedgers.forEach((l: any) => {
                     if (l.date > maxDateStr) maxDateStr = l.date;
-                    ledgerSummary.comm += Number(l.total_commission);
-                    ledgerSummary.tip += Number(l.total_tip);
-                    ledgerSummary.bonus += Number(l.total_bonus || 0);
+                    
+                    let dayComm = Number(l.total_commission || 0);
+                    let dayBonus = Number(l.total_bonus || 0);
+                    
+                    if (l.date >= taxEffectiveDate) {
+                        const taxComm = dayComm * 0.1;
+                        const taxBonus = dayBonus * 0.1;
+                        total_tax_deducted += (taxComm + taxBonus);
+                        dayComm -= taxComm;
+                        dayBonus -= taxBonus;
+                    }
+
+                    ledgerSummary.comm += dayComm;
+                    ledgerSummary.tip += Number(l.total_tip || 0);
+                    ledgerSummary.bonus += dayBonus;
                     ledgerSummary.penalty += Number(l.total_penalty || 0);
                 });
 
@@ -153,6 +168,14 @@ export class KtvTypeDWalletService {
             }
         }
 
+        if (todayStr >= taxEffectiveDate) {
+            const rtTaxComm = rt_commission * 0.1;
+            const rtTaxBonus = rt_bonus * 0.1;
+            total_tax_deducted += (rtTaxComm + rtTaxBonus);
+            rt_commission -= rtTaxComm;
+            rt_bonus -= rtTaxBonus;
+        }
+
         const { data: adjustments } = await supabase
             .from('WalletAdjustments')
             .select('amount')
@@ -192,6 +215,7 @@ export class KtvTypeDWalletService {
             total_bonus,
             total_penalty,
             total_adjustment,
+            total_tax_deducted,
             total_withdrawn,
             total_pending,
             gross_income,
