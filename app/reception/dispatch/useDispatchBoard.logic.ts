@@ -444,17 +444,29 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                 debouncedFetchData();
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Bookings' }, (payload: any) => {
-                setOrders(prev => prev.map(o => {
-                    if (o.id === payload.new.id) {
-                        const newStatus = payload.new.status;
-                        const isOpenStatus = ['NEW', 'WAITING', 'READY', 'PREPARING'].includes(newStatus);
-                        const mappedStatus = !o.hasAssignedKtv && isOpenStatus
-                            ? 'pending'
-                            : (isOpenStatus ? 'PREPARING' : (newStatus === 'CANCELLED' ? 'DONE' : newStatus));
-                        return { ...o, rawStatus: newStatus, dispatchStatus: mappedStatus };
+                const newBooking = payload.new;
+                const validSources = ['STANDARD_WALK_IN', 'VIP_WALK_IN', 'MIXED_WALK_IN'];
+                
+                setOrders(prev => {
+                    const exists = prev.some(o => o.id === newBooking.id);
+                    if (!exists && validSources.includes(newBooking?.source) && newBooking.status !== 'CANCELLED') {
+                        // Bắt sự kiện đơn từ Web Booking vừa được xác nhận (đổi source thành WALK_IN)
+                        debouncedFetchData();
+                        return prev;
                     }
-                    return o;
-                }));
+                    
+                    return prev.map(o => {
+                        if (o.id === newBooking.id) {
+                            const newStatus = newBooking.status;
+                            const isOpenStatus = ['NEW', 'WAITING', 'READY', 'PREPARING'].includes(newStatus);
+                            const mappedStatus = !o.hasAssignedKtv && isOpenStatus
+                                ? 'pending'
+                                : (isOpenStatus ? 'PREPARING' : (newStatus === 'CANCELLED' ? 'DONE' : newStatus));
+                            return { ...o, rawStatus: newStatus, dispatchStatus: mappedStatus };
+                        }
+                        return o;
+                    });
+                });
 
                 if (selectedOrderIdRef.current) {
                     needsRefreshRef.current = true;
