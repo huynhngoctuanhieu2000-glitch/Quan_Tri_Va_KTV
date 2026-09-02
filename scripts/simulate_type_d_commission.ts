@@ -68,7 +68,35 @@ function runTest() {
     console.log(`Case 5 (String JSON & Lowercase ID): ${pay5}`);
     assert.strictEqual(pay5, 150000); // 90 mins * 100000/60 = 150000
 
+
+    // Case 6: rating 3 sao -> phai ra 75% tien goc (25% deduction)
+    const items6 = [{
+        segments: [{
+            ktvId: 'T001',
+            duration: 60,
+            actualStartTime: '2026-09-01T10:00:00Z',
+            actualEndTime: '2026-09-01T11:00:00Z'
+        }]
+    }];
+    const pay6 = KtvTypeDCommissionService.calculateGuestCommission(items6, techCode, 3, ratePer60, deductions);
+    console.log(`Case 6 (Rating 3): ${pay6}`);
+    assert.strictEqual(pay6, 75000);
+
+    // Case 7: rating 0 sao (chua cham) -> phai ra 100% tien goc
+    const items7 = [{
+        segments: [{
+            ktvId: 'T001',
+            duration: 60,
+            actualStartTime: '2026-09-01T10:00:00Z',
+            actualEndTime: '2026-09-01T11:00:00Z'
+        }]
+    }];
+    const pay7 = KtvTypeDCommissionService.calculateGuestCommission(items7, techCode, 0, ratePer60, deductions);
+    console.log(`Case 7 (Rating 0): ${pay7}`);
+    assert.strictEqual(pay7, 100000);
+
     console.log("All commission assertions passed.");
 }
+
 
 runTest();

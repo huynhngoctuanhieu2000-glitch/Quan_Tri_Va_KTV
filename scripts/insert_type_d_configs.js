@@ -35,7 +35,7 @@ async function run() {
         },
         {
             key: 'ktv_type_d_rating_deduction',
-            value: JSON.stringify({ "4": 0, "3": 0.25, "2": 0.5, "1": 0.75, "0": 0 }),
+            value: JSON.stringify({ "0": 0, "1": 0.75, "2": 0.5, "3": 0.25, "4": 0 }),
             description: 'Bảng khấu trừ tiền tua theo sao (thang 4★) cho TYPE_D'
         },
         {
