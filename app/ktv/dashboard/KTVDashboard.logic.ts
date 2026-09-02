@@ -1097,10 +1097,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }, (payload: any) => {
                 console.log("🔄 [KTV] Realtime Booking Update:", payload.new.status);
                 
-                // Nếu đơn hàng bị hủy → set ngay
-                if (payload.new.status === 'CANCELLED') {
+                // Nếu đơn hàng bị hủy hoặc bị tách → set ngay
+                if (payload.new.status === 'CANCELLED' || payload.new.status === 'SPLIT') {
                     if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current)) {
-                        console.log("🔒 [KTV] Chặn thoát ra Dashboard vì đang trong màn hình Hậu kỳ (Realtime CANCELLED).");
+                        console.log(`🔒 [KTV] Chặn thoát ra Dashboard vì đang trong màn hình Hậu kỳ (Realtime ${payload.new.status}).`);
                         return;
                     }
                     setBooking(null);
