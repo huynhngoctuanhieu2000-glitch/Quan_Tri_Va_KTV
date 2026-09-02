@@ -169,6 +169,7 @@ export function AddEmployeeModal({ isOpen, onClose, onSuccess }: AddEmployeeModa
                                                 <option value="TYPE_A">Loại A (Tính theo Ca/Điểm)</option>
                                                 <option value="TYPE_B">Loại B (Hưởng tua 180k/h)</option>
                                                 <option value="TYPE_C">Loại C (Cộng tác viên/Freelance)</option>
+                                                <option value="TYPE_D">Loại D (Khoán)</option>
                                             </select>
                                         </div>
                                     )}

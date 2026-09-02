@@ -2,7 +2,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { revalidatePath } from 'next/cache';
-import { DEFAULT_FEATURE_FLAGS_TYPE_A, DEFAULT_FEATURE_FLAGS_TYPE_B } from '@/lib/constants/staff.constants';
+import { DEFAULT_FEATURE_FLAGS_TYPE_A, DEFAULT_FEATURE_FLAGS_TYPE_B, DEFAULT_FEATURE_FLAGS_TYPE_D } from '@/lib/constants/staff.constants';
 
 const DOMAIN_SUFFIX = '@nganhaspa.internal';
 
@@ -130,7 +130,7 @@ export async function createStaffMember(formData: any) {
             weight: formData.weight ? parseInt(formData.weight) : null,
             work_type: formData.work_type || 'TYPE_A',
             skills: formData.skills || {},
-            feature_flags: formData.work_type === 'TYPE_B' ? DEFAULT_FEATURE_FLAGS_TYPE_B : DEFAULT_FEATURE_FLAGS_TYPE_A
+            feature_flags: formData.work_type === 'TYPE_D' ? DEFAULT_FEATURE_FLAGS_TYPE_D : formData.work_type === 'TYPE_B' ? DEFAULT_FEATURE_FLAGS_TYPE_B : DEFAULT_FEATURE_FLAGS_TYPE_A
         };
 
         const { data: staffData, error: staffError } = await supabase

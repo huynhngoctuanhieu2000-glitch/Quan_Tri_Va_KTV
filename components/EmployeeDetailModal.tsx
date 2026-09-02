@@ -268,11 +268,13 @@ export function EmployeeDetailModal({ employee, isOpen, onClose, onUpdate }: Emp
                         <option value="TYPE_A">Loại A (Tính theo Ca/Điểm)</option>
                         <option value="TYPE_B">Loại B (Hưởng tua 180k/h)</option>
                         <option value="TYPE_C">Loại C (Cộng tác viên/Freelance)</option>
+                        <option value="TYPE_D">Loại D (Khoán)</option>
                       </select>
                     ) : (
                       <div className="text-sm font-bold text-emerald-700">
                         {editedEmployee.work_type === 'TYPE_B' ? 'Loại B (Hưởng tua 180k/h)' : 
                          editedEmployee.work_type === 'TYPE_C' ? 'Loại C (Cộng tác viên/Freelance)' : 
+                         editedEmployee.work_type === 'TYPE_D' ? 'Loại D (Khoán)' : 
                          'Loại A (Tính theo Ca/Điểm)'}
                       </div>
                     )}

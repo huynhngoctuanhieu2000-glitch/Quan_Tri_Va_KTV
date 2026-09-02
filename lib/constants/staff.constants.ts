@@ -7,7 +7,7 @@ export const WORK_TYPE_LABELS = {
     TYPE_A: 'Cơ bản',
     TYPE_B: 'Hợp tác',
     TYPE_C: 'Nhập tay',
-    TYPE_D: 'D'
+    TYPE_D: 'Khoán'
 };
 
 export const DEFAULT_FEATURE_FLAGS_TYPE_A: FeatureFlagsTypeA = {
