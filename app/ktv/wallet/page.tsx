@@ -20,7 +20,7 @@ const THEME = {
 
 export default function KTVWalletPage() {
     const { 
-        user, canViewWallet, activeTab, setActiveTab, canViewBonus, canViewPiggyBank,
+        user, canViewWallet, activeTab, setActiveTab, canViewTua, canViewBonus, canViewPiggyBank,
         walletBalance, walletTimeline, bonusBalance, bonusTimeline, 
         piggyBankBalance, piggyBankTimeline, piggyBankTotalWeeks,
         isLoading, submitWithdraw, submitRedeemBonus 
@@ -151,13 +151,15 @@ export default function KTVWalletPage() {
 
                     {isDropdownOpen && (
                         <div className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2">
-                            <button 
-                                onClick={() => { setActiveTab('TUA'); setIsDropdownOpen(false); }}
-                                className={`flex items-center gap-3 px-5 py-4 transition-all ${activeTab === 'TUA' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50'}`}
-                            >
-                                <Zap size={20} className={activeTab === 'TUA' ? 'text-emerald-500' : 'text-slate-400'} />
-                                <span className="font-bold">Ví Tua</span>
-                            </button>
+                            {canViewTua && (
+                                <button 
+                                    onClick={() => { setActiveTab('TUA'); setIsDropdownOpen(false); }}
+                                    className={`flex items-center gap-3 px-5 py-4 transition-all ${activeTab === 'TUA' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                >
+                                    <Zap size={20} className={activeTab === 'TUA' ? 'text-emerald-500' : 'text-slate-400'} />
+                                    <span className="font-bold">Ví Tua</span>
+                                </button>
+                            )}
                             {canViewBonus && (
                                 <button 
                                     onClick={() => { setActiveTab('BONUS'); setIsDropdownOpen(false); }}

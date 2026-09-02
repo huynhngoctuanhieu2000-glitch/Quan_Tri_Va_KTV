@@ -26,6 +26,7 @@ export const DEFAULT_FEATURE_FLAGS_TYPE_D: FeatureFlagsTypeD = {
     sudden_leave_penalty: false,
     allow_on_call: false,
     enable_employee_tasks: false,
+    tua_wallet: true,
     bonus_wallet: true,
     savings_wallet: false,
     maintenance_fee: true,

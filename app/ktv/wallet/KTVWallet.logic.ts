@@ -12,6 +12,7 @@ export const useKTVWallet = () => {
     const ktvId = user?.id || '';
 
     const [activeTab, setActiveTab] = useState<'TUA' | 'BONUS' | 'TICH_LUY'>('TUA');
+    const [canViewTua, setCanViewTua] = useState(true);
     const [canViewBonus, setCanViewBonus] = useState(false);
     const [canViewPiggyBank, setCanViewPiggyBank] = useState(false);
 
@@ -35,12 +36,22 @@ export const useKTVWallet = () => {
         setIsLoading(true);
         try {
             const { data: staffData } = await supabase.from('Staff').select('feature_flags').eq('id', ktvId).single();
-            const hasBonusFlag = staffData?.feature_flags?.enable_bonus_wallet === true;
-            const hasPiggyFlag = staffData?.feature_flags?.enable_piggy_wallet === true;
+            // Default to true for backward compatibility if flag is missing
+            const hasTuaFlag = staffData?.feature_flags?.tua_wallet !== false;
+            const hasBonusFlag = staffData?.feature_flags?.bonus_wallet === true || staffData?.feature_flags?.enable_bonus_wallet === true;
+            const hasPiggyFlag = staffData?.feature_flags?.savings_wallet === true || staffData?.feature_flags?.enable_piggy_wallet === true;
+            
+            // If the user doesn't have TUA wallet flag, but TUA is active, switch tab
+            if (activeTab === 'TUA' && !hasTuaFlag) {
+                if (hasBonusFlag) setActiveTab('BONUS');
+                else if (hasPiggyFlag) setActiveTab('TICH_LUY');
+            }
+
+            setCanViewTua(hasTuaFlag);
             setCanViewBonus(hasBonusFlag);
             setCanViewPiggyBank(hasPiggyFlag);
 
-            if (activeTab === 'TUA') {
+            if (activeTab === 'TUA' && hasTuaFlag) {
                 const [balanceRes, timelineRes] = await Promise.all([
                     apiClient.get<any>(API.KTV.WALLET.BALANCE(ktvId)).catch(() => ({ data: null })),
                     apiClient.get<any>(API.KTV.WALLET.TIMELINE(ktvId)).catch(() => ({ data: [] }))
@@ -133,6 +144,7 @@ export const useKTVWallet = () => {
         canViewWallet,
         activeTab,
         setActiveTab,
+        canViewTua,
         canViewBonus,
         canViewPiggyBank,
         walletBalance,

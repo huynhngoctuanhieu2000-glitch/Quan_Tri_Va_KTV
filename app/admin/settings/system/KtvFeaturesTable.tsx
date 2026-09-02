@@ -31,6 +31,14 @@ export const KtvFeaturesTable = ({ activeTab }: { activeTab: 'TYPE_A' | 'TYPE_B'
         );
     }
 
+    const getLabel = (def: any) => {
+        if (activeTab === 'TYPE_D') {
+            if (def.key === 'tua_wallet') return '💰 VÍ THU NHẬP';
+            if (def.key === 'bonus_wallet') return '💎 ĐIỂM TÍCH LŨY';
+        }
+        return def.label;
+    };
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -48,26 +56,28 @@ export const KtvFeaturesTable = ({ activeTab }: { activeTab: 'TYPE_A' | 'TYPE_B'
             </div>
 
             {/* Search + Bulk Actions */}
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="relative w-full md:w-96">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-5 w-5 text-gray-400" />
+                    </div>
                     <input
                         type="text"
                         placeholder="Tìm theo mã NV hoặc tên..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-xl leading-5 bg-gray-50 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 sm:text-sm transition-all"
                     />
                 </div>
-                {/* Bulk Toggle Dropdown & Buttons */}
-                <div className="flex items-center gap-2">
+                
+                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
                     <select
                         value={selectedBulkFeature}
                         onChange={(e) => setSelectedBulkFeature(e.target.value)}
                         className="py-2 px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 bg-white min-w-[200px]"
                     >
                         {FEATURE_FLAG_DEFS.map(def => (
-                            <option key={def.key} value={def.key}>{def.label}</option>
+                            <option key={def.key} value={def.key}>{getLabel(def)}</option>
                         ))}
                     </select>
                     
@@ -107,7 +117,7 @@ export const KtvFeaturesTable = ({ activeTab }: { activeTab: 'TYPE_A' | 'TYPE_B'
                                         className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 w-40"
                                         title={def.description}
                                     >
-                                        {def.label}
+                                        {getLabel(def)}
                                     </th>
                                 ))}
                             </tr>
