@@ -101,7 +101,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                     let nextAssign = null;
                     if (nextAssigns && nextAssigns.length > 0) {
                         const bIds = nextAssigns.map((a: any) => a.booking_id);
-                        const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED")');
+                        const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED","SPLIT")');
                         const validBIds = new Set(bData?.map((b: any) => b.id) || []);
                         nextAssign = nextAssigns.find((a: any) => validBIds.has(a.booking_id));
                     }
@@ -109,6 +109,62 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                     return NextResponse.json({ success: true, data: null });
                 }
                 bookingId = turn.current_order_id;
+            }
+        }
+
+        // 🔥 LỚP 2: SPLIT GUARD - Tự động đá văng hoặc chuyển hướng đơn cha bị tách
+        if (bookingId && technicianCode) {
+            const { data: rawBooking } = await supabase.from('Bookings').select('id, status').eq('id', bookingId).maybeSingle();
+            if (rawBooking && rawBooking.status === 'SPLIT') {
+                console.warn(`🚫 [KTV] Đơn cha SPLIT bị đá văng: KTV ${technicianCode} đang giữ mã ${bookingId}`);
+                
+                const { data: childBookings } = await supabase
+                    .from('Bookings')
+                    .select('id')
+                    .eq('parent_booking_id', bookingId);
+                
+                let foundChildId = null;
+                if (childBookings && childBookings.length > 0) {
+                    const childIds = childBookings.map(b => b.id);
+                    const { data: childItems } = await supabase
+                        .from('BookingItems')
+                        .select('bookingId, status, timeStart')
+                        .in('bookingId', childIds)
+                        .contains('technicianCodes', [technicianCode])
+                        .not('status', 'in', '("DONE","CANCELLED")')
+                        .order('timeStart', { ascending: true, nullsFirst: false });
+                    
+                    if (childItems && childItems.length > 0) {
+                        foundChildId = childItems[0].bookingId;
+                    }
+                }
+
+                if (foundChildId) {
+                    console.warn(`🔄 [KTV] Chuyển hướng KTV ${technicianCode} sang Đơn con: ${foundChildId}`);
+                    bookingId = foundChildId;
+                    await supabase.from('TurnQueue').update({ current_order_id: foundChildId }).eq('employee_id', technicianCode).eq('date', getBusinessDate());
+                    await supabase.from('KtvAssignments')
+                        .update({ booking_id: foundChildId, updated_at: new Date().toISOString() })
+                        .eq('employee_id', technicianCode)
+                        .eq('business_date', getBusinessDate())
+                        .eq('booking_id', rawBooking.id)
+                        .in('status', ['QUEUED', 'READY', 'ACTIVE']);
+                } else {
+                    console.warn(`🚫 [KTV] Không tìm thấy đơn con, đá văng KTV ${technicianCode} về Dashboard`);
+                    await supabase.from('TurnQueue').update({
+                        current_order_id: null,
+                        booking_item_id: null,
+                        booking_item_ids: [],
+                        status: 'waiting'
+                    }).eq('employee_id', technicianCode).eq('date', getBusinessDate());
+                    await supabase.from('KtvAssignments')
+                        .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+                        .eq('employee_id', technicianCode)
+                        .eq('business_date', getBusinessDate())
+                        .eq('booking_id', rawBooking.id)
+                        .in('status', ['QUEUED', 'READY', 'ACTIVE']);
+                    return NextResponse.json({ success: true, data: null });
+                }
             }
         }
 
@@ -265,7 +321,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 let nextAssign = null;
                 if (nextAssigns && nextAssigns.length > 0) {
                     const bIds = nextAssigns.map((a: any) => a.booking_id);
-                    const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED")');
+                    const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED","SPLIT")');
                     const validBIds = new Set(bData?.map((b: any) => b.id) || []);
                     nextAssign = nextAssigns.find((a: any) => validBIds.has(a.booking_id));
                 }
@@ -535,7 +591,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         let validNextAssign: any = null;
         if (nextAssignsRaw && nextAssignsRaw.length > 0) {
             const bIds = nextAssignsRaw.map((a: any) => a.booking_id);
-            const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED")');
+            const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED","SPLIT")');
             const validBIds = new Set(bData?.map((b: any) => b.id) || []);
             validNextAssign = nextAssignsRaw.find((a: any) => validBIds.has(a.booking_id));
         }
