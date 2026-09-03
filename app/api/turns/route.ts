@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { KtvTypeDTurnService } from '@/lib/services/KtvTypeDTurnService';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,8 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         let date = searchParams.get('date');
+        const workType = searchParams.get('workType'); // TYPE_A | TYPE_B | TYPE_C | TYPE_D | null
+
         if (!date) {
             const d = new Date();
             const vnTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
@@ -18,57 +21,94 @@ export async function GET(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
         }
 
-        const { data, error } = await supabase
-            .from('TurnQueue')
-            .select('*')
-            .eq('date', date)
-            .order('turns_completed', { ascending: true })
-            .order('queue_position', { ascending: true });
-
-        if (error) throw error;
-
+        // Sync turns first (count tua from TurnLedger)
         const { syncTurnsForDate } = await import('@/lib/turn-sync');
         await syncTurnsForDate(date);
 
-        // Lấy lại dữ liệu mới nhất sau khi đồng bộ
-        const { data: newData, error: newError } = await supabase
+        // Fetch TurnQueue with Staff info
+        const { data: rawData, error } = await supabase
             .from('TurnQueue')
-            .select('*')
-            .eq('date', date)
-            .order('turns_completed', { ascending: true })
-            .order('queue_position', { ascending: true });
+            .select(`
+                *,
+                Staff!inner ( id, work_type, full_name )
+            `)
+            .eq('date', date);
 
-        
-        if (newError) throw newError;
-
-        // --- TYPE_D Sorting Logic ---
-        const employeeIds = newData.map((r: any) => r.employee_id);
-        const { data: staffData } = await supabase.from('Staff').select('id, work_type').in('id', employeeIds);
-        const staffWorkTypeMap: Record<string, string> = {};
-        (staffData || []).forEach((s: any) => { staffWorkTypeMap[s.id] = s.work_type || 'TYPE_A'; });
-
-        const now = new Date();
-        const month = now.getMonth() + 1;
-        const year = now.getFullYear();
-        
-        const typeDIds = (staffData || []).filter((s: any) => s.work_type === 'TYPE_D').map((s: any) => s.id);
-        const monthlyHoursMap: Record<string, number> = {};
-        if (typeDIds.length > 0) {
-            const { data: mhData } = await supabase.from('KTVMonthlyServiceHours')
-                .select('staff_id, net_hours')
-                .in('staff_id', typeDIds)
-                .eq('month', month)
-                .eq('year', year);
-            (mhData || []).forEach((m: any) => { monthlyHoursMap[m.staff_id] = Number(m.net_hours) || 0; });
+        if (error) throw error;
+        if (!rawData || rawData.length === 0) {
+            return NextResponse.json({ success: true, data: [] });
         }
 
-        const others = newData.filter((r: any) => staffWorkTypeMap[r.employee_id] !== 'TYPE_D');
-        const typeD = newData.filter((r: any) => staffWorkTypeMap[r.employee_id] === 'TYPE_D');
-        
-        // Output TYPE_D sorted by monthly_hours DESC
-        typeD.sort((a: any, b: any) => (monthlyHoursMap[b.employee_id] || 0) - (monthlyHoursMap[a.employee_id] || 0));
+        // Flatten Staff info onto each turn record
+        const allTurns = rawData.map((t: any) => ({
+            ...t,
+            work_type: t.Staff?.work_type || 'TYPE_A',
+            staff_name: t.Staff?.full_name || '',
+            Staff: undefined // Remove nested object from response
+        }));
 
-        const finalData = [...others, ...typeD];
+        // --- Determine which types to include ---
+        const VALID_TYPES = ['TYPE_A', 'TYPE_B', 'TYPE_C', 'TYPE_D'];
+        let filtered: any[];
+
+        if (workType && VALID_TYPES.includes(workType)) {
+            // Specific type filter
+            filtered = allTurns.filter((t: any) => t.work_type === workType);
+        } else {
+            // Default "Tất cả" = A + B + D — ❗ EXCLUDE C
+            filtered = allTurns.filter((t: any) => t.work_type !== 'TYPE_C');
+        }
+
+        // --- Sort by type group ---
+        const typeA = filtered.filter((t: any) => t.work_type === 'TYPE_A');
+        const typeB = filtered.filter((t: any) => t.work_type === 'TYPE_B');
+        const typeC = filtered.filter((t: any) => t.work_type === 'TYPE_C');
+        const typeD = filtered.filter((t: any) => t.work_type === 'TYPE_D');
+
+        // A & B: sort by turns_completed ASC → check_in_order ASC → employee_id ASC
+        const sortABC = (a: any, b: any) => {
+            if ((a.turns_completed || 0) !== (b.turns_completed || 0)) {
+                return (a.turns_completed || 0) - (b.turns_completed || 0);
+            }
+            if ((a.check_in_order || 0) !== (b.check_in_order || 0)) {
+                return (a.check_in_order || 0) - (b.check_in_order || 0);
+            }
+            return (a.employee_id || '').localeCompare(b.employee_id || '');
+        };
+
+        typeA.sort(sortABC);
+        typeB.sort(sortABC);
+        typeC.sort(sortABC);
+
+        // D: sort by net_hours DESC → check_in_order ASC → employee_id ASC
+        if (typeD.length > 0) {
+            const typeDIds = typeD.map((t: any) => t.employee_id);
+            const now = new Date();
+            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+            const month = vnNow.getMonth() + 1;
+            const year = vnNow.getFullYear();
+
+            const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(supabase, typeDIds, month, year);
+
+            // Enrich with net_hours
+            typeD.forEach((t: any) => {
+                t.net_hours = hoursMap[t.employee_id] || 0;
+            });
+
+            // Sort: net_hours DESC → check_in_order ASC → employee_id ASC
+            typeD.sort((a: any, b: any) => {
+                if ((b.net_hours || 0) !== (a.net_hours || 0)) {
+                    return (b.net_hours || 0) - (a.net_hours || 0);
+                }
+                if ((a.check_in_order || 0) !== (b.check_in_order || 0)) {
+                    return (a.check_in_order || 0) - (b.check_in_order || 0);
+                }
+                return (a.employee_id || '').localeCompare(b.employee_id || '');
+            });
+        }
+
+        // Combine: [A] → [B] → [C] → [D] (C only when specifically filtered)
+        const finalData = [...typeA, ...typeB, ...typeC, ...typeD];
 
         return NextResponse.json({ success: true, data: finalData });
 

@@ -173,10 +173,10 @@ export async function updateStaffMember(id: string, updates: any) {
                 const { error: turnQueueError } = await supabase
                     .from('TurnQueue')
                     .delete()
-                    .eq('employeeId', id);
+                    .eq('employee_id', id);
                     
                 if (turnQueueError) {
-                    console.warn(`[Employees] Could not remove staff ${id} from TurnQueue:`, turnQueueError);
+                    throw new Error(`Không thể xóa KTV ${id} khỏi sổ tua: ${turnQueueError.message}`);
                 }
             }
         }
