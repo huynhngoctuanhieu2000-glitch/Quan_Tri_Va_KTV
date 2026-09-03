@@ -53,11 +53,12 @@ export class KtvTypeDWalletService {
                     if (l.date > maxDateStr) maxDateStr = l.date;
                     
                     let dayComm = Number(l.total_commission || 0);
-                    let dayBonus = Number(l.total_bonus || 0);
+                    let dayBonusPoints = Number(l.total_bonus || 0);
+                    let dayBonus = dayBonusPoints * pointRate; // Đổi ĐIỂM ra VNĐ trước khi tính thuế
                     
                     if (l.date >= taxEffectiveDate) {
                         const taxComm = dayComm * 0.1;
-                        const taxBonus = dayBonus * 0.1;
+                        const taxBonus = dayBonus * 0.1; // Tính thuế trên VNĐ
                         total_tax_deducted += (taxComm + taxBonus);
                         dayComm -= taxComm;
                         dayBonus -= taxBonus;

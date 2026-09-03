@@ -12,19 +12,46 @@ export const WORK_TYPE_LABELS = {
 
 export const DEFAULT_FEATURE_FLAGS_TYPE_A: FeatureFlagsTypeA = {
     overtime_enabled: true,
-    shift_bonus_enabled: true
+    shift_bonus_enabled: true,
+    laundry_deduction: true,
+    sudden_leave_penalty: true,
+    allow_on_call: false,
+    enable_employee_tasks: true,
+    tua_wallet: true,
+    bonus_wallet: true,
+    savings_wallet: true,
+    maintenance_fee: true,
 };
 
 export const DEFAULT_FEATURE_FLAGS_TYPE_B: FeatureFlagsTypeB = {
     fixed_order_bonus_enabled: true,
     vip_menu_enabled: true,
-    kpi_target_hours: DEFAULT_KPI_TARGET_HOURS
+    kpi_target_hours: DEFAULT_KPI_TARGET_HOURS,
+    laundry_deduction: true,
+    sudden_leave_penalty: false,
+    allow_on_call: true,
+    enable_employee_tasks: false,
+    tua_wallet: true,
+    bonus_wallet: false,
+    savings_wallet: false,
+    maintenance_fee: true,
+};
+
+export const DEFAULT_FEATURE_FLAGS_TYPE_C = {
+    laundry_deduction: true,
+    sudden_leave_penalty: false,
+    allow_on_call: true,
+    enable_employee_tasks: false,
+    tua_wallet: true,
+    bonus_wallet: false,
+    savings_wallet: false,
+    maintenance_fee: true,
 };
 
 export const DEFAULT_FEATURE_FLAGS_TYPE_D: FeatureFlagsTypeD = {
     laundry_deduction: true,
     sudden_leave_penalty: false,
-    allow_on_call: false,
+    allow_on_call: true, // Sửa thành true
     enable_employee_tasks: false,
     tua_wallet: true,
     bonus_wallet: true,

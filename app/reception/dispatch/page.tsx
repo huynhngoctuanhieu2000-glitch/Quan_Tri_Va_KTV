@@ -200,18 +200,28 @@ export default function DispatchBoardPage() {
   const { notifications, soundEnabled, setSoundEnabled, unlockAudio, playSound } = useNotifications();
 
   // ─── Guest Arrival Lock ───
-  const [guestArrivalLock, setGuestArrivalLock] = useState<{ active: boolean; lockedBy: string; lockedAt: string; message: string }>({ active: false, lockedBy: '', lockedAt: '', message: '' });
+  const [guestArrivalLock, setGuestArrivalLock] = useState<{ active: boolean; lockedBy: string; lockedAt: string; message: string; enabled: boolean }>({ active: false, lockedBy: '', lockedAt: '', message: '', enabled: true });
 
   const fetchGuestArrivalLock = async () => {
     try {
         const res = await apiClient.get<any>('/api/reception/guest-arrival');
-        if (res.success && res.data) {
-            setGuestArrivalLock(res.data);
+        const isEnabled = res.enabled !== false;
+        if (res.success && res.active && res.data) {
+            setGuestArrivalLock({
+                active: true,
+                lockedBy: res.data.created_by_name,
+                lockedAt: res.data.created_at,
+                message: res.data.note || '',
+                enabled: isEnabled
+            });
         } else {
-            setGuestArrivalLock({ active: false, lockedBy: '', lockedAt: '', message: '' });
+            setGuestArrivalLock({ active: false, lockedBy: '', lockedAt: '', message: '', enabled: isEnabled });
         }
     } catch(err) {}
   };
+
+  // Auto-OFF đã được chuyển về xử lý ở server (API /cron/guest-arrival-sweep và GET /api/reception/guest-arrival)
+  // Xóa effect tắt khóa ở client để tránh lỗi khóa bị treo vĩnh viễn (B1, B3)
 
   useEffect(() => {
     fetchGuestArrivalLock();
@@ -231,10 +241,14 @@ export default function DispatchBoardPage() {
   const toggleGuestArrivalLock = async () => {
     try {
         if (guestArrivalLock.active) {
+            const hasPending = orders.some(o => o.dispatchStatus === 'pending');
+            if (hasPending) {
+                if (!window.confirm('Vẫn còn đơn chưa điều phối (Khách đang đợi). Bạn có chắc chắn muốn tắt Báo Khách?')) return;
+            }
             await apiClient.delete<any>('/api/reception/guest-arrival');
         } else {
             if (!window.confirm('Khóa nút "Tan ca" của tất cả KTV (TYPE_D)?\nHãy bật khi khách đang xếp hàng nhưng KTV chưa kịp vào ca.')) return;
-            await apiClient.post<any>('/api/reception/guest-arrival', {});
+            await apiClient.post<any>('/api/reception/guest-arrival', { note: 'Bật thủ công từ Dispatch Board' });
         }
         await fetchGuestArrivalLock();
     } catch(err) {
@@ -1859,22 +1873,19 @@ if (!hasPermission('dispatch_board')) {
       <div className="flex items-center gap-2">
         <button
           onClick={toggleGuestArrivalLock}
-          className={`px-3 py-2 h-11 rounded-full text-xs font-bold transition-all shadow-sm border flex items-center gap-2 ${
-              guestArrivalLock.active
-                  ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+          disabled={!guestArrivalLock.enabled}
+          aria-label="Báo Khách"
+          aria-pressed={guestArrivalLock.active}
+          className={`relative w-11 h-11 rounded-full transition-all shadow-sm border flex items-center justify-center ${
+              !guestArrivalLock.enabled
+                  ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                  : guestArrivalLock.active
+                      ? 'bg-red-500 text-white border-red-600 hover:bg-red-600 shadow-md shadow-red-500/40'
+                      : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100 hover:text-slate-600'
           }`}
-          title={guestArrivalLock.active ? `Khóa bởi ${guestArrivalLock.lockedBy} lúc ${new Date(guestArrivalLock.lockedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bật thông báo có khách'}
+          title={!guestArrivalLock.enabled ? 'Tính năng Báo Khách đang bị tắt trong cài đặt hệ thống.' : guestArrivalLock.active ? `Đang báo có khách — khóa bởi ${guestArrivalLock.lockedBy} lúc ${new Date(guestArrivalLock.lockedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}. Bấm để tắt.` : 'Báo có khách đang đợi (khóa Tan Ca của KTV)'}
         >
-          {guestArrivalLock.active ? (
-              <span className="flex items-center gap-1.5 animate-pulse">
-                  <Ban size={16} /> Đang khóa <span className="hidden sm:inline font-normal opacity-80">({guestArrivalLock.lockedBy})</span>
-              </span>
-          ) : (
-              <span className="flex items-center gap-1.5">
-                  <Bell size={16} /> Báo Khách
-              </span>
-          )}
+          <Users size={20} className={guestArrivalLock.active ? 'animate-pulse' : ''} />
         </button>
         <button
           onClick={async () => {

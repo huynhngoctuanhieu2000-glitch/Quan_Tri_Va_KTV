@@ -31,6 +31,7 @@ interface NotificationContextType {
     unlockAudio: () => void;
     playSound: (type: string) => void;
     setKtvScreen: (screen: string) => void;
+    ktvScreen: string;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -48,6 +49,7 @@ const SOUND_MAP: Record<string, string> = {
     'SUPPORT': '/sounds/reception-notification.wav',
     'NEW_ORDER': '/sounds/quay-don-hang-moi.wav',
     'KTV_NEW_ORDER': '/sounds/ktv-don-hang-moi.wav',
+    'GUEST_ARRIVAL': '/sounds/ktv-don-hang-moi.wav',
     'REWARD': '/sounds/ktv-nhan-thuong.wav',
     'ATTENDANCE': '/sounds/reception-notification.wav',
     'ATTENDANCE_REQUEST': '/sounds/reception-notification.wav',
@@ -395,7 +397,10 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             }
 
             // Check 1: Role in allowed_roles?
-            let roleAllowed = rule?.allowed_roles?.includes(roleId) ?? false;
+            // ⚠️ So sánh KHÔNG phân biệt hoa thường: một số rule trong SystemConfigs lưu role
+            // viết hoa ('KTV') trong khi roleId luôn là chữ thường ('ktv'). Dùng includes() trần
+            // sẽ lọc mất toàn bộ thông báo của những rule đó (đã từng xảy ra với GUEST_ARRIVAL).
+            let roleAllowed = rule?.allowed_roles?.some((r: string) => String(r).toLowerCase() === roleId) ?? false;
 
             // 🔹 PHÂN QUYỀN THEO MODULE (DYNAMIC ROLES):
             // Nếu user có module quản lý nhưng base role là ktv/support, vẫn cho phép nhận thông báo của admin/reception
@@ -543,7 +548,8 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             setSoundEnabled,
             unlockAudio,
             playSound,
-            setKtvScreen
+            setKtvScreen,
+            ktvScreen
         }}>
             {children}
             

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
+import { useToast } from '@/components/ui/Toast';
 
 // 🔧 CONFIGURATION
 const GPS_TIMEOUT_MS = 10000;
@@ -54,11 +55,19 @@ export interface AttendanceRecord {
  */
 export const useKTVAttendance = () => {
     const { hasPermission, user } = useAuth();
+    const { addToast } = useToast();
     const [checkStatus, setCheckStatus] = useState<CheckStatus>('IDLE');
+    const [todayRegistration, setTodayRegistration] = useState<any>(null);
     const [currentRecord, setCurrentRecord] = useState<AttendanceRecord | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
+
+    const [isAdjusting, setIsAdjusting] = useState(false);
+    const [adjustmentType, setAdjustmentType] = useState<'ABSENT' | 'LATE'>('LATE');
+    const [lateExpectedTime, setLateExpectedTime] = useState('');
+    const [isSubmittingAdjustment, setIsSubmittingAdjustment] = useState(false);
+
 
     // Shift timing state
     const [activeShiftType, setActiveShiftType] = useState<string | null>(null);
@@ -101,6 +110,7 @@ export const useKTVAttendance = () => {
                     if (statusRes.availableUntil) setAvailableUntil(statusRes.availableUntil);
                     if (statusRes.incompleteTasksCount !== undefined) setIncompleteTasksCount(statusRes.incompleteTasksCount);
                     if (statusRes.guestArrivalLock) setGuestArrivalLock(statusRes.guestArrivalLock);
+                    if (statusRes.todayRegistration) setTodayRegistration(statusRes.todayRegistration);
                 }
                 
                 if (settingsRes.success && settingsRes.data) {
@@ -236,7 +246,7 @@ export const useKTVAttendance = () => {
 
     // --- Handlers ---
     const checkIsLate = useCallback(() => {
-        if (user?.roleId === 'support' || workType === 'TYPE_B') {
+        if (user?.roleId === 'support' || workType === 'TYPE_B' || workType === 'TYPE_D') {
             setIsLate(false);
             return false;
         }
@@ -334,6 +344,26 @@ export const useKTVAttendance = () => {
         }
     }, [user?.id]);
 
+    
+    const handleAdjustmentSubmit = async () => {
+        if (!user?.id) return;
+        setIsSubmittingAdjustment(true);
+        setErrorMsg(null);
+        try {
+            const result = await apiClient.post(API.KTV.ATTENDANCE_ADJUSTMENT, {
+                action: adjustmentType === "ABSENT" ? "REPORT_ABSENT" : "REPORT_LATE",
+                late_expected_time: adjustmentType === "LATE" ? lateExpectedTime : null,
+            });
+            addToast("Cập nhật thành công!", "success");
+            setIsAdjusting(false);
+            refreshAttendanceStatus();
+        } catch(err: any) {
+            addToast(err.message || "Có lỗi xảy ra", "error");
+        } finally {
+            setIsSubmittingAdjustment(false);
+        }
+    };
+
     const handleRetry = () => {
         setCheckStatus('IDLE');
         setCurrentRecord(null);
@@ -392,6 +422,15 @@ export const useKTVAttendance = () => {
     })();
 
     return {
+        todayRegistration,
+        isAdjusting,
+        setIsAdjusting,
+        adjustmentType,
+        setAdjustmentType,
+        lateExpectedTime,
+        setLateExpectedTime,
+        isSubmittingAdjustment,
+        handleAdjustmentSubmit,
         checkStatus,
         currentRecord,
         errorMsg,
@@ -403,14 +442,20 @@ export const useKTVAttendance = () => {
         checkoutBlockedUntil,
         isLoadingShift,
         activeShiftType,
-        shiftFetchError,
+        // KTV Loại D làm theo đăng ký ngày, KHÔNG có ca cố định trong KTVShiftRecords.
+        // Không tìm thấy ca là chuyện bình thường với họ — đừng báo "Không tải được ca làm việc",
+        // vì màn hình sẽ nuốt mất ô chọn Ca tự do và khoá luôn nút Gửi.
+        shiftFetchError: workType === 'TYPE_D' ? false : shiftFetchError,
         retryFetchShift,
         isLate,
         checkIsLate,
         handleAttendance,
         handleRetry,
         clearError,
-        isOffToday,
+        // ⚠️ isOffToday từ API /ktv/shift chỉ tra bảng KTVLeaveRequests — bảng mà KTV Loại D
+        // KHÔNG dùng. Ngày OFF của Loại D nằm ở KTVTypeDDailyRegistration (status OFF_REGISTERED),
+        // trả về qua todayRegistration. Gộp cả hai nguồn để màn điểm danh nhận đúng ngày OFF.
+        isOffToday: isOffToday || (workType === 'TYPE_D' && todayRegistration?.status === 'OFF_REGISTERED'),
         allowEarlyCheckout,
         minPhotoBrightness,
         showOvertimeFeature,

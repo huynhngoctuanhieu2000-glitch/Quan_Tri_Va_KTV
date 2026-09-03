@@ -31,11 +31,6 @@ export const vnHour = (): number => {
  * VD: 23:59 ngày 02/09 vẫn sửa được 03/09; 00:00 ngày 03/09 thì đóng băng.
  * @param workDate string format 'yyyy-MM-dd'
  */
-export const canEditRegistration = (workDate: string): boolean => {
-  const [year, month, day] = workDate.split('-').map(Number);
-
-  // VN timezone là UTC+7 → 00:00 VN ngày D = 17:00 UTC ngày D-1.
-  const deadlineUTC = new Date(Date.UTC(year, month - 1, day - 1, 17, 0, 0));
-
-  return Date.now() < deadlineUTC.getTime();
-};
+export function canEditRegistration(workDateStr: string): boolean {
+  return workDateStr > vnToday();
+}

@@ -1810,6 +1810,7 @@ function ScreenReward({ logic }: { logic: any }) {
           'Tiếp tục làm việc'
         )}
       </button>
+      </div>
     </div>
   );
 }

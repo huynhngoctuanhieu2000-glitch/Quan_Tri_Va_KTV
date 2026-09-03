@@ -1,0 +1,102 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { format } from 'date-fns';
+import { requireActiveStaff } from '@/lib/auth-server';
+
+export async function POST(request: Request) {
+  try {
+    const lockedError = await requireActiveStaff();
+    if (lockedError) return lockedError;
+
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const username = (user.email || '').split('@')[0];
+    const { data: dbUser } = await supabase.from('Users').select('code').ilike('username', username).single();
+    const { data: staff } = dbUser ? await supabase.from('Staff').select('id, work_type').eq('id', dbUser.code).single() : { data: null };
+
+    if (!staff || staff.work_type !== 'TYPE_D') {
+      return NextResponse.json({ error: 'Chỉ áp dụng cho KTV TYPE_D' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { action, late_expected_time } = body; // action: 'REPORT_ABSENT' | 'REPORT_LATE'
+
+    const { vnNow, vnToday, vnHour } = await import('@/lib/vn-time');
+    
+    // Ngày thao tác (hôm nay)
+    const now = vnNow();
+    const todayStr = vnToday();
+    const hour = vnHour();
+    
+    // Lấy bản ghi đăng ký hôm nay
+    const { data: registration, error: fetchError } = await supabase
+      .from('KTVTypeDDailyRegistration')
+      .select('*')
+      .eq('staff_id', staff.id)
+      .eq('work_date', todayStr)
+      .single();
+
+    if (fetchError || !registration) {
+      return NextResponse.json({ error: 'Bạn chưa đăng ký lịch làm việc cho hôm nay.' }, { status: 400 });
+    }
+
+    if (registration.status === 'OFF_REGISTERED') {
+      return NextResponse.json({ error: 'Bạn đã đăng ký nghỉ hôm nay.' }, { status: 400 });
+    }
+    
+    if (registration.check_in_at) {
+        return NextResponse.json({ error: 'Bạn đã điểm danh, không thể điều chỉnh nữa.' }, { status: 400 });
+    }
+
+    if (action === 'REPORT_ABSENT') {
+      // Chỉ cho phép Báo Vắng trước 07:00
+      if (hour >= 7) {
+        return NextResponse.json({ error: 'Không thể báo vắng từ 07:00 trở đi. Chỉ có thể báo trễ.' }, { status: 400 });
+      }
+
+      // Theo quy tắc Mục 14: Chỉ update DB, KHÔNG TRỪ GIỜ PHẠT NGAY. Chờ cron cuối ngày.
+      const { error: updateError } = await supabase
+        .from('KTVTypeDDailyRegistration')
+        .update({
+          status: 'ABSENT_REPORTED',
+          absent_reported_at: now.toISOString()
+        })
+        .eq('id', registration.id);
+
+      if (updateError) throw updateError;
+      return NextResponse.json({ success: true, message: 'Đã ghi nhận báo vắng. (Chưa bị trừ giờ cho đến khi chốt sổ 23:59)' });
+      
+    } else if (action === 'REPORT_LATE') {
+      if (!late_expected_time) {
+        return NextResponse.json({ error: 'Vui lòng nhập giờ hẹn có mặt' }, { status: 400 });
+      }
+
+      if (registration.late_report_count >= 1) {
+        return NextResponse.json({ error: 'Bạn chỉ được báo trễ 1 lần trong ngày.' }, { status: 400 });
+      }
+
+      const { error: updateError } = await supabase
+        .from('KTVTypeDDailyRegistration')
+        .update({
+          status: 'LATE_REPORTED',
+          late_reported_at: now.toISOString(),
+          late_expected_time: late_expected_time,
+          late_report_count: registration.late_report_count + 1
+        })
+        .eq('id', registration.id);
+
+      if (updateError) throw updateError;
+      return NextResponse.json({ success: true, message: 'Đã ghi nhận báo trễ.' });
+    } else {
+      return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400 });
+    }
+  } catch (error: any) {
+    console.error('Error in attendance-adjustment:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

@@ -67,6 +67,10 @@ export async function authenticateUser(username: string, password?: string) {
             return { success: false, error: 'Sai tài khoản hoặc mật khẩu' };
         }
 
+        if (user.is_active === false) {
+            return { success: false, error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản lý.' };
+        }
+
         // 3. Auto-Heal: DB login OK but no JWT → sync Auth then retry
         if (!jwtOk && password) {
             console.log(`[Login] 🔄 Auto-heal: Syncing Auth for ${username}...`);
@@ -102,21 +106,23 @@ export async function authenticateUser(username: string, password?: string) {
         // 4. Fetch avatar and feature_flags from Staff table (for profile display and permissions)
         let staffAvatarUrl = null;
         let featureFlags = undefined;
+        let workType = undefined;
         try {
             const { data: staffData } = await supabaseAdmin
                 .from('Staff')
-                .select('avatar_url, feature_flags')
+                .select('avatar_url, feature_flags, work_type')
                 .eq('id', user.code || user.id)
                 .maybeSingle();
             if (staffData) {
                 staffAvatarUrl = staffData.avatar_url;
                 featureFlags = staffData.feature_flags;
+                workType = staffData.work_type;
             }
         } catch (e) {
             // Non-critical: staff avatar lookup failed
         }
 
-        return { success: true, user: { ...user, staffAvatarUrl, featureFlags } };
+        return { success: true, user: { ...user, staffAvatarUrl, featureFlags, work_type: workType } };
     } catch (error: any) {
         console.error('Login action error:', error);
         return { success: false, error: error.message };

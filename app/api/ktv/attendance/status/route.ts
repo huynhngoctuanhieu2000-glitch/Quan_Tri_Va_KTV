@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { KtvOnlineService } from '@/lib/services/KtvOnlineService';
+import { resolveAttendanceStatus } from '@/lib/attendance/resolveAttendanceStatus';
 
 // 🔧 CONFIG
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
         // ─── Fetch Work Type & Available Until ───
         let workType = 'TYPE_A';
         let availableUntil = null;
+        let lockInfo = null;
         const { data: userRow } = await supabase
             .from('Users')
             .select('code')
@@ -74,15 +76,54 @@ export async function GET(request: Request) {
         if (userRow?.code) {
              const { data: staffRow } = await supabase
                  .from('Staff')
-                 .select('work_type, available_until')
+                 .select('work_type, available_until, status')
                  .eq('id', userRow.code)
                  .maybeSingle();
+             
+             if (staffRow?.status === 'KHÓA_TÀI_KHOẢN') {
+                const { data: auditLog } = await supabase
+                    .from('SecurityAuditLogs')
+                    .select('created_at, details, employee_name')
+                    .eq('event_type', 'AUTO_LOCK_ABSENCE')
+                    .eq('employee_id', userRow.code)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                if (auditLog) {
+                    lockInfo = {
+                        lockedAt: auditLog.created_at,
+                        reason: auditLog.details?.reason || 'Vắng mặt không phép (Cron)',
+                        adminContact: 'Hotline/Zalo Quản lý: 0987654321', 
+                    };
+                } else {
+                    lockInfo = { lockedAt: new Date().toISOString(), reason: 'Bị khóa kỷ luật', adminContact: 'Quản lý' };
+                }
+             }
+
              if (staffRow?.work_type) {
                  workType = staffRow.work_type;
              }
              if (staffRow?.available_until) {
                  availableUntil = staffRow.available_until;
              }
+        }
+
+        // ─── Fetch Today Registration (Only for TYPE_D) ───
+        let todayRegistration = null;
+        if (workType === 'TYPE_D' && userRow?.code) {
+            const { vnToday } = await import('@/lib/vn-time');
+            const todayStr = vnToday();
+
+            const { data: regData } = await supabase
+                .from('KTVTypeDDailyRegistration')
+                .select('status, expected_time, check_in_at, penalty_applied')
+                .eq('staff_id', userRow.code)
+                .eq('work_date', todayStr)
+                .maybeSingle();
+
+            if (regData) {
+                todayRegistration = regData;
+            }
         }
 
         // ─── Fetch Incomplete Tasks ───
@@ -124,13 +165,10 @@ export async function GET(request: Request) {
         // ─── Fetch Guest Arrival Lock (Only for TYPE_D) ───
         let guestArrivalLock = { active: false, lockedBy: '', lockedAt: '', message: '' };
         if (workType === 'TYPE_D') {
-            const { data: lockConfig } = await supabase
-                .from('SystemConfigs')
-                .select('value')
-                .eq('key', 'guest_arrival_lock_enabled')
-                .maybeSingle();
+            const { isGuestArrivalEnabled } = await import('@/lib/guest-arrival.logic');
+            const isEnabled = await isGuestArrivalEnabled(supabase);
 
-            if (lockConfig?.value === 'true') {
+            if (isEnabled) {
                 const { data: activeLock } = await supabase
                     .from('GuestArrivalEvents')
                     .select('created_by_name, created_at, note')
@@ -158,58 +196,11 @@ export async function GET(request: Request) {
                     await KtvOnlineService.goOffline(supabase, userRow.code);
                 }
             }
-            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
+            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration });
         }
 
-        // Find the most relevant record (most recent non-rejected, or fallback)
-        
-        // 1. Kiểm tra xin nghỉ đột xuất
-        const confirmedOff = records.find(
-            (r) => r.checkType === 'SUDDEN_OFF' && r.status === 'CONFIRMED'
-        );
-        if (confirmedOff) {
-            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedOff, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
-        }
-
-        const pendingOff = records.find(
-            (r) => r.checkType === 'SUDDEN_OFF' && r.status === 'PENDING'
-        );
-        if (pendingOff) {
-            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingOff, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
-        }
-
-        // 2. Kiểm tra Tan ca
-        const confirmedCheckOut = records.find(
-            (r) => r.checkType === 'CHECK_OUT' && r.status === 'CONFIRMED'
-        );
-        if (confirmedCheckOut) {
-            return NextResponse.json({ success: true, checkStatus: 'CHECKED_OUT', record: confirmedCheckOut, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
-        }
-
-        const pendingCheckOut = records.find(
-            (r) => r.checkType === 'CHECK_OUT' && r.status === 'PENDING'
-        );
-        if (pendingCheckOut) {
-            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckOut, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
-        }
-
-        // 3. Kiểm tra Vào ca
-        const confirmedCheckIn = records.find(
-            (r) => (r.checkType === 'CHECK_IN' || r.checkType === 'LATE_CHECKIN' || r.checkType === 'OVERTIME') && r.status === 'CONFIRMED'
-        );
-        if (confirmedCheckIn) {
-            return NextResponse.json({ success: true, checkStatus: 'CONFIRMED', record: confirmedCheckIn, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
-        }
-
-        const pendingCheckIn = records.find(
-            (r) => (r.checkType === 'CHECK_IN' || r.checkType === 'LATE_CHECKIN' || r.checkType === 'OVERTIME') && r.status === 'PENDING'
-        );
-        if (pendingCheckIn) {
-            return NextResponse.json({ success: true, checkStatus: 'PENDING', record: pendingCheckIn, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
-        }
-
-        // All records are REJECTED → allow retry
-        return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock });
+        const { checkStatus, record } = resolveAttendanceStatus(records, workType);
+        return NextResponse.json({ success: true, checkStatus, record, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration });
 
     } catch (error: any) {
         console.error('❌ [Attendance Status] Unhandled error:', error);

@@ -328,6 +328,10 @@ export class KtvCommissionService {
         if (!bonusConfig.enableBonus) return 0;
         // Kiểm tra cờ cấp độ cá nhân (nếu được truyền vào và set là false)
         if (staffBonusMap[techCode.toLowerCase()] === false) return 0;
+
+        // KTV Loại D ăn theo LƯỢT KHÁCH, không theo thời lượng: tua ngắn dưới 60 phút
+        // vẫn được trọn suất thưởng. Luật "dưới 60 phút mất điểm" chỉ áp cho các loại khác.
+        const isTypeD = String(staffWorkTypeMap[techCode.toLowerCase()] || '').toUpperCase() === 'TYPE_D';
         // Compute all unique technicians in this booking for dividing points
         const allKtvCodes = new Set<string>();
         for (const item of (booking.BookingItems || [])) {
@@ -447,9 +451,9 @@ export class KtvCommissionService {
             // Tìm số khách mà KTV này thực tế có phục vụ
             const servedGuestCount = ktvGuestIds.size > 0 ? ktvGuestIds.size : 1;
             
-            // LUẬT MỚI: Dưới 60 phút / 1 khách thì mất trắng (0 điểm)
+            // LUẬT MỚI: Dưới 60 phút / 1 khách thì mất trắng (0 điểm) — TRỪ Loại D.
             // Tính trung bình thời gian KTV phục vụ mỗi khách (chỉ tính những khách KTV NÀY CÓ LÀM)
-            if ((totalDurationForBonus / servedGuestCount) < 60) {
+            if (!isTypeD && (totalDurationForBonus / servedGuestCount) < 60) {
                 return 0;
             }
 
@@ -483,8 +487,8 @@ export class KtvCommissionService {
             // TRƯỚC NGÀY 06/08: Công thức cũ (1 đơn chỉ có BasePoints, chia cho KTV)
             calculatedPoints = adjustedBasePoints / totalUniqueKTVs;
 
-            // LUẬT CŨ: Dưới 60 phút thì bị chia đôi điểm
-            if (totalDurationForBonus < 60) {
+            // LUẬT CŨ: Dưới 60 phút thì bị chia đôi điểm — TRỪ Loại D.
+            if (!isTypeD && totalDurationForBonus < 60) {
                 calculatedPoints = calculatedPoints / 2;
             }
         }

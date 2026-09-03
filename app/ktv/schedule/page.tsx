@@ -121,15 +121,9 @@ const KTVSchedulePage = () => {
         if (!myLeave) {
             const isSelected = selectedDates.includes(dateStr);
             
-            // Nếu đang CHỌN THÊM (chưa có trong selectedDates)
             if (!isSelected) {
-                if (dateStr <= vnToday()) {
-                    setOffError('Chỉ có thể đăng ký/chỉnh sửa lịch từ ngày mai trở đi.');
-                    return;
-                }
-                
                 if (!canEditRegistration(dateStr)) {
-                    setOffError(`Đã qua 00:00 nên khóa sổ. Không thể đăng ký/sửa lịch cho ngày ${dateStr}.`);
+                    setOffError('Chỉ có thể đăng ký/chỉnh sửa lịch từ ngày mai trở đi.');
                     return;
                 }
             }
@@ -250,8 +244,8 @@ const KTVSchedulePage = () => {
                                                 key={dateStr}
                                                 onClick={() => {
                                                     if (myWorkReg) {
-                                                        if (dateStr <= vnToday() || !canEditRegistration(dateStr)) {
-                                                            setOffError(`Không thể sửa lịch ngày ${dateStr} vì đã qua 00:00, sổ đã khóa.`);
+                                                        if (!canEditRegistration(dateStr)) {
+                                                            setOffError(`Chỉ có thể đăng ký/sửa lịch từ ngày mai trở đi.`);
                                                             return;
                                                         }
                                                         setOffError(null);
@@ -362,7 +356,7 @@ const KTVSchedulePage = () => {
 
                             <div className={`divide-y divide-gray-100 overflow-hidden transition-all duration-200 ${isWorkListOpen ? 'mt-3' : 'max-h-0 opacity-0'}`}>
                                 {myWorkDays.map((reg: any) => {
-                                    const canEdit = reg.work_date > vnToday() && canEditRegistration(reg.work_date);
+                                    const canEdit = canEditRegistration(reg.work_date);
                                     const d = new Date(reg.work_date + 'T00:00:00');
                                     const timeStr = (reg.expected_time || '').slice(0, 5) || '--:--';
 
@@ -371,7 +365,7 @@ const KTVSchedulePage = () => {
                                             key={reg.work_date}
                                             onClick={() => {
                                                 if (!canEdit) {
-                                                    setOffError(`Không thể sửa lịch ngày ${reg.work_date} vì đã qua 00:00, sổ đã khóa.`);
+                                                    setOffError(`Chỉ có thể đăng ký/sửa lịch từ ngày mai trở đi.`);
                                                     return;
                                                 }
                                                 setOffError(null);
@@ -449,7 +443,7 @@ const KTVSchedulePage = () => {
                             <div className={`divide-y divide-gray-100 overflow-hidden transition-all duration-200 ${isOffListOpen ? 'mt-3' : 'max-h-0 opacity-0'}`}>
                                 {myOffDays.map((item: any) => {
                                     // Chỉ Loại D sửa được ngay tại đây; loại khác đi qua luồng duyệt nghỉ riêng.
-                                    const canEdit = isTypeD && item.date > vnToday() && canEditRegistration(item.date);
+                                    const canEdit = isTypeD && canEditRegistration(item.date);
                                     const d = new Date(item.date + 'T00:00:00');
 
                                     return (
@@ -458,7 +452,7 @@ const KTVSchedulePage = () => {
                                             onClick={() => {
                                                 if (!isTypeD) return;
                                                 if (!canEdit) {
-                                                    setOffError(`Không thể sửa lịch ngày ${item.date} vì đã qua 00:00, sổ đã khóa.`);
+                                                    setOffError(`Chỉ có thể đăng ký/sửa lịch từ ngày mai trở đi.`);
                                                     return;
                                                 }
                                                 setOffError(null);
@@ -724,12 +718,13 @@ const KTVSchedulePage = () => {
                         {sortedDisplayDates.map(date => {
                             // 🛡️ RIÊNG TƯ: chỉ hiển thị lịch nghỉ của chính mình, không xem của người khác.
                             const leaves = (leaveByDate[date] || []).filter(l => l.employeeId === user?.id);
-                            const myReg = user?.work_type === 'TYPE_D'
+                            const myRegRaw = user?.work_type === 'TYPE_D'
                                 ? workRegByDate[date]?.find((r: any) => r.staff_id === user?.id)
                                 : null;
+                            const visibleReg = myRegRaw && myRegRaw.status !== 'REGISTERED' ? myRegRaw : null;
 
                             // Không có gì của mình trong ngày này → không render thẻ rỗng.
-                            if (!myReg && leaves.length === 0) return null;
+                            if (!visibleReg && leaves.length === 0) return null;
 
                             const formattedDate = (() => {
                                 try { return format(new Date(date + 'T00:00:00'), 'EEEE, dd/MM/yyyy', { locale: vi }); }
@@ -743,33 +738,22 @@ const KTVSchedulePage = () => {
                                     </div>
                                     <div className="p-4">
                                         
-                                        {myReg && (
-                                            (() => {
-                                                const isWork = myReg.status === "REGISTERED";
-                                                return (
-                                                    <div className={`flex flex-col gap-2 p-3 mb-3 rounded-2xl border ${isWork ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}>
-                                                        <div className="flex justify-between items-center">
-                                                            <div className="flex items-center gap-2">
-                                                                {isWork ? <Briefcase size={16} className="text-emerald-600"/> : <CalendarOff size={16} className="text-rose-600"/>}
-                                                                <span className={`font-bold text-sm ${isWork ? "text-emerald-700" : "text-rose-700"}`}>
-                                                                    {isWork ? "ĐĂNG KÝ ĐI LÀM" : "ĐĂNG KÝ OFF"}
-                                                                </span>
-                                                            </div>
-                                                            {isWork && myReg.expected_time && (
-                                                                <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg shadow-sm border border-emerald-100">
-                                                                    <Clock size={12} className="text-emerald-600"/>
-                                                                    <span className="text-xs font-bold text-emerald-700">{myReg.expected_time.slice(0, 5)}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        {myReg.late_report_count > 0 && (
-                                                            <p className="text-[10px] text-gray-500 italic mt-1">
-                                                                Số lần báo trễ: {myReg.late_report_count}
-                                                            </p>
-                                                        )}
+                                        {visibleReg && (
+                                            <div className="flex flex-col gap-2 p-3 mb-3 rounded-2xl border border-rose-200 bg-rose-50">
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-2">
+                                                        <CalendarOff size={16} className="text-rose-600"/>
+                                                        <span className="font-bold text-sm text-rose-700">
+                                                            ĐĂNG KÝ OFF
+                                                        </span>
                                                     </div>
-                                                );
-                                            })()
+                                                </div>
+                                                {visibleReg.late_report_count > 0 && (
+                                                    <p className="text-[10px] text-gray-500 italic mt-1">
+                                                        Số lần báo trễ: {visibleReg.late_report_count}
+                                                    </p>
+                                                )}
+                                            </div>
                                         )}
 
                                         {leaves.length > 0 && (

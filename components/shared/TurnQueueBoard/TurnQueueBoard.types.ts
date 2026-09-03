@@ -8,6 +8,7 @@ export type StaffData = {
     position?: string | undefined;
     avatar_url?: string | undefined;
     experience?: string | undefined;
+    work_type?: string | undefined;
 };
 
 export type TurnQueueData = {
@@ -22,4 +23,7 @@ export type TurnQueueData = {
     current_order_id?: string | null;
     estimated_end_time?: string | null;
     last_served_at?: string | null;
+    work_type?: string;
+    net_hours?: number;
 };
+

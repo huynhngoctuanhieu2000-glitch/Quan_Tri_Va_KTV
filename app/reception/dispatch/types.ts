@@ -152,6 +152,8 @@ export type TurnQueueData = {
   estimated_end_time?: string | null;
   start_time?: string | null;
   last_served_at?: string | null;
+  work_type?: string;
+  net_hours?: number;
 };
 
 export interface StaffNotification {

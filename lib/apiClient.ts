@@ -58,6 +58,12 @@ class ApiClient {
           } catch {
             errorData = { error: response.statusText };
           }
+          if (errorData.error === 'ACCOUNT_LOCKED') {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('account_locked', { detail: { isLocked: true } }));
+            }
+          }
+
           throw new ApiError(
             errorData.error || errorData.message || 'Lỗi kết nối API',
             response.status,

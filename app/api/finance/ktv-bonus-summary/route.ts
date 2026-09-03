@@ -138,7 +138,7 @@ export async function GET(request: Request) {
         // Sum Earned from Ledger
         (ledger || []).forEach(tx => {
             if (statsMap[tx.staff_id]) {
-                statsMap[tx.staff_id].totalEarned += Number(tx.total_bonus || 0);
+                statsMap[tx.staff_id].totalEarned += Number(tx.total_bonus || 0); // ĐIỂM (không cần nhân rate ở đây vì API trả ĐIỂM trước, nhân VNĐ ở frontend/cuối)
             }
         });
 

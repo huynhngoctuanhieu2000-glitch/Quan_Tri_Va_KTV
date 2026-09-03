@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useNotifications } from '@/components/NotificationProvider';
 import { APP_VERSION, LAST_UPDATE } from '@/lib/version';
 import { MODULES } from '@/lib/constants';
 import { ModuleId } from '@/lib/types';
@@ -131,6 +132,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: SidebarProps) {
+  // 🔒 KTV đang phục vụ khách (màn hình đồng hồ đếm ngược) → khoá điều hướng,
+  // không cho rời khỏi đơn đang chạy.
+  const { ktvScreen } = useNotifications();
+  const isServingLocked = ktvScreen === 'TIMER';
   const { hasPermission, user, role, logout } = useAuth();
   const pathname = usePathname();
   const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({});
@@ -181,6 +186,22 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
   const renderLink = (module: typeof MODULES[0], showLabel: boolean) => {
     const path = PATHS[module.id];
     const isActive = pathname === path || pathname.startsWith(path + '/');
+
+    // Đang phục vụ khách: khoá mọi mục trừ chính trang đang đứng.
+    if (isServingLocked && !isActive) {
+      return (
+        <div
+          key={module.id}
+          title="Đang phục vụ khách — hoàn tất đơn trước khi chuyển mục khác."
+          aria-disabled="true"
+          className={`flex items-center ${showLabel ? 'gap-3 px-3' : 'justify-center px-0'} py-2 rounded-xl text-gray-300 cursor-not-allowed select-none`}
+        >
+          <span className="text-gray-300">{ICONS[module.id]}</span>
+          {showLabel && <span className="text-sm truncate">{module.name}</span>}
+        </div>
+      );
+    }
+
     return (
       <Link
         key={module.id}
@@ -260,6 +281,11 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
 
         {/* Navigation */}
         <div className={`py-4 space-y-1 flex-1 overflow-y-auto w-full overflow-x-hidden ${isExpanded ? 'px-3' : 'px-3'}`}>
+          {isServingLocked && isExpanded && (
+            <div className="mb-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-[11px] font-semibold text-amber-700 leading-snug">
+              Đang phục vụ khách. Hoàn tất đơn rồi mới chuyển mục khác được.
+            </div>
+          )}
           {isExpanded ? (
             // Expanded: Grouped dropdown navigation
             GROUP_ORDER.filter(g => groupedModules[g]?.length > 0).map(groupName => {

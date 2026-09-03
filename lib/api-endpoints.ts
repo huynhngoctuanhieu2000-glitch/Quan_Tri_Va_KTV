@@ -3,6 +3,7 @@ export const API = {
     BOOKING: '/api/ktv/booking',
     SETTINGS: '/api/ktv/settings',
     ON_CALL: '/api/ktv/on-call',
+    TYPE_D_ON_CALL: '/api/ktv/type-d/on-call',
     INTERACTION: '/api/ktv/interaction',
     REVIEW: '/api/ktv/review',
     NOTIFICATIONS: (techCode: string) => `/api/ktv/notifications?techCode=${techCode}`,

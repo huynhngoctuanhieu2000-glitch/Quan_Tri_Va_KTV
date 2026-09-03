@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
     for (const entry of processedEntries) {
       if (!canEditRegistration(entry.work_date)) {
-        return NextResponse.json({ error: `Ngày ${entry.work_date} đã khóa lúc 00:00, chỉ đăng ký/sửa được trong ngày hôm trước.` }, { status: 400 });
+        return NextResponse.json({ error: `Chỉ có thể đăng ký/sửa lịch từ ngày mai trở đi.` }, { status: 400 });
       }
       
       if (type === 'WORKING') {

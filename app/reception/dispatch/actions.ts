@@ -102,7 +102,10 @@ export async function getDispatchData(date: string, _timestamp?: number) {
         const { data: allStaffs, error: sError } = await supabase.from('Staff').select('id, full_name, avatar_url, gender, status, skills, phone, position, experience, work_type, feature_flags, online_status, travel_minutes, available_from, available_until');
         if (sError) throw sError;
         
-        const staffs = (allStaffs || []).filter(s => techCodes.has(s.id) || s.id.startsWith('EXT') || s.id.startsWith('C_'));
+        const staffs = (allStaffs || []).filter(s => 
+            (techCodes.has(s.id) || s.id.startsWith('EXT') || s.id.startsWith('C_')) && 
+            s.status !== 'KHÓA_TÀI_KHOẢN'
+        );
 
         // Fetch Discipline Points cho tháng hiện tại
         const now = new Date();
@@ -120,14 +123,49 @@ export async function getDispatchData(date: string, _timestamp?: number) {
             (s as any).totalPoints = pointsMap[s.id] !== undefined ? pointsMap[s.id] : 100;
         });
 
-        // 🔧 EGRESS FIX: Only select needed columns for TurnQueue
-        const { data: turns, error: tError } = await supabase
+        const { data: rawTurns, error: tError } = await supabase
             .from('TurnQueue')
             .select('id, employee_id, date, check_in_order, queue_position, status, turns_completed, current_order_id, booking_item_id, booking_item_ids, room_id, bed_id, start_time, estimated_end_time')
-            .eq('date', date)
-            .order('turns_completed', { ascending: true })
-            .order('queue_position', { ascending: true });
+            .eq('date', date);
         if (tError) throw tError;
+
+        // Apply correct sorting (turns_completed ASC for A/B/C, net_hours DESC for D)
+        const turnsWithWorkType = rawTurns.map(t => {
+            const st = staffs.find(s => s.id === t.employee_id);
+            return { ...t, work_type: st?.work_type || 'TYPE_A' };
+        });
+
+        const typeA = turnsWithWorkType.filter(t => t.work_type === 'TYPE_A');
+        const typeB = turnsWithWorkType.filter(t => t.work_type === 'TYPE_B');
+        const typeC = turnsWithWorkType.filter(t => t.work_type === 'TYPE_C');
+        const typeD = turnsWithWorkType.filter(t => t.work_type === 'TYPE_D');
+
+        const sortABC = (a: any, b: any) => {
+            if ((a.turns_completed || 0) !== (b.turns_completed || 0)) return (a.turns_completed || 0) - (b.turns_completed || 0);
+            if ((a.check_in_order || 0) !== (b.check_in_order || 0)) return (a.check_in_order || 0) - (b.check_in_order || 0);
+            return (a.employee_id || '').localeCompare(b.employee_id || '');
+        };
+
+        typeA.sort(sortABC);
+        typeB.sort(sortABC);
+        typeC.sort(sortABC);
+
+        if (typeD.length > 0) {
+            const { KtvTypeDTurnService } = await import('@/lib/services/KtvTypeDTurnService');
+            const now = new Date();
+            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+            const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(supabase, typeD.map(t => t.employee_id), vnNow.getMonth() + 1, vnNow.getFullYear());
+            
+            typeD.forEach(t => (t as any).net_hours = hoursMap[t.employee_id] || 0);
+            
+            typeD.sort((a: any, b: any) => {
+                if ((b.net_hours || 0) !== (a.net_hours || 0)) return (b.net_hours || 0) - (a.net_hours || 0);
+                if ((a.check_in_order || 0) !== (b.check_in_order || 0)) return (a.check_in_order || 0) - (b.check_in_order || 0);
+                return (a.employee_id || '').localeCompare(b.employee_id || '');
+            });
+        }
+
+        const turns = [...typeA, ...typeB, ...typeC, ...typeD];
 
         // 3. Fetch Bookings for selected date
         // bookingDate is "timestamp without time zone"

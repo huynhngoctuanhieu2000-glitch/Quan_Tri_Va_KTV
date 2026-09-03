@@ -67,58 +67,27 @@ interface StaffFeature {
     id: string;
     full_name: string;
     status: string;
-    feature_flags: Record<string, boolean>;
+    feature_flags: Record<string, any>;
     work_type: 'TYPE_A' | 'TYPE_B' | 'TYPE_C' | 'TYPE_D';
 }
 
-export const getDefaultFlagsForType = (workType: string): Record<string, boolean> => {
+import {
+    DEFAULT_FEATURE_FLAGS_TYPE_A,
+    DEFAULT_FEATURE_FLAGS_TYPE_B,
+    DEFAULT_FEATURE_FLAGS_TYPE_C,
+    DEFAULT_FEATURE_FLAGS_TYPE_D
+} from '@/lib/constants/staff.constants';
+
+export const getDefaultFlagsForType = (workType: string): Record<string, any> => {
     switch (workType) {
         case 'TYPE_A':
-            return {
-                laundry_deduction: true,
-                sudden_leave_penalty: true,
-                allow_on_call: false,
-                enable_employee_tasks: true,
-                tua_wallet: true,
-                bonus_wallet: true,
-                savings_wallet: true,
-                maintenance_fee: true,
-            };
+            return DEFAULT_FEATURE_FLAGS_TYPE_A;
         case 'TYPE_B':
-            return {
-                laundry_deduction: true,
-                sudden_leave_penalty: false,
-                allow_on_call: true,
-                enable_employee_tasks: false,
-                tua_wallet: true,
-                bonus_wallet: false,
-                savings_wallet: false,
-                maintenance_fee: true,
-            };
+            return DEFAULT_FEATURE_FLAGS_TYPE_B;
         case 'TYPE_C':
-            return {
-                laundry_deduction: true,
-                sudden_leave_penalty: false,
-                allow_on_call: true,
-                enable_employee_tasks: false,
-                tua_wallet: true,
-                bonus_wallet: false,
-                savings_wallet: false,
-                maintenance_fee: true,
-            };
+            return DEFAULT_FEATURE_FLAGS_TYPE_C;
         case 'TYPE_D':
-            return {
-                laundry_deduction: true,
-                sudden_leave_penalty: false,
-                allow_on_call: false,
-                enable_employee_tasks: false,
-                tua_wallet: true,
-                bonus_wallet: true,
-                savings_wallet: false,
-                maintenance_fee: true,
-                internal_fund_enabled: true,
-                withdraw_morning_only: true,
-            };
+            return DEFAULT_FEATURE_FLAGS_TYPE_D;
         default:
             return {};
     }

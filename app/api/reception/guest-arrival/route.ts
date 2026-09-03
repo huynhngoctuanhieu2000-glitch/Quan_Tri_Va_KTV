@@ -10,9 +10,12 @@ export async function GET(request: Request) {
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
+        const { isGuestArrivalEnabled } = await import('@/lib/guest-arrival.logic');
+        const isEnabled = await isGuestArrivalEnabled(supabase);
+
         const { data, error } = await supabase
             .from('GuestArrivalEvents')
-            .select('id, created_by_name, created_at, note')
+            .select('*')
             .is('released_at', null)
             .maybeSingle();
 
@@ -20,10 +23,20 @@ export async function GET(request: Request) {
             console.error('Error fetching guest arrival lock:', error);
             return NextResponse.json({ success: false, error: error.message }, { status: 500 });
         }
+        
+        // Tự tắt khi hết đơn chờ — nhưng ƯU TIÊN THỦ CÔNG: khóa vừa bật tay mà chưa từng
+        // có đơn chờ nào thì giữ nguyên, chờ quầy tắt. Chi tiết ở maybeAutoRelease().
+        if (data) {
+            const { maybeAutoRelease } = await import('@/lib/guest-arrival.logic');
+            if (await maybeAutoRelease(supabase, data)) {
+                return NextResponse.json({ success: true, active: false, enabled: isEnabled, data: null });
+            }
+        }
 
         return NextResponse.json({
             success: true,
             active: !!data,
+            enabled: isEnabled,
             data: data || null
         });
     } catch (error: any) {
@@ -44,7 +57,25 @@ export async function POST(request: Request) {
             const bUser = await requireBusinessUser();
             if (bUser) {
                 createdBy = bUser.businessUserId;
-                createdByName = bUser.techCode; // Fallback to techCode as name if we don't have username
+                createdByName = bUser.techCode; // fallback
+
+                // Fetch real name
+                const { data: userRow } = await supabase
+                    .from('Users')
+                    .select('fullName')
+                    .eq('id', bUser.businessUserId)
+                    .maybeSingle();
+
+                if (userRow?.fullName) {
+                    createdByName = userRow.fullName;
+                } else if (bUser.techCode) {
+                    const { data: staffRow } = await supabase
+                        .from('Staff')
+                        .select('full_name')
+                        .eq('id', bUser.techCode)
+                        .maybeSingle();
+                    if (staffRow?.full_name) createdByName = staffRow.full_name;
+                }
             }
         } catch (e) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -54,6 +85,12 @@ export async function POST(request: Request) {
         if (body.adminId) createdBy = body.adminId;
         if (body.adminName) createdByName = body.adminName;
         const note = body.note || null;
+
+        const { isGuestArrivalEnabled } = await import('@/lib/guest-arrival.logic');
+        const isEnabled = await isGuestArrivalEnabled(supabase);
+        if (!isEnabled) {
+            return NextResponse.json({ success: false, error: 'Tính năng Báo Khách đang bị tắt.' }, { status: 400 });
+        }
 
         // Check if there is an active lock
         const { data: existing } = await supabase
@@ -78,6 +115,16 @@ export async function POST(request: Request) {
             .single();
 
         if (insertError) {
+            if (insertError.code === '23505') {
+                 const { data: existing2 } = await supabase
+                     .from('GuestArrivalEvents')
+                     .select('*')
+                     .is('released_at', null)
+                     .maybeSingle();
+                 if (existing2) {
+                     return NextResponse.json({ success: true, data: existing2 });
+                 }
+            }
             console.error('Error creating guest arrival event:', insertError);
             return NextResponse.json({ success: false, error: insertError.message }, { status: 500 });
         }
@@ -119,7 +166,12 @@ export async function DELETE(request: Request) {
         }
 
         const body = await request.json().catch(() => ({}));
-        if (body.adminId) releasedBy = body.adminId;
+        
+        if (body.adminId === 'AUTO') {
+            releasedBy = 'AUTO';
+        } else if (body.adminId) {
+            releasedBy = body.adminId;
+        }
 
         // Find active lock
         const { data: activeLock } = await supabase

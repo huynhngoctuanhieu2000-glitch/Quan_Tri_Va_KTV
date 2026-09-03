@@ -188,3 +188,34 @@ export async function requirePermission(permissionId: string) {
 
     return true;
 }
+
+export async function requireActiveStaff() {
+    const bUser = await requireBusinessUser();
+    if (!bUser) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const staffId = bUser.techCode || bUser.businessUserId;
+    if (!staffId) return null;
+
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+        return Response.json({ error: 'Supabase admin not initialized' }, { status: 500 });
+    }
+
+    const { data: staff, error } = await supabase
+        .from('Staff')
+        .select('status')
+        .eq('id', staffId)
+        .single();
+
+    if (error || !staff) {
+         return Response.json({ error: 'Không tìm thấy thông tin nhân viên' }, { status: 404 });
+    }
+
+    if (staff.status === 'KHÓA_TÀI_KHOẢN') {
+        return Response.json({ error: 'ACCOUNT_LOCKED', message: 'Tài khoản của bạn đã bị khóa kỷ luật.' }, { status: 403 });
+    }
+
+    return null; 
+}

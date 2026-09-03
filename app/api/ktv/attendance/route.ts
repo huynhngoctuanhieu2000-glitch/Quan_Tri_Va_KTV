@@ -3,8 +3,10 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { AttendanceSchema } from '@/lib/schemas/ktv.schema';
 import { createNotification } from '@/lib/notification-helper';
 import { KtvOnlineService } from '@/lib/services/KtvOnlineService';
+import { KtvTypeDOnlineService } from '@/lib/services/KtvTypeDOnlineService';
 import { KtvTypeDDisciplineService } from '@/lib/services/KtvTypeDDisciplineService';
 import sharp from 'sharp';
+import { requireActiveStaff } from '@/lib/auth-server';
 
 // 🔧 CONFIG
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
@@ -13,6 +15,9 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 export async function POST(request: Request) {
     try {
+        const lockedError = await requireActiveStaff();
+        if (lockedError) return lockedError;
+
         const body = await request.json();
         const parseResult = AttendanceSchema.safeParse(body);
         
@@ -155,15 +160,12 @@ export async function POST(request: Request) {
                 }
             }
 
-            // ─── Step 0.6: Check Guest Arrival Lock (Only for TYPE_D) ─────────────
-            if (staffRow?.work_type === 'TYPE_D' && checkType === 'CHECK_OUT') {
-                const { data: lockConfig } = await supabase
-                    .from('SystemConfigs')
-                    .select('value')
-                    .eq('key', 'guest_arrival_lock_enabled')
-                    .maybeSingle();
-
-                if (lockConfig?.value === 'true') {
+            // Validation riêng cho TYPE_D khi checkout
+            if (staffRow?.work_type === 'TYPE_D') {
+                const { isGuestArrivalEnabled } = await import('@/lib/guest-arrival.logic');
+                const isEnabled = await isGuestArrivalEnabled(supabase);
+                
+                if (isEnabled) {
                     const { data: activeLock } = await supabase
                         .from('GuestArrivalEvents')
                         .select('id, note')
@@ -171,12 +173,45 @@ export async function POST(request: Request) {
                         .maybeSingle();
 
                     if (activeLock) {
-                        return NextResponse.json({ 
-                            success: false, 
-                            error: activeLock.note || 'Quầy vừa báo có khách. Vui lòng giữ máy, chưa thể tan ca lúc này.'
-                        }, { status: 403 });
+                        const { hasPendingDispatch } = await import('@/lib/guest-arrival.logic');
+                        const isPending = await hasPendingDispatch(supabase);
+                        
+                        if (isPending) {
+                            return NextResponse.json({ 
+                                success: false, 
+                                error: activeLock.note || 'Quầy vừa báo có khách. Vui lòng giữ máy, chưa thể tan ca lúc này.'
+                            }, { status: 403 });
+                        } else {
+                            const { vnNow } = await import('@/lib/vn-time');
+                            await supabase
+                                .from('GuestArrivalEvents')
+                                .update({ released_at: vnNow().toISOString(), released_by: 'AUTO' })
+                                .eq('id', activeLock.id);
+                        }
                     }
                 }
+            }
+        }
+
+        // ─── Step 0.6: Validation for TYPE_D (Check In) ─────────────
+        const { data: staffTypeData } = await supabase.from('Staff').select('work_type').eq('id', staffCode).maybeSingle();
+        const workType = staffTypeData?.work_type;
+        const isTypeD = workType === 'TYPE_D';
+
+        if (isTypeD && (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN')) {
+            const { vnToday } = await import('@/lib/vn-time');
+            const todayStr = vnToday();
+            const { data: registration } = await supabase
+                .from('KTVTypeDDailyRegistration')
+                .select('status')
+                .eq('staff_id', staffCode)
+                .eq('work_date', todayStr)
+                .single();
+            if (registration && registration.status === 'OFF_REGISTERED') {
+                return NextResponse.json({ 
+                    success: false, 
+                    error: 'Bạn đã đăng ký nghỉ (OFF) hôm nay. Vui lòng hủy đăng ký trước khi điểm danh.' 
+                }, { status: 403 });
             }
         }
 
@@ -303,6 +338,38 @@ export async function POST(request: Request) {
                         if (leaveErr) console.error('❌ [KTVLeaveRequests] Insert Error:', leaveErr);
                     }
                 }
+            } else if (isTypeD) {
+                if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
+                    const res = await KtvTypeDOnlineService.arriveAtVenue(supabase, staffCode);
+                    if (!res.success) {
+                        return NextResponse.json({ success: false, error: res.error }, { status: 500 });
+                    }
+                } else if (checkType === 'CHECK_OUT' || checkType === 'SUDDEN_OFF' || checkType === 'OFF_REQUEST') {
+                    // KHÔNG đóng KTVShifts ở đây. Bảng này lưu BẢN PHÂN CA, không lưu buổi làm việc.
+                    // status ACTIVE = phân ca đang hiệu lực, phải giữ qua ngày.
+                    // Set COMPLETED sẽ làm ca biến mất khỏi /api/ktv/shift và bảng lương
+                    // (cả hai đều lọc .in('status', ['ACTIVE','REPLACED'])).
+
+                    // Go offline AFTER closing shift
+                    const res = await KtvTypeDOnlineService.goOffline(supabase, staffCode);
+                    if (!res.success) {
+                        return NextResponse.json({ success: false, error: res.error }, { status: 500 });
+                    }
+
+                    if (checkType === 'SUDDEN_OFF' || selectedShiftType === 'SUDDEN_OFF_CHECKOUT') {
+                        const leaveReason = reason || (checkType === 'SUDDEN_OFF' ? 'Xin nghỉ đột xuất ngay đầu ca' : 'Tan ca sớm (Nghỉ đột xuất)');
+                        const { error: leaveErr } = await supabase.from('KTVLeaveRequests').insert({
+                            employeeId,
+                            employeeName: displayName,
+                            date: today,
+                            reason: leaveReason,
+                            status: 'APPROVED',
+                            is_sudden_off: true,
+                            is_extension: false,
+                        });
+                        if (leaveErr) console.error('❌ [KTVLeaveRequests] Insert Error:', leaveErr);
+                    }
+                }
             } else {
                 if (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN') {
                     // 🔹 Tự động tắt trạng thái nhận đơn ngoài giờ (nếu có)
@@ -324,14 +391,18 @@ export async function POST(request: Request) {
 
                         if (currentActive?.shiftType !== selectedShiftType) {
                             if (currentActive) {
-                                await supabase
+                                const { error: oldErr } = await supabase
                                     .from('KTVShifts')
                                     .update({ status: 'REPLACED' })
                                     .eq('employeeId', employeeId)
                                     .eq('status', 'ACTIVE');
+                                
+                                if (oldErr) {
+                                    console.error('[attendance/route] KTVShifts close old shift failed:', oldErr.message, oldErr.code);
+                                }
                             }
 
-                            await supabase
+                            const { error: newErr } = await supabase
                                 .from('KTVShifts')
                                 .insert({
                                     employeeId,
@@ -345,6 +416,11 @@ export async function POST(request: Request) {
                                     reviewedBy: 'SYSTEM',
                                     reviewedAt: nowUtc.toISOString(),
                                 });
+                            
+                            if (newErr) {
+                                console.error('[attendance/route] KTVShifts insert failed:', newErr.message, newErr.code);
+                                return NextResponse.json({ success: false, error: 'Không thể tạo ca làm việc mới.' }, { status: 500 });
+                            }
                         }
                     }
 
@@ -408,14 +484,10 @@ export async function POST(request: Request) {
                     // 🔸 Deactivate shift for User
                     await supabase.from('Users').update({ isOnShift: false }).eq('id', employeeId);
 
-                    // 🔸 Close the active KTVShifts record
-                    await supabase.from('KTVShifts')
-                        .update({ 
-                            actualEndTime: nowUtc.toISOString(),
-                            status: 'COMPLETED'
-                        })
-                        .eq('employeeId', employeeId)
-                        .eq('status', 'ACTIVE');
+                    // KHÔNG đóng KTVShifts ở đây. Bảng này lưu BẢN PHÂN CA, không lưu buổi làm việc.
+                    // status ACTIVE = phân ca đang hiệu lực, phải giữ qua ngày.
+                    // Set COMPLETED sẽ làm ca biến mất khỏi /api/ktv/shift và bảng lương
+                    // (cả hai đều lọc .in('status', ['ACTIVE','REPLACED'])).
 
                     if (staffCode && userData.role === 'TECHNICIAN') {
                         // 🔸 Set status = off trong TurnQueue (hiển thị mờ ở cuối danh sách màu xám)

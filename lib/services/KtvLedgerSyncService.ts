@@ -41,7 +41,7 @@ export async function processMonthlyLedgerSync(supabase: SupabaseClient, month: 
         const m = monthlyMap.get(row.staff_id);
         m.total_commission += Number(row.total_commission || 0);
         m.total_tip += Number(row.total_tip || 0);
-        m.total_bonus += Number(row.total_bonus || 0);
+        m.total_bonus += Number(row.total_bonus || 0); // ĐIỂM
         m.total_penalty += Number(row.total_penalty || 0);
         m.total_bookings += Number(row.total_bookings || 0);
         m.total_minutes += Number(row.total_minutes || 0);
@@ -97,7 +97,7 @@ export async function processYearlyLedgerSync(supabase: SupabaseClient, year: nu
         const y = yearlyMap.get(row.staff_id);
         y.total_commission += Number(row.total_commission || 0);
         y.total_tip += Number(row.total_tip || 0);
-        y.total_bonus += Number(row.total_bonus || 0);
+        y.total_bonus += Number(row.total_bonus || 0); // ĐIỂM
         y.total_penalty += Number(row.total_penalty || 0);
         y.total_bookings += Number(row.total_bookings || 0);
         y.total_minutes += Number(row.total_minutes || 0);

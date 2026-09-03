@@ -5,9 +5,11 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
+import { useToast } from '@/components/ui/Toast';
 
 export const useKTVWallet = () => {
     const { user, hasPermission } = useAuth();
+    const { addToast } = useToast();
     const canViewWallet = hasPermission('ktv_wallet');
     const ktvId = user?.id || '';
 
@@ -93,11 +95,11 @@ export const useKTVWallet = () => {
 
         try {
             await apiClient.post<any>(API.KTV.WALLET.WITHDRAW, { techCode: ktvId, amount, walletType: 'TUA' });
-            alert('✅ Yêu cầu rút tiền của bạn đã được duyệt.\nHãy đến quầy Lễ tân/Thu ngân để nhận tiền mặt nhé!');
+            addToast('✅ Yêu cầu rút tiền của bạn đã được duyệt.\nHãy đến quầy Lễ tân/Thu ngân để nhận tiền mặt nhé!', 'success');
             fetchWallet();
             return true;
         } catch (e: any) {
-            alert('Lỗi: ' + (e.message || 'Hệ thống lỗi khi tạo lệnh rút tiền.'));
+            addToast('Lỗi: ' + (e.message || 'Hệ thống lỗi khi tạo lệnh rút tiền.'), 'error');
             return false;
         }
     };
@@ -106,14 +108,11 @@ export const useKTVWallet = () => {
         if (!bonusBalance || bonusBalance.points <= 0) return false;
 
         if (pointsToRedeem > bonusBalance.points) {
-            alert('Số điểm vượt quá mức khả dụng!');
+            addToast('Số điểm vượt quá mức khả dụng!', 'error');
             return false;
         }
         const vndAmount = pointsToRedeem * 1000;
-        const confirmMsg = `XÁC NHẬN QUY ĐỔI\n\nBạn đang yêu cầu quy đổi ${pointsToRedeem} điểm thành ${vndAmount.toLocaleString()} VNĐ.\n\nĐồng ý?`;
         
-        if (!window.confirm(confirmMsg)) return false;
-
         try {
             await apiClient.post<any>(API.KTV.WALLET.WITHDRAW, { 
                 techCode: ktvId, 
@@ -130,11 +129,11 @@ export const useKTVWallet = () => {
                 date: new Date().toISOString().split('T')[0]
             });
             
-            alert(`✅ Yêu cầu quy đổi ${pointsToRedeem} điểm thành ${vndAmount.toLocaleString()}đ đã được gửi.\nHãy báo với Lễ tân/Thu ngân nhé!`);
+            addToast(`✅ Yêu cầu quy đổi ${pointsToRedeem} điểm thành ${vndAmount.toLocaleString()}đ đã được gửi.\nHãy báo với Lễ tân/Thu ngân nhé!`, 'success');
             fetchWallet();
             return true;
         } catch (e: any) {
-            alert('Lỗi: ' + (e.message || 'Hệ thống lỗi khi tạo lệnh quy đổi.'));
+            addToast('Lỗi: ' + (e.message || 'Hệ thống lỗi khi tạo lệnh quy đổi.'), 'error');
             return false;
         }
     };

@@ -202,6 +202,26 @@
 
 ---
 
+### 4.6. KTVServiceHoursLedger ✅ CHỦ LỰC (GIỜ LÀM LOẠI D)
+**Nhiệm vụ**: Sổ cái ghi nhận giờ làm thực tế của KTV Loại D để xếp tua. Bù trừ và cộng dồn (gian thực).
+
+| Cột | Kiểu | Mô tả chức năng |
+|-----|------|-----------------|
+| `id` | uuid PK | ID tự sinh |
+| `staff_id` | text FK → Staff | Mã KTV |
+| `date` | date | Ngày phát sinh |
+| `hours_earned` | numeric | Giờ làm thực tế kiếm được (0 nếu phạt) |
+| `hours_penalty` | numeric | Giờ bị phạt (âm, default 0) |
+| `penalty_type` | text | Loại phạt (`ABSENT`, `LATE_1`, `LATE_2`) |
+| `booking_id` | text FK → Bookings | ID đơn hàng nếu là giờ làm thực |
+| `note` | text | Ghi chú (VD: "Làm khách", "Phạt vắng") |
+| `created_at` | timestamptz | Thời điểm tạo |
+
+**Constraint 1**: `UNIQUE(staff_id, date, booking_id) WHERE booking_id IS NOT NULL` — Mỗi KTV 1 bill chỉ cộng 1 lần.
+**Constraint 2**: `UNIQUE(staff_id, date, penalty_type)` — Chống phạt trùng 1 loại lỗi trong ngày.
+
+---
+
 ### 5. KTVAttendance ✅ CHỦ LỰC
 **Nhiệm vụ**: Chấm công GPS có duyệt của admin.
 
@@ -410,7 +430,7 @@
 
 ---
 
-### 6.6. KTVDailyRegistration ✅ CHỦ LỰC (TYPE D LỊCH & BÁO VẮNG/TRỄ)
+### 6.6. KTVTypeDDailyRegistration ✅ CHỦ LỰC (TYPE D LỊCH & BÁO VẮNG/TRỄ)
 **Nhiệm vụ**: Đăng ký lịch làm việc hằng ngày của KTV TYPE_D và ghi nhận trạng thái báo vắng, báo trễ, điểm danh.
 
 | Cột | Kiểu | Mô tả chức năng |

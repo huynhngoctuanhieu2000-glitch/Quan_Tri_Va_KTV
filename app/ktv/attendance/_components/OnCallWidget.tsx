@@ -3,6 +3,7 @@ import { BellRing, LogOut, LogIn, Loader2, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
+import { useToast } from '@/components/ui/Toast';
 
 interface OnCallState {
   allow_on_call: boolean;
@@ -17,9 +18,12 @@ interface Props {
   onCheckIn: () => void;
   onStateChange?: (isOnCall: boolean) => void;
   onRefreshStatus?: () => void;
+  className?: string;
+  incompleteTasksCount?: number;
 }
 
-export const OnCallWidget: React.FC<Props> = ({ ktvId, isOffToday, onCheckIn, onStateChange, onRefreshStatus }) => {
+export const OnCallWidget: React.FC<Props> = ({ ktvId, isOffToday, onCheckIn, onStateChange, onRefreshStatus, className = '', incompleteTasksCount = 0 }) => {
+  const { addToast } = useToast();
   const [state, setState] = useState<OnCallState | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -70,11 +74,10 @@ export const OnCallWidget: React.FC<Props> = ({ ktvId, isOffToday, onCheckIn, on
         await fetchState();
         if (onRefreshStatus) onRefreshStatus();
       } else {
-        alert(res.error || 'Có lỗi xảy ra, vui lòng thử lại!');
+        addToast(res.error || 'Có lỗi xảy ra, vui lòng thử lại!', 'error');
       }
-    } catch (e: any) {
-      console.error(e);
-      alert('Lỗi kết nối máy chủ, vui lòng thử lại!');
+    } catch (e) {
+      addToast('Lỗi kết nối máy chủ, vui lòng thử lại!', 'error');
     } finally {
       setActionLoading(false);
     }

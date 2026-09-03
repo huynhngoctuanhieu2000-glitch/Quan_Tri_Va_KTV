@@ -1198,15 +1198,7 @@ const ServiceGroupCard = ({
       return t.employee_id.toLowerCase().includes(term) || (t.staff?.full_name || '').toLowerCase().includes(term);
     });
 
-    return filtered.sort((a, b) => {
-        const isAExt = a.employee_id.startsWith('EXT') || a.employee_id.startsWith('C_');
-        const isBExt = b.employee_id.startsWith('EXT') || b.employee_id.startsWith('C_');
-        if (isAExt && !isBExt) return 1;
-        if (!isAExt && isBExt) return -1;
-        
-        if (a.turns_completed !== b.turns_completed) return (a.turns_completed || 0) - (b.turns_completed || 0);
-        return (a.check_in_order || 0) - (b.check_in_order || 0);
-    });
+    return filtered;
   }, [availableTurns, state.selectedKtvIds, ktvSearch]);
 
   const dateFormatted = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1409,12 +1401,34 @@ const ServiceGroupCard = ({
             {isKtvDropdownOpen && (
               <div className="absolute z-50 w-full mt-1 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 overflow-hidden">
                 <div className="max-h-52 overflow-y-auto p-1.5 space-y-0.5">
-                  {filteredTurns.map(turn => { const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true; const isUsed = allSelectedKtvIds.includes(turn.employee_id) && !state.selectedKtvIds.includes(turn.employee_id); const isTypeAOrB = turn.staff?.work_type === 'TYPE_A' || turn.staff?.work_type === 'TYPE_B'; const displayName = isTypeAOrB ? turn.employee_id : (turn.staff?.full_name || turn.employee_id); return (
+                  {filteredTurns.map(turn => { 
+                    const hasSkill = targetSkill ? turn.staff?.skills?.[targetSkill] === true : true; 
+                    const isUsed = allSelectedKtvIds.includes(turn.employee_id) && !state.selectedKtvIds.includes(turn.employee_id); 
+                    const workType = turn.work_type || turn.staff?.work_type || 'TYPE_A';
+                    const isTypeAOrB = workType === 'TYPE_A' || workType === 'TYPE_B'; 
+                    const isTypeD = workType === 'TYPE_D';
+                    const displayName = (isTypeAOrB || isTypeD) ? turn.employee_id : (turn.staff?.full_name || turn.employee_id); 
+                    return (
                     <div key={turn.employee_id} onClick={() => { addKtv(turn.employee_id); }}
                       className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all flex items-center justify-between hover:bg-indigo-50 active:scale-[0.98] ${!hasSkill ? 'text-gray-400' : 'text-gray-700'}`}>
-                      <div className="flex items-center gap-2"><span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span><span>{displayName}</span>{turn.staff?.work_type && turn.staff.work_type !== 'TYPE_A' && <span className={`px-1 py-0.5 text-[8px] font-black rounded border leading-none ${turn.staff.work_type === 'TYPE_B' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>{turn.staff.work_type === 'TYPE_B' ? 'B' : 'C'}</span>}</div>
+                      <div className="flex items-center gap-2">
+                        {isTypeD ? (
+                          <span className="text-[10px] bg-purple-100 px-1.5 py-0.5 rounded-md font-black text-purple-700 border border-purple-200" title="Giờ làm trong tháng">
+                            {turn.net_hours?.toFixed(1) || '0.0'}h
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span>
+                        )}
+                        <span>{displayName}</span>
+                        {workType !== 'TYPE_A' && (
+                          <span className={`px-1 py-0.5 text-[8px] font-black rounded border leading-none ${workType === 'TYPE_B' ? 'bg-purple-100 text-purple-700 border-purple-200' : workType === 'TYPE_D' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+                            {workType === 'TYPE_B' ? 'B' : workType === 'TYPE_D' ? 'D' : 'C'}
+                          </span>
+                        )}
+                      </div>
                       <span className={`text-[10px] font-semibold ${isUsed ? 'text-indigo-500' : turn.status === 'working' ? 'text-amber-500' : turn.status === 'assigned' ? 'text-indigo-500' : 'text-emerald-500'}`}>{isUsed ? '🔄 Đã gán ở DV khác' : turn.status === 'working' ? `⌛ Đến ${fmtTime(turn.estimated_end_time)}` : turn.status === 'assigned' ? `🔒 Đã xếp lịch${turn.estimated_end_time ? ` • Rảnh ${fmtTime(turn.estimated_end_time)}` : ''}` : '✅ Sẵn sàng'}</span>
-                    </div>); })}
+                    </div>); 
+                  })}
                   {ktvSearch.trim() && !availableTurns.some(t => t.employee_id.toLowerCase() === ktvSearch.trim().toLowerCase() || t.staff?.full_name?.toLowerCase() === ktvSearch.trim().toLowerCase()) && (
                     <div onClick={() => { addKtv(ktvSearch.trim()); setKtvSearch(''); }} className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer hover:bg-emerald-50 text-emerald-700 active:scale-[0.98] border border-dashed border-emerald-200 mt-2">
                       <Plus size={16} className="text-emerald-500" /><span>Nhập tên ngoài: <strong className="text-emerald-800">{ktvSearch.trim()}</strong></span>

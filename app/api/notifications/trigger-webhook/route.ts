@@ -83,12 +83,19 @@ export async function POST(request: Request) {
             pushSent = true;
 
             // Also push to allowed roles (e.g. admins when a KTV gets rewarded)
-            if (rule.allowed_roles && rule.allowed_roles.length > 0) {
-                const targetRoles = rule.allowed_roles.map((r: string) => r.toUpperCase());
+            // 🛡️ LOẠI KTV KHỎI LẦN PUSH THỨ HAI NÀY.
+            // Thông báo đã có employeeId = thông báo CÁ NHÂN (vd "Bạn được phân công: ...").
+            // Rule KTV_NEW_ORDER có allowed_roles = ['ktv'], nên nếu không lọc thì nội dung
+            // phân công riêng của 1 người sẽ bắn cho TẤT CẢ KTV đang trong ca — vừa lộ thông tin
+            // vừa làm mọi máy kêu sai. Admin/Lễ tân vẫn nhận bình thường để theo dõi.
+            const secondaryRoles = rule.allowed_roles
+                .map((r: string) => r.toUpperCase())
+                .filter((r: string) => r !== 'KTV' && r !== 'TECHNICIAN');
+            if (secondaryRoles.length > 0) {
                 await sendPushNotification({
                     title: '🔔 Thông báo',
                     message: cleanMessage,
-                    targetRoles,
+                    targetRoles: secondaryRoles,
                     url: '/',
                     requireOnShift: shouldFilterOnShift,
                 });

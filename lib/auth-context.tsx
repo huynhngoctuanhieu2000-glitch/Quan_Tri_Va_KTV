@@ -11,6 +11,7 @@ import { API } from '@/lib/api-endpoints';
 interface AuthContextType {
   user: User | null;
   role: Role | null;
+  lockedInfo: any;
   login: (userId: string, password?: string) => Promise<boolean>;
   logout: () => void;
   changePassword: (newPassword: string) => Promise<void>;
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role | null>(null);
+  const [lockedInfo, setLockedInfo] = useState<any>(null);
 
   useEffect(() => {
     // 🔄 Restore session: sessionStorage (per-tab, ưu tiên) → localStorage (backup khi app bị kill)
@@ -71,7 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Dọn dẹp storage ngay lập tức để tránh reload loop
             sessionStorage.removeItem('spa_auth_user');
             localStorage.removeItem('spa_auth_user');
-            window.location.href = '/login';
+            window.location.href = '/login?error=account_locked';
+          }
+          if (payload.new.status === 'KHÓA_TÀI_KHOẢN') {
+            // Sẽ handle bằng cách trigger reload hoặc context state, hiện tại chỉ trigger event
+            window.dispatchEvent(new CustomEvent('account_locked', { detail: { isLocked: true } }));
+          } else if (payload.old.status === 'KHÓA_TÀI_KHOẢN' && payload.new.status !== 'KHÓA_TÀI_KHOẢN') {
+            window.dispatchEvent(new CustomEvent('account_locked', { detail: { isLocked: false } }));
           }
         }
       )
@@ -128,7 +136,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: dbUser.fullName || dbUser.username,
           roleId: roleId,
           avatarUrl: dbUser.staffAvatarUrl || fallbackAvatar,
-          featureFlags: dbUser.featureFlags || {}
+          featureFlags: dbUser.featureFlags || {},
+          work_type: dbUser.work_type
         };
 
         setUser(finalUser);
@@ -240,7 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [role, user?.featureFlags]);
 
   return (
-    <AuthContext.Provider value={{ user, role, login, logout, changePassword, updateProfile, hasPermission }}>
+    <AuthContext.Provider value={{ user, role, lockedInfo, login, logout, changePassword, updateProfile, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

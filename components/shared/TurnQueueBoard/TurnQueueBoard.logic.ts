@@ -43,7 +43,7 @@ export const useTurnQueueBoard = (staffs: StaffData[]) => {
         }
     }, [selectedDate]);
 
-    // Fetch qua API (trigger sync logic đếm tua chính xác)
+    // ✅ UNIFIED DATA PATH: Fetch qua API (trigger sync + correct sorting for all types)
     const fetchTurns = useCallback(async () => {
         setLoading(true);
         try {
@@ -54,10 +54,9 @@ export const useTurnQueueBoard = (staffs: StaffData[]) => {
                     ...t,
                     staff: staffs.find(s => s.id === t.employee_id)
                 }));
-                // 🔥 Tách KTV nội bộ và KTV ngoài
-                const internal = merged.filter((t: TurnQueueData) => !t.employee_id.startsWith('EXT') && !t.employee_id.startsWith('C_'));
-                // Include ALL external turns (even 'off') so we can map them back, or just use externalTurns for active
-                const external = merged.filter((t: TurnQueueData) => (t.employee_id.startsWith('EXT') || t.employee_id.startsWith('C_')));
+                // 🔥 Tách bằng work_type (KHÔNG dùng tiền tố mã nữa)
+                const internal = merged.filter((t: TurnQueueData) => t.work_type !== 'TYPE_C');
+                const external = merged.filter((t: TurnQueueData) => t.work_type === 'TYPE_C');
                 setTurns(internal);
                 setExternalTurns(external);
             }
@@ -67,39 +66,17 @@ export const useTurnQueueBoard = (staffs: StaffData[]) => {
         setLoading(false);
     }, [selectedDate, staffs]);
 
-    // Fetch trực tiếp từ DB (dùng khi TurnQueue thay đổi, không cần re-sync)
-    const fetchTurnsFromDB = useCallback(async () => {
-        const today = selectedDate;
-        const { data } = await supabase
-            .from('TurnQueue')
-            // 🔧 EGRESS FIX: Select only needed columns
-            .select('id, employee_id, date, check_in_order, queue_position, status, turns_completed, manual_adjustment, current_order_id, estimated_end_time')
-            .eq('date', today)
-            .order('turns_completed', { ascending: true })
-            .order('check_in_order', { ascending: true });
-
-        if (data) {
-            const merged = data.map((t: TurnQueueData) => ({
-                ...t,
-                staff: staffs.find(s => s.id === t.employee_id)
-            }));
-                // 🔥 Tách KTV nội bộ và KTV ngoài
-                const internal = merged.filter((t: TurnQueueData) => !t.employee_id.startsWith('EXT') && !t.employee_id.startsWith('C_'));
-                const external = merged.filter((t: TurnQueueData) => (t.employee_id.startsWith('EXT') || t.employee_id.startsWith('C_')));
-                setTurns(internal);
-                setExternalTurns(external);
-        }
-    }, [selectedDate, staffs]);
-
     useEffect(() => {
         if (staffs.length > 0) {
-            setAllExternalStaffs(staffs.filter(s => s.id.startsWith('EXT') || s.id.startsWith('C_')));
+            // 🔥 Dùng work_type thay vì tiền tố mã
+            setAllExternalStaffs(staffs.filter(s => s.work_type === 'TYPE_C'));
             fetchTurns();
             fetchExtras();
         }
     }, [staffs, selectedDate, fetchTurns, fetchExtras]);
 
-    // 🔄 REALTIME: Lắng nghe 3 bảng quan trọng liên quan đến điều phối
+    // 🔄 REALTIME: Lắng nghe các bảng quan trọng liên quan đến điều phối
+    // ✅ Bước 4: Gộp 2 đường dữ liệu — TẤT CẢ đều gọi fetchTurns() (qua API)
     useEffect(() => {
         if (staffs.length === 0) return;
 
@@ -117,17 +94,17 @@ export const useTurnQueueBoard = (staffs: StaffData[]) => {
             // Bảng TurnQueue: Thay đổi tua trực tiếp (swap vị trí, reset, tan ca...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, () => {
                 console.log('🔄 [Realtime] TurnQueue changed → refreshing...');
-                if (!hasChangesRef.current) fetchTurnsFromDB();
+                if (!hasChangesRef.current) fetchTurns();
             })
             // Bảng DailyAttendance: Điểm danh, đổi trạng thái (on_duty, off_duty, absent...)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'DailyAttendance' }, () => {
                 console.log('🔄 [Realtime] DailyAttendance changed → syncing turns...');
-                if (!hasChangesRef.current) fetchTurnsFromDB();
+                if (!hasChangesRef.current) fetchTurns();
             })
             // Bảng KTVAttendance: KTV bấm điểm danh / tan ca trên app
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVAttendance' }, () => {
                 console.log('🔄 [Realtime] KTVAttendance changed → syncing turns...');
-                if (!hasChangesRef.current) fetchTurnsFromDB();
+                if (!hasChangesRef.current) fetchTurns();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'KTVLeaveRequests' }, () => {
                 fetchExtras();
@@ -140,17 +117,18 @@ export const useTurnQueueBoard = (staffs: StaffData[]) => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [staffs, selectedDate, fetchTurns, fetchTurnsFromDB, fetchExtras]);
+    }, [staffs, selectedDate, fetchTurns, fetchExtras]);
 
-    // Sắp xếp gốc: off cuối → theo tua → theo queue_position
+    // Sắp xếp: off cuối → giữ nguyên thứ tự API (API đã sort đúng cho mỗi loại)
     const buildSorted = useCallback((source: (TurnQueueData & { staff?: StaffData })[]) => {
         return [...source].sort((a, b) => {
             const isAOff = a.status === 'off' || suddenOffs.has(a.employee_id);
             const isBOff = b.status === 'off' || suddenOffs.has(b.employee_id);
             if (isAOff && !isBOff) return 1;
             if (!isAOff && isBOff) return -1;
-            if (a.turns_completed !== b.turns_completed) return a.turns_completed - b.turns_completed;
-            return a.check_in_order - b.check_in_order;
+            // Giữ nguyên thứ tự API cho non-off KTVs
+            // API đã sort: A/B → turns_completed ASC, D → net_hours DESC
+            return 0;
         });
     }, [suddenOffs]);
 

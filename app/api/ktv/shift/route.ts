@@ -122,8 +122,10 @@ export async function GET(request: NextRequest) {
                 const isTempShift = shift.reason === 'Tự chọn ca lúc điểm danh';
                 
                 if (shift.status === 'ACTIVE' && isTempShift && shift.effectiveFrom < businessDateStr) {
-                    await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', shift.id);
-                    await supabase.from('KTVShifts').insert({
+                    const { error: oldErr } = await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', shift.id);
+                    if (oldErr) console.error('[shift/route] Failed to close old temp shift:', oldErr.message);
+
+                    const { error: newErr } = await supabase.from('KTVShifts').insert({
                         employeeId: shift.employeeId,
                         employeeName: shift.employeeName,
                         shiftType: shift.previousShift || 'SHIFT_1',
@@ -134,6 +136,8 @@ export async function GET(request: NextRequest) {
                         reviewedBy: 'SYSTEM',
                         reviewedAt: new Date().toISOString()
                     });
+                    if (newErr) console.error('[shift/route] Failed to insert restored shift:', newErr.message);
+                    
                     console.log(`✅ [Shift] Auto-reverted expired temp shift for ${shift.employeeId}`);
                     
                     // Cập nhật virtual state để hiển thị ngay
@@ -220,9 +224,10 @@ export async function GET(request: NextRequest) {
             if (activeShift && activeShift.status === 'ACTIVE') {
                 const isTempShift = activeShift.reason === 'Tự chọn ca lúc điểm danh';
                 if (isTempShift && activeShift.effectiveFrom < businessDateStr) {
-                    await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', activeShift.id);
+                    const { error: oldErr } = await supabase.from('KTVShifts').update({ status: 'REPLACED' }).eq('id', activeShift.id);
+                    if (oldErr) console.error('[shift/route POST] Failed to close old temp shift:', oldErr.message);
                     
-                    const { data: newShift } = await supabase.from('KTVShifts').insert({
+                    const { data: newShift, error: newErr } = await supabase.from('KTVShifts').insert({
                         employeeId: activeShift.employeeId,
                         employeeName: activeShift.employeeName,
                         shiftType: activeShift.previousShift || 'SHIFT_1',
@@ -233,6 +238,7 @@ export async function GET(request: NextRequest) {
                         reviewedBy: 'SYSTEM',
                         reviewedAt: new Date().toISOString()
                     }).select().single();
+                    if (newErr) console.error('[shift/route POST] Failed to insert restored shift:', newErr.message);
 
                     if (newShift) {
                         activeShift = newShift;
