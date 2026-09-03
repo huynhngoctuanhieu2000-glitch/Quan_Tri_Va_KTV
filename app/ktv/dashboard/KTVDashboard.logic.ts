@@ -776,10 +776,22 @@ export function useKTVDashboard(config?: DashboardConfig) {
     }, []);
 
     const isFetchingRef = useRef(false);
+    const realtimeFetchTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const lastVisibilityFetchMsRef = useRef(0);
+    const isCheckingNextRef = useRef(false);
 
     // 📡 Realtime & Polling Fetch
     useEffect(() => {
         if (!ktvId) return;
+
+        // Debounce cho realtime callbacks — nhiều event DB đến gần nhau → gộp thành 1 fetch
+        const scheduleRealtimeFetch = () => {
+            if (realtimeFetchTimerRef.current) clearTimeout(realtimeFetchTimerRef.current);
+            realtimeFetchTimerRef.current = setTimeout(() => {
+                fetchBooking();
+                realtimeFetchTimerRef.current = null;
+            }, 300);
+        };
 
         const fetchBooking = async () => {
             if (isFetchingRef.current) return;
@@ -1108,12 +1120,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
         // Subscribe to real-time changes
         const channel = supabase
             .channel(`ktv_realtime_${ktvId}`)
-            .on('postgres_changes', { 
-                event: 'UPDATE', 
-                schema: 'public', 
-                table: 'Bookings',
-                filter: booking?.id ? `id=eq.${booking.id}` : undefined
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'Bookings'
+                // KHÔNG filter theo booking.id → nhận tất cả, filter trong callback bằng bookingRef
+                // để không phải re-subscribe channel mỗi lần booking đổi.
             }, (payload: any) => {
+                const currentBookingId = bookingRef.current?.id;
+                if (!currentBookingId || payload.new?.id !== currentBookingId) return;
                 console.log("🔄 [KTV] Realtime Booking Update:", payload.new.status);
                 
                 // Nếu đơn hàng bị hủy hoặc bị tách → set ngay
@@ -1134,11 +1149,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 // 🚀 KHÔNG set partial data cho bất kỳ status nào có liên quan đến BookingItems
                 // Partial spread gây ra booking.status mới + BookingItems.status cũ → Screen Engine sai
                 // Chỉ fetchBooking() để lấy data hoàn chỉnh, nhất quán
-                fetchBooking();
+                scheduleRealtimeFetch();
             })
-            .on('postgres_changes', { 
-                event: '*', 
-                schema: 'public', 
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
                 table: 'BookingItems'
             }, (payload: any) => {
                 const currentBooking = bookingRef.current;
@@ -1181,11 +1196,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 }
                 
                 // Luôn fetchBooking để lấy danh sách items hoàn chỉnh (xử lý case INSERT Add-on)
-                fetchBooking();
+                scheduleRealtimeFetch();
             })
-            .on('postgres_changes', { 
-                event: '*', 
-                schema: 'public', 
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
                 table: 'TurnQueue',
                 filter: `employee_id=eq.${ktvId}`
             }, (payload: any) => {
@@ -1195,7 +1210,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     console.log("🚫 [KTV] TurnQueue realtime blocked — in post-service flow:", screenRef.current);
                     return;
                 }
-                fetchBooking();
+                scheduleRealtimeFetch();
             })
             .subscribe();
 
@@ -1213,10 +1228,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
         return () => {
             supabase.removeChannel(channel);
             clearInterval(intervalId);
+            if (realtimeFetchTimerRef.current) clearTimeout(realtimeFetchTimerRef.current);
         };
-    // ⚡ PERF: Removed isTimerRunning & isPrepping from deps to prevent channel re-subscription
-    // on every timer state change. These values are accessed via refs inside fetchBooking.
-    }, [ktvId, booking?.id, booking?.assignedItemId]);
+    // ⚡ PERF: Chỉ deps ktvId — mọi state khác đọc qua ref (bookingRef, screenRef, ...)
+    // Trước đây deps chứa booking?.id + assignedItemId → mỗi lần setBooking sẽ teardown
+    // + re-subscribe channel + gọi fetchBooking() → vòng lặp vô hạn.
+    }, [ktvId]);
 
     // 🕵️ Next Order Watcher — Polls for new assignments while KTV is finishing the current one
     // This ensures the "Next Order" button appears even if the dispatch happens late.
@@ -1224,6 +1241,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
         if (!ktvId || !['DASHBOARD', 'HANDOVER', 'REWARD'].includes(screen)) return;
 
         const checkNextOrder = async () => {
+            // 🛡️ Guard riêng — tránh concurrent Next Order fetches
+            if (isCheckingNextRef.current) return;
+            isCheckingNextRef.current = true;
             try {
                 // Fetch using techCode + current bookingId to exclude it from "next order" search
                 const currentId = bookingRef.current?.id || '';
@@ -1240,7 +1260,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         return { ...prev, nextBookingId: res.data.nextBookingId };
                     });
                 }
-            } catch (e) {}
+            } catch (e) {} finally {
+                isCheckingNextRef.current = false;
+            }
         };
 
         const tid = setInterval(checkNextOrder, 30000); // Tăng từ 5s lên 30s để tiết kiệm CPU
@@ -1472,19 +1494,32 @@ export function useKTVDashboard(config?: DashboardConfig) {
         recalcTimerRef.current = recalcTimerFromServer;
         recalcTimerFromServer();
 
+        // 🛡️ Cooldown 5s cho visibility/focus — tránh browser bounce visible↔hidden
+        // hoặc user Alt-Tab liên tục gây spam fetch. Dùng useRef để state survive
+        // giữa các lần effect re-mount (booking đổi).
+        const VISIBILITY_FETCH_COOLDOWN_MS = 5000;
+
         const handleVisibilityChange = async () => {
-            if (document.visibilityState === 'visible') {
-                // 🔥 Fetch dữ liệu MỚI từ server trước khi recalc
-                // Nếu dùng bookingRef cũ (stale), actualStartTime có thể = undefined
-                // → guard return sớm → timer không được sync → hiện sai
-                if (fetchBookingRef.current) {
-                    await fetchBookingRef.current();
-                }
+            if (document.visibilityState !== 'visible') return;
+            const now = Date.now();
+            if (now - lastVisibilityFetchMsRef.current < VISIBILITY_FETCH_COOLDOWN_MS) {
                 recalcTimerFromServer();
+                return;
             }
+            lastVisibilityFetchMsRef.current = now;
+            if (fetchBookingRef.current) {
+                await fetchBookingRef.current();
+            }
+            recalcTimerFromServer();
         };
 
         const handleFocus = async () => {
+            const now = Date.now();
+            if (now - lastVisibilityFetchMsRef.current < VISIBILITY_FETCH_COOLDOWN_MS) {
+                recalcTimerFromServer();
+                return;
+            }
+            lastVisibilityFetchMsRef.current = now;
             if (fetchBookingRef.current) {
                 await fetchBookingRef.current();
             }
