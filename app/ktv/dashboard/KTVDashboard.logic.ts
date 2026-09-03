@@ -775,11 +775,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
         fetchSettings();
     }, []);
 
+    const isFetchingRef = useRef(false);
+
     // 📡 Realtime & Polling Fetch
     useEffect(() => {
         if (!ktvId) return;
 
         const fetchBooking = async () => {
+            if (isFetchingRef.current) return;
+            isFetchingRef.current = true;
             try {
                 if (!ktvId) return;
 
@@ -1095,6 +1099,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 console.error('Error fetching booking:', err);
             } finally {
                 setIsLoading(false);
+                isFetchingRef.current = false;
             }
         };
 
