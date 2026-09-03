@@ -398,7 +398,8 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                         .replace(/[,\s]*Strength:\s*\S+/gi, '')
                         .replace(/[,\s]*Tránh:\s*[A-Z_,\s]+/gi, '')
                         .replace(/[,\s]*Avoid:\s*[A-Z_,\s]+/gi, '')
-                        // Clean up leftover artifacts: empty lines, trailing dashes, double spaces
+                        // Clean up leftover artifacts: lines ending with ":", empty lines, double spaces
+                        .replace(/^[\s""-]*\S+:\s*$/gm, '')
                         .replace(/^-\s*$/gm, '')
                         .replace(/^\s*[""]?\s*-?\s*[""]?\s*$/gm, '')
                         .replace(/\s{2,}/g, ' ')
