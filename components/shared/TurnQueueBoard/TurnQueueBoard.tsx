@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CheckCircle2, Timer, Clock, RotateCcw, Save, X, Moon, Loader2, Droplets, Plus } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { StaffData, TurnQueueData } from './TurnQueueBoard.types';
 import { useTurnQueueBoard } from './TurnQueueBoard.logic';
 import { getVnTimeStr } from '@/lib/time-helper';
@@ -61,6 +61,7 @@ export const TurnQueueBoard = ({ staffs, ktvDisplayNames, selectedDate: propSele
     }, [propSelectedDate]);
 
     const [activeTab, setActiveTab] = useState<TabKey>('all');
+    const [isTabExpanded, setIsTabExpanded] = useState(false);
     const [currentTime, setCurrentTime] = useState(getVnTimeStr());
     const [editingTurnKtvId, setEditingTurnKtvId] = useState<string | null>(null);
 
@@ -296,33 +297,53 @@ export const TurnQueueBoard = ({ staffs, ktvDisplayNames, selectedDate: propSele
             </div>
 
             {/* 🔥 Tab lọc loại KTV: Tất cả / A / B / D / C */}
-            <div className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200 overflow-x-auto">
-                {TAB_CONFIG.map(tab => {
-                    const count = tabCounts[tab.key];
-                    const isActive = activeTab === tab.key;
-                    const colorMap: Record<string, { active: string, badge: string }> = {
-                        indigo: { active: 'bg-white text-indigo-600 shadow-sm border border-gray-200/50', badge: 'bg-indigo-100 text-indigo-600' },
-                        blue:   { active: 'bg-white text-blue-600 shadow-sm border border-gray-200/50',   badge: 'bg-blue-100 text-blue-600' },
-                        purple: { active: 'bg-white text-purple-600 shadow-sm border border-gray-200/50', badge: 'bg-purple-100 text-purple-600' },
-                        amber:  { active: 'bg-white text-amber-600 shadow-sm border border-gray-200/50',  badge: 'bg-amber-100 text-amber-600' },
-                    };
-                    const colors = colorMap[tab.color] || colorMap.indigo;
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                                isActive ? colors.active : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            {tab.label}
-                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
-                                isActive ? colors.badge : 'bg-gray-200 text-gray-500'
-                            }`}>{count}</span>
-                        </button>
-                    );
-                })}
-            </div>
+            <motion.div 
+                layout
+                className="flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl shadow-inner border border-gray-200 overflow-x-hidden w-fit max-w-full"
+            >
+                <AnimatePresence mode="popLayout">
+                    {TAB_CONFIG.map(tab => {
+                        const count = tabCounts[tab.key];
+                        const isActive = activeTab === tab.key;
+                        
+                        if (!isTabExpanded && !isActive) return null;
+
+                        const colorMap: Record<string, { active: string, badge: string }> = {
+                            indigo: { active: 'bg-white text-indigo-600 shadow-sm border border-gray-200/50', badge: 'bg-indigo-100 text-indigo-600' },
+                            blue:   { active: 'bg-white text-blue-600 shadow-sm border border-gray-200/50',   badge: 'bg-blue-100 text-blue-600' },
+                            purple: { active: 'bg-white text-purple-600 shadow-sm border border-gray-200/50', badge: 'bg-purple-100 text-purple-600' },
+                            amber:  { active: 'bg-white text-amber-600 shadow-sm border border-gray-200/50',  badge: 'bg-amber-100 text-amber-600' },
+                        };
+                        const colors = colorMap[tab.color] || colorMap.indigo;
+                        return (
+                            <motion.button
+                                layout
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                transition={{ duration: ANIMATION_DURATION }}
+                                key={tab.key}
+                                onClick={() => {
+                                    if (!isTabExpanded) {
+                                        setIsTabExpanded(true);
+                                    } else {
+                                        setActiveTab(tab.key);
+                                        setIsTabExpanded(false);
+                                    }
+                                }}
+                                className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap min-w-[60px] ${
+                                    isActive ? colors.active : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                {tab.label}
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${
+                                    isActive ? colors.badge : 'bg-gray-200 text-gray-500'
+                                }`}>{count}</span>
+                            </motion.button>
+                        );
+                    })}
+                </AnimatePresence>
+            </motion.div>
 
             {/* Queue - KTV Nội bộ (Tabs: all, A, B, D) */}
             {activeTab !== 'TYPE_C' && (
