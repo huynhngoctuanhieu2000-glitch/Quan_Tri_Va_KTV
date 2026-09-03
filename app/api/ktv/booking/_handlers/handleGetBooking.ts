@@ -399,7 +399,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                         .replace(/[,\s]*Tránh:\s*[A-Z_,\s]+/gi, '')
                         .replace(/[,\s]*Avoid:\s*[A-Z_,\s]+/gi, '')
                         // Clean up leftover artifacts: lines ending with ":", empty lines, double spaces
-                        .replace(/^[\s""-]*\S+:\s*$/gm, '')
+                        .replace(/^[\s""-]*.+:\s*$/gm, '')
                         .replace(/^-\s*$/gm, '')
                         .replace(/^\s*[""]?\s*-?\s*[""]?\s*$/gm, '')
                         .replace(/\s{2,}/g, ' ')
