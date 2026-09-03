@@ -269,7 +269,8 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
             supabase
                 .from('BookingItems')
                 .select('*')
-                .eq('bookingId', bookingId!),
+                .eq('bookingId', bookingId!)
+                .order('id'),
 
             // Q4: Fetch reward config
             supabase
