@@ -346,14 +346,14 @@ export default function KTVHistoryPage() {
               <p className="text-xs text-gray-400">Bấm vào đơn để xem chi tiết</p>
           </div>
 
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="bg-indigo-600 text-white rounded-2xl px-2 py-3 shadow-lg shadow-indigo-100 flex flex-col justify-between">
               <p className="text-[8px] font-bold uppercase tracking-widest text-indigo-200">Thu nhập</p>
-              <p className="text-sm font-black tabular-nums mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{(summary.totalGross || 0).toLocaleString('vi-VN')}đ</p>
+              <p className="text-sm font-black tabular-nums mt-0.5 break-words">{(summary.totalGross || 0).toLocaleString('vi-VN')}đ</p>
             </div>
             <div className="bg-emerald-500 text-white rounded-2xl px-2 py-3 shadow-lg shadow-emerald-100 flex flex-col justify-between">
               <p className="text-[8px] font-bold uppercase tracking-widest text-emerald-100">Thực nhận</p>
-              <p className="text-sm font-black tabular-nums mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{(summary.totalNet || 0).toLocaleString('vi-VN')}đ</p>
+              <p className="text-sm font-black tabular-nums mt-0.5 break-words">{(summary.totalNet || 0).toLocaleString('vi-VN')}đ</p>
             </div>
             <div className="bg-white border border-gray-100 rounded-2xl px-2 py-3 shadow-sm flex flex-col justify-between items-center text-center">
               <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Đơn</p>

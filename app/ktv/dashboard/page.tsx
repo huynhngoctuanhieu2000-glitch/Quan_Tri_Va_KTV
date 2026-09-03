@@ -1028,17 +1028,17 @@ function ScreenTimer({ logic }: { logic: any }) {
     <div className="p-4 md:p-8 h-full flex flex-col pt-8 md:pt-12 md:max-w-4xl md:mx-auto w-full">
       {/* Header Info */}
       <div className="flex justify-between items-start mb-6 px-2">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-black text-emerald-700 leading-tight tracking-tight flex items-center gap-2 flex-wrap">
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-black text-emerald-700 leading-tight tracking-tight flex items-center gap-2 flex-wrap break-words">
             {item.guest_label && (
                <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl text-lg flex items-center gap-1 shrink-0 border border-emerald-200">
                  👨 {item.guest_label}
                </span>
             )}
-            <span>{allTimerServiceNames.length > 1 ? formatMultiServiceNames(ktvSegments) : item.service_name}</span>
+            <span className="min-w-0 break-words">{allTimerServiceNames.length > 1 ? formatMultiServiceNames(ktvSegments) : item.service_name}</span>
           </h1>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-slate-800 font-black">
+          <div className="flex flex-wrap items-center gap-3 gap-y-1">
+            <div className="flex items-center gap-1.5 text-slate-800 font-black shrink-0">
               <span className="text-[10px] text-slate-400 uppercase tracking-widest">
                 {ktvSegments.length > 1 && !shouldMerge ? `Chặng ${activeSegmentIndex + 1}` : 'Phòng'}
               </span>
@@ -1047,12 +1047,14 @@ function ScreenTimer({ logic }: { logic: any }) {
                 {(currentSeg?.bedId || booking?.assignedBedId) && ` (G: ${(currentSeg?.bedId || booking.assignedBedId).split('-').pop()})`}
               </span>
             </div>
-            <div className="w-px h-3 bg-slate-200" />
-            <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs">
+            <div className="w-px h-3 bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-1.5 text-slate-400 font-bold text-xs shrink-0">
               <Clock size={14} />
               <span>{displayDuration} phút</span>
             </div>
-            <ServiceTypeLabel serviceId={item.serviceId} />
+            <div className="shrink-0">
+              <ServiceTypeLabel serviceId={item.serviceId} />
+            </div>
           </div>
           {/* CoWorkers display in Timer - chỉ khi cùng 1 dịch vụ */}
           {(() => {
@@ -1065,7 +1067,7 @@ function ScreenTimer({ logic }: { logic: any }) {
             ) : null;
           })()}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           {isTimerRunning && (
             <button 
               onClick={() => logic.forceRefresh?.()}
@@ -1247,7 +1249,7 @@ function ScreenTimer({ logic }: { logic: any }) {
         <motion.div 
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="flex flex-col gap-3 mb-12"
+          className="flex flex-col gap-3 pb-safe"
         >
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <ActionGridButton 
@@ -1376,7 +1378,7 @@ function ScreenReview({ logic }: { logic: any }) {
   };
 
   return (
-    <div className="p-5 pt-10 space-y-6 max-w-lg mx-auto">
+    <div className="p-5 pt-10 space-y-6 max-w-lg mx-auto pb-28">
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
@@ -1441,7 +1443,7 @@ function ScreenReview({ logic }: { logic: any }) {
       </div>
 
       {/* Submit Button */}
-      <div className="pb-10 pt-2">
+      <div className="pt-2">
         <button
           onClick={() => handleSubmitReview({ personality: selectedTraits })}
           disabled={logic.isLoading}
@@ -1723,21 +1725,21 @@ function ScreenReward({ logic }: { logic: any }) {
       </div>
 
       {workType === 'TYPE_D' ? (
-          <div className="bg-white border-2 border-indigo-100 rounded-[24px] p-4 w-full shadow-lg max-w-[280px]">
+          <div className="bg-white border-2 border-indigo-100 rounded-[24px] p-4 w-full shadow-lg max-w-xs sm:max-w-sm">
               <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.1em] block mb-1">TUA ĐÃ HOÀN THÀNH</span>
               <div className="text-sm font-bold text-slate-600">
                   Vui lòng xem trong Ví để biết chi tiết thu nhập.
               </div>
           </div>
       ) : (
-          <div className="bg-white border-2 border-amber-100 rounded-[24px] p-4 w-full shadow-lg max-w-[280px]">
+          <div className="bg-white border-2 border-amber-100 rounded-[24px] p-4 w-full shadow-lg max-w-xs sm:max-w-sm">
             <span className="text-[9px] font-black text-amber-600 uppercase tracking-[0.2em] block mb-1">Tua bạn nhận được</span>
             <div className="text-3xl font-black text-slate-800 tabular-nums">+{commission.toLocaleString('vi-VN')}đ</div>
           </div>
       )}
 
       {/* --- FORM ĐÁNH GIÁ QUẦY --- */}
-      <div className="w-full max-w-[280px] bg-slate-50 border border-slate-100 p-4 rounded-3xl mt-4">
+      <div className="w-full max-w-xs sm:max-w-sm bg-slate-50 border border-slate-100 p-4 rounded-3xl mt-4">
         {!isSubmitted ? (
           <>
             <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-widest mb-3">Đánh giá Quầy Lễ Tân</h3>
@@ -1756,7 +1758,7 @@ function ScreenReward({ logic }: { logic: any }) {
               placeholder="Nhập nhận xét của bạn về sự hỗ trợ của Quầy (Tuỳ chọn)..."
               value={note}
               onChange={e => setNote(e.target.value)}
-              className="w-full h-20 px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-3 bg-white resize-none"
+              className="w-full h-24 px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-3 bg-white resize-none"
             />
 
             {/* Images */}
@@ -1791,11 +1793,12 @@ function ScreenReward({ logic }: { logic: any }) {
       </div>
       {/* ------------------------- */}
 
-      <button
-        onClick={() => goToDashboard(booking?.nextBookingId)}
-        className={`w-full max-w-[280px] py-4 rounded-[20px] font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 mt-4
-          ${booking?.nextBookingId 
-            ? 'bg-amber-600 text-white shadow-amber-200' 
+      <div className="w-full max-w-xs sm:max-w-sm mt-4 pb-safe">
+        <button
+          onClick={() => goToDashboard(booking?.nextBookingId)}
+          className={`w-full py-4 rounded-[20px] font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2
+            ${booking?.nextBookingId 
+              ? 'bg-amber-600 text-white shadow-amber-200' 
             : 'bg-slate-900 text-white'}`}
       >
         {booking?.nextBookingId ? (

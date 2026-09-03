@@ -32,8 +32,6 @@ export const viewport = {
   themeColor: '#D4AF37',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 import { NotificationProvider } from '@/components/NotificationProvider';
