@@ -412,7 +412,13 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                     : (opts.noteForKtv || '');
                 const focusAreas = formatBodyAreas(opts.focus || i.focus || opts.focusArea || '');
                 const avoidAreas = formatBodyAreas(opts.avoid || i.avoid || '');
-                const strength = normalizeStrength(opts.strength || '');
+                // Fallback: parse strength from opts.note if not in dedicated field
+                let strengthRaw = opts.strength || '';
+                if (!strengthRaw && opts.note) {
+                    const strengthMatch = opts.note.match(/Lực:\s*(\S+)/i) || opts.note.match(/Strength:\s*(\S+)/i);
+                    if (strengthMatch) strengthRaw = strengthMatch[1];
+                }
+                const strength = normalizeStrength(strengthRaw);
                 const therapistGender = opts.therapist || ''; 
 
                 let finalDuration = svc?.duration || (sId.includes('nhs0000') ? 1 : 60);
