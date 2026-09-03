@@ -387,7 +387,24 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 } else if (booking?.notes && typeof booking.notes === 'string' && !booking.notes.trim().startsWith('{')) {
                     bCustomerNote = String(booking.notes);
                 }
-                const customerNote = [bCustomerNote, opts.note, i.customerNote].filter(Boolean).join(' | ');
+                // Clean opts.note: remove focus/strength/avoid info already shown as parsed badges
+                let cleanedOptsNote = opts.note || '';
+                if (cleanedOptsNote) {
+                    // Remove patterns like "Tập trung: ARM, BACK, ..., WHOLE_BODY" or "Lực: Vừa" anywhere in text
+                    cleanedOptsNote = cleanedOptsNote
+                        .replace(/[,\s]*Tập trung:\s*[A-Z_,\s]+/gi, '')
+                        .replace(/[,\s]*Focus:\s*[A-Z_,\s]+/gi, '')
+                        .replace(/[,\s]*Lực:\s*\S+/gi, '')
+                        .replace(/[,\s]*Strength:\s*\S+/gi, '')
+                        .replace(/[,\s]*Tránh:\s*[A-Z_,\s]+/gi, '')
+                        .replace(/[,\s]*Avoid:\s*[A-Z_,\s]+/gi, '')
+                        // Clean up leftover artifacts: empty lines, trailing dashes, double spaces
+                        .replace(/^-\s*$/gm, '')
+                        .replace(/^\s*[""]?\s*-?\s*[""]?\s*$/gm, '')
+                        .replace(/\s{2,}/g, ' ')
+                        .trim();
+                }
+                const customerNote = [bCustomerNote, cleanedOptsNote, i.customerNote].filter(Boolean).join(' | ');
                 const notesForKtvs = opts.notesForKtvs || {};
                 const noteForKtv = (technicianCode && notesForKtvs[technicianCode]) 
                     ? notesForKtvs[technicianCode] 
