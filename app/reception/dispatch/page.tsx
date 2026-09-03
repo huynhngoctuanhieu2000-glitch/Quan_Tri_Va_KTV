@@ -2851,6 +2851,26 @@ if (!hasPermission('dispatch_board')) {
                   setContextMenu(null);
                 }
               }}
+              onFinishEarlyPaused={async (orderId, subOrder) => {
+                try {
+                  const res = await fetch('/api/ktv/finish-early-paused', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      bookingId: orderId,
+                      itemIds: subOrder.services.map((s: any) => s.id)
+                    })
+                  });
+                  if (res.ok) {
+                    fetchData();
+                  } else {
+                    const err = await res.json();
+                    alert('Lỗi kết thúc đơn: ' + (err.error || 'Unknown error'));
+                  }
+                } catch (err: any) {
+                  alert('Lỗi kết thúc đơn: ' + err.message);
+                }
+              }}
               onReviewClick={(service) => setReviewModalService(service)}
             />
           ) : activeMode === 'TURN_QUEUE' ? (

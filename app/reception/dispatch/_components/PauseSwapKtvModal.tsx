@@ -190,9 +190,9 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
                       animate={{ opacity: 1, height: 'auto' }}
                       className="space-y-4"
                     >
-                      <div className="p-3 bg-rose-50 text-rose-600 rounded-lg text-sm font-medium flex gap-2">
+                      <div className="p-3 bg-amber-50 text-amber-700 rounded-lg text-sm font-medium flex gap-2">
                         <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                        KTV bị đổi sẽ tự động bị hủy tua này và nhận 0đ.
+                        KTV bị đổi được tính lương theo đúng thời gian đã làm; KTV mới nhận phần còn lại (+ giờ bù nếu có).
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -246,7 +246,7 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
                             setExtraTimeMins(val);
                           }}
                         />
-                        <p className="text-[11px] text-gray-500 mt-1">*KTV mới luôn được hưởng tối thiểu bằng số tiền tua gốc. Bạn có thể nhập thêm giờ để KTV mới gánh bù.</p>
+                        <p className="text-[11px] text-gray-500 mt-1">*Thời gian tính lương KTV mới = (Tổng giờ dịch vụ - Giờ KTV cũ đã làm) + Giờ bù thêm.</p>
                       </div>
                     </motion.div>
                   )}

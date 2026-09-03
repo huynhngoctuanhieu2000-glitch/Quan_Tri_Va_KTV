@@ -238,27 +238,6 @@ export class BookingItemPauseService {
             throw new Error(`Thời gian bù thêm không được vượt quá thời gian của dịch vụ (${originalDuration} phút).`);
         }
 
-        // --- XỬ LÝ LƯƠNG & TUA KTV CŨ ---
-        if (businessDate) {
-            if (keepTurnForOldKtv) {
-                // Đánh dấu phạt (giữ tua) trong TurnLedger
-                await supabase
-                    .from('TurnLedger')
-                    .update({ is_punished: true })
-                    .eq('date', businessDate)
-                    .eq('booking_id', item.bookingId)
-                    .eq('employee_id', oldKtvId);
-            } else {
-                // Xóa hẳn TurnLedger -> Hủy tua
-                await supabase
-                    .from('TurnLedger')
-                    .delete()
-                    .eq('date', businessDate)
-                    .eq('booking_id', item.bookingId)
-                    .eq('employee_id', oldKtvId);
-            }
-        }
-
         // Hạ KTV cũ xuống waiting (nếu đang ở working với đơn này)
         if (businessDate) {
             await supabase
@@ -268,11 +247,40 @@ export class BookingItemPauseService {
                 .eq('date', businessDate);
         }
 
+        let parsedSegments = item.segments;
+        let isSegString = typeof parsedSegments === 'string';
+        if (isSegString) {
+            try {
+                parsedSegments = JSON.parse(parsedSegments);
+            } catch {
+                parsedSegments = [];
+            }
+        }
+        let segments = Array.isArray(parsedSegments) ? [...parsedSegments] : [];
+        
+        // --- XỬ LÝ LƯƠNG & TUA KTV CŨ ---
+        const aIndex = segments.findIndex(seg => seg.ktvId === oldKtvId && !seg.endTime);
+        let oldWorkedMins = 0;
+        const pauseTime = item.pauseStart || new Date().toISOString();
+        if (aIndex !== -1) {
+            const oldSeg = segments[aIndex];
+            const pauseTimeMs = new Date(pauseTime).getTime();
+            const oldStartMs = oldSeg.actualStartTime ? new Date(oldSeg.actualStartTime).getTime() : pauseTimeMs;
+            oldWorkedMins = Math.max(0, Math.round((pauseTimeMs - oldStartMs) / 60000));
+            
+            segments[aIndex] = {
+                ...oldSeg,
+                endTime: pauseTime,
+                actualEndTime: pauseTime,
+                customCommissionDuration: oldWorkedMins,
+                note: 'CHANGED'
+            };
+        }
+
         // --- NẾU CÓ KTV MỚI VÀO THAY ---
-        let customCommissionDuration = 0;
         if (newKtvId) {
-            // Tính số phút KTV B làm (Trọn lương gốc + bù thêm)
-            customCommissionDuration = originalDuration + extraTimeMins;
+            // Tính số phút KTV B làm (phần còn lại + bù thêm)
+            const remainingMins = Math.max(0, originalDuration - oldWorkedMins) + extraTimeMins;
 
             if (businessDate) {
                 // Thêm tua cho KTV B
@@ -292,43 +300,24 @@ export class BookingItemPauseService {
                     .eq('employee_id', newKtvId)
                     .eq('date', businessDate);
             }
+            
+            segments.push({
+                ktvId: newKtvId,
+                startTime: new Date().toISOString(), 
+                actualStartTime: new Date().toISOString(), // set để commission tính đúng
+                endTime: null,
+                duration: remainingMins, // để calculateItemExpectedDuration đọc
+                customCommissionDuration: remainingMins,
+                note: 'TAKEOVER'
+            });
         }
 
-        // --- CẬP NHẬT TECHNICIAN CODES VÀ SEGMENTS ---
+        // --- CẬP NHẬT TECHNICIAN CODES ---
         let newTechCodes = Array.isArray(item.technicianCodes) ? [...item.technicianCodes] : [];
         newTechCodes = newTechCodes.filter(id => id !== oldKtvId);
         
         if (newKtvId && !newTechCodes.includes(newKtvId)) {
             newTechCodes.push(newKtvId);
-        }
-
-        let parsedSegments = item.segments;
-        let isSegString = typeof parsedSegments === 'string';
-        if (isSegString) {
-            try {
-                parsedSegments = JSON.parse(parsedSegments);
-            } catch {
-                parsedSegments = [];
-            }
-        }
-        let segments = Array.isArray(parsedSegments) ? [...parsedSegments] : [];
-        // Chốt segment cũ
-        const aIndex = segments.findIndex(seg => seg.ktvId === oldKtvId && !seg.endTime);
-        const pauseTime = item.pauseStart || new Date().toISOString();
-        if (aIndex !== -1) {
-            segments[aIndex].endTime = pauseTime;
-            segments[aIndex].note = newKtvId ? 'Bị đổi người (Phạt)' : 'Rút ra làm dịch vụ khác';
-        }
-
-        // Thêm segment mới nếu có KTV mới
-        if (newKtvId) {
-            segments.push({
-                ktvId: newKtvId,
-                startTime: new Date().toISOString(), // Sẽ chạy tiếp từ lúc Resume
-                endTime: null,
-                customCommissionDuration: customCommissionDuration > 0 ? customCommissionDuration : undefined,
-                note: 'Vào cứu bộ'
-            });
         }
 
         const { error: errUpdate } = await supabase

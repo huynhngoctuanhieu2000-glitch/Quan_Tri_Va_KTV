@@ -77,23 +77,36 @@ export class KtvTypeDWalletService {
             }
         }
 
-        let allBookings: any[] = [];
+        let allBookingItems: any[] = [];
         let page = 0;
         const pageSize = 1000;
         while (true) {
             const { data, error } = await supabase
-                .from('Bookings')
+                .from('BookingItems')
                 .select(`
-                    id, timeStart, status, billCode, createdAt, rating,
-                    BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip, itemRating, ktvRatings, options, handover_status, handover_comment )
+                    id, serviceId, technicianCodes, segments, status, tip, itemRating, ktvRatings, options, handover_status, handover_comment,
+                    Bookings!inner ( id, timeStart, status, billCode, createdAt, rating )
                 `)
-                .gte('timeStart', realtimeStartStr)
+                .contains('technicianCodes', [staffId])
+                .gte('Bookings.timeStart', realtimeStartStr)
                 .range(page * pageSize, (page + 1) * pageSize - 1);
                 
             if (error || !data || data.length === 0) break;
-            allBookings = allBookings.concat(data);
+            allBookingItems = allBookingItems.concat(data);
             page++;
         }
+
+        const bookingsMap: Record<string, any> = {};
+        allBookingItems.forEach(item => {
+            const b = item.Bookings;
+            if (!bookingsMap[b.id]) {
+                bookingsMap[b.id] = { ...b, BookingItems: [] };
+            }
+            const cleanItem = { ...item };
+            delete cleanItem.Bookings;
+            bookingsMap[b.id].BookingItems.push(cleanItem);
+        });
+        const allBookings = Object.values(bookingsMap);
 
         const { data: services } = await supabase.from('Services').select('id, is_utility');
         const svcIsUtilityMap: Record<string, boolean> = {};

@@ -96,6 +96,7 @@ interface KanbanBoardProps {
     staffWorkTypeMap?: Record<string, string>;
     staffs?: any[];
     onSelectOrder?: (orderId: string) => void;
+    onFinishEarlyPaused?: (orderId: string, subOrder: any) => void;
 }
 
 const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services, subOrder?: any) => {
@@ -1060,22 +1061,26 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        subOrder.rating && (() => {
-                                                            const currentRating = Math.min(subOrder.rating, 4);
-                                                            const ratingLabel = currentRating >= 4 ? 'Xuất sắc' : currentRating >= 3 ? 'Tốt' : currentRating >= 2 ? 'Khá' : 'Tệ';
-                                                            const ratingColor = currentRating >= 4 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : currentRating >= 3 ? 'text-blue-600 bg-blue-50 border-blue-200' : currentRating >= 2 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-200';
-                                                            return (
-                                                                <div className={`mb-3 rounded-xl px-3 py-2 border flex flex-col items-center justify-center gap-1 ${ratingColor}`}>
-                                                                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Đánh giá chất lượng phục vụ</span>
-                                                                    <div className="flex items-center gap-1">
-                                                                        {[1, 2, 3, 4].map((s) => (
-                                                                            <Star key={s} size={16} fill={currentRating >= s ? 'currentColor' : 'none'} strokeWidth={currentRating >= s ? 0 : 2} className={currentRating >= s ? '' : 'opacity-30'} />
-                                                                        ))}
-                                                                        <span className="ml-1.5 text-[12px] font-black">{ratingLabel}</span>
-                                                                    </div>
+                                                        subOrder.rating ? (
+                                                            <div className={`mb-3 rounded-xl px-3 py-2 border flex flex-col items-center justify-center gap-1 ${
+                                                                Math.min(subOrder.rating, 4) >= 4 ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 
+                                                                Math.min(subOrder.rating, 4) >= 3 ? 'text-blue-600 bg-blue-50 border-blue-200' : 
+                                                                Math.min(subOrder.rating, 4) >= 2 ? 'text-amber-600 bg-amber-50 border-amber-200' : 
+                                                                'text-red-600 bg-red-50 border-red-200'
+                                                            }`}>
+                                                                <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Đánh giá chất lượng phục vụ</span>
+                                                                <div className="flex items-center gap-1">
+                                                                    {[1, 2, 3, 4].map((s) => (
+                                                                        <Star key={s} size={16} fill={Math.min(subOrder.rating, 4) >= s ? 'currentColor' : 'none'} strokeWidth={Math.min(subOrder.rating, 4) >= s ? 0 : 2} className={Math.min(subOrder.rating, 4) >= s ? '' : 'opacity-30'} />
+                                                                    ))}
+                                                                    <span className="ml-1.5 text-[12px] font-black">{
+                                                                        Math.min(subOrder.rating, 4) >= 4 ? 'Xuất sắc' : 
+                                                                        Math.min(subOrder.rating, 4) >= 3 ? 'Tốt' : 
+                                                                        Math.min(subOrder.rating, 4) >= 2 ? 'Khá' : 'Tệ'
+                                                                    }</span>
                                                                 </div>
-                                                            );
-                                                        })()
+                                                            </div>
+                                                        ) : null
                                                     )
                                                 )}
 

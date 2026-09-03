@@ -114,19 +114,20 @@ export async function GET(request: Request) {
         }
 
         // 2. Commission & Tips (from Bookings & BookingItems) CHỈ lấy từ ngày hiện tại
-        let allBookings: any[] = [];
+        let allBookingItems: any[] = [];
         let page = 0;
         const pageSize = 1000;
         
         while (true) {
             const { data, error } = await supabase
-                .from('Bookings')
+                .from('BookingItems')
                 .select(`
-                    id, timeStart, timeEnd, status, technicianCode, billCode, createdAt,
-                    BookingItems:BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status, tip, itemRating, ktvRatings, options, handover_status, handover_comment )
+                    id, serviceId, technicianCodes, segments, status, tip, itemRating, ktvRatings, options, handover_status, handover_comment,
+                    Bookings!inner ( id, timeStart, timeEnd, status, technicianCode, billCode, createdAt )
                 `)
-                .gte('timeStart', realtimeStartStr)
-                .not('status', 'in', '("CANCELLED","NEW")')
+                .contains('technicianCodes', [techCode])
+                .gte('Bookings.timeStart', realtimeStartStr)
+                .not('Bookings.status', 'in', '("CANCELLED","NEW")')
                 .range(page * pageSize, (page + 1) * pageSize - 1);
                 
             if (error) {
@@ -134,10 +135,21 @@ export async function GET(request: Request) {
                 break;
             }
             if (!data || data.length === 0) break;
-            allBookings = allBookings.concat(data);
+            allBookingItems = allBookingItems.concat(data);
             page++;
         }
-        const bookings = allBookings;
+
+        const bookingsMap: Record<string, any> = {};
+        allBookingItems.forEach(item => {
+            const b = item.Bookings;
+            if (!bookingsMap[b.id]) {
+                bookingsMap[b.id] = { ...b, BookingItems: [] };
+            }
+            const cleanItem = { ...item };
+            delete cleanItem.Bookings;
+            bookingsMap[b.id].BookingItems.push(cleanItem);
+        });
+        const bookings = Object.values(bookingsMap);
 
         const { data: services } = await supabase.from('Services').select('id, duration, is_utility');
         const svcDurationMap: Record<string, number> = {};
