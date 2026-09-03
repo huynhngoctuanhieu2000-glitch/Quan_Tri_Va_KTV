@@ -141,13 +141,12 @@ export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa', d
           </div>
         </div>
 
-        {(disablePullToRefresh || isServingLocked) ? (
-          MainContent
-        ) : (
-          <PullToRefresh onRefresh={handleGlobalRefresh}>
-            {MainContent}
-          </PullToRefresh>
-        )}
+        {/* 🛡️ LUÔN wrap PullToRefresh — chỉ toggle isDisabled.
+            Trước đây conditional wrap/unwrap khiến React unmount+remount children
+            mỗi khi isServingLocked toggle → vòng lặp vô hạn với screen state của KTV. */}
+        <PullToRefresh onRefresh={handleGlobalRefresh} isDisabled={disablePullToRefresh || isServingLocked}>
+          {MainContent}
+        </PullToRefresh>
       </main>
       {!hideAI && !isServingLocked && <AIAssistant />}
     </div>
