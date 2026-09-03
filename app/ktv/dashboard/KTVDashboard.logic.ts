@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { useNotifications } from '@/components/NotificationProvider';
 import { KtvCommissionService } from '@/lib/services/KtvCommissionService';
+import { useToast } from '@/components/ui/Toast';
 
 export type ScreenState = 'DASHBOARD' | 'TIMER' | 'REVIEW' | 'REWARD' | 'HANDOVER';
 
@@ -55,6 +56,7 @@ export interface DashboardConfig {
 export function useKTVDashboard(config?: DashboardConfig) {
     const { user, hasPermission } = useAuth();
     const { setKtvScreen } = useNotifications();
+    const { addToast } = useToast();
     const ktvIdRaw = config?.testTechCode || user?.code || user?.id;
     const ktvId = ktvIdRaw ? ktvIdRaw.toUpperCase() : undefined;
     const canViewWallet = hasPermission('ktv_wallet');
@@ -1577,10 +1579,10 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 message: fullMessage
             });
             setShowRoomIssueModal(false);
-            alert('Đã gửi báo cáo sự cố về Lễ tân!');
+            addToast('Đã gửi báo cáo sự cố về Lễ tân!', 'success');
         } catch (err) {
             console.error('Error reporting room issue:', err);
-            alert('Lỗi gửi báo cáo!');
+            addToast('Lỗi gửi báo cáo!', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -1646,7 +1648,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setIsPrepping(true);
             setScreen('TIMER');
         } else {
-            alert('Lỗi xác nhận chuẩn bị: ' + (res.error || 'Unknown error'));
+            addToast('Lỗi xác nhận chuẩn bị: ' + (res.error || 'Unknown error'), 'error');
         }
         setIsLoading(false);
     };
@@ -1727,11 +1729,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 setScreen('TIMER');
             } else {
                 console.error('❌ [KTV Logic] Start error:', res.error);
-                alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
+                addToast('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'), 'error');
             }
         } catch (error: any) {
             console.error('❌ [KTV Logic] Exception during Start:', error);
-            alert('Lỗi hệ thống khi bắt đầu tính giờ: ' + (error.message || 'Unknown error'));
+            addToast('Lỗi hệ thống khi bắt đầu tính giờ: ' + (error.message || 'Unknown error'), 'error');
         } finally {
             setIsLoading(false);
         }
@@ -1800,7 +1802,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 if (fetchBookingRef.current) fetchBookingRef.current();
             } else {
                 console.error('❌ [AutoAdvance] Error:', res.error);
-                alert('Lỗi chuyển chặng: ' + (res.error || 'Unknown error'));
+                addToast('Lỗi chuyển chặng: ' + (res.error || 'Unknown error'), 'error');
             }
             setIsLoading(false);
         } else {
@@ -1840,7 +1842,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 isTransitioningRef.current = false;
                 postServiceBookingIdRef.current = null;
                 try { localStorage.removeItem(POST_SERVICE_BOOKING_KEY); } catch (e) {}
-                alert('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'));
+                addToast('Lỗi cập nhật trạng thái: ' + (res.error || 'Unknown error'), 'error');
             }
             setIsLoading(false);
         }
@@ -1879,7 +1881,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             
             if (!res.success) {
                 console.error('❌ [KTV Logic] Lỗi khi gửi đánh giá:', res.error);
-                alert('Không thể lưu đánh giá: ' + (res.error || 'Vui lòng thử lại'));
+                addToast('Không thể lưu đánh giá: ' + (res.error || 'Vui lòng thử lại'), 'error');
                 return; // 🚫 Chặn không cho đi tiếp
             }
             
@@ -1896,7 +1898,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setTimeout(() => isTransitioningRef.current = false, 1000);
         } catch (err) {
             console.error('❌ [KTV Logic] Network error submitting review:', err);
-            alert('Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!');
+            addToast('Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -2112,7 +2114,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
         setIsSkippingHandover(true);
         try {
             const itemId = booking.assignedItemId || booking.assignedItemIds?.[0];
-            if (!itemId) return;
+            if (!itemId) {
+                addToast('Không tìm thấy mã item để bỏ qua.', 'error');
+                setIsSkippingHandover(false);
+                return;
+            }
             const res = await apiClient.post<any>('/api/ktv/handover/skip', {
                 bookingItemId: itemId,
                 ktvCode: ktvId,
@@ -2121,7 +2127,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 // Skip successful → go to REWARD or next order
                 handleFinishHandover();
             } else {
-                alert(res.error || 'Không thể bỏ qua. Bạn đã nợ quá nhiều đơn.');
+                addToast(res.error || 'Không thể bỏ qua. Bạn đã nợ quá nhiều đơn.', 'error');
             }
         } catch (e) {
             console.error('[Handover V5] Skip error:', e);
@@ -2138,7 +2144,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
             if (res.success) {
                 console.log(`Sent interaction: ${type}`);
             } else {
-                alert('Lỗi gửi yêu cầu');
+                addToast('Lỗi gửi yêu cầu', 'error');
             }
         } catch (err) {
             console.error('Error sending interaction:', err);
@@ -2155,7 +2161,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         // Thay vào đó gửi Interaction 'EARLY_EXIT' để Lễ tân xử lý
         // Khi lễ tân xử lý xong (Hoàn tất trên Dispatch Board), Realtime sẽ tự đưa KTV qua trang REVIEW/REWARD
         await handleInteraction('EARLY_EXIT');
-        alert('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.');
+        addToast('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.', 'success');
     };
 
     const handlePause = async () => {
@@ -2168,7 +2174,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         try {
             const action = isPaused ? 'RESUME' : 'PAUSE';
             if (action === 'RESUME') {
-                alert('Chỉ Lễ tân mới có quyền mở lại ca làm bị tạm dừng!');
+                addToast('Chỉ Lễ tân mới có quyền mở lại ca làm bị tạm dừng!', 'error');
                 setIsLoading(false);
                 return;
             }
@@ -2185,11 +2191,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
             if (res.success) {
                 if (fetchBookingRef.current) await fetchBookingRef.current();
             } else {
-                alert(res.error || `Lỗi ${isPaused ? 'tiếp tục' : 'tạm dừng'} đơn`);
+                addToast(res.error || `Lỗi ${isPaused ? 'tiếp tục' : 'tạm dừng'} đơn`, 'error');
             }
         } catch (e: any) {
             console.error('[KTV] Pause/Resume error:', e);
-            alert(e.message || `Lỗi ${isPaused ? 'tiếp tục' : 'tạm dừng'} đơn`);
+            addToast(e.message || `Lỗi ${isPaused ? 'tiếp tục' : 'tạm dừng'} đơn`, 'error');
         } finally {
             setIsLoading(false);
         }

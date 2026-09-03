@@ -9,7 +9,7 @@ import {
   CheckSquare, Check, XCircle, AlertTriangle, CheckCircle, ShieldAlert, Dumbbell, Target, QrCode, ScanLine, Search, Trash2, Camera, LogOut, FileImage, UploadCloud, FileDown,
   Info, LogIn, ChevronLeft, CalendarClock, History, Calendar, Heart, Shield, Star, Crown, Lock, ChevronDown, CheckIcon, MapPinIcon, LayoutDashboard, CalendarCheck, FileOutput, ShieldCheck,
   Zap, MessageCircle, XOctagon, Hand, ThumbsUp, Map as MapIcon, Navigation2, RefreshCw, Smartphone, MonitorPlay, Wifi, Coffee, Sparkles, Plus, Wallet, FilePlus, ExternalLink, Link as LinkIcon, HandHeart, CheckCheck, HandMetal, Smile, Image as ImageIcon,
-  ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Users, Loader2, ChevronUp, Ban
+  ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Users, Loader2, ChevronUp, Ban, ScrollText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'next/navigation';
@@ -18,6 +18,8 @@ import Image from 'next/image';
 import { useKTVDashboard } from './KTVDashboard.logic';
 import { ROOM_ISSUE_OPTIONS } from './KTVDashboard.logic';
 import { useNotifications } from '@/components/NotificationProvider';
+import { useToast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { supabase } from '@/lib/supabase';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
@@ -308,6 +310,7 @@ function WorkingTimeline({ segments, activeIndex, actualStartTime, shouldMerge, 
 }
 
 function ScreenDashboard({ logic }: { logic: any }) {
+  const { addToast } = useToast();
   const [showNoti, setShowNoti] = React.useState(false);
   logic.showNoti = showNoti;
   logic.setShowNoti = setShowNoti;
@@ -334,18 +337,18 @@ function ScreenDashboard({ logic }: { logic: any }) {
       });
       if (res.success) {
         if (res.isExempted) {
-          alert('✅ Bạn đã được miễn phạt do làm việc liên tục đạt ngưỡng. Lễ tân đã nhận được báo cáo.');
+          addToast('✅ Bạn đã được miễn phạt do làm việc liên tục đạt ngưỡng. Lễ tân đã nhận được báo cáo.', 'success');
         } else {
-          alert(`⚠️ Bạn đã bị trừ ${res.penaltyPoints} điểm chuyên cần. Lễ tân đã nhận được báo cáo.`);
+          addToast(`⚠️ Bạn đã bị trừ ${res.penaltyPoints} điểm chuyên cần. Lễ tân đã nhận được báo cáo.`, 'warning');
         }
         setShowRejectModal(false);
         // Refresh dashboard data
         logic.forceRefresh();
       } else {
-        alert('Lỗi: ' + res.error);
+        addToast('Lỗi: ' + res.error, 'error');
       }
     } catch (e: any) {
-      alert('Lỗi kết nối: ' + e.message);
+      addToast('Lỗi kết nối: ' + e.message, 'error');
     } finally {
       logic.setIsLoading(false);
     }
@@ -640,34 +643,29 @@ function ScreenDashboard({ logic }: { logic: any }) {
           {/* ─── BENTO GRID ─── */}
           <div className="flex flex-col gap-4">
 
-             {/* ─── GRID 2x2: Điểm, Sức Bền, Chỉ Tiêu, Mã QR ─── */}
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* 1. Điểm chuyên cần */}
-                {logic.disciplineStatus && (
-                   <div className={`p-4 rounded-[32px] border ${logic.disciplineStatus.totalPoints <= logic.disciplineStatus.demotionThreshold + 5 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]'} flex flex-col items-center justify-center relative`}>
-                      <h3 className="font-bold text-[10px] uppercase tracking-widest mb-3 flex items-center gap-1.5 text-slate-500">
-                         <ShieldAlert size={14} /> Điểm số
-                      </h3>
-                      <div className={`w-16 h-16 rounded-full flex items-center justify-center border-4 ${logic.disciplineStatus.totalPoints <= logic.disciplineStatus.demotionThreshold + 5 ? 'border-red-500 text-red-600 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse' : 'border-indigo-500 text-indigo-700'}`}>
-                         <span className="font-black text-xl">{logic.disciplineStatus.totalPoints}</span>
-                      </div>
+             {/* ─── GRID: Quy chế, Mã QR, Chỉ Tiêu ─── */}
+             <div className="grid grid-cols-2 gap-4">
+                {/* 1. Nút mở Quy chế */}
+                <Link href="/ktv/regulations" className="bg-gradient-to-br from-emerald-700 to-teal-800 p-4 rounded-[32px] shadow-lg text-white flex flex-col items-center justify-center relative active:scale-95 transition-transform">
+                   <h3 className="font-bold text-[10px] uppercase tracking-widest mb-2 flex items-center gap-1.5 text-emerald-100">
+                      Quy chế
+                   </h3>
+                   <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
+                      <ScrollText size={32} />
                    </div>
-                )}
+                </Link>
 
-                {/* 2. Sức bền (Hình tròn) */}
-                {logic.disciplineStatus && (
-                   <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col items-center justify-center relative">
-                      <h3 className="font-bold text-[10px] uppercase tracking-widest mb-3 flex items-center gap-1.5 text-slate-500">
-                         <Dumbbell size={14} /> Sức bền
-                      </h3>
-                      <div className="w-16 h-16 rounded-full flex items-center justify-center border-4 border-amber-500 text-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.1)] relative">
-                         <span className="font-black text-sm">{Math.floor(logic.disciplineStatus.continuousWorkMins / 60)}h{logic.disciplineStatus.continuousWorkMins % 60}m</span>
-                         <span className="text-[10px] absolute -bottom-2 bg-white font-bold px-1 rounded-sm text-slate-400 border border-slate-100">/ {logic.disciplineStatus.exemptHours}h</span>
-                      </div>
+                {/* 2. Nút mở Mã QR */}
+                <button onClick={() => setShowQRModal(true)} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-[32px] shadow-lg text-white flex flex-col items-center justify-center relative active:scale-95 transition-transform">
+                   <h3 className="font-bold text-[10px] uppercase tracking-widest mb-2 flex items-center gap-1.5 text-indigo-100">
+                      Mã QR Khách
+                   </h3>
+                   <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
+                      <QrCode size={32} />
                    </div>
-                )}
+                </button>
 
-                {/* 3. Chỉ tiêu tháng (Hình tròn cam) */}
+                {/* 3. Chỉ tiêu tháng (chỉ hiện nếu có KPI) */}
                 {kpiData && kpiData.targetHours > 0 && (
                    <div className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col items-center justify-center relative">
                       <h3 className="font-bold text-[10px] uppercase tracking-widest mb-3 flex items-center gap-1.5 text-slate-500">
@@ -679,16 +677,6 @@ function ScreenDashboard({ logic }: { logic: any }) {
                       </div>
                    </div>
                 )}
-
-                {/* 4. Nút mở Mã QR */}
-                <button onClick={() => setShowQRModal(true)} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-[32px] shadow-lg text-white flex flex-col items-center justify-center relative active:scale-95 transition-transform">
-                   <h3 className="font-bold text-[10px] uppercase tracking-widest mb-2 flex items-center gap-1.5 text-indigo-100">
-                      Mã QR Khách
-                   </h3>
-                   <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
-                      <QrCode size={32} />
-                   </div>
-                </button>
              </div>
           </div>
           
@@ -877,6 +865,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
 }
 
 function ScreenTimer({ logic }: { logic: any }) {
+  const { addToast } = useToast();
   const { 
     booking, 
     timeRemaining, 
@@ -917,7 +906,7 @@ function ScreenTimer({ logic }: { logic: any }) {
           logic.setStartPhotoBase64(compressed);
       } catch (err: any) {
           if (err?.message === 'TOO_DARK') {
-              alert('⚠️ Ảnh quá tối! Vui lòng chụp lại ở nơi có đủ ánh sáng.');
+              addToast('⚠️ Ảnh quá tối! Vui lòng chụp lại ở nơi có đủ ánh sáng.', 'error');
           } else {
               const reader = new FileReader();
               reader.onload = (ev) => {
@@ -1347,6 +1336,7 @@ function ChecklistItem({ label, checked, onChange }: { label: string, checked: b
 }
 
 function ScreenReview({ logic }: { logic: any }) {
+  const { addToast } = useToast();
   const { booking, handleSubmitReview } = logic;
   const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
 
@@ -1480,6 +1470,8 @@ function ScreenReview({ logic }: { logic: any }) {
 }
 
 function ScreenHandover({ logic }: { logic: any }) {
+  const { addToast } = useToast();
+  const [confirmDialog, setConfirmDialog] = useState<any>(null);
   const { handoverPhotosBase64, setHandoverPhotosBase64, isHandoverComplete, handleFinishHandover, booking, minBrightness = 40 } = logic;
   const { dynamicChecklist = [], isFetchingChecklist, handleSkipHandover, isSkippingHandover } = logic;
   
@@ -1510,7 +1502,7 @@ function ScreenHandover({ logic }: { logic: any }) {
               newPhotos.push(compressed);
           } catch (err: any) {
               if (err?.message === 'TOO_DARK') {
-                  alert(`⚠️ Ảnh quá tối! Vui lòng chụp lại ở nơi đủ ánh sáng.`);
+                  addToast(`⚠️ Ảnh quá tối! Vui lòng chụp lại ở nơi đủ ánh sáng.`, 'error');
               } else {
                   const base64 = await new Promise<string>((resolve) => {
                       const reader = new FileReader();
@@ -1614,6 +1606,8 @@ function ScreenHandover({ logic }: { logic: any }) {
           </div>
       </div>
 
+      {confirmDialog && <ConfirmDialog {...confirmDialog} />}
+
       {/* Room Issue Report Button */}
       <button
         onClick={() => logic.setShowRoomIssueModal(true)}
@@ -1633,10 +1627,17 @@ function ScreenHandover({ logic }: { logic: any }) {
                     handleSkipHandover();
                 } else {
                     // Nếu không có đơn mới mà chưa chụp ảnh -> Hỏi cảnh báo phạt
-                    if (!window.confirm("Bạn chưa chụp đủ ảnh bàn giao, nếu bỏ qua sẽ bị phạt. Nếu bạn đã bàn giao có thể bỏ qua.")) {
-                        return;
-                    }
-                    handleFinishHandover();
+                    setConfirmDialog({
+                        open: true,
+                        title: 'Thiếu Ảnh Bàn Giao',
+                        message: 'Bạn chưa chụp đủ ảnh bàn giao, nếu bỏ qua sẽ bị phạt. Nếu bạn đã bàn giao có thể bỏ qua.',
+                        onConfirm: () => {
+                            setConfirmDialog(null);
+                            handleFinishHandover();
+                        },
+                        onCancel: () => setConfirmDialog(null),
+                        variant: 'danger'
+                    });
                 }
             } else {
                 handleFinishHandover();
@@ -1663,6 +1664,7 @@ function ScreenHandover({ logic }: { logic: any }) {
 
 
 function ScreenReward({ logic }: { logic: any }) {
+  const { addToast } = useToast();
   const { commission, goToDashboard, booking, ktvId, workType } = logic;
   const [rating, setRating] = React.useState(5);
   const [note, setNote] = React.useState('');
@@ -1686,7 +1688,7 @@ function ScreenReward({ logic }: { logic: any }) {
       }
     } catch (err) {
       console.error('Lỗi tải ảnh:', err);
-      alert('Tải ảnh thất bại!');
+      addToast('Tải ảnh thất bại!', 'error');
     } finally {
       setUploading(false);
     }
@@ -1711,10 +1713,10 @@ function ScreenReward({ logic }: { logic: any }) {
       if (data.success) {
         setIsSubmitted(true);
       } else {
-        alert(data.error || 'Có lỗi xảy ra');
+        addToast(data.error || 'Có lỗi xảy ra', 'error');
       }
     } catch (err) {
-      alert('Không thể gửi đánh giá');
+      addToast('Không thể gửi đánh giá', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -2008,7 +2010,9 @@ function ProcedureModal({ isOpen, onClose, procedure, serviceName, isVip }: { is
   );
 }
 
-function RoomIssueModal({ isOpen, onClose, onSubmit, roomId }: { isOpen: boolean, onClose: () => void, onSubmit: (issues: string[], note: string) => void, roomId: string }) {
+function RoomIssueModal({
+  isOpen, onClose, onSubmit, roomId }: { isOpen: boolean, onClose: () => void, onSubmit: (issues: string[], note: string) => void, roomId: string }) {
+  const { addToast } = useToast();
   const [selectedIssues, setSelectedIssues] = React.useState<string[]>([]);
   const [note, setNote] = React.useState('');
 
@@ -2020,7 +2024,7 @@ function RoomIssueModal({ isOpen, onClose, onSubmit, roomId }: { isOpen: boolean
 
   const handleSubmit = () => {
     if (selectedIssues.length === 0 && !note.trim()) {
-      alert('Vui lòng chọn hoặc nhập mô tả sự cố!');
+      addToast('Vui lòng chọn hoặc nhập mô tả sự cố!', 'error');
       return;
     }
     onSubmit(selectedIssues, note.trim());
@@ -2113,6 +2117,7 @@ function RejectOrderModal({
   isExempted: boolean,
   disciplineStatus: any
 }) {
+  const { addToast } = useToast();
   const [reason, setReason] = React.useState('');
   
   if (!isOpen) return null;
@@ -2169,7 +2174,7 @@ function RejectOrderModal({
         <div className="p-5 border-t border-slate-100 space-y-2">
           <button
             onClick={() => {
-               if (!reason.trim()) return alert("Vui lòng nhập lý do từ chối!");
+               if (!reason.trim()) return addToast('Vui lòng nhập lý do từ chối!', 'error');
                onSubmit(reason);
             }}
             className={`w-full py-4 ${isExempted ? 'bg-emerald-600 shadow-emerald-200' : 'bg-rose-600 shadow-rose-200'} text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2`}
