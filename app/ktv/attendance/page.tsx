@@ -10,9 +10,14 @@ import { format } from 'date-fns';
 import { useKTVAttendance } from './Attendance.logic';
 import { t } from './Attendance.i18n';
 import AttendanceTypeB from './_components/AttendanceTypeB';
+import AttendanceTypeD from './_components/AttendanceTypeD';
 import { OnCallWidget } from './_components/OnCallWidget';
+import { useToast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const KTVAttendancePage = () => {
+    const { addToast } = useToast();
+    const [confirmDialog, setConfirmDialog] = React.useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; } | null>(null);
     const {
         checkStatus,
         currentRecord,
@@ -40,7 +45,16 @@ const KTVAttendancePage = () => {
         availableUntil,
         refreshAttendanceStatus,
         incompleteTasksCount,
-        guestArrivalLock
+        guestArrivalLock,
+        todayRegistration,
+        isAdjusting,
+        setIsAdjusting,
+        adjustmentType,
+        setAdjustmentType,
+        lateExpectedTime,
+        setLateExpectedTime,
+        isSubmittingAdjustment,
+        handleAdjustmentSubmit
     } = useKTVAttendance();
 
     // 🔧 UI CONFIGURATION
@@ -69,6 +83,7 @@ const KTVAttendancePage = () => {
     const [reason, setReason] = React.useState<string>('');
     const [isOnCall, setIsOnCall] = React.useState(false);
     const [selectedShiftType, setSelectedShiftType] = React.useState<string>('');
+    const [formError, setFormError] = React.useState<string | null>(null);
     const [estimatedEndTime, setEstimatedEndTime] = React.useState<string>('');
     const [deviceIP, setDeviceIP] = React.useState<string>('');
     const [wantsToWithdraw, setWantsToWithdraw] = React.useState(false);
@@ -102,7 +117,7 @@ const KTVAttendancePage = () => {
             setIsCameraOpen(true);
         } catch (err) {
             setUseFallbackCamera(true);
-            alert('Không thể truy cập Camera trực tiếp. Hệ thống đã tự động bật "Chụp dự phòng"!');
+            addToast('Không thể truy cập Camera trực tiếp. Hệ thống tự động bật "Chụp dự phòng"!', 'error');
         }
     };
 
@@ -166,7 +181,7 @@ const KTVAttendancePage = () => {
         const brightness = getAverageBrightness(canvas);
         console.log(`🔆 [Brightness Check] Giá trị: ${brightness.toFixed(1)} | Ngưỡng: ${minPhotoBrightness}`);
         if (brightness < minPhotoBrightness) {
-            alert('⚠️ Ảnh quá tối!\nVui lòng bật đèn hoặc di chuyển đến nơi có đủ ánh sáng rồi chụp lại.');
+            addToast('Ảnh quá tối! Vui lòng bật đèn hoặc di chuyển đến nơi sáng hơn.', 'error');
             return;
         }
 
@@ -272,6 +287,11 @@ const KTVAttendancePage = () => {
         } else {
             if (workType === 'TYPE_B') {
                 setSelectedShiftType('VIP');
+            } else if (workType === 'TYPE_D') {
+                setSelectedShiftType('');
+            } else if (isOffToday) {
+                // Ngày OFF mà vẫn lên làm → luôn tính là Ca tự do, không theo ca cố định.
+                setSelectedShiftType('FREE');
             } else {
                 setSelectedShiftType(activeShiftType || 'FREE');
             }
@@ -372,7 +392,7 @@ const KTVAttendancePage = () => {
                 });
             } catch (err: any) {
                 if (err?.message === 'TOO_DARK') {
-                    alert('⚠️ Ảnh quá tối! Vui lòng chụp lại ở nơi có đủ ánh sáng.');
+                    addToast('Ảnh quá tối! Vui lòng chụp lại ở nơi sáng hơn.', 'error');
                     continue;
                 }
                 // Fallback to raw FileReader if compression fails
@@ -397,17 +417,23 @@ const KTVAttendancePage = () => {
     };
 
     const handleSubmitForm = () => {
+        setFormError(null);
         if (selectedShiftType === 'SUDDEN_OFF') {
-            if (!window.confirm("Bạn đã chắc chắn muốn xin nghỉ đột xuất hôm nay không?")) {
-                return;
-            }
-            setIsFormOpen(false);
-            handleAttendance('SUDDEN_OFF', null, null, null);
+            setConfirmDialog({
+                isOpen: true,
+                title: 'Xin nghỉ đột xuất',
+                message: 'Bạn đã chắc chắn muốn xin nghỉ đột xuất hôm nay không?',
+                onConfirm: () => {
+                    setConfirmDialog(null);
+                    setIsFormOpen(false);
+                    handleAttendance('SUDDEN_OFF', null, null, null);
+                }
+            });
             return;
         }
-        if (formType === 'CHECK_IN' && (selectedShiftType === 'FREE' || workType === 'TYPE_B')) {
+        if (formType === 'CHECK_IN' && !isOffToday && activeShiftType && (selectedShiftType === 'FREE' || workType === 'TYPE_B')) {
             if (!estimatedEndTime) {
-                alert('Vui lòng chọn thời gian dự kiến kết thúc/về!');
+                setFormError('Vui lòng chọn thời gian dự kiến kết thúc/về!');
                 return;
             }
         }
@@ -418,7 +444,7 @@ const KTVAttendancePage = () => {
             photos.length > 0 ? photos : null, 
             reason, 
             (formType === 'CHECK_IN' || formType === 'CHECK_OUT') ? selectedShiftType : null,
-            (formType === 'CHECK_IN' && (selectedShiftType === 'VIP' || selectedShiftType === 'FREE' || workType === 'TYPE_B')) ? estimatedEndTime : null,
+            (formType === 'CHECK_IN' && !isOffToday && activeShiftType && (selectedShiftType === 'VIP' || selectedShiftType === 'FREE' || workType === 'TYPE_B')) ? estimatedEndTime : null,
             wantsToWithdraw,
             isLiveCaptureMode
         );
@@ -447,6 +473,10 @@ const KTVAttendancePage = () => {
                     {workType === 'TYPE_B' && user?.code ? (
                         <div className="w-full">
                             <AttendanceTypeB ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} />
+                        </div>
+                    ) : workType === 'TYPE_D' && user?.code ? (
+                        <div className="w-full">
+                            <AttendanceTypeD ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} guestArrivalLock={guestArrivalLock} />
                         </div>
                     ) : (
                         <>
@@ -578,63 +608,72 @@ const KTVAttendancePage = () => {
                                                     <Loader2 size={16} className="animate-spin" />
                                                     Đang kiểm tra giờ ca...
                                                 </div>
-                                            ) : guestArrivalLock?.active ? (
-                                                <div className="w-full bg-red-50 border border-red-500 rounded-2xl px-4 py-3 text-center space-y-2 shadow-sm">
-                                                    <p className="text-red-700 text-base font-bold animate-pulse">
-                                                        🔔 {guestArrivalLock.message}
-                                                    </p>
-                                                </div>
-                                            ) : incompleteTasksCount > 0 ? (
-                                                <div className="w-full bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center space-y-2">
-                                                    <p className="text-red-700 text-sm font-semibold">
-                                                        ⚠️ Bạn còn {incompleteTasksCount} công việc chưa được Admin nghiệm thu (Passed).
-                                                    </p>
-                                                    <p className="text-red-600 text-xs">
-                                                        Vui lòng hoàn thành công việc và chờ Admin duyệt trước khi tan ca.
-                                                    </p>
-                                                </div>
-                                            ) : !canCheckOut && checkoutBlockedUntil ? (
-                                                <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center space-y-2">
-                                                    <p className="text-amber-700 text-sm font-semibold">
-                                                        {t.cannotCheckOutYet(checkoutBlockedUntil)}
-                                                    </p>
-                                                </div>
-                                            ) : null}
-                                            
-                                            {!guestArrivalLock?.active && (
-                                                <button
-                                                    onClick={() => {
-                                                        if (incompleteTasksCount > 0) return;
-                                                        
-                                                        const isEarly = activeShiftType !== 'FREE' && !canCheckOut && allowEarlyCheckout;
+                                            ) : (
+                                                <>
 
-                                                        // Thông báo nhắc nhở riêng cho Ca Tự Do nếu về sớm hơn giờ dự kiến
-                                                        if (activeShiftType === 'FREE' && currentRecord?.estimatedEndTime) {
-                                                            const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
-                                                            const [estH, estM] = currentRecord.estimatedEndTime.split(':').map(Number);
+                                                    {incompleteTasksCount > 0 ? (
+                                                        <div className="w-full bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center space-y-2 mb-3">
+                                                            <p className="text-red-700 text-sm font-semibold">
+                                                                ⚠️ Bạn còn {incompleteTasksCount} công việc chưa được Admin nghiệm thu (Passed).
+                                                            </p>
+                                                            <p className="text-red-600 text-xs">
+                                                                Vui lòng hoàn thành công việc và chờ Admin duyệt trước khi tan ca.
+                                                            </p>
+                                                        </div>
+                                                    ) : !canCheckOut && checkoutBlockedUntil ? (
+                                                        <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center space-y-2 mb-3">
+                                                            <p className="text-amber-700 text-sm font-semibold">
+                                                                {t.cannotCheckOutYet(checkoutBlockedUntil)}
+                                                            </p>
+                                                        </div>
+                                                    ) : null}
+                                                    
+                                                    <button
+                                                        onClick={() => {
+                                                            if (incompleteTasksCount > 0) return;
+                                                            if (guestArrivalLock?.active) return;
                                                             
-                                                            const estDate = new Date(vnNow);
-                                                            estDate.setUTCHours(estH, estM, 0, 0); 
-                                                            
-                                                            if (vnNow.getTime() < estDate.getTime()) {
-                                                                if (!window.confirm(`⚠️ Bạn đang tan ca sớm hơn giờ dự kiến (${currentRecord.estimatedEndTime}).\n\nVui lòng thông báo cho lễ tân biết để sắp xếp khách nhé!\n\nNhấn OK để tiếp tục tan ca.`)) {
+                                                            const isEarly = activeShiftType !== 'FREE' && !canCheckOut && allowEarlyCheckout;
+
+                                                            // Thông báo nhắc nhở riêng cho Ca Tự Do nếu về sớm hơn giờ dự kiến
+                                                            if (activeShiftType === 'FREE' && currentRecord?.estimatedEndTime) {
+                                                                const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+                                                                const [estH, estM] = currentRecord.estimatedEndTime.split(':').map(Number);
+                                                                
+                                                                const estDate = new Date(vnNow);
+                                                                estDate.setUTCHours(estH, estM, 0, 0); 
+                                                                
+                                                                if (vnNow.getTime() < estDate.getTime()) {
+                                                                    setConfirmDialog({
+                                                                        isOpen: true,
+                                                                        title: 'Xác nhận tan ca sớm',
+                                                                        message: `Bạn đang tan ca sớm hơn giờ dự kiến (${currentRecord.estimatedEndTime}).\n\nVui lòng thông báo cho lễ tân biết để sắp xếp khách nhé!`,
+                                                                        onConfirm: () => {
+                                                                            setConfirmDialog(null);
+                                                                            openForm('CHECK_OUT', isEarly);
+                                                                        }
+                                                                    });
                                                                     return;
                                                                 }
                                                             }
-                                                        }
 
-                                                        openForm('CHECK_OUT', isEarly);
-                                                    }}
-                                                    disabled={incompleteTasksCount > 0 || isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
-                                                    className={`w-full py-4 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 ${
-                                                        incompleteTasksCount > 0
-                                                            ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
-                                                            : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md shadow-rose-200'
-                                                    }`}
-                                                >
-                                                    <LogOut size={22} /> {incompleteTasksCount > 0 ? 'CHƯA THỂ TAN CA' : 'Oria Xin Cảm ơn'}
-                                                </button>
+                                                            openForm('CHECK_OUT', isEarly);
+                                                        }}
+                                                        disabled={guestArrivalLock?.active || incompleteTasksCount > 0 || isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
+                                                        title={guestArrivalLock?.active ? (guestArrivalLock.message || 'Quầy đang báo có khách, chưa thể tan ca.') : undefined}
+                                                        className={`w-full py-4 font-bold text-lg rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all ${
+                                                            guestArrivalLock?.active
+                                                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                                : incompleteTasksCount > 0
+                                                                ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
+                                                                : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md shadow-rose-200'
+                                                        }`}
+                                                    >
+                                                        <LogOut size={22} /> {incompleteTasksCount > 0 ? 'CHƯA THỂ TAN CA' : 'Oria Xin Cảm ơn'}
+                                                    </button>
+                                                </>
                                             )}
+                                            
                                             {showOvertimeFeature && ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].includes(activeShiftType || '') && (
                                                 <button
                                                     onClick={() => openForm('OVERTIME')}
@@ -712,7 +751,7 @@ const KTVAttendancePage = () => {
                                         <button 
                                             onClick={() => {
                                                 if (!estimatedEndTime) {
-                                                    alert('Vui lòng chọn giờ kết thúc dự kiến!');
+                                                    setFormError('Vui lòng chọn giờ kết thúc dự kiến!');
                                                     return;
                                                 }
                                                 setIsFormOpen(false);
@@ -726,10 +765,10 @@ const KTVAttendancePage = () => {
                                 </div>
                             )}
 
-                            {formType === 'CHECK_IN' && workType !== 'TYPE_B' && (
+                            {formType === 'CHECK_IN' && workType !== 'TYPE_B' && workType !== 'TYPE_D' && (
                                 <div className="space-y-2">
                                     <label className="text-sm font-semibold text-gray-700 block">Ca làm việc hôm nay</label>
-                                    {activeShiftType ? (
+                                    {activeShiftType && !isOffToday ? (
                                         <select 
                                             value={selectedShiftType}
                                             onChange={(e) => setSelectedShiftType(e.target.value)}
@@ -780,10 +819,32 @@ const KTVAttendancePage = () => {
                                             )}
                                         </>
                                     )}
+
                                 </div>
                             )}
 
-                            {formType === 'CHECK_IN' && selectedShiftType !== 'SUDDEN_OFF' && selectedShiftType !== 'FREE' && user?.roleId !== 'support' && user?.roleId !== 'dev' && (
+                            {formType === 'CHECK_IN' && workType === 'TYPE_D' && (
+                                <div className="space-y-2 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    {todayRegistration ? (
+                                        <p className="text-center font-bold text-emerald-600">
+                                            {todayRegistration.status === 'OFF_REGISTERED' 
+                                                ? 'Nghỉ làm (OFF)'
+                                                : `Giờ bạn đã đăng ký: ${String(todayRegistration.expected_time || '').slice(0, 5) || '--:--'}`}
+                                        </p>
+                                    ) : (
+                                        <div className="text-center">
+                                            <p className="text-sm font-bold text-amber-600">
+                                                Bạn chưa đăng ký lịch hôm nay
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1 italic">
+                                                Hãy tiếp tục điểm danh để sẵn sàng làm việc nhé!
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {formType === 'CHECK_IN' && selectedShiftType !== 'SUDDEN_OFF' && user?.roleId !== 'support' && user?.roleId !== 'dev' && (
                                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2 pt-2 border-t border-gray-100">
                                     <label className="flex items-start gap-3 cursor-pointer p-3 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-xl transition-colors">
                                         <div className="flex items-center h-5 mt-0.5">
@@ -796,13 +857,12 @@ const KTVAttendancePage = () => {
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="text-sm font-bold text-indigo-900">Yêu cầu rút tiền</span>
-                                            <span className="text-xs text-indigo-600 font-medium mt-0.5">Yêu cầu rút tiền của bạn sẽ được xử lý trong vòng 24h</span>
                                         </div>
                                     </label>
                                 </div>
                             )}
 
-                            {formType === 'CHECK_IN' && (workType === 'TYPE_B' || selectedShiftType === 'FREE' || selectedShiftType === 'VIP') && (
+                            {formType === 'CHECK_IN' && !isOffToday && activeShiftType && (workType === 'TYPE_B' || selectedShiftType === 'FREE' || selectedShiftType === 'VIP') && (
                                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                                     <label className="text-sm font-semibold text-gray-700 block text-left flex gap-1 items-center">
                                         Dự kiến về lúc mấy giờ? <span className="text-rose-500">(*)</span>
@@ -905,15 +965,23 @@ const KTVAttendancePage = () => {
                             )}
 
                             {formType !== 'OVERTIME_PROMPT' && formType !== 'OVERTIME' && (
-                                <div className="flex gap-3 pt-2">
+                                <>
+                                    {formError && (
+                                        <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2 mb-4 flex items-center gap-2 text-left">
+                                            <AlertCircle size={14} className="shrink-0" />
+                                            <span>{formError}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex gap-3 pt-2">
                                     <button onClick={() => setIsFormOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors">Hủy</button>
                                     <button 
                                        onClick={handleSubmitForm}
-                                       disabled={selectedShiftType !== 'SUDDEN_OFF' && ((formType !== 'CHECK_OUT' && photos.length === 0) || ((formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate && workType !== 'TYPE_B') || (formType === 'CHECK_OUT' && selectedShiftType === 'SUDDEN_OFF_CHECKOUT')) && !reason.trim()) || (formType === 'CHECK_IN' && (selectedShiftType === 'FREE' || selectedShiftType === 'VIP') && workType !== 'TYPE_B' && !estimatedEndTime) || (formType === 'CHECK_IN' && shiftFetchError && !isOffToday))}
+                                       disabled={selectedShiftType !== 'SUDDEN_OFF' && ((formType !== 'CHECK_OUT' && photos.length === 0) || ((formType === 'LATE_CHECKIN' || (formType === 'CHECK_IN' && isLate && workType !== 'TYPE_B') || (formType === 'CHECK_OUT' && selectedShiftType === 'SUDDEN_OFF_CHECKOUT')) && !reason.trim()) || (formType === 'CHECK_IN' && !isOffToday && activeShiftType && (selectedShiftType === 'FREE' || selectedShiftType === 'VIP') && workType !== 'TYPE_B' && !estimatedEndTime) || (formType === 'CHECK_IN' && shiftFetchError && !isOffToday))}
                                        className="flex-1 py-3.5 bg-emerald-600 active:scale-95 transition-transform text-white rounded-xl font-bold disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2">
                                         <CheckCircle2 size={18} /> Gửi
                                     </button>
-                                </div>
+                                    </div>
+                                </>
                             )}
                         </div>
                     </div>
@@ -981,6 +1049,18 @@ const KTVAttendancePage = () => {
                             </button>
                         </div>
                     </div>
+                )}
+
+                {/* CONFIRM DIALOG */}
+                {confirmDialog && (
+                    <ConfirmDialog
+                        open={confirmDialog.isOpen}
+                        title={confirmDialog.title}
+                        message={confirmDialog.message}
+                        onConfirm={confirmDialog.onConfirm}
+                        onCancel={() => setConfirmDialog(null)}
+                        variant="danger"
+                    />
                 )}
 
                 {/* ERROR MODAL */}

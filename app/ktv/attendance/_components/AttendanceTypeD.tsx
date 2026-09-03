@@ -10,6 +10,7 @@ interface OnCallState {
   is_on_call: boolean;
   online_status: 'ONLINE' | 'AT_VENUE' | 'OFFLINE';
   travel_time_mins: number;
+  isOffToday?: boolean;
 }
 
 interface Props {
@@ -22,7 +23,7 @@ interface Props {
   guestArrivalLock?: { active: boolean; message: string };
 }
 
-export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, guestArrivalLock }: Props) {
+export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, guestArrivalLock }: Props) {
   const { addToast } = useToast();
   const [state, setState] = useState<OnCallState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,12 +32,11 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
   // Popup Bật Nhận Đơn
   const [showPopup, setShowPopup] = useState(false);
   const [tempMins, setTempMins] = useState(30);
-  const [expectedStart, setExpectedStart] = useState('');
   const [expectedEnd, setExpectedEnd] = useState('');
 
   const fetchState = async () => {
     try {
-      const res = await apiClient.get<any>(`${API.KTV.ON_CALL}?techCode=${ktvId}`);
+      const res = await apiClient.get<any>(`${API.KTV.TYPE_D_ON_CALL}?techCode=${ktvId}`);
       if (res.success && res.data) {
         setState(res.data);
         if (res.data.travel_time_mins) {
@@ -56,14 +56,13 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
     return () => clearInterval(interval);
   }, [ktvId]);
 
-  const handleToggleOnCall = async (isOnCall: boolean, mins: number, start?: string, end?: string) => {
+  const handleToggleOnCall = async (isOnCall: boolean, mins: number, end?: string) => {
     setActionLoading(true);
     try {
-      const res = await apiClient.post<any>(API.KTV.ON_CALL, {
+      const res = await apiClient.post<any>(API.KTV.TYPE_D_ON_CALL, {
         techCode: ktvId,
         is_on_call: isOnCall,
         travel_time_mins: mins,
-        expected_start: start,
         expected_end: end
       });
       if (res.success) {
@@ -94,7 +93,7 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
       <div className="bg-amber-50 p-6 rounded-2xl border border-amber-200 text-center">
         <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
         <p className="text-amber-800 font-bold">Tính năng không khả dụng</p>
-        <p className="text-sm text-amber-600 mt-2">Bạn không được cấp quyền sử dụng chế độ Nhận Đơn.</p>
+        <p className="text-sm text-amber-600 mt-2">Bạn chưa được cấp quyền sử dụng chế độ Nhận Đơn.</p>
       </div>
     );
   }
@@ -104,8 +103,24 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
   const isAtVenue = state.online_status === 'AT_VENUE' && checkStatus !== 'IDLE' && checkStatus !== 'CHECKED_OUT';
   const isOffline = (state.online_status === 'OFFLINE' || state.online_status === 'AT_VENUE') && !isOnline && !isAtVenue;
 
+  const getPreviewTime = () => {
+    const vnTime = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+    vnTime.setMinutes(vnTime.getMinutes() + tempMins);
+    return `${vnTime.getHours().toString().padStart(2, '0')}:${vnTime.getMinutes().toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {state?.isOffToday && (
+        <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 flex items-start gap-3">
+          <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-left">
+            <p className="text-amber-800 font-bold">Hôm nay bạn đã đăng ký nghỉ</p>
+            <p className="text-sm text-amber-600">Bạn không thể Oria Xin chào hoặc nhận đơn trong ngày nghỉ.</p>
+          </div>
+        </div>
+      )}
+
       {/* TRẠNG THÁI HIỆN TẠI */}
       <div className={`p-6 rounded-[32px] border ${
         isAtVenue ? 'bg-emerald-50 border-emerald-200' :
@@ -136,7 +151,7 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
       {/* CÁC NÚT ĐIỀU KHIỂN */}
       <div className="space-y-4">
         {/* Nếu đang tắt -> Hiện Bật nhận đơn VÀ Tới tiệm luôn */}
-        {isOffline && (
+        {isOffline && !state?.isOffToday && (
             <div className="space-y-4">
                 <button
                     onClick={() => onCheckIn()}
@@ -160,7 +175,7 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
             <>
                 <button
                     onClick={() => onCheckIn()}
-                    disabled={actionLoading}
+                    disabled={actionLoading || state?.isOffToday}
                     className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                     <LogIn size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin chào'}
@@ -168,15 +183,19 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
                 <div className="w-full">
                   <button
                       onClick={() => {
-                        if (incompleteTasksCount > 0) return;
+                        if (incompleteTasksCount > 0 || guestArrivalLock?.active) return;
                         handleToggleOnCall(false, state.travel_time_mins);
                       }}
-                      disabled={actionLoading || incompleteTasksCount > 0}
-                      className="w-full py-4 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      disabled={actionLoading || incompleteTasksCount > 0 || guestArrivalLock?.active}
+                      className={`w-full py-4 font-bold text-lg rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all
+                        ${guestArrivalLock?.active 
+                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
+                            : 'bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700'
+                        }`}
                   >
                       <LogOut size={22} className="rotate-180" /> {actionLoading ? 'Đang xử lý...' : 'Tắt Nhận Đơn'}
                   </button>
-                  {incompleteTasksCount > 0 && (
+                  {incompleteTasksCount > 0 && !guestArrivalLock?.active && (
                       <p className="text-red-500 text-xs text-center mt-2 font-medium">Bạn còn {incompleteTasksCount} công việc chưa hoàn thành. Không thể tắt nhận đơn.</p>
                   )}
                 </div>
@@ -184,22 +203,22 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
         )}
 
         {/* Nếu đã tới tiệm (AT_VENUE) -> Tan Ca */}
-         {isAtVenue && (
+        {isAtVenue && (
              <div className="w-full">
-                   <button
-                      onClick={() => {
-                        if (incompleteTasksCount > 0 || guestArrivalLock?.active) return;
-                        onCheckOut();
-                      }}
-                      disabled={actionLoading || incompleteTasksCount > 0 || guestArrivalLock?.active}
-                      className={`w-full py-4 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50
-                        ${guestArrivalLock?.active
-                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                            : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md shadow-rose-200'
-                        }`}
-                  >
-                      <LogOut size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin cảm ơn'}
-                  </button>
+               <button
+                  onClick={() => {
+                    if (incompleteTasksCount > 0 || guestArrivalLock?.active) return;
+                    onCheckOut();
+                  }}
+                  disabled={actionLoading || incompleteTasksCount > 0 || guestArrivalLock?.active}
+                  className={`w-full py-4 font-bold text-lg rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50
+                    ${guestArrivalLock?.active 
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
+                        : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white transition-all shadow-md shadow-rose-200'
+                    }`}
+              >
+                  <LogOut size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin cảm ơn'}
+              </button>
               {incompleteTasksCount > 0 && !guestArrivalLock?.active && (
                   <p className="text-red-500 text-xs text-center mt-2 font-medium">Bạn còn {incompleteTasksCount} công việc chưa hoàn thành. Không thể tan ca.</p>
               )}
@@ -247,29 +266,23 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
-                        Giờ rảnh dự kiến
-                      </label>
-                      <input 
-                        type="time" 
-                        value={expectedStart}
-                        onChange={(e) => setExpectedStart(e.target.value)}
-                        className="w-full h-12 rounded-2xl border-2 border-slate-100 px-3 font-bold text-slate-700 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
-                        Đến mấy giờ?
-                      </label>
-                      <input 
-                        type="time" 
-                        value={expectedEnd}
-                        onChange={(e) => setExpectedEnd(e.target.value)}
-                        className="w-full h-12 rounded-2xl border-2 border-slate-100 px-3 font-bold text-slate-700 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
+                  <div className="mb-4 text-center">
+                    <p className="text-sm font-medium text-slate-600">
+                      Bạn sẽ rảnh lúc: <span className="font-bold text-emerald-600">{getPreviewTime()}</span>
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">(Bây giờ + {tempMins} phút)</p>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">
+                      Đến mấy giờ? (Tuỳ chọn)
+                    </label>
+                    <input 
+                      type="time" 
+                      value={expectedEnd}
+                      onChange={(e) => setExpectedEnd(e.target.value)}
+                      className="w-full h-12 rounded-2xl border-2 border-slate-100 px-3 font-bold text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    />
                   </div>
                 </div>
 
@@ -283,7 +296,7 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
                   </button>
                   <button
                     onClick={() => {
-                      handleToggleOnCall(true, tempMins, expectedStart, expectedEnd);
+                      handleToggleOnCall(true, tempMins, expectedEnd);
                     }}
                     disabled={actionLoading}
                     className="flex-1 py-3.5 rounded-2xl bg-emerald-600 text-white font-bold active:scale-95 transition-transform shadow-lg shadow-emerald-200 disabled:opacity-50"

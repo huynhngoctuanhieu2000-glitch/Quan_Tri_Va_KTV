@@ -16,14 +16,9 @@ import PullToRefresh from '@/components/PullToRefresh/PullToRefresh';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
 
-// 🔧 UI CONFIGURATION
-const PRESET_BUTTONS = [
-  { key: 'today',     label: 'Hôm nay' },
-  { key: 'yesterday', label: 'Hôm qua' },
-  { key: '7days',     label: '7 ngày' },
-  { key: 'custom',    label: 'Tuỳ chọn' },
-] as const;
+import { HistoryCalendar } from './_components/HistoryCalendar';
 
+// 🔧 UI CONFIGURATION
 const RATING_CONFIG: Record<number, { label: string; color: string; bg: string }> = {
   1: { label: 'Tệ',          color: 'text-red-600',     bg: 'bg-red-50'     },
   2: { label: 'Bình thường',  color: 'text-yellow-600',  bg: 'bg-yellow-50'  },
@@ -107,32 +102,15 @@ const DisciplineCard = ({ item }: { item: HistoryRecord }) => {
 
 // ─── Expandable Order Card ────────────────────────────────────────────────────
 
-const OrderCard = ({ order, getStatusLabel, techCode, refetch }: {
+const OrderCard = ({ order, getStatusLabel }: {
   order: HistoryRecord;
   getStatusLabel: (s: string) => { label: string; color: string };
-  techCode: string;
-  refetch: () => void;
 }) => {
   const [expanded, setExpanded] = React.useState(false);
-  const [tipValue, setTipValue] = React.useState(String(order.tip || ''));
-  const [savingTip, setSavingTip] = React.useState(false);
-  const [tipSaved, setTipSaved] = React.useState(false);
 
   const statusInfo = getStatusLabel(order.status);
   const isDone = order.status === 'DONE' || order.status === 'COMPLETED';
   const ratingCfg = order.rating ? RATING_CONFIG[order.rating] : null;
-
-  const handleSaveTip = async () => {
-    const tip = parseInt(tipValue.replace(/\D/g, ''), 10) || 0;
-    setSavingTip(true);
-    try {
-      await apiClient.post<any>(API.KTV.HISTORY_UPDATE, { bookingId: order.id, techCode, tip });
-      setTipSaved(true);
-      refetch();
-      setTimeout(() => setTipSaved(false), 2000);
-    } catch { /* silent */ }
-    setSavingTip(false);
-  };
 
   return (
     <motion.div
@@ -213,10 +191,18 @@ const OrderCard = ({ order, getStatusLabel, techCode, refetch }: {
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider">Tiền tua</span>
                 <div className="flex items-center gap-1.5">
-                  <TrendingUp size={13} className="text-indigo-400" />
-                  <span className="text-sm font-black text-indigo-700">
-                    {order.commission > 0 ? `${order.commission.toLocaleString('vi-VN')}đ` : '—'}
-                  </span>
+                  {order.isFeedbackDone ? (
+                    <>
+                      <TrendingUp size={13} className="text-indigo-400" />
+                      <span className="text-sm font-black text-indigo-700">
+                        {order.commission != null && order.commission > 0 ? `${order.commission.toLocaleString('vi-VN')}đ` : '—'}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[11px] font-bold text-amber-500 bg-amber-50 px-2.5 py-0.5 rounded-full">
+                      ⏳ Chờ FB
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -269,51 +255,50 @@ const OrderCard = ({ order, getStatusLabel, techCode, refetch }: {
                     <Award size={14} className="text-amber-500" />
                     <span className="text-[11px] text-amber-700 font-bold uppercase tracking-wider">Bonus Xuất Sắc</span>
                   </div>
-                  <span className="text-sm font-black text-amber-600">+{order.bonusPoints}đ</span>
+                  <div className="text-right leading-tight">
+                    <span className="text-sm font-black text-amber-600">+{order.bonusPoints}đ</span>
+                    {!!order.bonusValue && order.bonusValue !== order.bonusPoints && (
+                      <p className="text-[10px] text-amber-500 font-semibold">
+                        = {order.bonusValue.toLocaleString('vi-VN')}đ
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {/* ─── Tip Input ─── */}
-              <div className="pt-2 border-t border-gray-50">
-                <label className="text-[11px] text-gray-400 uppercase font-bold tracking-wider block mb-2">
-                  💰 Tiền Tip
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Gift size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400" />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={tipValue}
-                      onChange={e => {
-                        const raw = e.target.value.replace(/\D/g, '');
-                        setTipValue(raw);
-                        setTipSaved(false);
-                      }}
-                      className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-bold">đ</span>
+              {/* ─── Thuế TNCN & thực nhận ─── */}
+              {order.isTypeD && order.type !== 'DISCIPLINE' && (
+                <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5 -mx-1 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Tổng thu nhập đơn</span>
+                    <span className="text-sm font-bold text-gray-700">
+                      {(order.grossIncome || 0).toLocaleString('vi-VN')}đ
+                    </span>
                   </div>
-                  <button
-                    onClick={handleSaveTip}
-                    disabled={savingTip}
-                    className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm min-w-[70px] flex items-center justify-center gap-1 ${
-                      tipSaved
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'
-                    }`}
-                  >
-                    {savingTip ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : tipSaved ? (
-                      <><CheckCircle2 size={14} /> OK</>
-                    ) : (
-                      'Lưu'
-                    )}
-                  </button>
+                  {(order.taxAmount || 0) > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] text-rose-500 font-bold uppercase tracking-wider">
+                        Thuế TNCN ({Math.round((order.taxRate || 0) * 100)}%)
+                      </span>
+                      <span className="text-sm font-bold text-rose-600">
+                        −{(order.taxAmount || 0).toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-1.5 border-t border-gray-200">
+                    <span className={`text-[11px] font-black uppercase tracking-wider ${order.isProvisional ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      {order.isProvisional ? 'Tạm tính' : 'Thực nhận'}
+                    </span>
+                    <span className={`text-base font-black ${order.isProvisional ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {(order.netIncome || 0).toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+
+
                 </div>
-              </div>
+              )}
+
+
             </div>
           </motion.div>
         )}
@@ -326,14 +311,12 @@ const OrderCard = ({ order, getStatusLabel, techCode, refetch }: {
 
 export default function KTVHistoryPage() {
   const [mounted, setMounted] = React.useState(false);
+  const [showCalendar, setShowCalendar] = React.useState(false);
   const { hasPermission } = useAuth();
   const {
     user,
     history, isLoading,
-    datePreset, setDatePreset,
-    dateFrom, setDateFrom,
-    dateTo, setDateTo,
-    applyCustomDate,
+    selectedDates, setSelectedDates,
     summary,
     getStatusLabel,
     refetch,
@@ -360,85 +343,49 @@ export default function KTVHistoryPage() {
 
           {/* Header */}
           <div>
-              <p className="text-xs text-gray-400">Bấm vào đơn để xem chi tiết & nhập tip</p>
+              <p className="text-xs text-gray-400">Bấm vào đơn để xem chi tiết</p>
           </div>
 
-          {/* Summary Cards */}
-          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl px-4 py-3 shadow-lg shadow-indigo-100/50 flex justify-between items-center text-white mb-2">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">Điểm Chuyên Cần Tháng Này</p>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-2xl font-black">{summary.disciplinePoints}</span>
-                <span className="text-sm font-medium text-indigo-200">/ 100đ</span>
-              </div>
+          <div className="grid grid-cols-4 gap-2">
+            <div className="bg-indigo-600 text-white rounded-2xl px-2 py-3 shadow-lg shadow-indigo-100 flex flex-col justify-between">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-indigo-200">Thu nhập</p>
+              <p className="text-sm font-black tabular-nums mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{(summary.totalGross || 0).toLocaleString('vi-VN')}đ</p>
             </div>
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              <Award size={24} className="text-white" />
+            <div className="bg-emerald-500 text-white rounded-2xl px-2 py-3 shadow-lg shadow-emerald-100 flex flex-col justify-between">
+              <p className="text-[8px] font-bold uppercase tracking-widest text-emerald-100">Thực nhận</p>
+              <p className="text-sm font-black tabular-nums mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{(summary.totalNet || 0).toLocaleString('vi-VN')}đ</p>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="bg-indigo-600 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-indigo-100">
-              <p className="text-[8px] font-bold uppercase tracking-widest text-indigo-200">Tiền tua</p>
-              <p className="text-base font-black tabular-nums mt-0.5">{summary.totalCommission.toLocaleString('vi-VN')}đ</p>
-            </div>
-            <div className="bg-emerald-500 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-emerald-100">
-              <p className="text-[8px] font-bold uppercase tracking-widest text-emerald-100">Tip</p>
-              <p className="text-base font-black tabular-nums mt-0.5">{summary.totalTip.toLocaleString('vi-VN')}đ</p>
-            </div>
-            <div className="bg-amber-500 text-white rounded-2xl px-2.5 py-3 shadow-lg shadow-amber-100">
-              <p className="text-[8px] font-bold uppercase tracking-widest text-amber-100">Bonus</p>
-              <p className="text-base font-black tabular-nums mt-0.5">{summary.totalBonus}đ</p>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-2xl px-2.5 py-3 shadow-sm">
+            <div className="bg-white border border-gray-100 rounded-2xl px-2 py-3 shadow-sm flex flex-col justify-between items-center text-center">
               <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Đơn</p>
               <p className="text-base font-black text-gray-900 tabular-nums mt-0.5">{summary.totalOrders}</p>
             </div>
+            <button 
+                onClick={() => setShowCalendar(!showCalendar)} 
+                className={`flex flex-col items-center justify-center rounded-2xl border active:scale-95 transition-all shadow-sm ${showCalendar ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-200' : 'bg-white border-gray-100 text-indigo-600'}`}
+            >
+                <CalendarDays size={22} className="mb-1" />
+                <span className="text-[8px] font-bold uppercase tracking-widest opacity-80">Chọn ngày</span>
+            </button>
           </div>
 
-          {/* Date Picker */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3 space-y-2.5">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <CalendarDays size={14} className="text-gray-400 shrink-0" />
-              {PRESET_BUTTONS.map(b => (
-                <button
-                  key={b.key}
-                  onClick={() => setDatePreset(b.key)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    datePreset === b.key
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 active:bg-gray-200'
-                  }`}
-                >
-                  {b.label}
-                </button>
-              ))}
-            </div>
-
-            {datePreset === 'custom' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={e => setDateFrom(e.target.value)}
-                  className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-[120px]"
-                />
-                <ChevronRight size={14} className="text-gray-300 shrink-0" />
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={e => setDateTo(e.target.value)}
-                  className="border border-gray-200 rounded-xl px-2.5 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-[120px]"
-                />
-                <button
-                  onClick={applyCustomDate}
-                  className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
-                >
-                  Xem
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Date Picker (Toggled via button) */}
+          <AnimatePresence>
+              {showCalendar && (
+                  <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                  >
+                      <HistoryCalendar selectedDates={selectedDates} onSelectDates={(dates, isComplete) => {
+                          setSelectedDates(dates);
+                          if (isComplete) {
+                            setTimeout(() => setShowCalendar(false), 300);
+                          }
+                      }} />
+                  </motion.div>
+              )}
+          </AnimatePresence>
 
           {/* Order List */}
           <div className="space-y-2.5">
@@ -456,7 +403,7 @@ export default function KTVHistoryPage() {
               history.map(item => (
                 item.type === 'DISCIPLINE'
                   ? <DisciplineCard key={item.id} item={item} />
-                  : <OrderCard key={item.id} order={item} getStatusLabel={getStatusLabel} techCode={user?.id || ''} refetch={refetch} />
+                  : <OrderCard key={item.id} order={item} getStatusLabel={getStatusLabel} />
               ))
             )}
           </div>

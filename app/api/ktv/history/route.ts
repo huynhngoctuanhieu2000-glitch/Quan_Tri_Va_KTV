@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { KtvCommissionService } from '@/lib/services/KtvCommissionService';
+import { KtvTypeDCommissionService } from '@/lib/services/KtvTypeDCommissionService';
 import { KtvHistoryTipSchema } from '@/lib/schemas/ktv.schema';
 import { parseDbDate } from '@/lib/utils';
 
@@ -15,9 +16,27 @@ export async function GET(request: Request) {
     const techCode = searchParams.get('techCode');
     const dateFrom = searchParams.get('dateFrom'); // YYYY-MM-DD (VN date)
     const dateTo = searchParams.get('dateTo');     // YYYY-MM-DD (VN date)
+    const datesStr = searchParams.get('dates');    // "2026-09-01,2026-09-02,..."
 
     if (!techCode) {
         return NextResponse.json({ success: false, error: 'techCode is required' }, { status: 400 });
+    }
+
+    let minDate = dateFrom;
+    let maxDate = dateTo;
+    let targetDates: string[] | null = null;
+
+    if (datesStr) {
+        targetDates = datesStr.split(',').filter(Boolean);
+        if (targetDates.length > 0) {
+            targetDates.sort();
+            minDate = targetDates[0];
+            maxDate = targetDates[targetDates.length - 1];
+        }
+    }
+
+    if (!minDate || !maxDate) {
+        return NextResponse.json({ success: false, error: 'Missing date range or dates' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdmin();
@@ -43,23 +62,59 @@ export async function GET(request: Request) {
         const commConfigs = await KtvCommissionService.getAllConfigs(supabase as any);
         const bonusConfig = await KtvCommissionService.getBonusConfig(supabase as any, workType as any);
 
+        // ─── Cấu hình quy đổi điểm & thuế TNCN ────────────────────────────
+        // bonusPoints là ĐIỂM; nhân pointRate mới ra VNĐ để tính thuế.
+        // ⚠️ SystemConfigs.value là jsonb → có thể về dạng số, chuỗi, hoặc chuỗi có nháy.
+        const { data: taxCfgRows } = await supabase
+            .from('SystemConfigs')
+            .select('key, value')
+            .in('key', [`ktv_bonus_rate_${workType}`, 'ktv_bonus_rate', 'ktv_type_d_tax_effective_from']);
+
+        const cfgMap: Record<string, any> = {};
+        (taxCfgRows || []).forEach((c: any) => { cfgMap[c.key] = c.value; });
+        const readNum = (v: any, dflt: number) => {
+            const n = Number(String(v ?? '').replace(/"/g, '').trim());
+            return Number.isFinite(n) && n > 0 ? n : dflt;
+        };
+
+        const pointRate = readNum(cfgMap[`ktv_bonus_rate_${workType}`] ?? cfgMap['ktv_bonus_rate'], 1000);
+
+        // Cấu hình riêng của Loại D: đơn giá VIP/PT và tỉ lệ trừ theo sao.
+        let rateVIP_D = 180000, ratePT_D = 100000;
+        let ratingDeductions_D: Record<string, number> = { '0': 0, '1': 0.75, '2': 0.5, '3': 0.25, '4': 0 };
+        if (workType === 'TYPE_D') {
+            const { data: dRows } = await supabase
+                .from('SystemConfigs')
+                .select('key, value')
+                .in('key', ['ktv_type_d_vip_rate_per_60m', 'ktv_type_d_pt_rate_per_60m', 'ktv_type_d_rating_deduction']);
+            const dMap: Record<string, any> = {};
+            (dRows || []).forEach((c: any) => { dMap[c.key] = c.value; });
+            rateVIP_D = readNum(dMap['ktv_type_d_vip_rate_per_60m'], 180000);
+            ratePT_D = readNum(dMap['ktv_type_d_pt_rate_per_60m'], 100000);
+            const rawDeduction = dMap['ktv_type_d_rating_deduction'];
+            if (rawDeduction) {
+                try {
+                    ratingDeductions_D = typeof rawDeduction === 'string' ? JSON.parse(rawDeduction) : rawDeduction;
+                } catch { /* giữ mặc định */ }
+            }
+        }
+        const taxEffectiveFrom = String(cfgMap['ktv_type_d_tax_effective_from'] ?? '').replace(/"/g, '').trim();
+        // Thuế 10% hiện chỉ áp cho KTV Loại D, từ ngày đã cấu hình trở đi.
+        const TAX_RATE = 0.1;
+        const isTaxableWorkType = workType === 'TYPE_D' && !!taxEffectiveFrom;
+
         // ─── Build date range ────────────────────────────────────────────
         const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-        const todayVn = nowVn.toISOString().split('T')[0];
-        const fromDate = dateFrom || todayVn;
-        const toDate = dateTo || todayVn;
-
-        // createdAt có thể là timestamp (VN local) hoặc timestamptz (UTC)
         // Dùng VN midnight trực tiếp — PostgreSQL sẽ cast chính xác cho cả 2 kiểu
-        const fromFilter = `${fromDate}T00:00:00`;
-        const toFilter = `${toDate}T23:59:59`;
+        const fromFilter = `${minDate}T00:00:00`;
+        const toFilter = `${maxDate}T23:59:59`;
 
         // ─── Fetch KTVShifts ─────────────────────────────────────────────
         const { data: shiftsData } = await supabase
             .from('KTVShifts')
             .select('effectiveFrom, shiftType, employeeId')
             .eq('employeeId', techCode)
-            .lte('effectiveFrom', toDate)
+            .lte('effectiveFrom', toFilter)
             .in('status', ['ACTIVE', 'REPLACED'])
             .order('effectiveFrom', { ascending: true })
             .order('createdAt', { ascending: true });
@@ -76,9 +131,9 @@ export async function GET(request: Request) {
         const shiftMap = new Map<string, string>();
         let currentShift = 'SHIFT_1';
         
-        // Tạo map cho tất cả các ngày từ fromDate tới toDate
-        const startD = new Date(fromDate);
-        const endD = new Date(toDate);
+        // Tạo map cho tất cả các ngày từ minDate tới maxDate
+        const startD = new Date(minDate);
+        const endD = new Date(maxDate);
         
         for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
             const dateStr = d.toISOString().split('T')[0];
@@ -117,8 +172,20 @@ export async function GET(request: Request) {
             const hasInArray = b.BookingItems?.some((item: any) => 
                 item.technicianCodes?.some((c: string) => c.toLowerCase() === techCode.toLowerCase())
             );
+            
+            if (targetDates && targetDates.length > 0) {
+                // Đảm bảo lấy đúng ngày theo múi giờ VN (nếu createdAt đang là UTC)
+                const vnDate = new Date(new Date(b.createdAt).getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+                const bDate = b.bookingDate ? String(b.bookingDate).slice(0, 10) : vnDate;
+                if (!targetDates.includes(bDate)) {
+                    return false;
+                }
+            }
+            
             return hasInString || hasInArray;
         });
+        
+        console.log(`[DEBUG History] targetDates: ${targetDates}, bookings length: ${bookings.length}`);
 
         if (!bookings || bookings.length === 0) {
             return NextResponse.json({ success: true, data: [] });
@@ -262,6 +329,32 @@ export async function GET(request: Request) {
                     return r > best ? r : best;
                 }, 0) || null;
 
+                // ─── Loại D: tính lại hoa hồng theo ĐÚNG luật riêng ────────────────
+                // Code chung (calcCommission) dùng bảng giá Loại A, KHÔNG tách VIP/PT và
+                // KHÔNG trừ theo sao — nên số hiển thị sẽ lệch với ví. Gọi lại service riêng.
+                let commissionBeforeDeduction = commission;
+                let ratingDeductionRate = 0;
+                if (workType === 'TYPE_D' && passedCount > 0) {
+                    const isVip = (i: any) => {
+                        const sid = String(i.serviceId || '').toUpperCase();
+                        return sid.startsWith('NHP') || sid.startsWith('NHT') || sid.startsWith('VIP');
+                    };
+                    const vipItems = groupItems.filter(isVip);
+                    const ptItems = groupItems.filter((i: any) => !isVip(i));
+
+                    // Không trừ sao → số gốc, để biết khách chấm sao làm mất bao nhiêu.
+                    const noDeduction: Record<string, number> = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 };
+                    commissionBeforeDeduction =
+                        KtvTypeDCommissionService.calculateGuestCommission(vipItems, techCode, itemRating, rateVIP_D, noDeduction) +
+                        KtvTypeDCommissionService.calculateGuestCommission(ptItems, techCode, itemRating, ratePT_D, noDeduction);
+
+                    commission =
+                        KtvTypeDCommissionService.calculateGuestCommission(vipItems, techCode, itemRating, rateVIP_D, ratingDeductions_D) +
+                        KtvTypeDCommissionService.calculateGuestCommission(ptItems, techCode, itemRating, ratePT_D, ratingDeductions_D);
+
+                    ratingDeductions_D && (ratingDeductionRate = Number(ratingDeductions_D[String(itemRating ?? 0)] ?? 0));
+                }
+
                 // ─── Bonus points ─────────────
                 const dbDate = parseDbDate(b.bookingDate || b.createdAt);
                 const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -314,6 +407,20 @@ export async function GET(request: Request) {
                 const groupId0 = opts0.mergedIntoId || groupItems[0].id;
                 const billSuffix = suffixMap.get(groupId0) || '';
 
+                // ─── Tạm tính hay đã chốt? ──────────────────────────────────────
+                // Đơn chưa được khách FB thì KHÔNG hiện tiền.
+                // Chỉ khi status = DONE/COMPLETED (khách đã FB hoặc bị bỏ qua) mới hiện số tiền thực nhận.
+                const hasRating = itemRating != null && Number(itemRating) > 0;
+                const isFinalStatus = ['DONE', 'COMPLETED'].includes(itemBasedStatus);
+                const isFeedbackDone = isFinalStatus; // Khách đã FB hoặc đã bỏ qua
+                const isProvisional = !hasRating && !isFinalStatus;
+
+                // ─── Quy đổi bonus ra tiền + tính thuế TNCN cho từng đơn ───────
+                const bonusValue = Math.round(bonusPoints * pointRate);
+                const grossIncome = commission + bonusValue;
+                const isTaxed = isTaxableWorkType && String(b.bookingDate || bDateStr) >= taxEffectiveFrom;
+                const taxAmount = isTaxed ? Math.round(grossIncome * TAX_RATE) : 0;
+
                 return {
                     id: `${b.id}_${groupItems[0].id}`, // Đảm bảo ID duy nhất cho mỗi dòng lịch sử (BookingID + ItemID)
                     billCode: `${b.billCode}${billSuffix}`,
@@ -321,11 +428,22 @@ export async function GET(request: Request) {
                     bookingDate: b.bookingDate,
                     status: itemBasedStatus,
                     rating: itemRating,
-                    tip: ktvTip,
-                    commission,
+                    tip: isFeedbackDone ? ktvTip : 0,
+                    commission: isFeedbackDone ? commission : null,
                     serviceName,
                     duration: totalDuration,
-                    bonusPoints,
+                    bonusPoints: isFeedbackDone ? bonusPoints : 0,
+                    bonusValue: isFeedbackDone ? bonusValue : 0,
+                    grossIncome: isFeedbackDone ? grossIncome : null,
+                    taxRate: isTaxed ? TAX_RATE : 0,
+                    taxAmount: isFeedbackDone ? taxAmount : 0,
+                    netIncome: isFeedbackDone ? (grossIncome - taxAmount) : null,
+                    isProvisional,
+                    isFeedbackDone,      // true = khách đã FB hoặc bỏ qua, số tiền đã chốt
+                    isTypeD: workType === 'TYPE_D',
+                    commissionBeforeDeduction: isFeedbackDone ? commissionBeforeDeduction : null,
+                    ratingDeductionRate: isFeedbackDone ? ratingDeductionRate : 0,
+                    ratingDeductionAmount: isFeedbackDone ? Math.max(0, commissionBeforeDeduction - commission) : 0,
                     handover_status,
                     handover_comment,
                     ktv_comment: b.notes,
@@ -337,8 +455,8 @@ export async function GET(request: Request) {
         });
 
         // ─── Fetch KTV Discipline Data ─────────────────────────────────────
-        const currentMonth = new Date(fromDate).getMonth() + 1;
-        const currentYear = new Date(fromDate).getFullYear();
+        const currentMonth = new Date(minDate).getMonth() + 1;
+        const currentYear = new Date(minDate).getFullYear();
 
         const { data: ptsData } = await supabase
             .from('KTVDisciplinePoints')
@@ -356,12 +474,20 @@ export async function GET(request: Request) {
             .lte('created_at', toFilter)
             .order('created_at', { ascending: false });
 
+        let finalDiscData = discData || [];
+        if (targetDates && targetDates.length > 0) {
+            finalDiscData = finalDiscData.filter((d: any) => {
+                const vnDate = new Date(new Date(d.created_at).getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+                return targetDates.includes(vnDate);
+            });
+        }
+
         return NextResponse.json({ 
             success: true, 
             data: {
                 bookings: result,
                 disciplinePoints: ptsData?.total_points ?? 100,
-                disciplines: discData || []
+                disciplines: finalDiscData
             } 
         });
 

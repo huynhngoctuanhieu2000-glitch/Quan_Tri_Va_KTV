@@ -18,6 +18,17 @@ export interface HistoryRecord {
   serviceName: string;
   duration: number;
   bonusPoints: number;
+  bonusValue?: number;   // bonusPoints quy ra VNĐ
+  grossIncome?: number;  // tiền tua + bonus (chưa trừ thuế)
+  taxRate?: number;      // 0 hoặc 0.1
+  taxAmount?: number;    // thuế TNCN bị trừ trên đơn
+  netIncome?: number;    // thực nhận sau thuế
+  isProvisional?: boolean;         // true = khách chưa đánh giá, số còn có thể giảm
+  isFeedbackDone?: boolean;
+  isTypeD?: boolean;
+  commissionBeforeDeduction?: number; // tiền tua trước khi trừ theo sao
+  ratingDeductionRate?: number;       // 0 / 0.25 / 0.5 / 0.75
+  ratingDeductionAmount?: number;     // số tiền bị trừ do đánh giá
   handover_status?: string;
   handover_comment?: string | null;
   ktv_comment?: string | null;
@@ -38,19 +49,18 @@ export const useKTVHistory = () => {
   const { hasPermission, user } = useAuth();
 
   const today = getVnDateStr();
-  const [datePreset, setDatePreset] = useState<DatePreset>('today');
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo]   = useState(today);
+  const [selectedDates, setSelectedDates] = useState<string[]>([today]);
 
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [summary, setSummary] = useState({ totalCommission: 0, totalTip: 0, totalOrders: 0, totalBonus: 0, disciplinePoints: 100 });
+  const [summary, setSummary] = useState({ totalCommission: 0, totalGross: 0, totalOrders: 0, disciplinePoints: 100, totalNet: 0 });
 
-  const fetchHistory = useCallback(async (from: string, to: string) => {
-    if (!user?.id) return;
+  const fetchHistory = useCallback(async (dates: string[]) => {
+    if (!user?.id || dates.length === 0) return;
     setIsLoading(true);
     try {
-      const result = await apiClient.get<any>(API.KTV.HISTORY(user.id, from, to));
+      const datesParam = dates.join(',');
+      const result = await apiClient.get<any>(`${API.KTV.HISTORY(user.id, dates[0], dates[dates.length - 1])}&dates=${datesParam}`);
       
       const resData = result.data || {};
       const bookings = Array.isArray(resData) ? resData : (resData.bookings || []);
@@ -73,7 +83,9 @@ export const useKTVHistory = () => {
         booking_id: d.booking_id,
         // Điền rác cho đúng interface
         billCode: d.booking_id || 'PHẠT LỖI',
-        tip: 0, commission: 0, duration: 0, bonusPoints: 0, serviceName: '', rating: null
+        tip: 0, commission: 0, duration: 0, bonusPoints: 0, serviceName: '', rating: null,
+        bonusValue: 0, grossIncome: 0, taxRate: 0, taxAmount: 0, netIncome: 0, isProvisional: false, isTypeD: false,
+        commissionBeforeDeduction: 0, ratingDeductionRate: 0, ratingDeductionAmount: 0
       }));
 
       const combined = [...bkList, ...dcList].sort((a, b) => {
@@ -81,14 +93,19 @@ export const useKTVHistory = () => {
       });
 
       setHistory(combined);
-      const totalCommission = bkList.reduce((s: number, r: any) => s + (r.commission || 0), 0);
-      const totalTip        = bkList.reduce((s: number, r: any) => s + (r.tip || 0), 0);
-      const totalBonus      = bkList.reduce((s: number, r: any) => s + (r.bonusPoints || 0), 0);
+      // Chỉ cộng tiền cho đơn đã được khách FB (isFeedbackDone = true)
+      const fbDone = bkList.filter((r: any) => r.isFeedbackDone);
+      const totalCommission = fbDone.reduce((s: number, r: any) => s + (r.commission || 0), 0);
+      const totalGross      = fbDone.reduce((s: number, r: any) => s + (r.grossIncome || (r.commission || 0) + ((r.bonusValue ?? r.bonusPoints) || 0)), 0);
+      
+      let totalNet          = fbDone.reduce((s: number, r: any) => s + (r.netIncome || 0), 0);
+      if (totalNet === 0) totalNet = totalGross;
+
       const uniqueBookings  = new Set(bkList.map((b: any) => {
         const parts = (b.billCode || '').split('-');
         return parts.length >= 2 ? `${parts[0]}-${parts[1]}` : b.billCode;
       }));
-      setSummary({ totalCommission, totalTip, totalOrders: uniqueBookings.size, totalBonus, disciplinePoints });
+      setSummary({ totalCommission, totalGross, totalOrders: uniqueBookings.size, disciplinePoints, totalNet });
     } catch (err: any) {
       console.error('[KTVHistory]', err.message || err);
     } finally {
@@ -96,26 +113,11 @@ export const useKTVHistory = () => {
     }
   }, [user?.id]);
 
-  // Apply preset — re-run when user.id becomes available (after F5)
+  // Fetch history when selectedDates changes or user is ready
   useEffect(() => {
-    if (!user?.id) return; // wait until auth is ready
-    const t = getVnDateStr();
-    if (datePreset === 'today') {
-      setDateFrom(t); setDateTo(t);
-      fetchHistory(t, t);
-    } else if (datePreset === 'yesterday') {
-      const y = format(subDays(new Date(), 1), 'yyyy-MM-dd');
-      setDateFrom(y); setDateTo(y);
-      fetchHistory(y, y);
-    } else if (datePreset === '7days') {
-      const w = format(subDays(new Date(), 6), 'yyyy-MM-dd');
-      setDateFrom(w); setDateTo(t);
-      fetchHistory(w, t);
-    }
-    // 'custom' → user picks manually
-  }, [datePreset, user?.id]); // eslint-disable-line
-
-  const applyCustomDate = () => fetchHistory(dateFrom, dateTo);
+    if (!user?.id) return;
+    fetchHistory(selectedDates);
+  }, [selectedDates, user?.id, fetchHistory]);
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -131,12 +133,9 @@ export const useKTVHistory = () => {
   return {
     user, hasPermission,
     history, isLoading,
-    datePreset, setDatePreset,
-    dateFrom, setDateFrom,
-    dateTo, setDateTo,
-    applyCustomDate,
+    selectedDates, setSelectedDates,
     summary,
     getStatusLabel,
-    refetch: () => fetchHistory(dateFrom, dateTo),
+    refetch: () => fetchHistory(selectedDates),
   };
 };
