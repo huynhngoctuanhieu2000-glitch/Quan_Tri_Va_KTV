@@ -1249,9 +1249,9 @@ function ScreenTimer({ logic }: { logic: any }) {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           className="flex flex-col gap-3 mb-12"
         >
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <ActionGridButton 
-                  onClick={handleEarlyExit} 
+                  onClick={() => { logic.handlePause(); handleEarlyExit(); }} 
                   icon={<LogOut size={20} />} 
                   label="KHÁCH VỀ SỚM" 
                   color="text-rose-600 border-rose-50" 
@@ -1274,25 +1274,10 @@ function ScreenTimer({ logic }: { logic: any }) {
                   label="HỖ TRỢ" 
                   color="text-blue-600 border-blue-50" 
                 />
-                {isPaused ? (
-                    <ActionGridButton 
-                      onClick={() => {}} 
-                      icon={<Lock size={20} />} 
-                      label="CHỜ QUẦY MỞ" 
-                      color="text-slate-400 border-slate-100 bg-slate-50 opacity-70" 
-                    />
-                ) : (
-                    <ActionGridButton 
-                      onClick={logic.handlePause} 
-                      icon={<PauseCircle size={20} />} 
-                      label="TẠM DỪNG" 
-                      color="text-amber-600 border-amber-50" 
-                    />
-                )}
             </div>
             
             <button
-              onClick={() => handleInteraction('EMERGENCY')}
+              onClick={() => { logic.handlePause(); handleInteraction('EMERGENCY'); }}
               className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-200 active:scale-95 transition-all"
             >
               <ShieldAlert size={18} />
