@@ -325,6 +325,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
   const [showRejectModal, setShowRejectModal] = React.useState(false);
   const [showQRModal, setShowQRModal] = React.useState(false);
   const [showWallet, setShowWallet] = React.useState(false);
+  const [showTurnQueueModal, setShowTurnQueueModal] = React.useState(false);
 
   const handleRejectOrder = async (reason: string) => {
     if (!logic.booking?.nextBookingId) return;
@@ -643,6 +644,35 @@ function ScreenDashboard({ logic }: { logic: any }) {
           {/* ─── BENTO GRID ─── */}
           <div className="flex flex-col gap-4">
 
+             {/* THỨ TỰ TUA */}
+             {logic.turnData && (
+               <button 
+                 onClick={() => setShowTurnQueueModal(true)}
+                 className="w-full bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-[32px] shadow-lg text-white flex items-center justify-between relative active:scale-95 transition-transform"
+               >
+                 <div className="flex items-center gap-3">
+                   <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
+                     <Clock size={24} />
+                   </div>
+                   <div className="text-left">
+                     <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thứ tự tua</h3>
+                     <p className="font-black text-xl leading-none mt-1">{logic.turnData.myRank > 0 ? logic.turnData.myRank : '-'} <span className="text-sm font-medium opacity-80 ml-1">/ {logic.turnData.allTypeD.length}</span></p>
+                   </div>
+                 </div>
+                 <div className="text-right">
+                   <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thời gian</h3>
+                   <p className="font-black text-xl leading-none mt-1">
+                     {logic.turnData.myRank > 0 ? (
+                       <>
+                         {Math.floor(logic.turnData.myTime)}<span className="text-sm font-medium opacity-80 mx-0.5">h</span>
+                         {String(Math.round((logic.turnData.myTime - Math.floor(logic.turnData.myTime)) * 60)).padStart(2, '0')}<span className="text-sm font-medium opacity-80 ml-0.5">P</span>
+                       </>
+                     ) : '-'}
+                   </p>
+                 </div>
+               </button>
+             )}
+
              {/* ─── GRID: Quy chế, Mã QR, Chỉ Tiêu ─── */}
              <div className="grid grid-cols-2 gap-4">
                 {/* 1. Nút mở Quy chế */}
@@ -860,6 +890,16 @@ function ScreenDashboard({ logic }: { logic: any }) {
         disciplineStatus={logic.disciplineStatus}
         isExempted={logic.disciplineStatus ? logic.disciplineStatus.continuousWorkMins >= logic.disciplineStatus.exemptHours * 60 : false}
       />
+
+      {/* Turn Queue Modal */}
+      {logic.turnData && (
+        <TurnQueueTypeDModal
+          isOpen={showTurnQueueModal}
+          onClose={() => setShowTurnQueueModal(false)}
+          turnData={logic.turnData}
+          ktvId={logic.ktvId}
+        />
+      )}
     </div>
   );
 }
@@ -2176,6 +2216,79 @@ function RejectOrderModal({
           >
             Huỷ, tôi sẽ nhận đơn
           </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function TurnQueueTypeDModal({ isOpen, onClose, turnData, ktvId }: { isOpen: boolean, onClose: () => void, turnData: any, ktvId: string }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+        animate={{ opacity: 1, scale: 1, y: 0 }} 
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+      >
+        <div className="p-6 bg-gradient-to-br from-blue-500 to-indigo-600 text-white relative flex-shrink-0">
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-colors">
+            <X size={20} />
+          </button>
+          <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+            <Clock size={24} className="text-white" />
+          </div>
+          <h2 className="text-2xl font-black mb-1">Thứ tự tua</h2>
+          <p className="text-blue-100 text-xs font-medium opacity-90">Sổ hàng đợi tua được sắp xếp theo thời gian làm việc trong tháng.</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 bg-slate-50">
+          <div className="space-y-2">
+            {turnData.allTypeD?.map((ktv: any, idx: number) => {
+              const isMe = ktv.employee_id === ktvId;
+              return (
+                <div 
+                  key={ktv.employee_id} 
+                  className={`flex items-center justify-between p-4 rounded-2xl border ${
+                    isMe 
+                      ? 'bg-blue-50 border-blue-200 shadow-md shadow-blue-100/50' 
+                      : 'bg-white border-slate-100 shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${
+                      idx === 0 ? 'bg-amber-100 text-amber-600' : 
+                      idx === 1 ? 'bg-slate-200 text-slate-600' :
+                      idx === 2 ? 'bg-orange-100 text-orange-600' :
+                      'bg-slate-100 text-slate-400'
+                    }`}>
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <p className={`text-sm font-bold ${isMe ? 'text-blue-700' : 'text-slate-700'}`}>
+                        {ktv.staff_name || ktv.employee_id} {isMe && <span className="text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded ml-1">BẠN</span>}
+                      </p>
+                      <p className="text-[10px] font-medium text-slate-400">{ktv.employee_id}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-black text-lg ${isMe ? 'text-blue-600' : 'text-slate-600'}`}>
+                      {(() => {
+                                      const totalHours = ktv.net_hours || 0;
+                                      const h = Math.floor(totalHours);
+                                      const m = Math.round((totalHours - h) * 60);
+                                      return `${h}h ${m.toString().padStart(2, '0')}P`;
+                                  })()}
+                    </p>
+                    <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">Giờ làm</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </motion.div>
     </div>

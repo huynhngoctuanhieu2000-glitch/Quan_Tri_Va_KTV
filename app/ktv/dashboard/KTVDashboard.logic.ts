@@ -144,6 +144,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
+    const [turnData, setTurnData] = useState<{ myRank: number; myTime: number; allTypeD: any[] } | null>(null);
+
     const [workType, setWorkType] = useState('TYPE_A');
     useEffect(() => {
         if (!ktvId) return;
@@ -248,7 +250,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         }
     }, [screen, booking?.id, ktvId]);
 
-    // 🔄 Fetch KPI Data & Discipline Status
+    // 🔄 Fetch KPI Data, Discipline Status, and Turn Data
     useEffect(() => {
         if (!ktvId) return;
         const fetchData = async () => {
@@ -261,6 +263,20 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 const discJson = await apiClient.get<any>(`/api/ktv/discipline/status?staffId=${ktvId}`);
                 if (discJson.success && discJson.data) {
                     setDisciplineStatus(discJson.data);
+                }
+
+                const turnsJson = await apiClient.get<any>(`/api/turns`);
+                if (turnsJson.success && turnsJson.data) {
+                    const allTypeD = turnsJson.data.filter((t: any) => t.work_type === 'TYPE_D');
+                    // Tính rank cho current KTV trong list allTypeD (dựa vào net_hours DESC)
+                    const sortedTypeD = [...allTypeD].sort((a, b) => (b.net_hours || 0) - (a.net_hours || 0));
+                    const myIndex = sortedTypeD.findIndex(t => t.employee_id === ktvId);
+                    
+                    setTurnData({
+                        myRank: myIndex !== -1 ? myIndex + 1 : 0,
+                        myTime: myIndex !== -1 ? (sortedTypeD[myIndex].net_hours || 0) : 0,
+                        allTypeD: sortedTypeD
+                    });
                 }
             } catch (e) {
                 console.error('Error fetching KPI/Discipline state:', e);
@@ -2363,7 +2379,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
         walletTimeline,
         notifications,
         unreadCount,
-
+        markNotificationAsRead,
+        turnData,
         kpiData,
         disciplineStatus,
         canViewWallet,
