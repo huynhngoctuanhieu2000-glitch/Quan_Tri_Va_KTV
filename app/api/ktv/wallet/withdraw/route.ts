@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { KtvWalletWithdrawSchema } from '@/lib/schemas/ktv.schema';
 import { KtvWalletService } from '@/lib/services/KtvWalletService';
+import { KtvTypeDWalletService } from '@/lib/services/KtvTypeDWalletService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -40,27 +41,34 @@ export async function POST(request: Request) {
         // KTV có thể gửi thông báo rút tiền nhiều lần dù cho lệnh cũ chưa được duyệt.
 
         if (walletType === 'TUA') {
-            let balanceData;
+            let balanceData: any;
             try {
-                balanceData = await KtvWalletService.getBalance(supabase, techCode);
+                // ⚠️ Phải dùng ĐÚNG service theo chế độ. Trước đây chỗ này luôn gọi
+                // KtvWalletService (bản A/B/C) kể cả với loại D, nên số dư và mức
+                // cọc lấy ra đều sai cho loại D.
+                balanceData = workType === 'TYPE_D'
+                    ? await KtvTypeDWalletService.getBalance(supabase, techCode)
+                    : await KtvWalletService.getBalance(supabase, techCode);
             } catch (err) {
                 console.error('Error getting balance in withdraw:', err);
                 return NextResponse.json({ success: false, error: 'Lỗi lấy thông tin số dư' }, { status: 500 });
             }
-            
-            const effectiveBalance = Number(balanceData.effective_balance || 0);
-            const minDeposit = Number(balanceData.min_deposit || 500000);
 
-            // Validation Core Logic for TUA
-            const remainingAfterWithdrawal = effectiveBalance - requestAmount;
-            
-            // USER YÊU CẦU: Không chặn lệnh rút tiền, chỉ gửi thông báo.
-            // if (remainingAfterWithdrawal < minDeposit) {
-            //     return NextResponse.json({ 
-            //         success: false, 
-            //         error: `Không thể rút. Số dư còn lại sau khi rút (${remainingAfterWithdrawal.toLocaleString()}đ) thấp hơn mức cọc tối thiểu yêu cầu (${minDeposit.toLocaleString()}đ).`
-            //     }, { status: 400 });
-            // }
+            // `available_balance` đã là max(0, số dư ròng − cọc tối thiểu), tức
+            // đúng bằng số được phép rút mà KHÔNG chạm vào tiền cọc.
+            const availableBalance = Number(balanceData.available_balance || 0);
+            const minDeposit = Number(balanceData.min_deposit || 0);
+            const netBalance = Number(balanceData.net_balance || 0);
+
+            if (requestAmount > availableBalance) {
+                const conLai = netBalance - requestAmount;
+                return NextResponse.json({
+                    success: false,
+                    error: availableBalance <= 0
+                        ? `Chưa thể rút tiền. Số dư ${netBalance.toLocaleString('vi-VN')}đ chưa vượt mức cọc tối thiểu ${minDeposit.toLocaleString('vi-VN')}đ.`
+                        : `Chỉ được rút tối đa ${availableBalance.toLocaleString('vi-VN')}đ. Rút ${requestAmount.toLocaleString('vi-VN')}đ sẽ làm số dư còn ${conLai.toLocaleString('vi-VN')}đ, thấp hơn mức cọc tối thiểu ${minDeposit.toLocaleString('vi-VN')}đ.`,
+                }, { status: 400 });
+            }
         }
 
         // 4. Tạo lệnh rút tiền
