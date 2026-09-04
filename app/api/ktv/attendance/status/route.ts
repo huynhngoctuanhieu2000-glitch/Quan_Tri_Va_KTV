@@ -110,9 +110,21 @@ export async function GET(request: Request) {
 
         // ─── Fetch Today Registration (Only for TYPE_D) ───
         let todayRegistration = null;
+        // Hôm nay đã báo "yêu cầu rút tiền" chưa? Mỗi KTV chỉ báo được 1 lần/ngày,
+        // nên form điểm danh phải biết mà ẩn ô tích đi — nếu không KTV bấm lại,
+        // server chặn im lặng và họ tưởng đã báo thêm được.
+        let withdrawIntentToday = false;
         if (workType === 'TYPE_D' && userRow?.code) {
             const { vnToday } = await import('@/lib/vn-time');
             const todayStr = vnToday();
+
+            const { data: intentRow } = await supabase
+                .from('KTVWithdrawals')
+                .select('id')
+                .eq('staff_id', userRow.code)
+                .eq('intent_date', todayStr)
+                .maybeSingle();
+            withdrawIntentToday = !!intentRow;
 
             const { data: regData } = await supabase
                 .from('KTVTypeDDailyRegistration')
@@ -196,11 +208,11 @@ export async function GET(request: Request) {
                     await KtvOnlineService.goOffline(supabase, userRow.code);
                 }
             }
-            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration });
+            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration, withdrawIntentToday });
         }
 
         const { checkStatus, record } = resolveAttendanceStatus(records, workType);
-        return NextResponse.json({ success: true, checkStatus, record, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration });
+        return NextResponse.json({ success: true, checkStatus, record, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration, withdrawIntentToday });
 
     } catch (error: any) {
         console.error('❌ [Attendance Status] Unhandled error:', error);
