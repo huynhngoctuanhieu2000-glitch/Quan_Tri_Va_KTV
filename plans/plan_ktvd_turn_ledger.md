@@ -398,7 +398,7 @@ Tách `getBusinessDate(supabase, at?: Date)` ra `lib/` dùng chung cho: `work_da
 |---|---|---|
 | **0** | Sửa L1 (key config cron). Độc lập, đang gây sai số thật | Đổi giá trong Settings → chạy cron tay → số đổi theo |
 | **1** | ✅ **XONG** — `lib/business-date.ts` dùng chung + sửa L6 + tháng/năm xếp hạng theo ngày làm việc. L7 hoãn sang bước 6 (§1.2) | Test mốc biên 01:00/05:59/06:00/00:30 đều pass; cửa sổ về đúng VN [D 06:00, D+1 06:00) |
-| **2** | Viết `KtvDLedgerEngine.computeRows()` (pure) — nâng từ history, + sao theo khách, + đúng key | Unit test: tua 60 làm 55, 3★, PT → khớp số tính tay |
+| **2** | ✅ **XONG** — `lib/services/KtvDLedgerEngine.ts` (thuần) + 52 test + script đối chiếu dữ liệu thật | 52/52 test pass; đối chiếu 01–03/09: 3/39 ô lệch, **giải thích được 100%** (chỉ do L7 + L2) — xem §7.1 |
 | **3** | Migration: tạo 2 bảng mới + `intent_date`. Backfill từ **2026-09-01** bằng `recomputeTurnRows()` | Script đối chiếu `Σ commission_net` theo ngày vs `KTVDailyLedger.total_commission` — chốt từng chênh lệch |
 | **4** | `KtvDLedgerReader.getRows()` | So với API cũ trên 5 KTV × 10 ngày, khớp 100% |
 | **5** | Chuyển consumer lần lượt: `service-hours` → `history` → `wallet/timeline` → `getBalance` | Mỗi lần chuyển, chụp số cũ/mới đối chiếu |
@@ -408,6 +408,31 @@ Tách `getBusinessDate(supabase, at?: Date)` ra `lib/` dùng chung cho: `work_da
 | **9** | Drop `KTVServiceHoursLedger`, `KTVMonthlyServiceHours`, cron reset | — |
 
 **Bước 0 và 8 nên tách PR riêng** — bước 0 sửa lỗi tiền đang chạy, bước 8 động tới tài khoản KTV.
+
+### 7.1. Kết quả đối chiếu engine vs sổ cũ (01–03/09)
+
+Chạy `npx ts-node -O '{"module":"commonjs"}' scripts/audit_ktvd_ledger_engine.ts 2026-09-01 2026-09-03`
+
+| ngày | KTV | sổ cũ | engine | chênh | vì sao |
+|---|---|---|---|---|---|
+| 01/09 | T016 | 113.048đ | 100.000đ | −13.048đ | **L7** — `WB-001-02092026-A` chuyển sang 02/09 theo ngày làm việc |
+| 02/09 | T016 | 25.835đ | 29.097đ | +3.262đ | **L2** — đơn đó khách chấm riêng T016 **1★**, trừ 75%; sổ cũ đọc `Bookings.rating = null` → trả đủ |
+| 03/09 | T016 | 24.634đ | 26.484đ | +1.850đ | **L2** ngược lại — `Bookings.rating = 1` (−75%) nhưng sao riêng của T016 là 0 → không trừ |
+
+**3/39 ô lệch, không còn dư lượng nào không giải thích được.** Cả hai chiều đều xuất hiện: có đơn KTV đang được **trả dư** vì sao xấu không được đọc, có đơn KTV đang bị **phạt oan** vì sao của khách khác trong cùng bill.
+
+### 7.2. ⚠️ Phút tiền ≠ phút giờ — đã kiểm chứng, không được gộp
+
+Trong lần chạy đối chiếu đầu tiên, engine lệch thêm ở NH079 (−690đ). Nguyên nhân: engine làm tròn phút, còn công thức tiền đang chạy dùng **phút lẻ**.
+
+| | Nguồn | Phần lẻ | Mốc lỗi (`t2 < t1`) | Chặn trên |
+|---|---|---|---|---|
+| `paid_minutes` (TIỀN) | `calculateGuestCommission` | **giữ nguyên** | trả **0** | `min(thực, gán)` |
+| `actual_minutes` (GIỜ) | `calculateActualMinutes` | **làm tròn** | lùi về **giờ gán** | không chặn |
+
+Ví dụ thật: `009-01092026-C` làm 29,4140 phút → tiền tính theo 29,4140 phút; giờ tích lũy tính 29 phút. Gộp chung là **tự ý đổi lương KTV**.
+
+`computeMinutes()` sao chép trung thành cả hai. Đây chính là lỗi L4 ở dạng tinh vi: không phải "dùng nhầm hàm" mà là "hai hàm vốn khác nhau ở phần lẻ và ở mốc lỗi".
 
 ---
 
