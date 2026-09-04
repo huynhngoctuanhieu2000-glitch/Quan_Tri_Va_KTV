@@ -1,8 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getDayCutoffHours, toBusinessDate, businessDayRange } from '../business-date';
-
-// 🔧 CONFIGURATION
-const DONE_STATUSES = ['DONE', 'COMPLETED', 'FEEDBACK', 'CLEANING'];
+import { getDayCutoffHours, toBusinessDate } from '../business-date';
+import { getRows, getPenalties } from './KtvDLedgerReader';
 
 export class KtvTypeDTurnService {
 
@@ -69,24 +67,27 @@ export class KtvTypeDTurnService {
 
     /**
      * ==========================================
-     * SINGLE SOURCE OF TRUTH (Hướng B)
+     * GIỜ TÍCH LŨY RÒNG THÁNG — đọc từ sổ cái
      * ==========================================
-     * "How many net hours has this Type D KTV worked this month?"
+     * "KTV loại D này đã làm bao nhiêu giờ ròng trong tháng?"
      *
-     * Formula:
-     *   net_hours = Σ(hours_earned - hours_penalty)  ← KTVServiceHoursLedger (past days, from nightly cron)
-     *             + today's earned hours              ← Bookings (real-time, today only)
-     *             + today's penalty hours              ← KTVServiceHoursLedger (today, penalty rows)
+     *   net_hours = Σ KTVDTurnLedger.actual_minutes / 60
+     *             − Σ KTVDPenaltyLedger.hours_penalty
+     *             , chặn dưới ở 0
      *
-     * Constraints:
-     *   - Only count entries where date >= Staff.work_type_effective_from
-     *   - Exclude is_utility services
-     *   - Use ACTUAL duration (not assigned)
-     *   - Clamp to Math.max(0, ...)
-     *   - Reset monthly (automatic via date filtering)
+     * Chỉ CỘNG DỒN, không còn công thức nào ở đây. Trước kia hàm này tự quét
+     * lại Bookings và trộn hai hệ ngày (lấy ngày theo cutoff nhưng lọc theo
+     * mốc nửa đêm) nên tua ca đêm bị mất — xem plan §1.2.
      *
-     * Called by: turns/route.ts, service-hours/route.ts, finance reports
-     * EVERY consumer MUST use this function — no independent calculations.
+     * Cũng bỏ luôn nhánh "tháng hiện tại = sổ quá khứ + tính lại hôm nay":
+     * trigger + hàng đợi (KTVDRecomputeQueue) đã giữ sổ cái bắt kịp dữ liệu,
+     * kể cả hôm nay.
+     *
+     * Vẫn giữ: reset khi chuyển chế độ (work_type_effective_from), loại dịch
+     * vụ tiện ích, dùng giờ THỰC (engine đã chặn tại giờ gán), chặn dưới 0.
+     *
+     * Gọi bởi: turns/route.ts, dispatch/actions.ts, getRankedQueue.
+     * MỌI consumer phải dùng hàm này — không nơi nào được tự tính lại.
      */
     static async getMonthlyNetHours(
         supabase: SupabaseClient,
@@ -99,7 +100,7 @@ export class KtvTypeDTurnService {
         const result: Record<string, number> = {};
         for (const id of staffIds) result[id] = 0;
 
-        // --- Effective dates (for work_type change reset) ---
+        // Reset khi KTV chuyển chế độ: chỉ tính từ ngày vào chế độ hiện tại.
         const { data: staffData } = await supabase
             .from('Staff')
             .select('id, work_type_effective_from')
@@ -114,121 +115,22 @@ export class KtvTypeDTurnService {
         const lastDay = new Date(year, month, 0).getDate();
         const lastOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-        // Detect if this is the current month
-        const todayStr = await KtvTypeDTurnService.getBusinessTodayStr(supabase);
-        const todayParts = todayStr.split('-');
-        const isCurrentMonth = parseInt(todayParts[1]) === month && parseInt(todayParts[0]) === year;
+        const [rows, penalties] = await Promise.all([
+            getRows(supabase, { staffIds, from: firstOfMonth, to: lastOfMonth }),
+            getPenalties(supabase, { staffIds, from: firstOfMonth, to: lastOfMonth }),
+        ]);
 
-        if (isCurrentMonth) {
-            // === CURRENT MONTH: Ledger (past days) + Realtime (today) ===
-
-            // Part A: Ledger for past days (exclude today to avoid double-counting earned rows)
-            const { data: pastLedger } = await supabase
-                .from('KTVServiceHoursLedger')
-                .select('staff_id, date, hours_earned, hours_penalty')
-                .in('staff_id', staffIds)
-                .gte('date', firstOfMonth)
-                .lt('date', todayStr);
-
-            if (pastLedger) {
-                for (const row of pastLedger) {
-                    const effectiveDate = effectiveDateMap[row.staff_id] || '2020-01-01';
-                    if (row.date >= effectiveDate) {
-                        result[row.staff_id] += (Number(row.hours_earned) || 0) - (Number(row.hours_penalty) || 0);
-                    }
-                }
-            }
-
-            // Part B: Today's penalties from ledger (penalty rows have booking_id = NULL)
-            const { data: todayPenalties } = await supabase
-                .from('KTVServiceHoursLedger')
-                .select('staff_id, hours_penalty')
-                .in('staff_id', staffIds)
-                .eq('date', todayStr)
-                .is('booking_id', null);
-
-            if (todayPenalties) {
-                for (const row of todayPenalties) {
-                    const effectiveDate = effectiveDateMap[row.staff_id] || '2020-01-01';
-                    if (todayStr >= effectiveDate) {
-                        result[row.staff_id] -= (Number(row.hours_penalty) || 0);
-                    }
-                }
-            }
-
-            // Part C: Today's earned from Bookings (real-time)
-            const { data: services } = await supabase
-                .from('Services')
-                .select('id, is_utility');
-            const utilitySet = new Set<string>();
-            (services || []).forEach((s: any) => {
-                if (s.is_utility) utilitySet.add(String(s.id));
-            });
-
-            // ⚠️ Cửa sổ phải theo NGÀY LÀM VIỆC (cutoff), không phải nửa đêm lịch.
-            // `todayStr` đã tính theo cutoff, nên nếu lọc bằng T00:00→T23:59 thì tua
-            // ca đêm (vd bắt đầu 00:30, thuộc ngày làm việc hôm trước) rơi ra ngoài
-            // cửa sổ và biến mất khỏi giờ tích lũy — trong khi sổ cái vẫn ghi nhận nó.
-            const cutoffHours = await getDayCutoffHours(supabase);
-            const { startIso, endIso } = businessDayRange(todayStr, cutoffHours);
-
-            const { data: bookings } = await supabase
-                .from('Bookings')
-                .select(`
-                    id, timeStart, status,
-                    BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status )
-                `)
-                .gte('timeStart', startIso)
-                .lt('timeStart', endIso)
-                .neq('status', 'CANCELLED');
-
-            for (const staffId of staffIds) {
-                const effectiveDate = effectiveDateMap[staffId] || '2020-01-01';
-                if (todayStr < effectiveDate) continue;
-
-                const techCode = staffId.toLowerCase();
-                let todayMinutes = 0;
-
-                (bookings || []).forEach((b: any) => {
-                    const items = (b.BookingItems || []).filter((i: any) =>
-                        i.technicianCodes &&
-                        Array.isArray(i.technicianCodes) &&
-                        i.technicianCodes.some((tc: string) => tc.toLowerCase().includes(techCode)) &&
-                        DONE_STATUSES.includes(i.status) &&
-                        !utilitySet.has(String(i.serviceId)) // Exclude utility services
-                    );
-
-                    items.forEach((item: any) => {
-                        const mins = KtvTypeDTurnService.calculateActualMinutes(item, techCode);
-                        if (mins > 0) todayMinutes += mins;
-                    });
-                });
-
-                result[staffId] += todayMinutes / 60;
-            }
-        } else {
-            // === PAST MONTH: Ledger only (full month) ===
-            const { data: ledgerData } = await supabase
-                .from('KTVServiceHoursLedger')
-                .select('staff_id, date, hours_earned, hours_penalty')
-                .in('staff_id', staffIds)
-                .gte('date', firstOfMonth)
-                .lte('date', lastOfMonth);
-
-            if (ledgerData) {
-                for (const row of ledgerData) {
-                    const effectiveDate = effectiveDateMap[row.staff_id] || '2020-01-01';
-                    if (row.date >= effectiveDate) {
-                        result[row.staff_id] += (Number(row.hours_earned) || 0) - (Number(row.hours_penalty) || 0);
-                    }
-                }
-            }
+        for (const r of rows) {
+            if (r.work_date < (effectiveDateMap[r.staff_id] || '2020-01-01')) continue;
+            result[r.staff_id] = (result[r.staff_id] || 0) + r.actual_minutes / 60;
+        }
+        for (const p of penalties) {
+            if (p.work_date < (effectiveDateMap[p.staff_id] || '2020-01-01')) continue;
+            result[p.staff_id] = (result[p.staff_id] || 0) - p.hours_penalty;
         }
 
-        // --- Clamp to 0 (không cho giờ tích lũy âm) ---
-        for (const id of staffIds) {
-            result[id] = Math.max(0, result[id] || 0);
-        }
+        // Không cho giờ tích lũy âm.
+        for (const id of staffIds) result[id] = Math.max(0, result[id] || 0);
 
         return result;
     }
