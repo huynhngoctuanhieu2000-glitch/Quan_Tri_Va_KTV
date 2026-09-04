@@ -647,16 +647,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
             </motion.div>
           )}
 
-          {/* Cảnh Báo Tua Đầu & Nợ Bàn Giao */}
-          {isFirstInQueue && (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-red-50 p-4 rounded-3xl border border-red-100 flex items-center gap-3">
-              <AlertTriangle size={20} className="text-red-500 animate-pulse shrink-0" />
-              <div>
-                <h3 className="font-bold text-xs text-red-700 uppercase tracking-widest">Tua Đầu - Chú ý</h3>
-                <p className="text-[10px] text-red-600/80 font-medium">Bạn đang đứng tua đầu! Hãy kiểm tra châm nước phòng.</p>
-              </div>
-            </motion.div>
-          )}
+          {/* Nhắc trực nước đã gộp vào ô "Thứ tự tua" bên dưới, không còn banner riêng. */}
 
           {logic.pendingHandovers?.length > 0 && (
             <div className="bg-amber-50 p-4 rounded-3xl border border-amber-100">
@@ -682,30 +673,42 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
              {/* THỨ TỰ TUA */}
              {logic.turnData && (
-               <button 
+               <button
                  onClick={() => setShowTurnQueueModal(true)}
-                 className="w-full bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-[32px] shadow-lg text-white flex items-center justify-between relative active:scale-95 transition-transform"
+                 className="w-full bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-[32px] shadow-lg text-white flex flex-col gap-3 relative active:scale-95 transition-transform"
                >
-                 <div className="flex items-center gap-3">
-                   <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
-                     <Clock size={24} />
+                 <div className="w-full flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                     <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
+                       <Clock size={24} />
+                     </div>
+                     <div className="text-left">
+                       <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thứ tự tua</h3>
+                       <p className="font-black text-xl leading-none mt-1">{logic.turnData.myRank > 0 ? logic.turnData.myRank : '-'}</p>
+                     </div>
                    </div>
-                   <div className="text-left">
-                     <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thứ tự tua</h3>
-                     <p className="font-black text-xl leading-none mt-1">{logic.turnData.myRank > 0 ? logic.turnData.myRank : '-'}</p>
+                   <div className="text-right">
+                     <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thời gian</h3>
+                     <p className="font-black text-xl leading-none mt-1">
+                       {logic.turnData.myRank > 0 ? (
+                         <>
+                           {Math.floor(logic.turnData.myTime)}<span className="text-sm font-medium opacity-80 mx-0.5">h</span>
+                           {String(Math.round((logic.turnData.myTime - Math.floor(logic.turnData.myTime)) * 60)).padStart(2, '0')}<span className="text-sm font-medium opacity-80 ml-0.5">P</span>
+                         </>
+                       ) : '-'}
+                     </p>
                    </div>
                  </div>
-                 <div className="text-right">
-                   <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thời gian</h3>
-                   <p className="font-black text-xl leading-none mt-1">
-                     {logic.turnData.myRank > 0 ? (
-                       <>
-                         {Math.floor(logic.turnData.myTime)}<span className="text-sm font-medium opacity-80 mx-0.5">h</span>
-                         {String(Math.round((logic.turnData.myTime - Math.floor(logic.turnData.myTime)) * 60)).padStart(2, '0')}<span className="text-sm font-medium opacity-80 ml-0.5">P</span>
-                       </>
-                     ) : '-'}
-                   </p>
-                 </div>
+
+                 {/* Đứng tua đầu thì nhắc trực nước ngay trong ô, khỏi banner riêng phía trên. */}
+                 {isFirstInQueue && (
+                   <div className="w-full flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl px-3 py-2">
+                     <AlertTriangle size={16} className="shrink-0 animate-pulse" />
+                     <p className="text-[11px] font-bold text-left leading-snug">
+                       Bạn đang đứng tua đầu — hãy kiểm tra châm nước bình thuỷ các phòng.
+                     </p>
+                   </div>
+                 )}
                </button>
              )}
 
