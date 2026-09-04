@@ -8,6 +8,13 @@ import { SupabaseClient } from '@supabase/supabase-js';
  *  - Điểm Office (bảng này)               → quyết định mức miễn quỹ nội bộ 250k/tháng.
  *
  * Quy chế: public/regulations/type-d.html — mục "Bảng tự chấm điểm cuối ca".
+ *
+ * RESET THEO KỲ — không cộng dồn qua kỳ:
+ *  - Điểm NGÀY  reset mỗi ngày:   mỗi ngày bắt đầu lại từ 100, trừ dần theo lỗi trong ngày đó.
+ *  - Điểm THÁNG reset mỗi tháng:  chỉ đọc phiếu trừ trong khoảng [đầu tháng, cuối tháng],
+ *                                 nên sang tháng mới mọi KTV lại bắt đầu từ 100.
+ *  - Phạt lỗi lặp cũng chỉ đếm trong phạm vi 1 tháng, không mang sang tháng sau.
+ * Không cần job reset định kỳ — kỳ được quyết bởi bộ lọc `month` khi đọc.
  */
 
 /** Cùng 1 lỗi lặp từ ngần này lần trong tháng thì bị trừ thêm. */
@@ -152,22 +159,27 @@ export class KtvOfficeScoreService {
             byDate.get(l.work_date)!.push(hit);
         }
 
-        const days: OfficeDay[] = [...byDate.entries()]
-            .map(([workDate, hits]) => ({
-                workDate,
-                dayScore: Math.max(0, 100 - hits.reduce((a, h) => a + h.points, 0)),
-                hits,
-            }))
-            .sort((a, b) => b.workDate.localeCompare(a.workDate));
-
         // Mẫu số: ngày đi làm thực tế. Nếu chấm công thiếu mà vẫn có phiếu trừ,
         // vẫn phải đếm ngày đó, nếu không trung bình sẽ sai lệch có lợi cho KTV.
         const allDays = new Set<string>([...attendedDates, ...byDate.keys()]);
-        const workDays = allDays.size;
-        const dirtyWithinWork = days.filter(d => allDays.has(d.workDate));
-        const cleanDays = Math.max(0, workDays - dirtyWithinWork.length);
 
-        const sum = cleanDays * 100 + dirtyWithinWork.reduce((a, d) => a + d.dayScore, 0);
+        // Mỗi ngày đi làm bắt đầu từ 100đ rồi trừ dần. Ngày sạch vẫn nằm trong danh
+        // sách với 100đ để người xem đối chiếu được từng ngày, không chỉ ngày có lỗi.
+        const days: OfficeDay[] = [...allDays]
+            .map(workDate => {
+                const hits = byDate.get(workDate) || [];
+                return {
+                    workDate,
+                    dayScore: Math.max(0, 100 - hits.reduce((a, h) => a + h.points, 0)),
+                    hits,
+                };
+            })
+            .sort((a, b) => b.workDate.localeCompare(a.workDate));
+
+        const workDays = days.length;
+        const cleanDays = days.filter(d => d.hits.length === 0).length;
+
+        const sum = days.reduce((a, d) => a + d.dayScore, 0);
         const avg = workDays > 0 ? sum / workDays : 100;
 
         // Phạt lỗi lặp — phương án A: cùng 1 lỗi từ 3 lần/tháng (rải rác bất kỳ,

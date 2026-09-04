@@ -45,9 +45,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         const m = scores.get(id)!;
 
         // Mã phạt sang tiếng Việt để lễ tân đọc được, giữ lại mã gốc cho việc truy vết.
+        // orderCode: booking_id đôi khi là UUID nội bộ (đơn cũ), đôi khi là mã đơn
+        // đọc được kiểu 'WB-002-03092026'. UUID thì rút gọn cho đỡ chiếm chỗ,
+        // vẫn giữ bookingId đầy đủ để tra ngược.
+        const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
         const hoursRows = ledger.rows.map(r => ({
             ...r,
             penaltyLabel: r.penaltyType ? (HOURS_PENALTY_VI[r.penaltyType] || r.penaltyType) : null,
+            orderCode: r.bookingId
+                ? (isUuid(r.bookingId) ? `#${r.bookingId.slice(0, 8)}` : r.bookingId)
+                : null,
         }));
 
         return NextResponse.json({

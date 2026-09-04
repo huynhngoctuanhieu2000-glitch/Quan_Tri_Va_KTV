@@ -366,14 +366,22 @@ const AdminKtvOfficePage = () => {
                             <>
                               {/* Bóc từng bước ra để KTV không thắc mắc vì sao ra con số này */}
                               <div className="bg-[var(--surface-soft)] p-4 rounded-2xl mb-5 text-sm">
-                                <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-3">Cách tính điểm tháng {logic.month}</p>
-                                <div className="flex justify-between py-1.5"><span>Ngày đi làm không vi phạm</span><b>{o.cleanDays} ngày × 100đ</b></div>
-                                {o.days.map((d: any) => (
-                                  <div key={d.workDate} className="flex justify-between py-1 pl-4 text-xs text-[var(--muted)]">
-                                    <span>{fmtDate(d.workDate)} — {d.hits.length} lỗi</span><b>{fmtNum(d.dayScore)}đ</b>
+                                <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Điểm từng ngày · tháng {logic.month}</p>
+                                <p className="text-xs text-[var(--muted)] mb-3">Mỗi ngày đi làm bắt đầu từ 100đ, trừ dần theo lỗi trong ngày đó.</p>
+                                {o.days.length === 0 ? (
+                                  <p className="py-3 text-xs text-[var(--muted)]">Chưa có ngày đi làm nào trong tháng.</p>
+                                ) : o.days.map((d: any) => (
+                                  <div key={d.workDate} className="flex justify-between items-baseline py-1.5 border-b border-[var(--line)]">
+                                    <span>
+                                      {fmtDate(d.workDate)}
+                                      <span className="text-xs text-[var(--muted)] ml-2">
+                                        {d.hits.length === 0 ? 'không vi phạm' : `${d.hits.length} lỗi`}
+                                      </span>
+                                    </span>
+                                    <b className={d.hits.length === 0 ? 'text-[var(--green)]' : 'text-[var(--rust)]'}>{fmtNum(d.dayScore)}đ</b>
                                   </div>
                                 ))}
-                                <div className="flex justify-between py-1.5 border-t border-[var(--line)] mt-2 pt-2">
+                                <div className="flex justify-between py-2 mt-1">
                                   <span>Trung bình {o.workDays} ngày đi làm</span><b>{fmtNum(o.avg)}đ</b>
                                 </div>
                                 {o.repeats.length > 0 ? (
@@ -395,13 +403,18 @@ const AdminKtvOfficePage = () => {
                                   <span className="text-[var(--muted)]">Quỹ nội bộ còn phải đóng{o.exemptPct > 0 ? ` (đã miễn ${o.exemptPct}%)` : ''}</span>
                                   <b className={o.fundDue === 0 ? 'text-[var(--green)]' : 'text-[var(--rust)]'}>{fmtMoney(o.fundDue)}</b>
                                 </div>
+                                <p className="text-xs text-[var(--muted)] mt-3 pt-3 border-t border-[var(--line)] leading-relaxed">
+                                  Điểm tính riêng từng tháng — sang tháng mới mọi KTV bắt đầu lại từ 100 điểm, lỗi tháng trước không mang sang.
+                                </p>
                               </div>
 
-                              {o.days.length === 0 ? (
+                              {/* Timeline chỉ liệt kê ngày CÓ vi phạm — bảng phía trên đã liệt kê đủ mọi ngày. */}
+                              {o.days.filter((d: any) => d.hits.length > 0).length === 0 ? (
                                 <p className="py-8 text-center text-[var(--muted)] text-sm">Tháng này chưa có phiếu trừ điểm nào.</p>
                               ) : (
                                 <div className="pl-6 border-l-2 border-[var(--line)] ml-2">
-                                  {o.days.map((d: any) => (
+                                  <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-3 -ml-6">Chi tiết vi phạm</p>
+                                  {o.days.filter((d: any) => d.hits.length > 0).map((d: any) => (
                                     <div key={d.workDate} className="relative pb-6">
                                       <div className="absolute w-3.5 h-3.5 rounded-full border-2 border-[var(--rust)] bg-white -left-[32px] top-1"></div>
                                       <div className="flex justify-between items-baseline mb-2">
@@ -459,7 +472,11 @@ const AdminKtvOfficePage = () => {
                                             <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${r.penaltyLabel ? 'bg-[var(--rust-2)] text-[var(--rust)] border-[var(--rust)]' : 'bg-[var(--green-2)] text-[var(--green)] border-[var(--green)]'}`}>
                                               {r.penaltyLabel || 'Giờ làm khách'}
                                             </span>
-                                            {r.note && <p className="text-xs text-[var(--muted)] mt-1">{r.note}</p>}
+                                            {/* Mã đơn quan trọng hơn ghi chú — đối chiếu ngược lại đơn hàng khi KTV thắc mắc. */}
+                                            {r.orderCode && (
+                                              <p className="text-xs font-mono font-bold text-[var(--ink)] mt-1" title={r.bookingId || ''}>{r.orderCode}</p>
+                                            )}
+                                            {r.note && <p className="text-xs text-[var(--muted)] mt-0.5">{r.note}</p>}
                                           </td>
                                           <td className="py-2.5 pr-3 text-right whitespace-nowrap text-[var(--green)] font-bold">{r.earned ? '+' + fmtHours(r.earned) : '—'}</td>
                                           <td className="py-2.5 pr-3 text-right whitespace-nowrap text-[var(--rust)] font-bold">{r.penalty ? '−' + fmtHours(r.penalty) : '—'}</td>
