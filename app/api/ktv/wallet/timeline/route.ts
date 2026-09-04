@@ -10,6 +10,58 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+/**
+ * Điều chỉnh + rút tiền — phần chung cho MỌI chế độ.
+ * Tách ra để nhánh loại D (đọc sổ cái) và nhánh A/B/C (đường cũ) dùng chung,
+ * không phải chép đôi.
+ */
+async function appendAdjustmentsAndWithdrawals(
+    supabase: any, techCode: string, workType: string, startDate: string, timeline: any[]
+) {
+    const { data: adjustments } = await KtvWalletService.applySnapshotFilter(
+        supabase.from('WalletAdjustments').select('id, amount, reason, type, created_at').eq('staff_id', techCode),
+        workType
+    ).gte('created_at', startDate);
+
+    (adjustments || []).forEach((a: any) => {
+        let title = Number(a.amount) >= 0 ? 'Thưởng hệ thống' : 'Trừ tiền hệ thống';
+        const reason = (a.reason || '').toLowerCase();
+        if (reason.includes('giặt đồ')) title = '🧦 Giặt đồ hàng ngày';
+        else if (reason.includes('nghỉ đột xuất')) title = '⚠️ Phạt nghỉ đột xuất';
+
+        timeline.push({
+            id: a.id,
+            type: Number(a.amount) >= 0 ? 'GIFT' : 'ADJUSTMENT',
+            title,
+            amount: a.amount,
+            note: a.reason || '',
+            created_at: a.created_at,
+            status: 'APPROVED',
+        });
+    });
+
+    const { data: withdrawals } = await KtvWalletService.applySnapshotFilter(
+        supabase.from('KTVWithdrawals').select('id, amount, note, request_date, status').eq('staff_id', techCode),
+        workType
+    ).or('wallet_type.eq.TUA,wallet_type.is.null').gte('request_date', startDate);
+
+    (withdrawals || []).forEach((w: any) => {
+        // Ẩn dòng "Báo trước lúc điểm danh" (amount = 1, chỉ là tín hiệu báo Thu ngân).
+        const isIntent = Math.abs(Number(w.amount)) === 1 && w.note && w.note.includes('Báo trước');
+        if (isIntent) return;
+
+        timeline.push({
+            id: w.id,
+            type: 'WITHDRAWAL',
+            title: 'Rút tiền mặt',
+            amount: -Math.abs(Number(w.amount)),
+            note: w.note || '',
+            created_at: w.request_date,
+            status: w.status,
+        });
+    });
+}
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -58,6 +110,70 @@ export async function GET(request: Request) {
         const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
         const nowVnDate = new Date(Date.now() + VN_OFFSET_MS);
         const todayStr = nowVnDate.toISOString().split('T')[0];
+
+        // ═══ LOẠI D: dựng từ SỔ CÁI, mỗi tua một dòng ═══════════════════════
+        // Tách hẳn khỏi đường A/B/C. Trước đây nhánh này tự tính lại hoa hồng
+        // nên lệch với lịch sử và với số dư ví; nay cả ba cùng đọc
+        // KTVDTurnLedger. Sổ cái lưu KHÔNG làm tròn → làm tròn ở đây.
+        //
+        // Khác đường cũ ở chỗ hiển thị: cũ gộp thành "Tổng tiền tua ngày X",
+        // nay tách từng tua kèm mã bill để KTV đối chiếu được với lịch sử.
+        if (workType === 'TYPE_D') {
+            const { drainQueueFor } = await import('@/lib/services/KtvDLedgerWriter');
+            const { getRows, groupForHistory } = await import('@/lib/services/KtvDLedgerReader');
+
+            const turnRows = await getRows(supabase, {
+                staffIds: [techCode], from: GLOBAL_START_DATE_STR, to: '2099-12-31',
+            });
+
+            // Tua vừa xong có thể còn trong hàng đợi (worker 5 phút/lần).
+            try {
+                await drainQueueFor(supabase, [...new Set(turnRows.map(r => r.booking_id))]);
+            } catch { /* không chặn hiển thị */ }
+
+            for (const g of groupForHistory(turnRows)) {
+                const at = g.rows[0].booking_time_start || `${g.work_date}T12:00:00`;
+                if (g.commission_net > 0) {
+                    timeline.push({
+                        id: `${g.key}_comm`,
+                        type: 'COMMISSION',
+                        title: `Tiền tua đơn ${g.bill}`,
+                        amount: Math.round(g.commission_net),
+                        note: `${g.service_name} · ${Math.round(g.paid_minutes)} phút`
+                            + (g.deduction_rate > 0 ? ` · ${g.rating}★ trừ ${Math.round(g.deduction_rate * 100)}%` : '')
+                            + (g.is_provisional ? ' · tạm tính' : ''),
+                        created_at: at,
+                        status: g.is_provisional ? 'PENDING' : 'APPROVED',
+                    });
+                }
+                if (g.tax_amount > 0) {
+                    timeline.push({
+                        id: `${g.key}_tax`,
+                        type: 'ADJUSTMENT',
+                        title: `Thuế TNCN đơn ${g.bill}`,
+                        amount: -Math.round(g.tax_amount),
+                        note: 'Khấu trừ 10%',
+                        created_at: at,
+                        status: 'APPROVED',
+                    });
+                }
+                if (g.tip > 0) {
+                    timeline.push({
+                        id: `${g.key}_tip`,
+                        type: 'TIP',
+                        title: `Tiền Tip đơn ${g.bill}`,
+                        amount: Math.round(g.tip),
+                        note: '',
+                        created_at: at,
+                        status: 'APPROVED',
+                    });
+                }
+            }
+
+            await appendAdjustmentsAndWithdrawals(supabase, techCode, workType, START_DATE, timeline);
+            timeline.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            return NextResponse.json({ success: true, data: timeline });
+        }
 
         // 1. Fetch Ledger (Chỉ lấy các ngày trước ngày hôm nay để tránh đụng độ Realtime)
         const { data: ledgers } = await KtvWalletService.applySnapshotFilter(
@@ -284,53 +400,7 @@ export async function GET(request: Request) {
             }
         }
 
-        // 3. Adjustments
-        const { data: adjustments } = await KtvWalletService.applySnapshotFilter(
-            supabase.from('WalletAdjustments').select('id, amount, reason, type, created_at').eq('staff_id', techCode),
-            workType
-        )
-            .gte('created_at', START_DATE);
-        
-        (adjustments || []).forEach((a: any) => {
-            // Smart title based on reason content
-            let title = Number(a.amount) >= 0 ? 'Thưởng hệ thống' : 'Trừ tiền hệ thống';
-            const reason = (a.reason || '').toLowerCase();
-            if (reason.includes('giặt đồ')) title = '🧦 Giặt đồ hàng ngày';
-            else if (reason.includes('nghỉ đột xuất')) title = '⚠️ Phạt nghỉ đột xuất';
-
-            timeline.push({
-                id: a.id,
-                type: Number(a.amount) >= 0 ? 'GIFT' : 'ADJUSTMENT',
-                title,
-                amount: a.amount,
-                note: a.reason || '',
-                created_at: a.created_at,
-                status: 'APPROVED'
-            });
-        });
-
-        // 4. Withdrawals
-        const { data: withdrawals } = await KtvWalletService.applySnapshotFilter(
-            supabase.from('KTVWithdrawals').select('id, amount, note, request_date, status').eq('staff_id', techCode),
-            workType
-        )
-            .or('wallet_type.eq.TUA,wallet_type.is.null')
-            .gte('request_date', START_DATE);
-
-        (withdrawals || []).forEach((w: any) => {
-            const isIntent = Math.abs(Number(w.amount)) === 1 && w.note && w.note.includes('Báo trước');
-            if (isIntent) return; // Ẩn giao dịch "Báo trước" khỏi timeline của KTV
-            
-            timeline.push({
-                id: w.id,
-                type: 'WITHDRAWAL',
-                title: 'Rút tiền mặt',
-                amount: -Math.abs(Number(w.amount)),
-                note: w.note || '',
-                created_at: w.request_date,
-                status: w.status
-            });
-        });
+        await appendAdjustmentsAndWithdrawals(supabase, techCode, workType, START_DATE, timeline);
 
         // Sort timeline asc by created_at to calculate running balance
         timeline.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
