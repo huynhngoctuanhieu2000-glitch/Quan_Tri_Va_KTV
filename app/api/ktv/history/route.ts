@@ -193,6 +193,26 @@ export async function GET(request: Request) {
 
         // ─── Fetch BookingItems for these bookings ────────────────────────
         const bookingIds = bookings.map((b: any) => b.id);
+
+        // ─── Loại D: lấy số từ SỔ CÁI, không tính lại ─────────────────────
+        // Tiền, giờ, sao và thuế đều đọc từ KTVDTurnLedger. Trước đây chỗ này
+        // tự tính lại nên lệch với ví (sao cấp bill thay vì cấp khách, thuế
+        // làm tròn từng đơn). Xem plans/plan_ktvd_turn_ledger.md.
+        const ledgerByGroup = new Map<string, any>();
+        if (workType === 'TYPE_D' && bookingIds.length > 0) {
+            const { drainQueueFor } = await import('@/lib/services/KtvDLedgerWriter');
+            const { getRows, groupForHistory } = await import('@/lib/services/KtvDLedgerReader');
+
+            // Tua vừa xong có thể còn nằm trong hàng đợi (worker chạy 5 phút/lần).
+            // Tính ngay những item thuộc đúng các đơn đang xem — bó hẹp, không
+            // quét cả hàng đợi — để KTV thấy tua vừa làm mà không phải chờ.
+            try { await drainQueueFor(supabase as any, bookingIds); } catch { /* không chặn hiển thị */ }
+
+            const rows = await getRows(supabase as any, { staffIds: [techCode], from: minDate, to: maxDate });
+            for (const g of groupForHistory(rows)) {
+                ledgerByGroup.set(`${g.booking_id}|${g.rows[0].group_id}`, g);
+            }
+        }
         console.log('🔍 [DEBUG] bookingIds:', JSON.stringify(bookingIds));
         const { data: items, error: iErr } = await supabase
             .from('BookingItems')
@@ -299,6 +319,9 @@ export async function GET(request: Request) {
             // Mỗi group sẽ tạo ra 1 dòng lịch sử riêng rẽ
             const groupsArray = Array.from(itemGroups.values());
             return groupsArray.map((groupItems: any[]) => {
+                const opts0 = typeof groupItems[0].options === 'string' ? JSON.parse(groupItems[0].options) : (groupItems[0].options || {});
+                const groupId0 = opts0.mergedIntoId || groupItems[0].id;
+
                 let totalDuration = 0;
                 let actualDuration = 0;
                 let commission = 0;
@@ -344,30 +367,37 @@ export async function GET(request: Request) {
                     return r > best ? r : best;
                 }, 0) || null;
 
-                // ─── Loại D: tính lại hoa hồng theo ĐÚNG luật riêng ────────────────
-                // Code chung (calcCommission) dùng bảng giá Loại A, KHÔNG tách VIP/PT và
-                // KHÔNG trừ theo sao — nên số hiển thị sẽ lệch với ví. Gọi lại service riêng.
+                // ─── Loại D: ĐỌC từ sổ cái, không tính lại ─────────────────────────
+                // Số ở đây phải khớp tuyệt đối với ví, nên cả hai cùng đọc
+                // KTVDTurnLedger. Trước đây chỗ này tự tính nên lệch với ví ở hai
+                // điểm: sao lấy cấp bill (`itemRating`) thay vì cấp khách, và thuế
+                // làm tròn từng đơn trong khi ví làm tròn trên tổng ngày.
+                //
+                // Sổ cái lưu KHÔNG làm tròn; làm tròn ở đây — tầng hiển thị.
                 let commissionBeforeDeduction = commission;
                 let ratingDeductionRate = 0;
-                if (workType === 'TYPE_D' && passedCount > 0) {
-                    const isVip = (i: any) => {
-                        const sid = String(i.serviceId || '').toUpperCase();
-                        return sid.startsWith('NHP') || sid.startsWith('NHT') || sid.startsWith('VIP');
-                    };
-                    const vipItems = groupItems.filter(isVip);
-                    const ptItems = groupItems.filter((i: any) => !isVip(i));
+                let ledgerRating: number | null = null;
+                let ledgerTax: number | null = null;
+                let ledgerActualDuration: number | null = null;
 
-                    // Không trừ sao → số gốc, để biết khách chấm sao làm mất bao nhiêu.
-                    const noDeduction: Record<string, number> = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 };
-                    commissionBeforeDeduction =
-                        KtvTypeDCommissionService.calculateGuestCommission(vipItems, techCode, itemRating, rateVIP_D, noDeduction) +
-                        KtvTypeDCommissionService.calculateGuestCommission(ptItems, techCode, itemRating, ratePT_D, noDeduction);
-
-                    commission =
-                        KtvTypeDCommissionService.calculateGuestCommission(vipItems, techCode, itemRating, rateVIP_D, ratingDeductions_D) +
-                        KtvTypeDCommissionService.calculateGuestCommission(ptItems, techCode, itemRating, ratePT_D, ratingDeductions_D);
-
-                    ratingDeductions_D && (ratingDeductionRate = Number(ratingDeductions_D[String(itemRating ?? 0)] ?? 0));
+                if (workType === 'TYPE_D') {
+                    const led = ledgerByGroup.get(`${b.id}|${groupId0}`);
+                    if (led) {
+                        commission = Math.round(led.commission_net);
+                        commissionBeforeDeduction = Math.round(led.commission_gross);
+                        ratingDeductionRate = led.deduction_rate;
+                        ledgerRating = led.rating;
+                        ledgerTax = Math.round(led.tax_amount);
+                        ledgerActualDuration = Math.round(led.actual_minutes);
+                        totalDuration = Math.round(led.assigned_minutes) || totalDuration;
+                    } else {
+                        // Chưa có dòng trong sổ = tua chưa đủ điều kiện tính tiền
+                        // (chưa có segment, hoặc chưa tới trạng thái được tính).
+                        // Hiện 0 chứ KHÔNG tính lại — tính lại là đẻ lại đúng cái
+                        // lệch mà kiến trúc này sinh ra để xoá.
+                        commission = 0;
+                        commissionBeforeDeduction = 0;
+                    }
                 }
 
                 // ─── Bonus points ─────────────
@@ -418,8 +448,6 @@ export async function GET(request: Request) {
                     ? recomputeBookingStatus(myItemStatuses)
                     : b.status;
 
-                const opts0 = typeof groupItems[0].options === 'string' ? JSON.parse(groupItems[0].options) : (groupItems[0].options || {});
-                const groupId0 = opts0.mergedIntoId || groupItems[0].id;
                 const billSuffix = suffixMap.get(groupId0) || '';
 
                 // ─── Tạm tính hay đã chốt? ──────────────────────────────────────
@@ -430,11 +458,17 @@ export async function GET(request: Request) {
                 const isFeedbackDone = isFinalStatus; // Khách đã FB hoặc đã bỏ qua
                 const isProvisional = !hasRating && !isFinalStatus;
 
-                // ─── Quy đổi bonus ra tiền + tính thuế TNCN cho từng đơn ───────
+                // ─── Quy đổi bonus ra tiền + thuế TNCN ─────────────────────────
                 const bonusValue = Math.round(bonusPoints * pointRate);
                 const grossIncome = commission + bonusValue;
                 const isTaxed = isTaxableWorkType && String(b.bookingDate || bDateStr) >= taxEffectiveFrom;
-                const taxAmount = isTaxed ? Math.round(grossIncome * TAX_RATE) : 0;
+
+                // Loại D: thuế phần hoa hồng lấy thẳng từ sổ cái (không làm tròn khi
+                // lưu, làm tròn ở đây) để khớp tuyệt đối với ví. Thuế phần thưởng vẫn
+                // tính ở đây vì thưởng tính theo KHÁCH, không thuộc tầng đơn.
+                const taxAmount = workType === 'TYPE_D'
+                    ? (ledgerTax ?? 0) + (isTaxed ? Math.round(bonusValue * TAX_RATE) : 0)
+                    : (isTaxed ? Math.round(grossIncome * TAX_RATE) : 0);
 
                 return {
                     id: `${b.id}_${groupItems[0].id}`, // Đảm bảo ID duy nhất cho mỗi dòng lịch sử (BookingID + ItemID)
@@ -442,12 +476,14 @@ export async function GET(request: Request) {
                     createdAt: b.createdAt,
                     bookingDate: b.bookingDate,
                     status: itemBasedStatus,
-                    rating: itemRating,
+                    rating: workType === 'TYPE_D' ? (ledgerRating ?? itemRating) : itemRating,
                     tip: isFeedbackDone ? ktvTip : 0,
                     commission: isFeedbackDone ? commission : null,
                     serviceName,
                     duration: totalDuration,
-                    actualDuration: actualDuration > 0 ? actualDuration : null,
+                    actualDuration: workType === 'TYPE_D'
+                        ? (ledgerActualDuration ?? null)
+                        : (actualDuration > 0 ? actualDuration : null),
                     bonusPoints: isFeedbackDone ? bonusPoints : 0,
                     bonusValue: isFeedbackDone ? bonusValue : 0,
                     grossIncome: isFeedbackDone ? grossIncome : null,

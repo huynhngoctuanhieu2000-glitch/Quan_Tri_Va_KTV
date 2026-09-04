@@ -160,6 +160,35 @@ export async function recomputeTurnRows(
     };
 }
 
+/**
+ * Tính ngay những item ĐANG NẰM TRONG HÀNG ĐỢI thuộc các booking chỉ định.
+ *
+ * Dùng lúc ĐỌC: tua vừa xong có thể còn chờ worker (chạy 5 phút/lần), nên
+ * màn hình lịch sử / ví gọi hàm này để KTV thấy tua vừa làm mà không phải
+ * chờ. Bó hẹp trong đúng các đơn đang xem — không quét cả hàng đợi.
+ *
+ * Không ném lỗi ra ngoài: hiển thị chậm một nhịp còn hơn là vỡ màn hình.
+ */
+export async function drainQueueFor(
+    supabase: SupabaseClient,
+    bookingIds: string[],
+): Promise<number> {
+    if (bookingIds.length === 0) return 0;
+
+    const { data: queued } = await supabase
+        .from('KTVDRecomputeQueue')
+        .select('booking_item_id')
+        .in('booking_id', bookingIds)
+        .limit(500);
+
+    const itemIds = (queued || []).map((q: any) => q.booking_item_id);
+    if (itemIds.length === 0) return 0;
+
+    await supabase.from('KTVDRecomputeQueue').delete().in('booking_item_id', itemIds);
+    await recomputeTurnRows(supabase, itemIds);
+    return itemIds.length;
+}
+
 export interface DrainResult extends RecomputeResult {
     queueTaken: number;
     queueRemaining: number;
