@@ -8,6 +8,7 @@ import {
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useKTVSchedule, LeaveRequest, ScheduleTab } from './Schedule.logic';
+import { getRegistrationEditWindow } from '@/lib/vn-time';
 import { canEditRegistration, vnToday } from '@/lib/vn-time';
 import { t } from './Schedule.i18n';
 
@@ -586,11 +587,27 @@ const KTVSchedulePage = () => {
                                         <AlertCircle size={24} />
                                     </div>
                                     <h3 className="text-lg font-bold text-center text-gray-900 mb-2">
-                                        Xác nhận hủy lịch
+                                        {editingReg.status === 'REGISTERED' ? 'Chuyển sang OFF?' : 'Xác nhận hủy lịch'}
                                     </h3>
-                                    <p className="text-sm text-gray-500 text-center mb-6">
-                                        Bạn có chắc chắn muốn hủy đăng ký {editingReg.status === 'REGISTERED' ? 'ĐI LÀM' : 'OFF'} ngày {editingReg.date}? {editingReg.status === 'REGISTERED' && editingReg.expected_time ? `(Giờ đến: ${editingReg.expected_time})` : ''}
+                                    <p className="text-sm text-gray-500 text-center mb-4">
+                                        {editingReg.status === 'REGISTERED'
+                                            ? <>Ngày {editingReg.date} sẽ chuyển thành <strong>OFF</strong>{editingReg.expected_time ? ` (đang đăng ký đi làm lúc ${editingReg.expected_time})` : ''}.</>
+                                            : <>Bạn có chắc chắn muốn hủy đăng ký OFF ngày {editingReg.date}?</>}
                                     </p>
+
+                                    {/* Cảnh báo trừ giờ khi bỏ ca sau hạn miễn phạt */}
+                                    {editingReg.status === 'REGISTERED'
+                                        && getRegistrationEditWindow(editingReg.date) === 'PENALTY' && (
+                                        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl px-4 py-3 mb-4">
+                                            <p className="text-sm font-black text-amber-900 mb-1 flex items-center gap-2">
+                                                <AlertCircle size={16} /> Bạn sẽ bị trừ 5 giờ tích lũy
+                                            </p>
+                                            <p className="text-xs text-amber-800 leading-relaxed">
+                                                Đã quá hạn đổi lịch miễn phạt (12:00 trưa hôm trước).
+                                                Giờ tích lũy quyết định thứ tự nhận khách của bạn.
+                                            </p>
+                                        </div>
+                                    )}
                                     
                                     {offError && (
                                         <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2 mb-4 flex items-center gap-2">

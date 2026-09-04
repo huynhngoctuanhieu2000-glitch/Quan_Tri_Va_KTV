@@ -48,11 +48,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const { canEditRegistration, vnNow } = await import('@/lib/vn-time');
+    const { canEditRegistration, getRegistrationEditWindow, vnNow } = await import('@/lib/vn-time');
 
     for (const entry of processedEntries) {
       if (!canEditRegistration(entry.work_date)) {
-        return NextResponse.json({ error: `Chỉ có thể đăng ký/sửa lịch từ ngày mai trở đi.` }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Từ 07:00 sáng ngày làm việc thì không đổi lịch được nữa. Bạn chỉ còn quyền BÁO ĐI MUỘN 1 lần.' },
+          { status: 400 });
       }
       
       if (type === 'WORKING') {
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
     const datesToUpdate = processedEntries.map(e => e.work_date);
     const { data: existingRecords } = await supabase
       .from('KTVTypeDDailyRegistration')
-      .select('work_date, check_in_at, penalty_applied')
+      .select('work_date, status, check_in_at, penalty_applied')
       .eq('staff_id', staff.id)
       .in('work_date', datesToUpdate);
       
@@ -81,23 +83,42 @@ export async function POST(request: Request) {
       }
     }
 
-    if (type === 'CANCEL') {
-      const { error } = await supabase
-        .from('KTVTypeDDailyRegistration')
-        .delete()
-        .eq('staff_id', staff.id)
-        .in('work_date', datesToUpdate);
-        
-      if (error) throw error;
-      return NextResponse.json({ success: true, message: 'Đã hủy lịch đăng ký' });
-    }
+    // ⚠️ HUỶ ĐĂNG KÝ = CHUYỂN SANG OFF, không xoá bản ghi.
+    // Trước đây `CANCEL` xoá sạch dòng đăng ký. Cron chốt sổ cuối ngày thấy
+    // "không đăng ký gì" → KHOÁ TÀI KHOẢN. Nghĩa là KTV bấm một nút trông vô
+    // hại là mất tài khoản, không cảnh báo gì.
+    const effectiveType = type === 'CANCEL' ? 'OFF' : type;
+    const status = effectiveType === 'OFF' ? 'OFF_REGISTERED' : 'REGISTERED';
 
-    const status = type === 'OFF' ? 'OFF_REGISTERED' : 'REGISTERED';
+    // ─── Trừ 5 giờ nếu bỏ ca sau hạn miễn phạt ────────────────────────
+    // Bỏ ca = đang đăng ký LÀM mà chuyển sang OFF (hoặc bấm huỷ).
+    // Hạn miễn phạt: 12:00 trưa ngày hôm trước. Quá hạn thì vẫn cho đổi,
+    // nhưng trừ 5 giờ tích lũy — giao diện đã cảnh báo trước khi xác nhận.
+    const penalised: { work_date: string; hours: number }[] = [];
+
+    if (effectiveType === 'OFF') {
+      const dangDangKyLam = new Set(
+        (existingRecords || [])
+          .filter((r: any) => r.status === 'REGISTERED' || r.status === 'LATE_REPORTED')
+          .map((r: any) => r.work_date));
+
+      for (const entry of processedEntries) {
+        if (!dangDangKyLam.has(entry.work_date)) continue;              // vốn đã OFF → không phạt
+        if (getRegistrationEditWindow(entry.work_date) !== 'PENALTY') continue;
+
+        const { KtvTypeDDisciplineService } = await import('@/lib/services/KtvTypeDDisciplineService');
+        const hours = await KtvTypeDDisciplineService.deductDailyViolation(
+          supabase as any, staff.id, entry.work_date, 'ABSENT_EARLY_NOTICE',
+          'Bỏ ca đã đăng ký sau hạn miễn phạt (12:00 hôm trước)', staff.id,
+        );
+        penalised.push({ work_date: entry.work_date, hours });
+      }
+    }
 
     const upsertData = processedEntries.map(entry => ({
         staff_id: staff.id,
         work_date: entry.work_date,
-        expected_time: type === 'WORKING' ? entry.expected_time : null,
+        expected_time: effectiveType === 'WORKING' ? entry.expected_time : null,
         status,
         registered_at: vnNow().toISOString()
     }));
@@ -109,7 +130,14 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({
+      success: true,
+      data,
+      penalised,
+      message: penalised.length > 0
+        ? `Đã chuyển sang OFF. Bạn bị trừ ${penalised[0].hours} giờ tích lũy do bỏ ca sau 12:00 hôm trước.`
+        : (type === 'CANCEL' ? 'Đã chuyển ngày này sang OFF.' : undefined),
+    });
   } catch (error: any) {
     console.error('Error in daily-registration:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

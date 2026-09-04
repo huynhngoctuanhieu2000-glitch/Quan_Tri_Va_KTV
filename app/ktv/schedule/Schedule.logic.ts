@@ -195,13 +195,21 @@ export const useKTVSchedule = () => {
         setIsSubmittingOff(true);
         setOffError(null);
         try {
-            await apiClient.post(API.KTV.DAILY_REGISTRATION, {
+            const res = await apiClient.post(API.KTV.DAILY_REGISTRATION, {
+                // Server chuyển CANCEL thành OFF chứ không xoá bản ghi — xoá thì
+                // cron chốt sổ thấy "không đăng ký gì" và khoá tài khoản.
                 type: "CANCEL",
                 dates: [dateStr],
             });
             fetchLeaveList();
             setEditingReg(null);
-            addToast("Hủy lịch thành công", "success");
+            // Server trả về `penalised` nếu bỏ ca sau hạn miễn phạt (12:00 hôm trước).
+            const bịPhạt = (res as any)?.penalised?.[0];
+            if (bịPhạt) {
+                addToast(`Đã chuyển sang OFF. Bạn bị trừ ${bịPhạt.hours} giờ tích lũy do bỏ ca sau 12:00 hôm trước.`, "warning");
+            } else {
+                addToast("Đã chuyển ngày này sang OFF", "success");
+            }
         } catch(err: any) {
             setOffError(err.message || "Có lỗi xảy ra khi hủy");
         } finally {
