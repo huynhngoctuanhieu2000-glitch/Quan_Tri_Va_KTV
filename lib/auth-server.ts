@@ -182,6 +182,13 @@ export async function requirePermission(permissionId: string) {
         ? bUser.permissions
         : getFallbackPermissions(roleId);
 
+    // Auto-inject ktv_office_scoring for admin, dev, reception (tránh lỗi cache DB cũ)
+    if (permissionId === 'ktv_office_scoring') {
+        if (roleId === 'admin' || roleId === 'dev' || roleId === 'reception') {
+            return true;
+        }
+    }
+
     if (!permissions.includes(permissionId)) {
         throw new Error('Forbidden');
     }

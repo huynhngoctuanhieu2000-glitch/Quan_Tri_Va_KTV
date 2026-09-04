@@ -79,6 +79,7 @@ const ICONS: Record<string, React.ReactNode> = {
   support_dashboard: <LayoutDashboard size={20} />,
   support_tasks_admin: <ClipboardCheck size={20} />,
   support_reviews_admin: <CheckSquare size={20} />,
+  ktv_office_scoring: <ClipboardCheck size={20} />,
   system_settings: <Settings size={20} />,
   settings: <Settings size={20} />,
 };
@@ -116,13 +117,14 @@ const PATHS: Record<string, string> = {
   support_dashboard: '/admin/support/dashboard',
   support_tasks_admin: '/admin/support/templates',
   support_reviews_admin: '/admin/support/reviews',
+  ktv_office_scoring: '/admin/ktv-office',
   employee_tasks: '/support/tasks',
   system_settings: '/admin/settings/system',
   settings: '/settings',
 };
 
 // 🔧 UI CONFIGURATION
-const GROUP_ORDER = ['Vận Hành', 'Tài Chính & Kế Toán', 'Thiết Lập Nội Dung', 'Kỹ Thuật Viên', 'Giao Việc', 'Hệ Thống'];
+const GROUP_ORDER = ['Vận Hành', 'Tài Chính & Kế Toán', 'Thiết Lập Nội Dung', 'Kỹ Thuật Viên', 'Office', 'Hệ Thống'];
 
 interface SidebarProps {
   isOpen: boolean;

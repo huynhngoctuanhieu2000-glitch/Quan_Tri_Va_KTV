@@ -33,6 +33,7 @@ export type ModuleId =
   | 'support_tasks_admin'
   | 'support_reviews_admin'
   | 'employee_tasks'
+  | 'ktv_office_scoring'
   | 'settings'
   | 'system_settings';
 

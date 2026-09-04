@@ -1,0 +1,105 @@
+import { NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth-server';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { KtvOfficeScoreService } from '@/lib/services/KtvOfficeScoreService';
+
+export const dynamic = 'force-dynamic';
+
+/** 'YYYY-MM' của tháng hiện tại theo giờ VN. */
+function currentMonthVn(): string {
+    const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+export async function GET(request: Request) {
+    try {
+        await requirePermission('ktv_office_scoring');
+
+        const { searchParams } = new URL(request.url);
+        const monthParam = searchParams.get('month');
+        const month = /^\d{4}-\d{2}$/.test(monthParam || '') ? monthParam! : currentMonthVn();
+
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+            return NextResponse.json({ success: false, error: 'Supabase admin chưa được cấu hình' }, { status: 500 });
+        }
+
+        // Chỉ KTV Loại D. Không có ai thì trả mảng rỗng — KHÔNG fallback sang toàn bộ
+        // nhân viên, vì trang này chấm điểm theo quy chế riêng của Loại D.
+        const { data: staff, error: staffError } = await supabase
+            .from('Staff')
+            .select('id, full_name, status, avatar_url')
+            .eq('work_type', 'TYPE_D')
+            .neq('status', 'ĐÃ NGHỈ');
+        if (staffError) throw staffError;
+
+        const staffList = staff || [];
+        const staffIds = staffList.map((s: any) => s.id);
+
+        if (staffIds.length === 0) {
+            return NextResponse.json({ success: true, month, data: [] });
+        }
+
+        const [scores, hours, lockLogs] = await Promise.all([
+            KtvOfficeScoreService.computeMonth(supabase, staffIds, month),
+            KtvOfficeScoreService.hoursTotals(supabase, staffIds, month),
+            supabase
+                .from('SecurityAuditLogs')
+                .select('employee_id, created_at, details')
+                .in('employee_id', staffIds)
+                .eq('event_type', 'AUTO_LOCK_ABSENCE')
+                .order('created_at', { ascending: false }),
+        ]);
+
+        // Lý do khóa gần nhất của mỗi KTV, để hiển thị trên thẻ đang bị khóa.
+        const lockInfo = new Map<string, { reason: string; at: string }>();
+        (lockLogs.data || []).forEach((l: any) => {
+            if (!lockInfo.has(l.employee_id)) {
+                lockInfo.set(l.employee_id, {
+                    reason: l.details?.reason || 'Vi phạm kỷ luật',
+                    at: l.created_at,
+                });
+            }
+        });
+
+        const data = staffList.map((s: any) => {
+            const m = scores.get(s.id)!;
+            const locked = s.status === 'KHÓA_TÀI_KHOẢN';
+            return {
+                id: s.id,
+                code: s.id,
+                name: s.full_name || s.id,
+                avatarUrl: s.avatar_url,
+                locked,
+                lockReason: locked ? lockInfo.get(s.id)?.reason ?? null : null,
+                lockedAt: locked ? lockInfo.get(s.id)?.at ?? null : null,
+                score: m.final,
+                workDays: m.workDays,
+                avg: m.avg,
+                repeats: m.repeats,
+                repeatPenalty: m.repeatPenalty,
+                exemptPct: m.exemptPct,
+                fundDue: m.fundDue,
+                hours: hours.get(s.id) ?? 0,
+            };
+        });
+
+        // Xếp hạng theo giờ tích lũy — quy chế: giờ cao hơn được ưu tiên xếp tua trước.
+        // KTV bị khóa không tham gia xếp hạng vì không nhận tua được.
+        const ranked = data.filter(d => !d.locked).sort((a, b) => b.hours - a.hours);
+        ranked.forEach((d: any, i) => { d.rank = i + 1; });
+        data.forEach((d: any) => { if (d.locked) d.rank = null; });
+
+        // Bị khóa lên đầu để không bị bỏ sót, còn lại theo thứ hạng.
+        data.sort((a: any, b: any) =>
+            (Number(b.locked) - Number(a.locked)) || (b.hours - a.hours)
+        );
+
+        return NextResponse.json({ success: true, month, data });
+    } catch (error: any) {
+        const msg = error?.message || 'Lỗi không xác định';
+        const status = msg === 'Forbidden' ? 403 : msg === 'Unauthorized' ? 401 : 500;
+        if (status === 500) console.error('Lỗi khi lấy summary KTV Office:', error);
+        return NextResponse.json({ success: false, error: msg }, { status });
+    }
+}
