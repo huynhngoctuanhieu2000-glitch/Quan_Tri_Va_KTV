@@ -27,11 +27,36 @@ Hiện tại tiền tua và giờ tích lũy của loại D được **tính l�
 | L3 | ~~**COMBO** lệch 30k/h~~ — **ghi sai, đã kiểm chứng lại**: không mã dịch vụ nào bắt đầu bằng `COMBO` (0/`danh_sach_dich_vu.csv`; "Combo King" là `NHS0800`). Nhánh COMBO trong cron là **code chết**, `rateCombo` chưa bao giờ được áp dụng → **không có lệch**. Đã gỡ ở bước 0 | [route.ts:138](app/api/cron/sync-daily-ledger-type-d/route.ts) |
 | L4 | **Giờ tích lũy có 2 định nghĩa.** Cron ghi `hours_earned` bằng `calculateActualMinutes` (giờ **thực**); `service-hours` route bỏ qua cột đó, tự tính bằng `calculateItemDuration` (giờ **gán**) | [KtvTypeDTurnService.ts:22](lib/services/KtvTypeDTurnService.ts) vs [service-hours/route.ts:88](app/api/ktv/type-d/service-hours/route.ts) |
 | L5 | **Thuế 10% tính ở 2 tầng.** Ví: `dayComm * 0.1` (tổng ngày). Lịch sử: `Math.round(gross * 0.1)` (từng đơn). `Σ round(đơn) ≠ round(Σ)` → KTV cộng tay lịch sử không ra số trong ví | [history:437](app/api/ktv/history/route.ts) vs [WalletService:59](lib/services/KtvTypeDWalletService.ts) |
-| L6 | **`getMonthlyNetHours` trộn 2 hệ ngày.** `todayStr` tính theo cutoff, nhưng cửa sổ truy vấn là nửa đêm lịch → tua ca đêm mất khỏi bảng xếp hạng | [KtvTypeDTurnService.ts:174](lib/services/KtvTypeDTurnService.ts) |
-| L7 | **Cron ledger không dùng cutoff.** Cắt theo lịch thô `T00:00:00`→`T23:59:59` trong khi tua/điểm danh cắt theo cutoff | [route.ts:25](app/api/cron/sync-daily-ledger-type-d/route.ts) |
+| L6 | ✅ **ĐÃ SỬA (bước 1).** `getMonthlyNetHours` trộn 2 hệ ngày: `todayStr` theo cutoff nhưng cửa sổ truy vấn theo nửa đêm lịch. Thực chất cửa sổ cũ hành xử như **cutoff = 7** và phớt lờ config — xem §1.2 | [KtvTypeDTurnService.ts:174](lib/services/KtvTypeDTurnService.ts) |
+| L7 | **Cron ledger không dùng cutoff.** Cắt theo `T00:00:00+07:00`→`T23:59:59+07:00` → cũng thành cutoff 7 (§1.2). **Cố tình hoãn** — sửa cùng lúc viết `KTVDTurnLedger` để không xê dịch ranh giới ngày trên dữ liệu đã chốt (xem §7 bước 6) | [route.ts:25](app/api/cron/sync-daily-ledger-type-d/route.ts) |
+| L11 | **`Bookings.timeStart` là `timestamp` KHÔNG timezone**, lưu theo giờ UTC — trong khi các cột `timestamptz` thì có offset. Mọi filter dạng `${d}T00:00:00+07:00` đều bị Postgres bỏ qua offset → lệch 1 tiếng ở mọi ranh giới ngày | §1.2 |
 | L8 | 🔴 **2 cron chưa bao giờ chạy.** Vercel Cron gọi **GET**; `reset-type-d-hours` và `daily-absence-check` chỉ export `POST` → 405 | xem §6.1 |
 | L9 | **Grain sai.** `UNIQUE(staff_id, date, booking_id)` = 1 KTV/1 bill/1 dòng → không lưu được `service_id` từng đơn con | [migration:51](supabase/migrations/20260901000000_add_type_d_support.sql) |
 | L10 | **Partial index chặn `ON CONFLICT`** → phải insert từng dòng bắt lỗi 23505 | working diff hiện tại |
+
+### 1.2. ⚠️ Cái bẫy kiểu timestamp — đọc trước khi viết bất kỳ filter theo ngày nào
+
+Hai kiểu cột đang sống chung trong DB và **render khác nhau**:
+
+| Cột | Kiểu | PostgREST trả về |
+|---|---|---|
+| `KTVServiceHoursLedger.created_at` | `timestamptz` | `"2026-09-03T15:17:58.193365+00:00"` |
+| `Bookings.timeStart`, `bookingDate`, `createdAt` | **`timestamp` (naive)** | `"2026-09-04T07:40:00"` — không `Z`, không offset |
+
+Giá trị naive được lưu theo **giờ UTC**. Khi so sánh, Postgres cast chuỗi filter sang `timestamp` và **bỏ qua phần offset**:
+
+```
+'2026-09-02T00:00:00+07:00'::timestamp  →  2026-09-02 00:00:00   (offset bị vứt)
+                                        →  thực chất là VN 07:00
+```
+
+Hệ quả: mọi cửa sổ viết dạng `${d}T00:00:00+07:00` → `${d}T23:59:59+07:00` thực ra là **VN [D 07:00, D+1 06:59]** — tức cutoff 7 cứng, phớt lờ `spa_day_cutoff_hours`. Đây là gốc chung của L6 và L7.
+
+**Cách viết đúng:** dùng `businessDayRange()` trong [lib/business-date.ts](lib/business-date.ts) — nó trả `.toISOString()` nên phần UTC khớp thẳng với dữ liệu lưu, đúng cho cả cột naive-UTC lẫn `timestamptz` thật.
+
+**Kiểm chứng trên dữ liệu thật:** sau khi quy đổi đúng, phân bố giờ VN đạt đỉnh 14h–18h và kéo tới 01h đêm — khớp với thực tế "tua muộn nhất kết thúc khoảng 01:00". Nếu diễn giải sai (coi là VN local) thì phân bố ra đỉnh 07h–11h và chết sau 18h, vô lý với spa.
+
+⚠️ Khi ghi `KTVDTurnLedger.work_date`, phải tính từ `toBusinessDate()` chứ **không** được cắt chuỗi `timeStart.slice(0,10)` — cắt chuỗi sẽ ra ngày UTC, lệch 7 tiếng.
 
 ---
 
@@ -372,7 +397,7 @@ Tách `getBusinessDate(supabase, at?: Date)` ra `lib/` dùng chung cho: `work_da
 | Bước | Việc | Verify |
 |---|---|---|
 | **0** | Sửa L1 (key config cron). Độc lập, đang gây sai số thật | Đổi giá trong Settings → chạy cron tay → số đổi theo |
-| **1** | Tách `getBusinessDate()` dùng chung + sửa L6, L7 | Tua ca đêm 01:00 xuất hiện đúng ngày trong bảng xếp hạng |
+| **1** | ✅ **XONG** — `lib/business-date.ts` dùng chung + sửa L6 + tháng/năm xếp hạng theo ngày làm việc. L7 hoãn sang bước 6 (§1.2) | Test mốc biên 01:00/05:59/06:00/00:30 đều pass; cửa sổ về đúng VN [D 06:00, D+1 06:00) |
 | **2** | Viết `KtvDLedgerEngine.computeRows()` (pure) — nâng từ history, + sao theo khách, + đúng key | Unit test: tua 60 làm 55, 3★, PT → khớp số tính tay |
 | **3** | Migration: tạo 2 bảng mới + `intent_date`. Backfill từ **2026-09-01** bằng `recomputeTurnRows()` | Script đối chiếu `Σ commission_net` theo ngày vs `KTVDailyLedger.total_commission` — chốt từng chênh lệch |
 | **4** | `KtvDLedgerReader.getRows()` | So với API cũ trên 5 KTV × 10 ngày, khớp 100% |
