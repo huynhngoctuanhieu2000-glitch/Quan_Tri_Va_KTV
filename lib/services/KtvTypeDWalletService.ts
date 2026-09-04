@@ -52,20 +52,17 @@ export class KtvTypeDWalletService {
                 pastLedgers.forEach((l: any) => {
                     if (l.date > maxDateStr) maxDateStr = l.date;
                     
-                    let dayComm = Number(l.total_commission || 0);
-                    let dayBonusPoints = Number(l.total_bonus || 0);
-                    let dayBonus = dayBonusPoints * pointRate; // Đổi ĐIỂM ra VNĐ trước khi tính thuế
-                    
+                    // ⚠️ CHỈ lấy THƯỞNG từ sổ cũ. Tiền tua, tip và thuế phần hoa
+                    // hồng nay đọc từ KTVDTurnLedger (xem bên dưới) — thưởng thì
+                    // chưa, vì thưởng tính theo KHÁCH nên không thuộc tầng đơn.
+                    let dayBonus = Number(l.total_bonus || 0) * pointRate;
+
                     if (l.date >= taxEffectiveDate) {
-                        const taxComm = dayComm * 0.1;
-                        const taxBonus = dayBonus * 0.1; // Tính thuế trên VNĐ
-                        total_tax_deducted += (taxComm + taxBonus);
-                        dayComm -= taxComm;
+                        const taxBonus = dayBonus * 0.1;
+                        total_tax_deducted += taxBonus;
                         dayBonus -= taxBonus;
                     }
 
-                    ledgerSummary.comm += dayComm;
-                    ledgerSummary.tip += Number(l.total_tip || 0);
                     ledgerSummary.bonus += dayBonus;
                     ledgerSummary.penalty += Number(l.total_penalty || 0);
                 });
@@ -124,8 +121,6 @@ export class KtvTypeDWalletService {
         const techWorkTypeMap: Record<string, string> = {};
         (allTechData || []).forEach((t: any) => { techWorkTypeMap[t.id.toLowerCase()] = t.work_type; });
 
-        let rt_commission = 0;
-        let rt_tip = 0;
         let rt_bonus = 0;
 
         for (const b of allBookings) {
@@ -142,24 +137,8 @@ export class KtvTypeDWalletService {
 
             if (relevantItems.length === 0) continue;
 
-            const vipItems = relevantItems.filter((i: any) => {
-                const svcId = String(i.serviceId).toUpperCase();
-                return svcId.startsWith('NHP') || svcId.startsWith('NHT') || svcId.startsWith('VIP');
-            });
-            const ptItems = relevantItems.filter((i: any) => {
-                const svcId = String(i.serviceId).toUpperCase();
-                return !(svcId.startsWith('NHP') || svcId.startsWith('NHT') || svcId.startsWith('VIP'));
-            });
-
-            const vipCommission = KtvTypeDCommissionService.calculateGuestCommission(vipItems, staffId, b.rating, rateVIP, ratingDeductions);
-            const ptCommission = KtvTypeDCommissionService.calculateGuestCommission(ptItems, staffId, b.rating, ratePT, ratingDeductions);
-
-            rt_commission += vipCommission + ptCommission;
-
-            let bookingTip = 0;
-            relevantItems.forEach((i: any) => bookingTip += (Number(i.tip) || 0));
-            rt_tip += bookingTip;
-
+            // Vòng lặp này giờ CHỈ tính THƯỞNG. Tiền tua và tip đọc từ
+            // KTVDTurnLedger để khớp tuyệt đối với lịch sử.
             if (enableBonus) {
                 const ktvWorkTypesForGuest: string[] = [];
                 (b.BookingItems || []).forEach((i: any) => {
@@ -183,10 +162,8 @@ export class KtvTypeDWalletService {
         }
 
         if (todayStr >= taxEffectiveDate) {
-            const rtTaxComm = rt_commission * 0.1;
             const rtTaxBonus = rt_bonus * 0.1;
-            total_tax_deducted += (rtTaxComm + rtTaxBonus);
-            rt_commission -= rtTaxComm;
+            total_tax_deducted += rtTaxBonus;
             rt_bonus -= rtTaxBonus;
         }
 
@@ -213,8 +190,22 @@ export class KtvTypeDWalletService {
             .filter((w: any) => w.status === 'PENDING' && !(Math.abs(Number(w.amount)) === 1 && w.note?.includes('Bảo trì')))
             .reduce((sum: number, w: any) => sum + Math.abs(Number(w.amount)), 0);
 
-        const total_commission = ledgerSummary.comm + rt_commission;
-        const total_tip = ledgerSummary.tip + rt_tip;
+        // ─── TIỀN TUA · TIP · THUẾ: đọc từ sổ cái ──────────────────────────
+        // Cùng nguồn với màn hình lịch sử, nên KTV cộng tay các dòng lịch sử
+        // luôn ra đúng số trong ví. Sổ cái lưu KHÔNG làm tròn.
+        const { getRows, sumByStaff } = await import('./KtvDLedgerReader');
+        const turnRows = await getRows(supabase, {
+            staffIds: [staffId],
+            from: GLOBAL_START_DATE_STR,
+            to: '2099-12-31',
+        });
+        const turnTotals = sumByStaff(turnRows)[staffId]
+            || { commission_net: 0, tax_amount: 0, take_home: 0, tip: 0, hours: 0, turns: 0 };
+
+        total_tax_deducted += turnTotals.tax_amount;
+
+        const total_commission = turnTotals.take_home;   // đã trừ thuế
+        const total_tip = turnTotals.tip;
         const total_bonus = ledgerSummary.bonus + rt_bonus;
         const total_penalty = 0; 
 
