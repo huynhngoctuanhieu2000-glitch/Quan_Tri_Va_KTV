@@ -399,7 +399,7 @@ Tách `getBusinessDate(supabase, at?: Date)` ra `lib/` dùng chung cho: `work_da
 | **0** | Sửa L1 (key config cron). Độc lập, đang gây sai số thật | Đổi giá trong Settings → chạy cron tay → số đổi theo |
 | **1** | ✅ **XONG** — `lib/business-date.ts` dùng chung + sửa L6 + tháng/năm xếp hạng theo ngày làm việc. L7 hoãn sang bước 6 (§1.2) | Test mốc biên 01:00/05:59/06:00/00:30 đều pass; cửa sổ về đúng VN [D 06:00, D+1 06:00) |
 | **2** | ✅ **XONG** — `lib/services/KtvDLedgerEngine.ts` (thuần) + 52 test + script đối chiếu dữ liệu thật | 52/52 test pass; đối chiếu 01–03/09: 3/39 ô lệch, **giải thích được 100%** (chỉ do L7 + L2) — xem §7.1 |
-| **3** | Migration: tạo 2 bảng mới + `intent_date`. Backfill từ **2026-09-01** bằng `recomputeTurnRows()` | Script đối chiếu `Σ commission_net` theo ngày vs `KTVDailyLedger.total_commission` — chốt từng chênh lệch |
+| **3** | ✅ **XONG** — migration `20260904120000` (2 bảng, RLS siết) + backfill 11 dòng từ 01/09. `intent_date` dời sang bước 7 | Đối chiếu 3/39 ô lệch, giải thích 100% (§7.1). RLS test: anon đọc 0 dòng, ghi bị chặn 42501 |
 | **4** | `KtvDLedgerReader.getRows()` | So với API cũ trên 5 KTV × 10 ngày, khớp 100% |
 | **5** | Chuyển consumer lần lượt: `service-hours` → `history` → `wallet/timeline` → `getBalance` | Mỗi lần chuyển, chụp số cũ/mới đối chiếu |
 | **6** | Cắm 4 hook (§2.3) + cron hạ vai trò xuống lưới an toàn | Chạy 3 đêm song song 2 bảng, so |
