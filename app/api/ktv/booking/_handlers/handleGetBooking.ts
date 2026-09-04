@@ -283,7 +283,7 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
             technicianCode
                 ? supabase
                     .from('KtvAssignments')
-                    .select('booking_id, planned_start_time')
+                    .select('booking_id, booking_item_id, planned_start_time')
                     .eq('employee_id', technicianCode)
                     .eq('business_date', today)
                     .in('status', ['QUEUED', 'READY'])
@@ -608,6 +608,8 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         // ⚡ NHÓM 4: PARALLEL EXTRAS (next booking details + prefetch checklist)
         // ═══════════════════════════════════════════════════════════════
         let nextBookingId: string | null = null;
+        let nextBookingItemId: string | null = null;   // id ĐƠN CON — dùng cho luồng từ chối tua
+        let nextBillCode: string | null = null;
         let nextServiceName: string | null = null;
         let nextStartTime: string | null = null;
         let prefetchedDynamicChecklist: any = null;
@@ -616,13 +618,21 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         let validNextAssign: any = null;
         if (nextAssignsRaw && nextAssignsRaw.length > 0) {
             const bIds = nextAssignsRaw.map((a: any) => a.booking_id);
-            const { data: bData } = await supabase.from('Bookings').select('id, status').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED","SPLIT")');
+            const { data: bData } = await supabase.from('Bookings').select('id, status, "billCode"').in('id', bIds).not('status', 'in', '("COMPLETED","CANCELLED","SPLIT")');
             const validBIds = new Set(bData?.map((b: any) => b.id) || []);
             validNextAssign = nextAssignsRaw.find((a: any) => validBIds.has(a.booking_id));
+            if (validNextAssign) {
+                nextBillCode = bData?.find((b: any) => b.id === validNextAssign.booking_id)?.billCode ?? null;
+            }
         }
 
         if (validNextAssign) {
             nextBookingId = validNextAssign.booking_id;
+            // ⚠️ `nextBookingId` là id của BOOKING. Luồng từ chối tua cần id của
+            // BOOKING ITEM — trước đây gửi nhầm booking id nên API tra
+            // BookingItems không ra gì, KTV không bị gỡ khỏi đơn và thời lượng
+            // gói không xác định được (rơi về mặc định 60 phút).
+            nextBookingItemId = validNextAssign.booking_item_id ?? null;
             if (validNextAssign.planned_start_time) {
                 const pst = new Date(validNextAssign.planned_start_time);
                 const vnPst = new Date(pst.getTime() + 7 * 60 * 60 * 1000);
@@ -791,6 +801,8 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 handoverChecklist: roomProcedures.handover_checklist,
                 ktv_instant_reward_enabled: ktv_instant_reward_enabled,
                 nextBookingId: nextBookingId,
+                nextBookingItemId: nextBookingItemId,
+                nextBillCode: nextBillCode,
                 nextServiceName: nextServiceName,
                 nextStartTime: nextStartTime,
                 ktvWorkTypes: ktvWorkTypes

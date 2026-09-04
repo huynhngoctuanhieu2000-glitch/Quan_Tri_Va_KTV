@@ -327,18 +327,47 @@ function ScreenDashboard({ logic }: { logic: any }) {
   const [showWallet, setShowWallet] = React.useState(false);
   const [showTurnQueueModal, setShowTurnQueueModal] = React.useState(false);
 
+  const [isAccepting, setIsAccepting] = React.useState(false);
+
+  // Báo quầy biết KTV đã nhận đơn. KHÔNG đổi trạng thái đơn, không bắt đầu
+  // tính giờ — chỉ là tín hiệu cho lễ tân. Bấm xong vẫn đi tiếp như cũ.
+  const handleAcceptOrder = async () => {
+    const id = logic.booking?.nextBookingItemId || logic.booking?.nextBookingId;
+    if (!id) return;
+    try {
+      setIsAccepting(true);
+      const res = await apiClient.post<any>('/api/ktv/accept-order', {
+        staffId: logic.ktvId,
+        bookingItemId: id,
+      });
+      if (res.success) addToast('✅ Đã báo quầy. Bạn tới phòng nhé!', 'success');
+      else addToast('Lỗi: ' + res.error, 'error');
+    } catch (e: any) {
+      addToast('Lỗi kết nối: ' + e.message, 'error');
+    } finally {
+      setIsAccepting(false);
+    }
+    logic.goToDashboard(logic.booking.nextBookingId);
+  };
+
   const handleRejectOrder = async (reason: string) => {
-    if (!logic.booking?.nextBookingId) return;
+    const rejectId = logic.booking?.nextBookingItemId || logic.booking?.nextBookingId;
+    if (!rejectId) return;
     try {
       logic.setIsLoading(true);
       const res = await apiClient.post<any>('/api/ktv/discipline/reject-order', {
         staffId: logic.ktvId,
-        bookingItemId: logic.booking.nextBookingId,
+        // Ưu tiên id ĐƠN CON. Trước đây luôn gửi booking id nên API tra
+        // BookingItems không ra, KTV không bị gỡ khỏi đơn và mức phạt sai.
+        bookingItemId: rejectId,
         reason
       });
       if (res.success) {
         if (res.isExempted) {
           addToast('✅ Bạn đã được miễn phạt do làm việc liên tục đạt ngưỡng. Lễ tân đã nhận được báo cáo.', 'success');
+        } else if (res.hoursDeducted > 0) {
+          // Loại D trừ GIỜ tích lũy, không phải điểm chuyên cần.
+          addToast(`⚠️ Bạn đã bị trừ ${res.hoursDeducted} giờ tích lũy. Lễ tân đã nhận được báo cáo.`, 'warning');
         } else {
           addToast(`⚠️ Bạn đã bị trừ ${res.penaltyPoints} điểm chuyên cần. Lễ tân đã nhận được báo cáo.`, 'warning');
         }
@@ -572,25 +601,31 @@ function ScreenDashboard({ logic }: { logic: any }) {
                   <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/30">
                     <Sparkles size={24} className="animate-pulse" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-black text-lg uppercase tracking-tight mb-1">Đơn mới đã sẵn sàng!</p>
-                    <p className="text-sm font-medium text-emerald-50">
+                    {logic.booking.nextBillCode && (
+                      <p className="text-base font-black text-white tracking-tight">
+                        Đơn {logic.booking.nextBillCode}
+                      </p>
+                    )}
+                    <p className="text-sm font-medium text-emerald-50 truncate">
                       {logic.booking.nextServiceName || 'Dịch vụ'}{logic.booking.nextStartTime ? ` • ${logic.booking.nextStartTime}` : ''}
                     </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => logic.goToDashboard(logic.booking.nextBookingId)}
-                  className="w-full py-4 bg-white text-emerald-700 font-black rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  onClick={handleAcceptOrder}
+                  disabled={isAccepting}
+                  className="w-full py-4 bg-white text-emerald-700 font-black rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   <Play size={16} fill="currentColor" />
-                  NHẬN ĐƠN NGAY
+                  {isAccepting ? 'ĐANG BÁO QUẦY…' : 'BÁO QUẦY NHẬN ĐƠN'}
                 </button>
                 <button
                   onClick={() => setShowRejectModal(true)}
-                  className="text-xs font-bold text-emerald-100 hover:text-white underline text-center opacity-80"
+                  className="w-full py-3 bg-white/15 border border-white/30 text-white font-bold rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all"
                 >
-                  Tôi muốn từ chối tua này
+                  TỪ CHỐI
                 </button>
               </div>
             </motion.div>

@@ -16,6 +16,26 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Supabase init failed' }, { status: 500 });
         }
 
+        // Màn hình KTV từng gửi nhầm BOOKING id vào đây (nextBookingId). Chấp nhận
+        // cả hai: nếu id không khớp BookingItem nào thì coi như booking id và tìm
+        // đơn con đang gán cho chính KTV này.
+        let itemId: string = bookingItemId;
+        const { data:directItem } = await supabase
+            .from('BookingItems').select('id').eq('id', bookingItemId).maybeSingle();
+        if (!directItem) {
+            const { data: candidates } = await supabase
+                .from('BookingItems')
+                .select('id, technicianCodes, status')
+                .eq('bookingId', bookingItemId);
+            const mine = (candidates || []).find((i: any) =>
+                (i.technicianCodes || []).some((t: string) => String(t).toLowerCase() === String(staffId).toLowerCase()));
+            if (!mine) {
+                return NextResponse.json(
+                    { success: false, error: 'Không tìm thấy đơn đang gán cho bạn.' }, { status: 404 });
+            }
+            itemId = mine.id;
+        }
+
         // 1. Lấy thông tin KTV
         const { data: staffData } = await supabase.from('Staff').select('full_name, work_type').eq('id', staffId).single();
         const staffName = staffData?.full_name || staffId;
@@ -42,7 +62,7 @@ export async function POST(request: Request) {
         if (isTypeD) {
             if (!isExempted) {
                 const { data: item } = await supabase
-                    .from('BookingItems').select('serviceId, segments').eq('id', bookingItemId).maybeSingle();
+                    .from('BookingItems').select('serviceId, segments').eq('id', itemId).maybeSingle();
 
                 // Thời lượng gói: ưu tiên phút đã gán cho chính KTV này, không
                 // có thì lấy thời lượng chuẩn của dịch vụ.
@@ -68,7 +88,7 @@ export async function POST(request: Request) {
                 const workDate = await getBusinessToday(supabase);
 
                 hoursDeducted = await KtvTypeDDisciplineService.deductOrderReject(
-                    supabase, staffId, workDate, bookingItemId, mins,
+                    supabase, staffId, workDate, itemId, mins,
                 );
                 console.log(`[Type D] ${staffId} từ chối tua ${bookingItemId} (${mins}p) → trừ ${hoursDeducted}h`);
             }
@@ -84,7 +104,7 @@ export async function POST(request: Request) {
 
         // 5. Gỡ KTV khỏi BookingItem và TurnQueue
         // Lấy BookingItem hiện tại
-        const { data: itemData } = await supabase.from('BookingItems').select('technicianCodes, status').eq('id', bookingItemId).single();
+        const { data: itemData } = await supabase.from('BookingItems').select('technicianCodes, status').eq('id', itemId).maybeSingle();
         if (itemData && itemData.technicianCodes) {
             const newTechCodes = itemData.technicianCodes.filter((id: string) => id !== staffId);
             // Nếu không còn KTV nào thì đưa về PREPARING để Lễ tân điều phối lại
@@ -93,11 +113,12 @@ export async function POST(request: Request) {
             await supabase.from('BookingItems').update({ 
                 technicianCodes: newTechCodes,
                 status: newStatus
-            }).eq('id', bookingItemId);
+            }).eq('id', itemId);
         }
 
         // Cập nhật TurnQueue của KTV này (gỡ đơn đang làm)
-        const dateStr = new Date().toISOString().split('T')[0];
+        const { getBusinessToday } = await import('@/lib/business-date');
+        const dateStr = await getBusinessToday(supabase);
         const { data: turnData } = await supabase.from('TurnQueue')
             .select('id, booking_item_ids')
             .eq('employee_id', staffId)
@@ -106,8 +127,8 @@ export async function POST(request: Request) {
 
         if (turnData) {
             let newBookingItemIds = turnData.booking_item_ids || [];
-            if (newBookingItemIds.includes(bookingItemId)) {
-                newBookingItemIds = newBookingItemIds.filter((id: string) => id !== bookingItemId);
+            if (newBookingItemIds.includes(itemId)) {
+                newBookingItemIds = newBookingItemIds.filter((id: string) => id !== itemId);
             }
             
             await supabase.from('TurnQueue').update({
@@ -121,7 +142,7 @@ export async function POST(request: Request) {
         await supabase.from('StaffNotifications').insert({
             employeeId: null, // Gửi chung
             type: 'WARNING',
-            message: `KTV ${staffName} vừa từ chối phục vụ đơn ${bookingItemId}. Lý do: ${reason}`
+            message: `KTV ${staffName} vừa từ chối phục vụ đơn ${itemId}. Lý do: ${reason}`
         });
 
         return NextResponse.json({
