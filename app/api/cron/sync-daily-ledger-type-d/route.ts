@@ -5,6 +5,7 @@ import { KtvTypeDBonusService } from '@/lib/services/KtvTypeDBonusService';
 import { KtvTypeDTurnService } from '@/lib/services/KtvTypeDTurnService';
 import { processMonthlyLedgerSync, processYearlyLedgerSync, processMonthlyMaintenanceFee } from '@/lib/services/KtvLedgerSyncService';
 import { SyncDailyLedgerPostSchema } from '@/lib/schemas/finance.schema';
+import { getDayCutoffHours, businessDayRange, toBusinessDate, previousBusinessDate } from '@/lib/business-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +23,18 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
         return NextResponse.json({ success: true, message: 'Skipped - Before effective date' });
     }
 
-    const startTimeStr = `${targetDateStr}T00:00:00+07:00`;
-    const endTimeStr = `${targetDateStr}T23:59:59.999+07:00`;
+    // Cửa sổ theo NGÀY LÀM VIỆC (spa_day_cutoff_hours), không phải nửa đêm lịch.
+    //
+    // Cách viết cũ `${d}T00:00:00+07:00` không chạy như tên gọi: Bookings.timeStart là
+    // `timestamp` KHÔNG timezone (lưu theo giờ UTC), nên Postgres cast chuỗi rồi VỨT phần
+    // offset → hoá ra là VN 07:00, tức cutoff 7 cứng và phớt lờ config.
+    // businessDayRange() trả .toISOString() nên khớp cả cột naive-UTC (Bookings) lẫn cột
+    // timestamptz thật (WalletAdjustments.created_at).
+    //
+    // ⚠️ Khoảng NỬA MỞ [start, end): dùng .gte(start) + .lt(end), KHÔNG dùng .lte(end)
+    // — nếu không, tua đúng mốc cutoff sẽ bị đếm ở cả hai ngày liền kề.
+    const cutoffHours = await getDayCutoffHours(supabase);
+    const { startIso: startTimeStr, endIso: endTimeStr } = businessDayRange(targetDateStr, cutoffHours);
 
     // 1. Fetch Configs for Type D
     const { data: configs } = await supabase.from('SystemConfigs').select('key, value');
@@ -71,7 +82,7 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
         .from('Bookings')
         .select('id, timeStart, status, customerId, rating, BookingItems!fk_bookingitems_booking(*)')
         .gte('timeStart', startTimeStr)
-        .lte('timeStart', endTimeStr)
+        .lt('timeStart', endTimeStr)
         .neq('status', 'CANCELLED');
 
     const validStatuses = ['DONE', 'COMPLETED', 'FEEDBACK', 'CLEANING'];
@@ -85,8 +96,8 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
 
     // 4. Fetch adjustments, withdrawals, and EXISTING LEDGER for conflict check
     const [{ data: adjustments }, { data: withdrawals }, { data: existingLedgers }] = await Promise.all([
-        supabase.from('WalletAdjustments').select('amount, staff_id').eq('type', 'ADJUSTMENT').gte('created_at', startTimeStr).lte('created_at', endTimeStr),
-        supabase.from('WalletAdjustments').select('amount, staff_id').eq('type', 'WITHDRAWAL').gte('created_at', startTimeStr).lte('created_at', endTimeStr),
+        supabase.from('WalletAdjustments').select('amount, staff_id').eq('type', 'ADJUSTMENT').gte('created_at', startTimeStr).lt('created_at', endTimeStr),
+        supabase.from('WalletAdjustments').select('amount, staff_id').eq('type', 'WITHDRAWAL').gte('created_at', startTimeStr).lt('created_at', endTimeStr),
         supabase.from('KTVDailyLedger').select('staff_id, work_type_snapshot').eq('date', targetDateStr).in('staff_id', activeStaffIds)
     ]);
 
@@ -269,16 +280,29 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
     return NextResponse.json({ success: true, message: `Synced ${upsertRows.length} TYPE_D ledgers for ${targetDateStr}` });
 }
 
+/**
+ * Ngày mặc định để chốt sổ = NGÀY LÀM VIỆC liền trước ngày làm việc hiện tại.
+ *
+ * Phải theo ngày làm việc chứ không phải "hôm qua theo lịch": nếu chạy lúc 02:00
+ * (trước cutoff 06:00) thì ngày làm việc hôm qua VẪN ĐANG CHẠY, chốt lúc đó là
+ * chốt sớm và bỏ sót tua cuối đêm. Cách tính này tự động lùi thêm 1 ngày trong
+ * tình huống đó, nên chạy sớm chỉ bị trễ chứ không bị mất dữ liệu.
+ *
+ * Lịch chạy khuyến nghị: 06:30 giờ VN (`30 23 * * *` UTC) — 30 phút sau khi
+ * ngày làm việc thực sự đóng.
+ */
+async function resolveDefaultTargetDate(): Promise<string> {
+    const cutoffHours = await getDayCutoffHours(supabase);
+    return previousBusinessDate(toBusinessDate(new Date(), cutoffHours));
+}
+
 export async function GET(request: Request) {
     const authHeader = request.headers.get('authorization');
     if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
     try {
-        const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-        const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-        nowVn.setDate(nowVn.getDate() - 1);
-        const targetDateStr = nowVn.toISOString().split('T')[0];
+        const targetDateStr = await resolveDefaultTargetDate();
         return await processLedgerSyncTypeD(targetDateStr);
     } catch (err: any) {
         console.error('Exception in GET sync-daily-ledger-type-d:', err);
@@ -297,10 +321,7 @@ export async function POST(request: Request) {
             }
         } catch { }
         if (!targetDateStr) {
-            const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-            const nowVn = new Date(Date.now() + VN_OFFSET_MS);
-            nowVn.setDate(nowVn.getDate() - 1);
-            targetDateStr = nowVn.toISOString().split('T')[0];
+            targetDateStr = await resolveDefaultTargetDate();
         }
         return await processLedgerSyncTypeD(targetDateStr);
     } catch (err: any) {

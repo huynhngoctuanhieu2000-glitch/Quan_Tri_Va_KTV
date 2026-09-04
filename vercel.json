@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/sync-daily-ledger-type-d",
-      "schedule": "0 19 * * *"
+      "schedule": "30 23 * * *"
     },
     {
       "path": "/api/cron/piggy-bank-deduct",
