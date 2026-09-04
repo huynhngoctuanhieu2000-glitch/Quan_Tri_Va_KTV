@@ -692,7 +692,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
                    </div>
                    <div className="text-left">
                      <h3 className="font-bold text-[10px] uppercase tracking-widest text-blue-100">Thứ tự tua</h3>
-                     <p className="font-black text-xl leading-none mt-1">{logic.turnData.myRank > 0 ? logic.turnData.myRank : '-'} <span className="text-sm font-medium opacity-80 ml-1">/ {logic.turnData.allTypeD.length}</span></p>
+                     <p className="font-black text-xl leading-none mt-1">{logic.turnData.myRank > 0 ? logic.turnData.myRank : '-'}</p>
                    </div>
                  </div>
                  <div className="text-right">
