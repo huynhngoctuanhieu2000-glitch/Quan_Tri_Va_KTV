@@ -1447,14 +1447,9 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
     }
 }
 
-/**
- * @param opts.systemActor Bỏ qua kiểm tra quyền vì lệnh đến từ CRON, không có
- *   phiên đăng nhập. CHỈ dùng cho `/api/cron/auto-finish-services` — cron đó đã
- *   tự bảo vệ bằng CRON_SECRET. Không bao giờ set cờ này từ đường người dùng.
- */
-export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string, targetKtvIds?: string[], forceBackward: boolean = false, customStartTime?: string, opts?: { systemActor?: boolean }) {
+export async function updateBookingItemStatus(itemIds: string[], newStatus: string, date: string, bookingId: string, targetKtvIds?: string[], forceBackward: boolean = false, customStartTime?: string) {
     try {
-        if (!opts?.systemActor) await requirePermission('dispatch_board');
+        await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
         if (!supabase) throw new Error('Supabase admin not initialized');
 
