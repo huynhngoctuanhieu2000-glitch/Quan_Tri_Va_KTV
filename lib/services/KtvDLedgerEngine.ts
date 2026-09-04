@@ -197,12 +197,19 @@ export function resolveRating(
  *   actual ← KtvTypeDTurnService.calculateActualMinutes           (GIỜ)
  *            · phút LÀM TRÒN
  *            · mốc lỗi (t2 ≤ t1) thì lùi về giờ gán
- *            · KHÔNG chặn trên → làm 70 thì tích lũy được 70
+ *            · CHẶN TRÊN tại giờ gán — xem ghi chú dưới
  *
- * Hai cách này lệch nhau ở phần lẻ và ở mốc lỗi. Trước đây chúng bị dùng lẫn
- * (lỗi L4). Ở đây tách bạch nhưng vẫn giữ nguyên hành vi từng cái.
+ * Hai cách này lệch nhau ở phần lẻ và ở mốc lỗi.
  *
- * `customCommissionDuration` (admin can thiệp) thắng cả hai.
+ * ⚠️ CHẶN TRÊN cho `actual` (thêm 04/09/2026): trước đây giờ tích lũy không
+ * có trần, nên một tua quên bấm kết thúc đẻ ra 1441 phút = 24 giờ (bill
+ * 005-02092026-B). Vì thứ tự nhận khách sort theo net_hours DESC, một lần
+ * quên bấm là đủ để một KTV đứng đầu hàng suốt cả tháng. Máy treo hay lỗi
+ * ghi nhận thì không thể tính thành giờ làm — giờ thực chặn tại giờ gán,
+ * đúng như tiền. Phải sửa cùng lúc ở KtvTypeDTurnService.calculateActualMinutes.
+ *
+ * `customCommissionDuration` (admin can thiệp) thắng cả hai và KHÔNG bị chặn —
+ * đó là con số admin cố ý nhập, không phải dữ liệu hỏng.
  */
 export function computeMinutes(segs: any[]): {
     assigned: number; actual: number; paid: number; custom: number | null;
@@ -230,11 +237,11 @@ export function computeMinutes(segs: any[]): {
         }
         const hasMarks = Number.isFinite(t1) && Number.isFinite(t2);
 
-        // TIỀN — phút lẻ, mốc lỗi trả 0
+        // TIỀN — phút lẻ, mốc lỗi trả 0, chặn tại giờ gán
         paid += hasMarks ? Math.min(Math.max(0, (t2 - t1) / 60000), gan) : gan;
 
-        // GIỜ — phút làm tròn, mốc lỗi lùi về giờ gán
-        actual += (hasMarks && t2 > t1) ? Math.round((t2 - t1) / 60000) : gan;
+        // GIỜ — phút làm tròn, mốc lỗi lùi về giờ gán, chặn tại giờ gán
+        actual += (hasMarks && t2 > t1) ? Math.min(Math.round((t2 - t1) / 60000), gan) : gan;
     }
 
     return { assigned, actual, paid, custom };

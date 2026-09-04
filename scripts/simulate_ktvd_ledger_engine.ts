@@ -51,9 +51,19 @@ check('làm 55/60 → trả 55, giờ thực 55',
     computeMinutes([seg({ actualStartTime: '2026-09-10T07:00:00Z', actualEndTime: '2026-09-10T07:55:00Z' })]),
     { assigned: 60, actual: 55, paid: 55, custom: null });
 
-check('làm 70/60 → trả 60 (không trả dư), giờ thực 70',
+check('làm 70/60 → chặn cứng tại 60 cho CẢ tiền lẫn giờ',
     computeMinutes([seg({ actualStartTime: '2026-09-10T07:00:00Z', actualEndTime: '2026-09-10T08:10:00Z' })]),
-    { assigned: 60, actual: 70, paid: 60, custom: null });
+    { assigned: 60, actual: 60, paid: 60, custom: null });
+
+// Quên bấm kết thúc → 24 giờ. Không chặn thì 1 lần quên đủ để KTV
+// đứng đầu bảng xếp tua suốt tháng (bill thật: 005-02092026-B).
+check('quên bấm kết thúc (1441p/60p) → chặn về 60, không thành 24 giờ',
+    computeMinutes([seg({ actualStartTime: '2026-09-01T10:05:00Z', actualEndTime: '2026-09-02T10:06:00Z' })]),
+    { assigned: 60, actual: 60, paid: 60, custom: null });
+
+check('admin can thiệp KHÔNG bị chặn (số cố ý nhập)',
+    computeMinutes([seg({ duration: 60, customCommissionDuration: 90 })]),
+    { assigned: 60, actual: 90, paid: 90, custom: 90 });
 
 check('không có mốc thực → dùng giờ gán',
     computeMinutes([seg()]),

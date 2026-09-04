@@ -31,22 +31,30 @@ export class KtvTypeDTurnService {
         if (mySegs.length === 0) return 0;
 
         return mySegs.reduce((sum: number, seg: any) => {
-            // Priority 1: Admin override
+            const assigned = Number(seg.duration) || 0;
+
+            // Priority 1: Admin override — số admin cố ý nhập, KHÔNG chặn
             if (seg.customCommissionDuration) {
                 return sum + Number(seg.customCommissionDuration);
             }
 
-            // Priority 2: Actual time (KTV làm bao lâu tính bấy nhiêu)
+            // Priority 2: Actual time, CHẶN TRÊN tại giờ gán.
+            // ⚠️ Trước 04/09/2026 chỗ này không có trần, nên một tua quên bấm
+            // kết thúc đẻ ra 1441 phút = 24 giờ (bill 005-02092026-B). Vì thứ tự
+            // nhận khách sort theo net_hours DESC, một lần quên bấm là đủ để một
+            // KTV đứng đầu hàng suốt cả tháng. Máy treo hay lỗi ghi nhận thì
+            // không thể tính thành giờ làm — chặn tại giờ gán, đúng như tiền
+            // (KtvTypeDCommissionService cũng dùng min(thực, gán)).
             if (seg.actualStartTime && seg.actualEndTime) {
                 const t1 = new Date(seg.actualStartTime).getTime();
                 const t2 = new Date(seg.actualEndTime).getTime();
                 if (!isNaN(t1) && !isNaN(t2) && t2 > t1) {
-                    return sum + Math.round((t2 - t1) / 60000);
+                    return sum + Math.min(Math.round((t2 - t1) / 60000), assigned);
                 }
             }
 
             // Priority 3: Assigned duration (fallback)
-            return sum + (Number(seg.duration) || 0);
+            return sum + assigned;
         }, 0);
     }
 
