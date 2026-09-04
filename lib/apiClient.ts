@@ -64,6 +64,12 @@ class ApiClient {
             }
           }
 
+          // 🔑 JWT Supabase hết hạn → mọi API trả 401. Báo cho auth-context ép đăng nhập lại,
+          // thay vì để từng màn hình kẹt ở trạng thái "Đang tải..." mà không ai biết vì sao.
+          if (response.status === 401 && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('session_expired'));
+          }
+
           throw new ApiError(
             errorData.error || errorData.message || 'Lỗi kết nối API',
             response.status,
@@ -87,6 +93,13 @@ class ApiClient {
         }
         if (error.name === 'AbortError') {
           throw new Error('Kết nối bị quá hạn (Timeout). Vui lòng thử lại.');
+        }
+
+        // NEW: retry network fail
+        const isNetworkFail = error instanceof TypeError && /failed to fetch|network/i.test(error.message);
+        if (isNetworkFail && i < retries) {
+            await new Promise(r => setTimeout(r, 500 * (i + 1)));
+            continue;
         }
         
         // Delay trước khi retry (exponential backoff cơ bản)

@@ -109,6 +109,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.id, user?.password]);
 
+  // 🔑 JWT hết hạn (API trả 401) → dọn session và ép đăng nhập lại.
+  // Không có bước này thì user đã login trên UI nhưng mọi API đều 401, màn hình trắng im lặng.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      sessionStorage.removeItem('spa_auth_user');
+      sessionStorage.removeItem('spa_auth_role');
+      localStorage.removeItem('spa_auth_user');
+      localStorage.removeItem('spa_auth_role');
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login?error=session_expired';
+      }
+    };
+
+    window.addEventListener('session_expired', handleSessionExpired);
+    return () => window.removeEventListener('session_expired', handleSessionExpired);
+  }, []);
+
   const login = async (userId: string, password?: string) => {
     try {
       // Use the Server Action to query public."Users" table

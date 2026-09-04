@@ -18,6 +18,11 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     setMounted(true);
+    // Bị đá về đây do JWT hết hạn → nói rõ lý do, tránh user tưởng app hỏng.
+    const reason = new URLSearchParams(window.location.search).get('error');
+    if (reason === 'session_expired') {
+      setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    }
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {

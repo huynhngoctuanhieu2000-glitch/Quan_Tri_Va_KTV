@@ -120,8 +120,10 @@ export const useKTVSchedule = () => {
                 setLeaveList(Array.isArray(res?.data) ? res.data : []);
             }
             
-        } catch (err) {
+        } catch (err: any) {
             console.error('Lỗi khi tải lịch:', err);
+            // Trước đây lỗi bị nuốt hoàn toàn → màn hình rỗng mà không rõ lý do.
+            setOffError(err?.message || 'Không tải được lịch. Vui lòng thử lại.');
         } finally {
             setIsLoadingLeaves(false);
         }
