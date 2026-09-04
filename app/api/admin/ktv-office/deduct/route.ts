@@ -14,6 +14,54 @@ function vnDaysAgo(n: number): string {
     return vn.toISOString().slice(0, 10);
 }
 
+/**
+ * Các lỗi ĐÃ trừ của 1 KTV trong 1 ngày — để sheet chấm điểm hiện sẵn dấu tích
+ * và khoá lại, thay vì để người chấm bấm rồi mới báo lỗi trùng.
+ */
+export async function GET(request: Request) {
+    try {
+        await requirePermission('ktv_office_scoring');
+
+        const { searchParams } = new URL(request.url);
+        const staffId = searchParams.get('staffId');
+        const workDate = searchParams.get('workDate');
+        if (!staffId || !workDate || !/^\d{4}-\d{2}-\d{2}$/.test(workDate)) {
+            return NextResponse.json({ success: false, error: 'Thiếu staffId hoặc workDate.' }, { status: 400 });
+        }
+
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+            return NextResponse.json({ success: false, error: 'Supabase admin chưa được cấu hình' }, { status: 500 });
+        }
+
+        const { data, error } = await supabase
+            .from('KTVOfficeScoreLog')
+            .select('criteria_id, criteria_label, points_deducted, created_by_name, created_at, note, photo_urls')
+            .eq('staff_id', staffId)
+            .eq('work_date', workDate)
+            .is('revoked_at', null);
+        if (error) throw error;
+
+        return NextResponse.json({
+            success: true,
+            existing: (data || []).map((r: any) => ({
+                criteriaId: r.criteria_id,
+                label: r.criteria_label,
+                points: Number(r.points_deducted) || 0,
+                byName: r.created_by_name,
+                at: r.created_at,
+                note: r.note,
+                photoCount: Array.isArray(r.photo_urls) ? r.photo_urls.length : 0,
+            })),
+        });
+    } catch (error: any) {
+        const msg = error?.message || 'Lỗi không xác định';
+        const status = msg === 'Forbidden' ? 403 : msg === 'Unauthorized' ? 401 : 500;
+        if (status === 500) console.error('Lỗi khi tra phiếu trừ điểm đã có:', error);
+        return NextResponse.json({ success: false, error: msg }, { status });
+    }
+}
+
 export async function POST(request: Request) {
     try {
         await requirePermission('ktv_office_scoring');

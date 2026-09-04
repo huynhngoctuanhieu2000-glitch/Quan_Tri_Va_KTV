@@ -69,6 +69,11 @@ export const useAdminKtvOfficeLogic = () => {
   const [criteriaGroups, setCriteriaGroups] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // Lỗi ĐÃ trừ của ngày đang chọn — hiện sẵn dấu tích và khoá, vì quy chế
+  // "mỗi lỗi chỉ trừ 1 lần/ngày dù lặp lại nhiều lần".
+  const [existingHits, setExistingHits] = useState<any[]>([]);
+  const [existingLoading, setExistingLoading] = useState(false);
+
   const [sheetState, setSheetState] = useState<{
     isOpen: boolean;
     type: SheetType;
@@ -145,21 +150,50 @@ export const useAdminKtvOfficeLogic = () => {
     }
   }, [criteriaGroups.length, addToast]);
 
+  const fetchExisting = useCallback(async (code: string, workDate: string) => {
+    setExistingLoading(true);
+    setExistingHits([]);
+    try {
+      const res = await apiClient.get<any>(
+        `/api/admin/ktv-office/deduct?staffId=${encodeURIComponent(code)}&workDate=${workDate}`
+      );
+      setExistingHits(res?.existing || []);
+    } catch {
+      setExistingHits([]); // không tra được thì để trống, server vẫn chặn trùng khi gửi
+    } finally {
+      setExistingLoading(false);
+    }
+  }, []);
+
   const openSheet = (type: Exclude<SheetType, null>, person: string, code: string, score = 100) => {
+    const today = vnTodayStr();
     setSheetState(prev => ({
       ...prev, isOpen: true, type, person, code, score,
-      workDate: vnTodayStr(), selectedIds: [], note: '', photos: [],
+      workDate: today, selectedIds: [], note: '', photos: [],
     }));
     if (type === 'history') {
       setHistoryTab('office');
       fetchDetail(code);
     }
-    if (type === 'deduct') fetchCriteria();
+    if (type === 'deduct') {
+      fetchCriteria();
+      fetchExisting(code, today);
+    }
+  };
+
+  /** Đổi ngày vi phạm → tải lại danh sách lỗi đã trừ của ngày đó. */
+  const changeWorkDate = (workDate: string) => {
+    if (!workDate) return;
+    // Bỏ tích những lỗi đã bị trừ ở ngày mới, tránh gửi lên rồi bị từ chối.
+    setSheetState(prev => ({ ...prev, workDate }));
+    fetchExisting(sheetState.code, workDate);
   };
 
   const closeSheet = () => setSheetState(prev => ({ ...prev, isOpen: false }));
 
   const toggleCriteria = (id: string) => {
+    // Lỗi đã trừ hôm đó thì khoá, không cho tích lại.
+    if (existingHits.some(h => h.criteriaId === id)) return;
     setSheetState(prev => ({
       ...prev,
       selectedIds: prev.selectedIds.includes(id)
@@ -214,6 +248,7 @@ export const useAdminKtvOfficeLogic = () => {
       addToast(`Đã trừ ${res.totalPoints} điểm của ${sheetState.person}. KTV đã nhận thông báo.`, 'success');
       closeSheet();
       await fetchSummary();
+      await fetchDetail(sheetState.code).catch(() => {});
     } catch (error: any) {
       addToast(error?.message || 'Không lưu được phiếu trừ điểm.', 'error');
     } finally {
@@ -234,6 +269,7 @@ export const useAdminKtvOfficeLogic = () => {
     sheetState, openSheet, closeSheet, setSheetState,
     criteriaGroups, toggleCriteria, addPhotos, removePhoto,
     totalPoints, needPhoto, canSubmit, submitting, submitDeduct,
+    existingHits, existingLoading, changeWorkDate,
     maxPhotos: MAX_PHOTOS,
   };
 };

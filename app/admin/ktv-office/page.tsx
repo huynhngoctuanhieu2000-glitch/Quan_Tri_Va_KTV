@@ -241,36 +241,54 @@ const AdminKtvOfficePage = () => {
                       <label className="block text-xs text-[var(--muted)] mb-2">Ngày vi phạm</label>
                       <div className="flex gap-2 flex-wrap">
                         <button
-                          onClick={() => logic.setSheetState(p => ({ ...p, workDate: vnTodayStr() }))}
+                          onClick={() => logic.changeWorkDate(vnTodayStr())}
                           className={`h-11 px-4 rounded-xl font-bold text-sm ${logic.sheetState.workDate === vnTodayStr() ? 'btn-primary' : 'bg-white border border-[var(--line)]'}`}
                         >Hôm nay</button>
                         <button
-                          onClick={() => logic.setSheetState(p => ({ ...p, workDate: vnTodayStr(1) }))}
+                          onClick={() => logic.changeWorkDate(vnTodayStr(1))}
                           className={`h-11 px-4 rounded-xl font-bold text-sm ${logic.sheetState.workDate === vnTodayStr(1) ? 'btn-primary' : 'bg-white border border-[var(--line)]'}`}
                         >Hôm qua</button>
                         <input
                           type="date"
                           max={vnTodayStr()}
                           value={logic.sheetState.workDate}
-                          onChange={e => logic.setSheetState(p => ({ ...p, workDate: e.target.value }))}
+                          onChange={e => logic.changeWorkDate(e.target.value)}
                           className="h-11 px-3 rounded-xl border border-[var(--line)] bg-white text-sm font-bold"
                         />
                       </div>
                       <p className="text-xs text-[var(--muted)] mt-2">Lễ tân chỉ trừ được hôm nay và hôm qua. Quản lý trừ được mọi ngày.</p>
                     </div>
 
-                    <div className="flex justify-between items-center bg-[var(--green-2)] p-4 rounded-2xl mb-6">
-                      <div>
-                        <span className="block text-xs text-[var(--muted)]">Điểm ngày này</span>
-                        <strong className="text-2xl tracking-tight">100</strong>
-                      </div>
-                      <div className="text-right">
-                        <span className="block text-xs text-[var(--muted)]">Sau khi trừ</span>
-                        <strong className={`text-2xl tracking-tight ${logic.totalPoints > 0 ? 'text-[var(--rust)]' : ''}`}>
-                          {fmtNum(Math.max(0, 100 - logic.totalPoints))}
-                        </strong>
-                      </div>
-                    </div>
+                    {(() => {
+                      // Điểm ngày này = 100 trừ những gì ĐÃ trừ trước đó, rồi trừ tiếp phần đang tích.
+                      const already = logic.existingHits.reduce((a: number, h: any) => a + h.points, 0);
+                      const current = Math.max(0, 100 - already);
+                      const after = Math.max(0, current - logic.totalPoints);
+                      return (
+                        <div className="bg-[var(--green-2)] p-4 rounded-2xl mb-6">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="block text-xs text-[var(--muted)]">Điểm ngày này</span>
+                              <strong className="text-2xl tracking-tight">{fmtNum(current)}</strong>
+                            </div>
+                            <div className="text-right">
+                              <span className="block text-xs text-[var(--muted)]">Sau khi trừ</span>
+                              <strong className={`text-2xl tracking-tight ${logic.totalPoints > 0 ? 'text-[var(--rust)]' : ''}`}>
+                                {fmtNum(after)}
+                              </strong>
+                            </div>
+                          </div>
+                          {already > 0 && (
+                            <p className="text-xs text-[var(--muted)] mt-2 pt-2 border-t border-white/60">
+                              Ngày này đã bị trừ {fmtNum(already)}đ ({logic.existingHits.length} lỗi) — các lỗi đó đã khóa, mỗi lỗi chỉ trừ 1 lần/ngày.
+                            </p>
+                          )}
+                          {logic.existingLoading && (
+                            <p className="text-xs text-[var(--muted)] mt-2">Đang kiểm tra lỗi đã trừ của ngày này…</p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {logic.criteriaGroups.length === 0 && (
                       <p className="py-6 text-center text-[var(--muted)] text-sm">Đang tải danh sách tiêu chí…</p>
@@ -284,18 +302,28 @@ const AdminKtvOfficePage = () => {
                         </div>
                         <div className="border-t border-[var(--line)]">
                           {group.items.map((item: any) => {
-                            const isChecked = logic.sheetState.selectedIds.includes(item.id);
+                            const done = logic.existingHits.find((h: any) => h.criteriaId === item.id);
+                            const isChecked = !!done || logic.sheetState.selectedIds.includes(item.id);
                             return (
-                              <label key={item.id} className="flex items-center gap-3 py-3 border-b border-[var(--line)] cursor-pointer">
+                              <label
+                                key={item.id}
+                                className={`flex items-center gap-3 py-3 border-b border-[var(--line)] ${done ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                              >
                                 <input
                                   type="checkbox"
                                   className="w-5 h-5 accent-[var(--rust)] shrink-0"
                                   checked={isChecked}
+                                  disabled={!!done}
                                   onChange={() => logic.toggleCriteria(item.id)}
                                 />
                                 <div className="flex-1 min-w-0">
                                   <strong className="block text-sm font-semibold">{item.label}</strong>
-                                  {item.requiresPhoto && (
+                                  {done ? (
+                                    <small className="block text-[11px] text-[var(--muted)] mt-0.5">
+                                      Đã trừ lúc {new Date(done.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} bởi {done.byName}
+                                      {done.photoCount > 0 ? ` · ${done.photoCount} ảnh` : ''}
+                                    </small>
+                                  ) : item.requiresPhoto && (
                                     <small className="inline-block text-[10px] font-bold text-[var(--amber)] bg-[var(--amber-2)] px-2 py-0.5 rounded mt-1">CẦN ẢNH</small>
                                   )}
                                 </div>
