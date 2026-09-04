@@ -10,15 +10,21 @@ export async function GET(request: Request) {
         let date = searchParams.get('date');
         const workType = searchParams.get('workType'); // TYPE_A | TYPE_B | TYPE_C | TYPE_D | null
 
-        if (!date) {
-            const d = new Date();
-            const vnTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-            date = vnTime.getFullYear() + '-' + String(vnTime.getMonth() + 1).padStart(2, '0') + '-' + String(vnTime.getDate()).padStart(2, '0');
-        }
-
         const supabase = getSupabaseAdmin();
         if (!supabase) {
             return NextResponse.json({ success: false, error: 'Supabase not initialized' }, { status: 500 });
+        }
+
+        if (!date) {
+            // Lấy linh động cutoff hour từ config (mặc định 6h sáng)
+            const { data: configCutoff } = await supabase.from('SystemConfigs').select('value').eq('key', 'spa_day_cutoff_hours').maybeSingle();
+            const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
+
+            const now = new Date();
+            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+            const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
+            
+            date = businessNow.getFullYear() + '-' + String(businessNow.getMonth() + 1).padStart(2, '0') + '-' + String(businessNow.getDate()).padStart(2, '0');
         }
 
         // Sync turns first (count tua from TurnLedger)

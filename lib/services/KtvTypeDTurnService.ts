@@ -51,14 +51,20 @@ export class KtvTypeDTurnService {
     }
 
     /**
-     * Get today's date string in Vietnam timezone (YYYY-MM-DD)
+     * Get today's business date string in Vietnam timezone (YYYY-MM-DD)
+     * using the spa's cutoff hours config.
      */
-    private static getVnTodayStr(): string {
+    private static async getBusinessTodayStr(supabase: SupabaseClient): Promise<string> {
+        const { data: configCutoff } = await supabase.from('SystemConfigs').select('value').eq('key', 'spa_day_cutoff_hours').maybeSingle();
+        const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
+
         const now = new Date();
         const vnNow = new Date(now.toLocaleString('en-US', { timeZone: VN_TIMEZONE }));
-        return vnNow.getFullYear() + '-' +
-            String(vnNow.getMonth() + 1).padStart(2, '0') + '-' +
-            String(vnNow.getDate()).padStart(2, '0');
+        const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
+        
+        return businessNow.getFullYear() + '-' +
+            String(businessNow.getMonth() + 1).padStart(2, '0') + '-' +
+            String(businessNow.getDate()).padStart(2, '0');
     }
 
     /**
@@ -109,7 +115,7 @@ export class KtvTypeDTurnService {
         const lastOfMonth = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
         // Detect if this is the current month
-        const todayStr = KtvTypeDTurnService.getVnTodayStr();
+        const todayStr = await KtvTypeDTurnService.getBusinessTodayStr(supabase);
         const todayParts = todayStr.split('-');
         const isCurrentMonth = parseInt(todayParts[1]) === month && parseInt(todayParts[0]) === year;
 
