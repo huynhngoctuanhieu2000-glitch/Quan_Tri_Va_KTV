@@ -436,6 +436,29 @@ Ví dụ thật: `009-01092026-C` làm 29,4140 phút → tiền tính theo 29,41
 
 `computeMinutes()` sao chép trung thành cả hai. Đây chính là lỗi L4 ở dạng tinh vi: không phải "dùng nhầm hàm" mà là "hai hàm vốn khác nhau ở phần lẻ và ở mốc lỗi".
 
+### 7.3. ⚠️ Hai cách hiểu sai về "tua treo" — đã kiểm chứng và bác bỏ
+
+Trong lúc chuẩn bị bước 6 đã dựng một cron "lưới an toàn" cho auto-finish rồi **gỡ bỏ** (commit `8708f23` → revert `8a18f7b`), vì tiền đề sai. Ghi lại để không ai đi lại đường này.
+
+**Nhận định sai 1 — "224 item đang kẹt, đang xảy ra hôm nay".**
+Tách theo mốc 01/09 thì khác hẳn:
+
+| Trạng thái | Từ 01/09 | Trước 01/09 |
+|---|---|---|
+| `FEEDBACK` | 9 | 121 |
+| `CLEANING` | 2 | 176 |
+| `IN_PROGRESS` | **0** | 43 |
+| `WAITING`/`PREPARING` | 0 | 168 |
+
+508 item là rác lịch sử/test từ trước. **Đếm ngược ở client đang chạy đúng** — từ 01/09 không tua nào kẹt ở `IN_PROGRESS`.
+
+**Nhận định sai 2 — "kẹt ở FEEDBACK làm KTV mất tiền".**
+Cả 9 item đó đều có **0 segment**: 2 cái là Phòng riêng (tiện ích), 7 cái có mã KTV nhưng chưa từng sinh segment. Engine bỏ qua item không segment, nên chúng **không sinh dòng sổ cái, không ảnh hưởng tiền hay giờ**.
+
+**Bài học:** trước khi kết luận có lỗi vận hành, phải (a) tách theo mốc chế độ có hiệu lực, và (b) kiểm `segments` chứ không chỉ nhìn `status`. Con số tổng gộp cả rác lịch sử sẽ dẫn tới vá nhầm chỗ.
+
+Rủi ro còn lại là thật nhưng chưa xảy ra: auto-finish sống trong `useEffect` ở trình duyệt lễ tân ([KanbanBoard.tsx:234](app/reception/dispatch/_components/KanbanBoard.tsx)). Đóng máy sớm thì không ai đẩy tua. Chỉ xử lý khi nào thực sự phát sinh.
+
 ---
 
 ## 8. Rủi ro
