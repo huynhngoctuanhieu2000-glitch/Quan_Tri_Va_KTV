@@ -322,8 +322,18 @@ export function computeRows(
                 const gross = Math.round(paid * (rate / 60));
                 const net = Math.round(gross * (1 - deduction));
 
+                // Thuế TNCN — KHÔNG làm tròn.
+                //
+                // Vì không làm tròn nên thuế cộng dồn chính xác ở mọi cấp:
+                //   thuế(khách) = 0,1 × Σ(tiền từng đơn) = Σ(0,1 × tiền từng đơn)
+                // Tức là lưu theo dòng hay theo khách đều ra cùng một số — đúng
+                // nghĩa "thuế theo đơn của khách" mà không phải gộp dòng lại.
+                //
+                // Chính việc làm tròn là thứ đã khiến ví (tính trên tổng ngày) lệch
+                // với lịch sử (làm tròn từng đơn) — lỗi L5. Bỏ làm tròn thì lệch
+                // không còn khả năng xảy ra ở bất kỳ cấp cộng dồn nào.
                 const isTaxed = !!configs.taxEffectiveFrom && workDate >= configs.taxEffectiveFrom;
-                const tax = isTaxed ? Math.round(net * configs.taxRate) : 0;
+                const tax = isTaxed ? net * configs.taxRate : 0;
 
                 const itemStatus = String(item.status);
                 const hasRating = rating > 0;

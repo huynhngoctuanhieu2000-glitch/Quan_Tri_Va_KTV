@@ -239,9 +239,23 @@ BookingGuests.ktv_ratings[staff_id]     → rating_source = 'GUEST_KTV'
 
 `BookingGuests.rating` và `ktv_ratings` được ghi tại [submitFeedbackAction](app/reception/feedback/_components/actions.ts:38).
 
-### 3.4. Thuế 10% — chốt: **tầng dòng**
+### 3.4. Thuế 10% — chốt: **theo đơn của khách, KHÔNG làm tròn**
 
-Lưu `tax_amount` ngay trong dòng; ví `SUM(tax_amount)`. Hai màn hình dùng **chung một cột** → không thể lệch (giải L5).
+Lưu `tax_amount` ngay trong dòng; mọi nơi `SUM(tax_amount)`.
+
+**Không làm tròn** là mấu chốt. Nhờ đó thuế cộng dồn chính xác ở mọi cấp:
+
+```
+thuế(khách) = 0,1 × Σ(tiền từng đơn) = Σ(0,1 × tiền từng đơn) = Σ thuế từng dòng
+```
+
+Nên lưu theo dòng hay theo khách đều ra **cùng một số** — đúng nghĩa "thuế theo đơn của khách" mà không cần gộp dòng.
+
+Chính việc làm tròn là thứ đã đẻ ra L5: ví tính `dayComm × 0,1` còn lịch sử tính `round(gross × 0,1)` từng đơn, nên `Σ round(đơn) ≠ round(Σ)`. Bỏ làm tròn thì lệch **không còn khả năng xảy ra** ở bất kỳ cấp cộng dồn nào.
+
+Kiểm chứng trên dữ liệu thật (T016, tháng 9): cộng từng dòng = cộng theo khách = tính trên tổng ngày = 10% tổng tháng = **15.558,1đ**.
+
+⚠️ `tax_amount` có phần lẻ (vd `326,2đ`). Khi hiển thị cho KTV thì làm tròn ở tầng giao diện, KHÔNG làm tròn khi lưu.
 
 Thuế **thưởng** (bonus) không thuộc bảng này (bonus tính theo khách, không theo item) → xử lý ở tầng ngày cùng `total_bonus`.
 

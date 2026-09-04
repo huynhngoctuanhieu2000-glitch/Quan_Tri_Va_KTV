@@ -169,13 +169,40 @@ section('computeRows — VIP 4★ không bị trừ');
     check('rate_category', rows[0].rate_category, 'VIP');
 }
 
-section('Thuế 10% ở tầng dòng');
+section('Thuế 10% — theo đơn của khách, KHÔNG làm tròn');
 {
     const rows = computeRows([booking({
         BookingGuests: [{ id: 'G1', rating: 4 }],
         BookingItems: [it({ guest_id: 'G1', status: 'DONE', segments: [seg()], technicianCodes: ['T016'] })],
     })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-09-01' });
     check('net 100.000 → thuế 10.000', rows[0].tax_amount, 10000);
+}
+{
+    // 3★ trên 55 phút PT: gross 91.667 → net 68.750 → thuế 6.875,0
+    const rows = computeRows([booking({
+        BookingGuests: [{ id: 'G1', rating: 3 }],
+        BookingItems: [it({
+            guest_id: 'G1', status: 'DONE',
+            segments: [seg({ actualStartTime: '2026-09-10T07:00:00Z', actualEndTime: '2026-09-10T07:55:00Z' })],
+            technicianCodes: ['T016'],
+        })],
+    })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-09-01' });
+    check('giữ nguyên phần lẻ, không làm tròn', rows[0].tax_amount, 6875);
+}
+{
+    // Một khách 2 dịch vụ: thuế cộng từng dòng PHẢI bằng thuế tính trên tổng.
+    const rows = computeRows([booking({
+        BookingGuests: [{ id: 'G1', rating: 4 }],
+        BookingItems: [
+            it({ id: 'X1', guest_id: 'G1', status: 'DONE', technicianCodes: ['T016'],
+                 segments: [seg({ duration: 17, actualStartTime: '2026-09-10T07:00:00Z', actualEndTime: '2026-09-10T07:17:00Z' })] }),
+            it({ id: 'X2', guest_id: 'G1', status: 'DONE', technicianCodes: ['T016'],
+                 segments: [seg({ duration: 23, actualStartTime: '2026-09-10T07:20:00Z', actualEndTime: '2026-09-10T07:43:00Z' })] }),
+        ],
+    })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-09-01' });
+    const tongThue = rows.reduce((s, r) => s + r.tax_amount, 0);
+    const tongTien = rows.reduce((s, r) => s + r.commission_net, 0);
+    check('Σ thuế từng dòng = thuế trên tổng của khách', tongThue, tongTien * 0.1);
 }
 {
     const rows = computeRows([booking({
