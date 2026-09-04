@@ -157,24 +157,24 @@ export class KtvTypeDWalletService {
             // loại khác phục vụ KHÁCH KHÁC trong cùng bill cũng làm KTV loại D
             // mất thưởng dù hai người không làm chung khách.
             if (enableBonus) {
-                const guestIds = [...new Set(relevantItems.map((i: any) => i.guest_id ?? null))];
+                // ⚠️ Điều kiện LOẠI TRỪ xét trên TOÀN ĐƠN CHA.
+                const ktvWorkTypesInBill: string[] = [];
+                (b.BookingItems || []).forEach((i: any) => {
+                    (i.technicianCodes || []).forEach((tc: string) => {
+                        ktvWorkTypesInBill.push(techWorkTypeMap[tc.toLowerCase()] || 'TYPE_A');
+                    });
+                });
 
+                // SAO vẫn theo từng KHÁCH — mỗi khách một suất thưởng.
+                const guestIds = [...new Set(relevantItems.map((i: any) => i.guest_id ?? null))];
                 for (const gid of guestIds) {
                     const itemsOfGuest = (b.BookingItems || []).filter((i: any) =>
                         gid === null ? true : String(i.guest_id) === String(gid));
-
-                    const ktvWorkTypesForGuest: string[] = [];
-                    itemsOfGuest.forEach((i: any) => {
-                        (i.technicianCodes || []).forEach((tc: string) => {
-                            ktvWorkTypesForGuest.push(techWorkTypeMap[tc.toLowerCase()] || 'TYPE_A');
-                        });
-                    });
-
                     const guest = (b as any).BookingGuests?.find((g: any) => String(g.id) === String(gid));
                     const guestRating = guest?.rating ?? itemsOfGuest[0]?.itemRating ?? b.rating ?? 0;
 
                     rt_bonus += KtvTypeDBonusService.calculateBonusForTypeD(
-                        ktvWorkTypesForGuest, guestRating, basePoints, pointRate);
+                        ktvWorkTypesInBill, guestRating, basePoints, pointRate);
                 }
             }
         }

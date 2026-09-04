@@ -208,24 +208,25 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
             // Nay lọc theo `guest_id`, và sao cũng lấy theo khách chứ không
             // phải `Bookings.rating` cấp bill.
             if (staffBonusMap[techCode]) {
-                const guestIds = [...new Set(items.map((i: any) => i.guest_id ?? null))];
+                // ⚠️ Điều kiện LOẠI TRỪ xét trên TOÀN ĐƠN CHA: chỉ cần bill có
+                // một KTV khác chế độ là mọi KTV loại D đều mất thưởng.
+                const ktvWorkTypesInBill: string[] = [];
+                (b.BookingItems || []).forEach((i: any) => {
+                    (i.technicianCodes || []).forEach((tc: string) => {
+                        ktvWorkTypesInBill.push(allStaffWorkTypeMap[tc.toLowerCase()] || 'TYPE_A');
+                    });
+                });
 
+                // Nhưng SAO thì vẫn theo từng KHÁCH — mỗi khách một suất thưởng.
+                const guestIds = [...new Set(items.map((i: any) => i.guest_id ?? null))];
                 for (const gid of guestIds) {
                     const itemsOfGuest = (b.BookingItems || []).filter((i: any) =>
                         gid === null ? true : String(i.guest_id) === String(gid));
-
-                    const ktvWorkTypesForGuest: string[] = [];
-                    itemsOfGuest.forEach((i: any) => {
-                        (i.technicianCodes || []).forEach((tc: string) => {
-                            ktvWorkTypesForGuest.push(allStaffWorkTypeMap[tc.toLowerCase()] || 'TYPE_A');
-                        });
-                    });
-
                     const guest = (b as any).BookingGuests?.find((g: any) => String(g.id) === String(gid));
                     const guestRating = guest?.rating ?? itemsOfGuest[0]?.itemRating ?? b.rating ?? 0;
 
                     const typeDBonusVND = KtvTypeDBonusService.calculateBonusForTypeD(
-                        ktvWorkTypesForGuest, guestRating, basePoints_D, pointRate_D);
+                        ktvWorkTypesInBill, guestRating, basePoints_D, pointRate_D);
                     total_bonus += (typeDBonusVND / pointRate_D); // Điểm
                 }
             }

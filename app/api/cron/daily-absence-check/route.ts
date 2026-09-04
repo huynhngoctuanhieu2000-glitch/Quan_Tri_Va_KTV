@@ -26,6 +26,83 @@ export const dynamic = 'force-dynamic';
  * Chốt theo NGÀY LÀM VIỆC liền trước, không phải "hôm nay theo lịch": chạy
  * lúc 06:30 (sau cutoff 06:00) thì ngày làm việc hôm qua vừa đóng.
  */
+/**
+ * ================================================================
+ * KHOÁ NGAY LÚC 12H — chưa đăng ký lịch NGÀY MAI
+ * ================================================================
+ * 12:00 trưa là hạn chót quyết định lịch ngày mai (cùng mốc với hạn đổi
+ * lịch miễn phạt). Quá hạn mà chưa đăng ký gì → khoá luôn, không đợi hết
+ * ngày mai mới biết.
+ *
+ * ⚠️ Khoá lúc 12h trưa nghĩa là có thể khoá đúng KTV ĐANG LÀM VIỆC hôm nay
+ * — họ chưa đăng ký cho ngày mai nhưng hôm nay vẫn đang phục vụ khách.
+ * Đây là chủ ý: 12h là hạn chót, quá hạn thì chặn ngay.
+ */
+async function runLockUnregistered() {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+        return NextResponse.json({ success: false, error: 'Supabase admin not configured' }, { status: 500 });
+    }
+
+    const today = await getBusinessToday(supabase);
+    const tomorrow = (() => {
+        const d = new Date(`${today}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + 1);
+        return d.toISOString().slice(0, 10);
+    })();
+
+    const { data: swRow } = await supabase
+        .from('SystemConfigs').select('value')
+        .eq('key', 'ktv_type_d_discipline_enabled').maybeSingle();
+    const enabled = String(swRow?.value ?? '').replace(/"/g, '').trim() === 'true';
+
+    const { data: staffList } = await supabase
+        .from('Staff')
+        .select('id, full_name, created_at')
+        .eq('work_type', 'TYPE_D')
+        .neq('status', 'KHÓA_TÀI_KHOẢN');
+
+    const ids = (staffList || []).map((s: any) => s.id);
+    const { data: regs } = await supabase
+        .from('KTVTypeDDailyRegistration')
+        .select('staff_id').eq('work_date', tomorrow).in('staff_id', ids);
+    const daDangKy = new Set((regs || []).map((r: any) => r.staff_id));
+
+    const locked: string[] = [];
+    for (const staff of staffList || []) {
+        if (daDangKy.has(staff.id)) continue;
+        // Bỏ qua KTV mới tạo hôm nay — chưa kịp làm quen.
+        if (staff.created_at && String(staff.created_at).slice(0, 10) >= today) continue;
+
+        locked.push(staff.full_name ? `${staff.full_name} (${staff.id})` : staff.id);
+        if (!enabled) continue;
+
+        const lyDo = `Chưa đăng ký lịch ngày ${tomorrow} tính tới 12:00 hôm nay`;
+        await supabase.from('SecurityAuditLogs').insert({
+            employee_id: staff.id,
+            employee_name: staff.full_name || staff.id,
+            event_type: 'AUTO_LOCK_NO_REGISTRATION',
+            ip_address: '127.0.0.1',
+            user_agent: 'CRON',
+            details: { source: 'CRON_12H', targetDate: tomorrow, reason: lyDo },
+        });
+        await supabase.from('Staff').update({ status: 'KHÓA_TÀI_KHOẢN' }).eq('id', staff.id);
+        await KtvTypeDDisciplineService.markAccountLock(supabase, staff.id, today, lyDo);
+        await createNotification({
+            type: 'EMERGENCY',
+            message: `Tài khoản của bạn đã bị khóa do chưa đăng ký lịch ngày ${tomorrow} trước 12:00.`,
+            employeeId: staff.id,
+        });
+    }
+
+    console.log(`[Kỷ luật D 12h] ${locked.length} KTV chưa đăng ký ${tomorrow} (${enabled ? 'ĐÃ KHOÁ' : 'đang TẮT'})`);
+    return NextResponse.json({
+        success: true, mode: 'lock-unregistered', enabled,
+        targetDate: tomorrow, lockedCount: locked.length, locked,
+        note: enabled ? undefined : 'Kỷ luật đang TẮT — danh sách chỉ là dự kiến.',
+    });
+}
+
 async function run() {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
@@ -173,7 +250,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     try {
-        return await run();
+        // ?mode=lock-unregistered → khoá ngay lúc 12h nếu chưa đăng ký ngày mai.
+        // Không có tham số → chốt sổ cuối ngày (phạt trừ giờ).
+        const mode = new URL(request.url).searchParams.get('mode');
+        return mode === 'lock-unregistered' ? await runLockUnregistered() : await run();
     } catch (error: any) {
         console.error('Lỗi daily-absence-check:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

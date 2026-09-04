@@ -292,6 +292,10 @@ export function computeRows(
             ? `-${String.fromCharCode(65 + Math.max(0, groupOrder.indexOf(g)))}`
             : '';
 
+        // Bill này có KTV nào KHÔNG thuộc loại D không? Xét trên toàn đơn cha.
+        const hasOtherType = allItems.some((i: EngineItem) =>
+            !isUtility(i) && (i.technicianCodes || []).some(c => !staffSet.has(String(c).toLowerCase())));
+
         const guestById = new Map<string, EngineGuest>();
         for (const g of booking.BookingGuests || []) guestById.set(String(g.id), g);
 
@@ -353,15 +357,9 @@ export function computeRows(
                 const opts = parseJson(item.options, {}) || {};
                 const group = groupIdOf(item);
 
-                // KTV cùng phục vụ KHÁCH này mà không thuộc loại D.
-                // Xét theo `guest_id`, KHÔNG theo cả bill: một KTV loại khác
-                // phục vụ khách KHÁC trong cùng bill thì không liên quan.
-                const sameGuestItems = allItems.filter((i: EngineItem) =>
-                    !isUtility(i) && (item.guest_id
-                        ? String(i.guest_id) === String(item.guest_id)
-                        : groupIdOf(i) === group));
-                const hasOtherType = sameGuestItems.some((i: EngineItem) =>
-                    (i.technicianCodes || []).some(c => !staffSet.has(String(c).toLowerCase())));
+                // ⚠️ Xét trên TOÀN ĐƠN CHA, không phải từng khách.
+                // Chỉ cần trong bill có MỘT KTV khác chế độ là mọi KTV loại D
+                // ở các đơn con đều mất thưởng — kể cả người phục vụ khách khác.
 
                 rows.push({
                     staff_id: staffId,
