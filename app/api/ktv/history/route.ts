@@ -300,6 +300,7 @@ export async function GET(request: Request) {
             const groupsArray = Array.from(itemGroups.values());
             return groupsArray.map((groupItems: any[]) => {
                 let totalDuration = 0;
+                let actualDuration = 0;
                 let commission = 0;
                 let passedCount = 0;
                 for (const item of groupItems) {
@@ -307,6 +308,20 @@ export async function GET(request: Request) {
                     let itemDuration = KtvCommissionService.calculateItemDuration(item, techCode, fallbackDuration);
                     if (itemDuration <= 0) itemDuration = 60;
                     totalDuration += itemDuration;
+
+                    // Calculate actual working time from segments
+                    let segs: any[] = [];
+                    try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch { }
+                    const mySegs = segs.filter((s: any) => s.ktvId && s.ktvId.toLowerCase() === techCode.toLowerCase());
+                    for (const seg of mySegs) {
+                        if (seg.actualStartTime && seg.actualEndTime) {
+                            const t1 = new Date(seg.actualStartTime).getTime();
+                            const t2 = new Date(seg.actualEndTime).getTime();
+                            if (!isNaN(t1) && !isNaN(t2) && t2 > t1) {
+                                actualDuration += Math.round((t2 - t1) / 60000);
+                            }
+                        }
+                    }
                     
                     const { isPassed } = KtvCommissionService.checkIsItemPassed(item, b, techCode);
                     if (isPassed) {
@@ -432,6 +447,7 @@ export async function GET(request: Request) {
                     commission: isFeedbackDone ? commission : null,
                     serviceName,
                     duration: totalDuration,
+                    actualDuration: actualDuration > 0 ? actualDuration : null,
                     bonusPoints: isFeedbackDone ? bonusPoints : 0,
                     bonusValue: isFeedbackDone ? bonusValue : 0,
                     grossIncome: isFeedbackDone ? grossIncome : null,

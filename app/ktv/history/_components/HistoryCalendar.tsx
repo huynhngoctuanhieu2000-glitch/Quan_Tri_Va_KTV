@@ -98,9 +98,11 @@ export const HistoryCalendar: React.FC<HistoryCalendarProps> = ({ selectedDates,
 
   useEffect(() => {
     const stopDrag = () => { isDragging.current = false; };
+    window.addEventListener('pointerup', stopDrag);
     window.addEventListener('mouseup', stopDrag);
     window.addEventListener('touchend', stopDrag);
     return () => {
+      window.removeEventListener('pointerup', stopDrag);
       window.removeEventListener('mouseup', stopDrag);
       window.removeEventListener('touchend', stopDrag);
     };
@@ -169,14 +171,7 @@ export const HistoryCalendar: React.FC<HistoryCalendarProps> = ({ selectedDates,
               <button
                 key={dateStr}
                 data-date={dateStr}
-                onMouseDown={() => {
-                  if (!isFuture) {
-                    isDragging.current = true;
-                    dragMode.current = isSelected ? 'remove' : 'add';
-                    handleInteract(dateStr);
-                  }
-                }}
-                onTouchStart={() => {
+                onPointerDown={(e) => {
                   if (!isFuture) {
                     isDragging.current = true;
                     dragMode.current = isSelected ? 'remove' : 'add';

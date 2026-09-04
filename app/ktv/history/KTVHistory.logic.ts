@@ -17,6 +17,7 @@ export interface HistoryRecord {
   commission: number;
   serviceName: string;
   duration: number;
+  actualDuration?: number | null;
   bonusPoints: number;
   bonusValue?: number;   // bonusPoints quy ra VNĐ
   grossIncome?: number;  // tiền tua + bonus (chưa trừ thuế)

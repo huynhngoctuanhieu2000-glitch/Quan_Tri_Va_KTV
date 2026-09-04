@@ -179,11 +179,21 @@ const OrderCard = ({ order, getStatusLabel }: {
                 </div>
               )}
 
-              {/* Thời lượng */}
+              {/* Thời lượng DV */}
               {order.duration > 0 && (
                 <div className="flex justify-between items-start">
-                  <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider">Thời lượng</span>
+                  <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider">Thời lượng DV</span>
                   <span className="text-sm text-gray-600">{order.duration} phút</span>
+                </div>
+              )}
+
+              {/* Thời gian làm DV (thực tế) */}
+              {order.actualDuration != null && order.actualDuration > 0 && (
+                <div className="flex justify-between items-start">
+                  <span className="text-[11px] text-gray-400 uppercase font-bold tracking-wider">Thời gian làm DV</span>
+                  <span className={`text-sm font-medium ${order.actualDuration > order.duration ? 'text-amber-600' : 'text-gray-600'}`}>
+                    {order.actualDuration} phút
+                  </span>
                 </div>
               )}
 
@@ -195,7 +205,10 @@ const OrderCard = ({ order, getStatusLabel }: {
                     <>
                       <TrendingUp size={13} className="text-indigo-400" />
                       <span className="text-sm font-black text-indigo-700">
-                        {order.commission != null && order.commission > 0 ? `${order.commission.toLocaleString('vi-VN')}đ` : '—'}
+                        {(() => {
+                          const displayComm = order.isTypeD ? (order.commissionBeforeDeduction || order.commission) : order.commission;
+                          return displayComm != null && displayComm > 0 ? `${displayComm.toLocaleString('vi-VN')}đ` : '—';
+                        })()}
                       </span>
                     </>
                   ) : (
@@ -266,15 +279,25 @@ const OrderCard = ({ order, getStatusLabel }: {
                 </div>
               )}
 
-              {/* ─── Thuế TNCN & thực nhận ─── */}
+              {/* ─── Trừ đánh giá, Thuế TNCN & thực nhận ─── */}
               {order.isTypeD && order.type !== 'DISCIPLINE' && (
                 <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5 -mx-1 space-y-1.5">
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Tổng thu nhập đơn</span>
                     <span className="text-sm font-bold text-gray-700">
-                      {(order.grossIncome || 0).toLocaleString('vi-VN')}đ
+                      {((order.grossIncome || 0) + (order.ratingDeductionAmount || 0)).toLocaleString('vi-VN')}đ
                     </span>
                   </div>
+                  {(order.ratingDeductionAmount || 0) > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] text-orange-500 font-bold uppercase tracking-wider">
+                        Trừ đánh giá ({Math.round((order.ratingDeductionRate || 0) * 100)}%)
+                      </span>
+                      <span className="text-sm font-bold text-orange-600">
+                        −{(order.ratingDeductionAmount || 0).toLocaleString('vi-VN')}đ
+                      </span>
+                    </div>
+                  )}
                   {(order.taxAmount || 0) > 0 && (
                     <div className="flex justify-between items-center">
                       <span className="text-[11px] text-rose-500 font-bold uppercase tracking-wider">
@@ -293,8 +316,6 @@ const OrderCard = ({ order, getStatusLabel }: {
                       {(order.netIncome || 0).toLocaleString('vi-VN')}đ
                     </span>
                   </div>
-
-
                 </div>
               )}
 
