@@ -400,12 +400,14 @@ Tách `getBusinessDate(supabase, at?: Date)` ra `lib/` dùng chung cho: `work_da
 | **1** | ✅ **XONG** — `lib/business-date.ts` dùng chung + sửa L6 + tháng/năm xếp hạng theo ngày làm việc. L7 hoãn sang bước 6 (§1.2) | Test mốc biên 01:00/05:59/06:00/00:30 đều pass; cửa sổ về đúng VN [D 06:00, D+1 06:00) |
 | **2** | ✅ **XONG** — `lib/services/KtvDLedgerEngine.ts` (thuần) + 52 test + script đối chiếu dữ liệu thật | 52/52 test pass; đối chiếu 01–03/09: 3/39 ô lệch, **giải thích được 100%** (chỉ do L7 + L2) — xem §7.1 |
 | **3** | ✅ **XONG** — migration `20260904120000` (2 bảng, RLS siết) + backfill 11 dòng từ 01/09. `intent_date` dời sang bước 7 | Đối chiếu 3/39 ô lệch, giải thích 100% (§7.1). RLS test: anon đọc 0 dòng, ghi bị chặn 42501 |
-| **4** | `KtvDLedgerReader.getRows()` | So với API cũ trên 5 KTV × 10 ngày, khớp 100% |
+| **4** | ✅ **XONG** — `lib/services/KtvDLedgerReader.ts`: `getRows` / `getPenalties` + cộng dồn thuần (`sumByStaff`, `netHoursByStaff`, `groupForHistory`) | Trên dữ liệu thật: ví 155.581đ = Σ lịch sử 155.581đ, thuế 15.559đ = 15.559đ → **L5 chết hẳn về mặt cấu trúc** |
+| **6** | ⚠️ **ĐẢO LÊN TRƯỚC BƯỚC 5** — cắm 4 hook (§2.3) + cron hạ vai trò xuống lưới an toàn | Chạy 3 đêm song song 2 bảng, so |
 | **5** | Chuyển consumer lần lượt: `service-hours` → `history` → `wallet/timeline` → `getBalance` | Mỗi lần chuyển, chụp số cũ/mới đối chiếu |
-| **6** | Cắm 4 hook (§2.3) + cron hạ vai trò xuống lưới an toàn | Chạy 3 đêm song song 2 bảng, so |
 | **7** | Quy chế §5: R1–R6 + nút báo trễ + tích rút tiền 1 lần | Kịch bản tay: check-in 2 lần → chỉ 1 dòng intent |
 | **8** | Dời giờ cron §6.3 + bật `daily-absence-check` (GET) | Chạy thử tay 1 ngày, xem danh sách sẽ khoá **trước** khi bật thật |
 | **9** | Drop `KTVServiceHoursLedger`, `KTVMonthlyServiceHours`, cron reset | — |
+
+⚠️ **Bước 6 phải làm TRƯỚC bước 5.** Backfill phủ ngày cũ, cron phủ hôm qua, nhưng **hôm nay** chỉ có hook mới ghi được. Chuyển consumer trước khi cắm hook → KTV mở ví giữa ca thấy 0đ.
 
 **Bước 0 và 8 nên tách PR riêng** — bước 0 sửa lỗi tiền đang chạy, bước 8 động tới tài khoản KTV.
 
