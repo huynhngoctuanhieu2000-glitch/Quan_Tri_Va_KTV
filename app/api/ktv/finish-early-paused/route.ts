@@ -1,107 +1,99 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { syncTurnsForDate } from '@/lib/turn-sync';
-import { z } from 'zod';
-
-const finishEarlySchema = z.object({
-    bookingId: z.string().min(1, 'Thiếu bookingId'),
-    itemIds: z.array(z.string()).min(1, 'Thiếu itemIds')
-});
+import { recomputeBookingStatus } from '@/lib/dispatch-status';
 
 export async function POST(req: Request) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     try {
-        const body = await req.json();
-        const parsedData = finishEarlySchema.safeParse(body);
-        if (!parsedData.success) {
-            return NextResponse.json({ 
-                success: false, 
-                error: parsedData.error.issues?.[0]?.message || parsedData.error.message || 'Dữ liệu không hợp lệ' 
-            }, { status: 400 });
+        const body = await req.json().catch(() => ({}));
+        const bookingId = body.bookingId;
+        const itemIds = body.itemIds || [];
+        
+        if (!bookingId || !Array.isArray(itemIds) || itemIds.length === 0) {
+            return NextResponse.json({ success: false, error: 'Thiếu thông tin đơn hàng (bookingId hoặc itemIds)' }, { status: 400 });
         }
 
-        const { bookingId, itemIds } = parsedData.data;
-
-        // Lấy thông tin các items
-        const { data: items, error: itemsError } = await supabase
+        // 1. Get the items to process
+        const { data: itemsToProcess } = await supabase
             .from('BookingItems')
             .select('*')
-            .in('id', itemIds)
-            .eq('bookingId', bookingId);
+            .in('id', itemIds);
 
-        if (itemsError || !items || items.length === 0) {
-            return NextResponse.json({ success: false, error: 'Không tìm thấy BookingItems' }, { status: 404 });
+        if (!itemsToProcess || itemsToProcess.length === 0) {
+            return NextResponse.json({ success: false, error: 'Không tìm thấy dịch vụ' }, { status: 404 });
         }
 
-        const businessDateObj = new Date();
-        const businessDate = `${businessDateObj.getFullYear()}-${String(businessDateObj.getMonth() + 1).padStart(2, '0')}-${String(businessDateObj.getDate()).padStart(2, '0')}`;
+        let updatedAny = false;
 
-        for (const item of items) {
-            let parsedSegments = item.segments;
-            let isSegString = typeof parsedSegments === 'string';
-            if (isSegString) {
-                try {
-                    parsedSegments = JSON.parse(parsedSegments);
-                } catch {
-                    parsedSegments = [];
-                }
-            }
-            let segments = Array.isArray(parsedSegments) ? [...parsedSegments] : [];
-
-            // Duyệt segments, với mỗi segment có actualStartTime và chưa có actualEndTime: chốt
-            const pauseTime = item.pauseStart || new Date().toISOString();
-
-            for (const seg of segments) {
-                if (seg.actualStartTime && !seg.actualEndTime) {
-                    seg.endTime = pauseTime;
-                    seg.actualEndTime = pauseTime;
-                    const pauseTimeMs = new Date(pauseTime).getTime();
-                    const oldStartMs = new Date(seg.actualStartTime).getTime();
-                    const oldWorkedMins = Math.max(0, Math.round((pauseTimeMs - oldStartMs) / 60000));
-                    
-                    seg.customCommissionDuration = oldWorkedMins;
-                    seg.note = 'FINISHED_EARLY_ON_PAUSE';
-                }
+        for (const it of itemsToProcess) {
+            if (it.status !== 'PAUSED') {
+                continue; // Skip items that are not paused
             }
 
-            const { error: errUpdate } = await supabase
-                .from('BookingItems')
-                .update({
-                    status: 'CLEANING',
-                    segments: isSegString ? JSON.stringify(segments) as any : segments
-                })
-                .eq('id', item.id);
+            const effectivePauseStart = it.pauseStart || new Date().toISOString();
+
+            let segs = it.segments;
+            if (typeof segs === 'string') {
+                try { segs = JSON.parse(segs); } catch { segs = []; }
+            }
+            if (Array.isArray(segs)) {
+                let segmentsUpdated = false;
+                for (let seg of segs) {
+                    if (seg.actualStartTime && !seg.actualEndTime) {
+                        seg.actualEndTime = effectivePauseStart;
+                        // Calculate duration in mins
+                        const startMs = new Date(seg.actualStartTime).getTime();
+                        const endMs = new Date(effectivePauseStart).getTime();
+                        let customDuration = Math.round((endMs - startMs) / 60000);
+                        if (customDuration < 0) customDuration = 0;
+                        seg.customCommissionDuration = customDuration;
+                        seg.note = 'FINISHED_EARLY_ON_PAUSE';
+                        segmentsUpdated = true;
+                    }
+                }
                 
-            if (errUpdate) {
-                console.error('Error updating item on finish-early-paused:', errUpdate);
+                await supabase.from('BookingItems').update({ 
+                    segments: JSON.stringify(segs),
+                    status: 'CLEANING',
+                    timeEnd: new Date().toISOString()
+                }).eq('id', it.id);
+                updatedAny = true;
+            } else {
+                await supabase.from('BookingItems').update({ 
+                    status: 'CLEANING',
+                    timeEnd: new Date().toISOString()
+                }).eq('id', it.id);
+                updatedAny = true;
             }
         }
 
-        // Cập nhật trạng thái của KTV trong TurnQueue xuống status waiting nếu cần?
-        // Let's release the KTVs from working state to waiting.
-        const allKtvIds = new Set<string>();
-        for (const item of items) {
-            if (Array.isArray(item.technicianCodes)) {
-                item.technicianCodes.forEach((k: string) => allKtvIds.add(k));
+        if (updatedAny) {
+            // Recompute booking status for both parent and children
+            const { data: booking } = await supabase.from('Bookings').select('date, parentBookingId').eq('id', bookingId).single();
+            const parentId = booking?.parentBookingId || bookingId;
+            
+            const { data: childBookings } = await supabase.from('Bookings').select('id').eq('parentBookingId', parentId);
+            const allBookingIds = [parentId, ...(childBookings?.map(b => b.id) || [])];
+
+            const { data: allBookingItems } = await supabase.from('BookingItems').select('status').in('bookingId', allBookingIds);
+            
+            if (allBookingItems) {
+                const statuses = allBookingItems.map(i => i.status);
+                let bStatus = recomputeBookingStatus(statuses);
+                if (bStatus === 'DONE') {
+                    bStatus = 'CLEANING'; // because we just set items to CLEANING
+                }
+                await supabase.from('Bookings').update({ status: bStatus }).in('id', allBookingIds);
+            }
+
+            if (booking && booking.date) {
+                await syncTurnsForDate(booking.date);
             }
         }
-        
-        if (allKtvIds.size > 0) {
-            await supabase
-                .from('TurnQueue')
-                .update({ status: 'waiting', current_order_id: null, booking_item_id: null, booking_item_ids: [] })
-                .in('employee_id', Array.from(allKtvIds))
-                .eq('date', businessDate);
-        }
 
-        await syncTurnsForDate(businessDate);
-
-        return NextResponse.json({ success: true });
-    } catch (err: any) {
-        console.error('Error in finish-early-paused API:', err);
-        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+        return NextResponse.json({ success: true, data: { itemIdsFinished: itemIds } });
+    } catch (e: any) {
+        console.error('finish-early-paused error:', e);
+        return NextResponse.json({ success: false, error: e.message || 'Server error' }, { status: 500 });
     }
 }

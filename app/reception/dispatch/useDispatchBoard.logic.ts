@@ -145,7 +145,7 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
             if (res.data.roomTransitionTime !== undefined) setRoomTransitionTime(res.data.roomTransitionTime);
             
             if (bData) {
-                const mappedOrders: PendingOrder[] = (bData as any[]).filter(b => b.status !== 'CANCELLED').map(b => {
+                const mappedOrders: PendingOrder[] = (bData as any[]).map(b => {
                     const assignedTurns = tData?.filter((t: any) => t.current_order_id === b.id) || [];
                     const hasAssignedKtv = assignedTurns.length > 0 || (b.BookingItems || []).some((bi: any) => {
                         const tc = bi.technicianCodes;
@@ -157,7 +157,8 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                     else if (b.status === 'IN_PROGRESS') dStatus = 'IN_PROGRESS';
                     else if (b.status === 'CLEANING') dStatus = 'CLEANING';
                     else if (b.status === 'FEEDBACK') dStatus = 'FEEDBACK';
-                    else if (b.status === 'DONE' || b.status === 'CANCELLED') dStatus = 'DONE';
+                    else if (b.status === 'DONE') dStatus = 'DONE';
+                    else if (b.status === 'CANCELLED') dStatus = 'CANCELLED';
                     else if (hasAssignedKtv) dStatus = 'PREPARING';
 
                     let calculatedRating = b.rating || null;
@@ -461,7 +462,7 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                             const isOpenStatus = ['NEW', 'WAITING', 'READY', 'PREPARING'].includes(newStatus);
                             const mappedStatus = !o.hasAssignedKtv && isOpenStatus
                                 ? 'pending'
-                                : (isOpenStatus ? 'PREPARING' : (newStatus === 'CANCELLED' ? 'DONE' : newStatus));
+                                : (isOpenStatus ? 'PREPARING' : newStatus);
                             return { ...o, rawStatus: newStatus, dispatchStatus: mappedStatus };
                         }
                         return o;

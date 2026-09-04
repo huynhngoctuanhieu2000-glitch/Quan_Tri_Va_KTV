@@ -179,7 +179,6 @@ export async function getDispatchData(date: string, _timestamp?: number) {
             .in('source', ['STANDARD_WALK_IN', 'VIP_WALK_IN', 'MIXED_WALK_IN'])
             .gte('bookingDate', startOfDay)
             .lte('bookingDate', endOfDay)
-            .neq('status', 'CANCELLED')
             .neq('status', 'SPLIT')
             .order('createdAt', { ascending: true });
 

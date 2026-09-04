@@ -364,7 +364,8 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
             const getServicePhase = (st: string) => {
                 if (['IN_PROGRESS', 'PAUSED'].includes(st)) return 'IN_PROGRESS';
                 if (['CLEANING', 'COMPLETED'].includes(st)) return 'CLEANING';
-                if (['FEEDBACK', 'DONE', 'CANCELLED'].includes(st)) return 'FEEDBACK';
+                if (st === 'FEEDBACK') return 'FEEDBACK';
+                if (['DONE', 'CANCELLED'].includes(st)) return 'DONE';
                 return 'PREPARING';
             };
 

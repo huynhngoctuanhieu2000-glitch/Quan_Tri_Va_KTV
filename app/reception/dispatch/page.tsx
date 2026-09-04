@@ -1598,7 +1598,11 @@ if (!hasPermission('dispatch_board')) {
     try {
       const res = await cancelBooking(orderId, selectedDate);
       if (res.success) {
-        setOrders(prev => prev.filter(o => o.id !== orderId));
+        setOrders(prev => prev.map(o => 
+          o.id === orderId 
+            ? { ...o, dispatchStatus: 'CANCELLED' as any, rawStatus: 'CANCELLED' } 
+            : o
+        ));
         if (selectedOrderId === orderId) setSelectedOrderId(null);
         setContextMenu(null);
       } else {
@@ -2801,6 +2805,7 @@ if (!hasPermission('dispatch_board')) {
               orders={orders} 
               staffs={staffs}
               staffWorkTypeMap={Object.fromEntries(turns.filter(t => t.staff?.work_type).map(t => [t.employee_id, t.staff!.work_type!]))}
+
               onUpdateCustomerName={async (orderId, itemIds, ktvIds, newName) => {
                 try {
                   const { updateSubOrderCustomerName } = await import('./actions');

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles, Banknote, CreditCard, Camera, X, PlayCircle, UserMinus, Crown, Stethoscope } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles, Banknote, CreditCard, Camera, X, PlayCircle, UserMinus, Crown, Stethoscope, Square } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
 import { SubOrder, buildOrderTimeline } from './dispatch-timeline';
 
@@ -14,7 +14,8 @@ const STATUS_CONFIG = [
     { id: 'IN_PROGRESS' as RawStatus, dispatchModeId: ['IN_PROGRESS'], label: 'Đang Tiến Hành', shortLabel: 'Đang làm', color: 'text-indigo-600', bg: 'bg-indigo-50', activeBg: 'bg-indigo-600', border: 'border-indigo-200', dot: 'bg-indigo-500', next: 'CLEANING' as RawStatus, nextLabel: '🧹 Dọn' },
     { id: 'CLEANING' as RawStatus, dispatchModeId: ['CLEANING'], label: 'Đang Dọn Phòng', shortLabel: 'Dọn phòng', color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-600', border: 'border-purple-200', dot: 'bg-purple-500', next: 'FEEDBACK' as RawStatus, nextLabel: '⭐ Chờ Đánh Giá' },
     { id: 'FEEDBACK' as RawStatus, dispatchModeId: ['FEEDBACK'], label: 'Chờ Đánh Giá', shortLabel: 'Đánh giá', color: 'text-blue-600', bg: 'bg-blue-50', activeBg: 'bg-blue-600', border: 'border-blue-200', dot: 'bg-blue-500', next: 'DONE' as RawStatus, nextLabel: '✅ Hoàn tất' },
-    { id: 'DONE' as RawStatus, dispatchModeId: ['DONE', 'CANCELLED'], label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
+    { id: 'DONE' as RawStatus, dispatchModeId: ['DONE'], label: 'Hoàn Tất Dịch Vụ', shortLabel: 'Hoàn tất', color: 'text-emerald-600', bg: 'bg-emerald-50', activeBg: 'bg-emerald-600', border: 'border-emerald-200', dot: 'bg-emerald-500', next: null, nextLabel: null },
+    { id: 'CANCELLED' as RawStatus, dispatchModeId: ['CANCELLED'], label: 'Đã Huỷ', shortLabel: 'Đã huỷ', color: 'text-rose-600', bg: 'bg-rose-50', activeBg: 'bg-rose-600', border: 'border-rose-200', dot: 'bg-rose-500', next: null, nextLabel: null },
 ];
 
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
@@ -70,6 +71,7 @@ const WORK_TYPE_BADGE_KANBAN: Record<string, { label: string; className: string 
     TYPE_A: { label: 'A', className: 'bg-blue-100 text-blue-700 border-blue-200' },
     TYPE_B: { label: 'B', className: 'bg-purple-100 text-purple-700 border-purple-200' },
     TYPE_C: { label: 'C', className: 'bg-gray-100 text-gray-500 border-gray-200' },
+    TYPE_D: { label: 'D', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
 };
 
 const KtvTypeBadge = ({ workType }: { workType?: string }) => {
@@ -180,7 +182,7 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     return order.time; 
 };
 
-export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder }: KanbanBoardProps) {
+export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused }: KanbanBoardProps) {
     const [draggedSubOrderId, setDraggedSubOrderId] = useState<string | null>(null);
     const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; ktvId: string; time: string | null } | null>(null);
     const [editingNameSubOrderId, setEditingNameSubOrderId] = useState<string | null>(null);
@@ -1084,20 +1086,21 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                     )
                                                 )}
 
-                                                <div className="flex items-center gap-2">
+                                                <div className={`gap-2 w-full ${services.some((s: any) => s.status === 'PAUSED') ? 'grid grid-cols-2' : 'flex items-center'}`}>
                                                     {(() => {
                                                         const unpaidAmount = services.reduce((acc: number, svc: any) => acc + (svc.options?.isPaid === false ? ((svc.price || 0) * (svc.quantity || 1)) : 0), 0);
                                                         if (unpaidAmount > 0 && onConfirmAddonPayment) {
                                                             return (
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); onConfirmAddonPayment(order.id); }}
-                                                                    className="flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm bg-orange-500 text-white hover:bg-orange-600 active:scale-95"
+                                                                    className={`py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm bg-orange-500 text-white hover:bg-orange-600 active:scale-95 ${services.some((s: any) => s.status === 'PAUSED') ? 'col-span-2' : 'flex-1'}`}
                                                                 >
                                                                     Đã thu {formatVND(unpaidAmount)}
                                                                 </button>
                                                             );
                                                         }
-                                                        if (currentCfg.next) {
+                                                        const anyPaused = services.some((s: any) => s.status === 'PAUSED');
+                                                        if (currentCfg.next && !anyPaused) {
                                                             return (
                                                                 <button
                                                                     onClick={e => { 
@@ -1134,17 +1137,29 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                 <>
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); onPauseClick(order.id, subOrder); }}
-                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-green-600 bg-green-50 hover:bg-green-100 transition-all border border-green-100 flex items-center gap-1"
+                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-green-600 bg-green-50 hover:bg-green-100 transition-all border border-green-100 flex items-center justify-center w-full gap-1"
                                                                         title="Tiếp tục"
                                                                     >
                                                                         <PlayCircle size={12} /> Tiếp
                                                                     </button>
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); onPauseClick(order.id, subOrder); }}
-                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center gap-1"
+                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center justify-center w-full gap-1"
                                                                         title="Rút/Đổi KTV"
                                                                     >
                                                                         <UserMinus size={12} /> Đổi
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => { 
+                                                                            e.stopPropagation(); 
+                                                                            if (window.confirm('Xác nhận kết thúc đơn sớm? KTV sẽ được tính lương theo đúng thời gian đã làm.')) {
+                                                                                if (onFinishEarlyPaused) onFinishEarlyPaused(order.id, subOrder);
+                                                                            }
+                                                                        }}
+                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 transition-all border border-rose-100 flex items-center justify-center w-full gap-1"
+                                                                        title="Kết thúc đơn"
+                                                                    >
+                                                                        <Square size={12} /> Kết thúc
                                                                     </button>
                                                                 </>
                                                             );
@@ -1168,7 +1183,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                 const ratingUrl = `https://nganha.vercel.app/${order.customerLang || 'vi'}/journey/${order.accessToken || subOrder.bookingId}${sGuestId ? '?guestId=' + sGuestId : ''}`;
                                                                 window.open(ratingUrl, '_blank');
                                                             }}
-                                                            className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-indigo-500 bg-indigo-50 hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center gap-1"
+                                                            className={`px-2.5 py-2.5 rounded-xl text-[11px] font-black text-indigo-500 bg-indigo-50 hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center justify-center gap-1 ${services.some((s: any) => s.status === 'PAUSED') ? 'w-full' : ''}`}
                                                             title="Link đánh giá"
                                                         >
                                                             <QrCode size={12} /> Link

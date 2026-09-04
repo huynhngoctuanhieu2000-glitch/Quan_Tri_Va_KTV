@@ -77,7 +77,7 @@ export interface ServiceBlock {
   guestId?: string; // ID của Guest đang sử dụng dịch vụ này
 }
 
-export type DispatchStatus = 'pending' | 'dispatched' | 'PREPARING' | 'IN_PROGRESS' | 'CLEANING' | 'FEEDBACK' | 'DONE';
+export type DispatchStatus = 'pending' | 'dispatched' | 'PREPARING' | 'IN_PROGRESS' | 'CLEANING' | 'FEEDBACK' | 'DONE' | 'CANCELLED';
 
 export interface PendingOrder {
   id: string; // Booking ID
