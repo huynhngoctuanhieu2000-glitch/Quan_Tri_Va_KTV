@@ -28,15 +28,15 @@ export const dynamic = 'force-dynamic';
  */
 /**
  * ================================================================
- * KHOÁ NGAY LÚC 12H — chưa đăng ký lịch NGÀY MAI
+ * KHOÁ NGAY LÚC 00:00 — chưa đăng ký lịch cho ngày vừa sang
  * ================================================================
- * 12:00 trưa là hạn chót quyết định lịch ngày mai (cùng mốc với hạn đổi
- * lịch miễn phạt). Quá hạn mà chưa đăng ký gì → khoá luôn, không đợi hết
- * ngày mai mới biết.
+ * Nửa đêm là hạn chót quyết định lịch — cùng mốc với hạn đổi lịch miễn phạt
+ * (được đổi thoải mái đến hết ngày hôm trước). Sang ngày mới mà chưa đăng ký
+ * gì thì khoá luôn, không đợi hết ngày mới biết.
  *
- * ⚠️ Khoá lúc 12h trưa nghĩa là có thể khoá đúng KTV ĐANG LÀM VIỆC hôm nay
- * — họ chưa đăng ký cho ngày mai nhưng hôm nay vẫn đang phục vụ khách.
- * Đây là chủ ý: 12h là hạn chót, quá hạn thì chặn ngay.
+ * ⚠️ Dùng NGÀY LỊCH VN, không phải ngày làm việc theo cutoff. Bảng
+ * `KTVTypeDDailyRegistration.work_date` được ghi bằng `vnToday()` (ngày lịch),
+ * nên tra bằng business date lúc 00:00 sẽ ra ngày HÔM TRƯỚC và khoá nhầm.
  */
 async function runLockUnregistered() {
     const supabase = getSupabaseAdmin();
@@ -44,12 +44,9 @@ async function runLockUnregistered() {
         return NextResponse.json({ success: false, error: 'Supabase admin not configured' }, { status: 500 });
     }
 
-    const today = await getBusinessToday(supabase);
-    const tomorrow = (() => {
-        const d = new Date(`${today}T00:00:00Z`);
-        d.setUTCDate(d.getUTCDate() + 1);
-        return d.toISOString().slice(0, 10);
-    })();
+    // Ngày LỊCH VN vừa sang — khớp với cách `KTVTypeDDailyRegistration.work_date`
+    // được ghi (vnToday()), không dùng business date.
+    const today = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     const { data: swRow } = await supabase
         .from('SystemConfigs').select('value')
@@ -65,7 +62,7 @@ async function runLockUnregistered() {
     const ids = (staffList || []).map((s: any) => s.id);
     const { data: regs } = await supabase
         .from('KTVTypeDDailyRegistration')
-        .select('staff_id').eq('work_date', tomorrow).in('staff_id', ids);
+        .select('staff_id').eq('work_date', today).in('staff_id', ids);
     const daDangKy = new Set((regs || []).map((r: any) => r.staff_id));
 
     const locked: string[] = [];
@@ -77,28 +74,28 @@ async function runLockUnregistered() {
         locked.push(staff.full_name ? `${staff.full_name} (${staff.id})` : staff.id);
         if (!enabled) continue;
 
-        const lyDo = `Chưa đăng ký lịch ngày ${tomorrow} tính tới 12:00 hôm nay`;
+        const lyDo = `Chưa đăng ký lịch (đi làm hoặc OFF) cho ngày ${today}`;
         await supabase.from('SecurityAuditLogs').insert({
             employee_id: staff.id,
             employee_name: staff.full_name || staff.id,
             event_type: 'AUTO_LOCK_NO_REGISTRATION',
             ip_address: '127.0.0.1',
             user_agent: 'CRON',
-            details: { source: 'CRON_12H', targetDate: tomorrow, reason: lyDo },
+            details: { source: 'CRON_MIDNIGHT', targetDate: today, reason: lyDo },
         });
         await supabase.from('Staff').update({ status: 'KHÓA_TÀI_KHOẢN' }).eq('id', staff.id);
         await KtvTypeDDisciplineService.markAccountLock(supabase, staff.id, today, lyDo);
         await createNotification({
             type: 'EMERGENCY',
-            message: `Tài khoản của bạn đã bị khóa do chưa đăng ký lịch ngày ${tomorrow} trước 12:00.`,
+            message: `Tài khoản của bạn đã bị khóa do chưa đăng ký lịch (đi làm hoặc OFF) cho ngày ${today}.`,
             employeeId: staff.id,
         });
     }
 
-    console.log(`[Kỷ luật D 12h] ${locked.length} KTV chưa đăng ký ${tomorrow} (${enabled ? 'ĐÃ KHOÁ' : 'đang TẮT'})`);
+    console.log(`[Kỷ luật D 00:00] ${locked.length} KTV chưa đăng ký ${today} (${enabled ? 'ĐÃ KHOÁ' : 'đang TẮT'})`);
     return NextResponse.json({
         success: true, mode: 'lock-unregistered', enabled,
-        targetDate: tomorrow, lockedCount: locked.length, locked,
+        targetDate: today, lockedCount: locked.length, locked,
         note: enabled ? undefined : 'Kỷ luật đang TẮT — danh sách chỉ là dự kiến.',
     });
 }

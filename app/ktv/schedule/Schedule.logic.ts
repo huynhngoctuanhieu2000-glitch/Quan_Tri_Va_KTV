@@ -206,7 +206,7 @@ export const useKTVSchedule = () => {
             // Server trả về `penalised` nếu bỏ ca sau hạn miễn phạt (12:00 hôm trước).
             const bịPhạt = (res as any)?.penalised?.[0];
             if (bịPhạt) {
-                addToast(`Đã chuyển sang OFF. Bạn bị trừ ${bịPhạt.hours} giờ tích lũy do bỏ ca sau 12:00 hôm trước.`, "warning");
+                addToast(`Đã chuyển sang OFF. Bạn bị trừ ${bịPhạt.hours} giờ tích lũy do bỏ ca sau 00:00 ngày làm việc.`, "warning");
             } else {
                 addToast("Đã chuyển ngày này sang OFF", "success");
             }

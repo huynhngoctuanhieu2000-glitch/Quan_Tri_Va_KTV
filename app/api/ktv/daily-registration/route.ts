@@ -92,7 +92,7 @@ export async function POST(request: Request) {
 
     // ─── Trừ 5 giờ nếu bỏ ca sau hạn miễn phạt ────────────────────────
     // Bỏ ca = đang đăng ký LÀM mà chuyển sang OFF (hoặc bấm huỷ).
-    // Hạn miễn phạt: 12:00 trưa ngày hôm trước. Quá hạn thì vẫn cho đổi,
+    // Hạn miễn phạt: hết ngày hôm trước (00:00 ngày làm). Quá hạn vẫn cho đổi,
     // nhưng trừ 5 giờ tích lũy — giao diện đã cảnh báo trước khi xác nhận.
     const penalised: { work_date: string; hours: number }[] = [];
 
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         const { KtvTypeDDisciplineService } = await import('@/lib/services/KtvTypeDDisciplineService');
         const hours = await KtvTypeDDisciplineService.deductDailyViolation(
           supabase as any, staff.id, entry.work_date, 'ABSENT_EARLY_NOTICE',
-          'Bỏ ca đã đăng ký sau hạn miễn phạt (12:00 hôm trước)', staff.id,
+          'Bỏ ca đã đăng ký sau 00:00 ngày làm việc', staff.id,
         );
         penalised.push({ work_date: entry.work_date, hours });
       }
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
       data,
       penalised,
       message: penalised.length > 0
-        ? `Đã chuyển sang OFF. Bạn bị trừ ${penalised[0].hours} giờ tích lũy do bỏ ca sau 12:00 hôm trước.`
+        ? `Đã chuyển sang OFF. Bạn bị trừ ${penalised[0].hours} giờ tích lũy do bỏ ca sau 00:00 ngày làm việc.`
         : (type === 'CANCEL' ? 'Đã chuyển ngày này sang OFF.' : undefined),
     });
   } catch (error: any) {

@@ -37,46 +37,27 @@ export function canEditRegistration(workDateStr: string): boolean {
   return false;
 }
 
-/** Hạn chót đổi lịch MIỄN PHẠT: 12:00 trưa ngày HÔM TRƯỚC ngày làm. */
-export const OFF_FREE_DEADLINE_HOUR = 12;
-
+/**
+ * Hạn chót đổi lịch MIỄN PHẠT: **00:00 nửa đêm** của ngày làm.
+ * Tức là được đổi thoải mái đến hết ngày hôm trước.
+ */
 export type RegistrationEditWindow =
   | 'FREE'      // còn trong hạn — đổi thoải mái, không phạt
-  | 'PENALTY'   // quá hạn nhưng chưa tới 07:00 ngày làm — đổi được nhưng bị trừ 5 giờ
+  | 'PENALTY'   // đã sang ngày làm nhưng chưa tới 07:00 — đổi được nhưng trừ 5 giờ
   | 'LOCKED';   // từ 07:00 ngày làm — hết quyền đổi, chỉ còn báo trễ
 
 /**
  * Đổi lịch ngày D đang nằm ở khung nào.
  *
- *   ... → 12:00 ngày D-1    : FREE     — huỷ / chuyển OFF thoải mái
- *   12:00 D-1 → 07:00 D     : PENALTY  — vẫn đổi được, TRỪ 5 GIỜ tích lũy
+ *   ... hết ngày D-1        : FREE     — huỷ / chuyển OFF thoải mái
+ *   00:00 D → 07:00 D       : PENALTY  — vẫn đổi được, TRỪ 5 GIỜ tích lũy
  *   từ 07:00 ngày D         : LOCKED   — chỉ còn báo trễ 1 lần
  *
- * Mốc 12:00 lấy của ngày HÔM TRƯỚC vì spa mở cửa 09:00 — cho huỷ miễn phí
- * tới trưa ngày làm thì đã mở cửa 3 tiếng mà vẫn hụt người, lễ tân không
- * kịp xoay ca.
- *
- * @param workDateStr    'yyyy-MM-dd' — ngày làm việc đang sửa
- * @param deadlineHour   giờ hạn chót ngày D-1 (mặc định 12)
+ * @param workDateStr 'yyyy-MM-dd' — ngày làm việc đang sửa
  */
-export function getRegistrationEditWindow(
-  workDateStr: string,
-  deadlineHour: number = OFF_FREE_DEADLINE_HOUR,
-): RegistrationEditWindow {
+export function getRegistrationEditWindow(workDateStr: string): RegistrationEditWindow {
   const today = vnToday();
-  const hour = vnHour();
-
-  // Ngày làm ở tương lai xa (từ D-2 trở về trước) → luôn miễn phạt.
-  const dayBefore = new Date(`${workDateStr}T00:00:00Z`);
-  dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-  const dayBeforeStr = dayBefore.toISOString().slice(0, 10);
-
-  if (today < dayBeforeStr) return 'FREE';
-  if (today === dayBeforeStr) return hour < deadlineHour ? 'FREE' : 'PENALTY';
-
-  // Đã sang chính ngày làm.
-  if (today === workDateStr) return hour < 7 ? 'PENALTY' : 'LOCKED';
-
-  // Ngày làm đã qua.
-  return 'LOCKED';
+  if (workDateStr > today) return 'FREE';                 // chưa tới ngày làm
+  if (workDateStr === today) return vnHour() < 7 ? 'PENALTY' : 'LOCKED';
+  return 'LOCKED';                                        // ngày làm đã qua
 }

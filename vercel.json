@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/cron/daily-absence-check?mode=lock-unregistered",
-      "schedule": "0 5 * * *"
+      "schedule": "0 17 * * *"
     }
   ]
 }

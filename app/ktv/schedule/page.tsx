@@ -603,7 +603,7 @@ const KTVSchedulePage = () => {
                                                 <AlertCircle size={16} /> Bạn sẽ bị trừ 5 giờ tích lũy
                                             </p>
                                             <p className="text-xs text-amber-800 leading-relaxed">
-                                                Đã quá hạn đổi lịch miễn phạt (12:00 trưa hôm trước).
+                                                Đã sang ngày làm việc — quá hạn đổi lịch miễn phạt (hết ngày hôm trước).
                                                 Giờ tích lũy quyết định thứ tự nhận khách của bạn.
                                             </p>
                                         </div>
