@@ -319,8 +319,12 @@ export function computeRows(
                 const rate = category === 'VIP' ? configs.rateVIP : configs.ratePT;
                 const deduction = Number(configs.ratingDeductions[String(rating)] ?? 0);
 
-                const gross = Math.round(paid * (rate / 60));
-                const net = Math.round(gross * (1 - deduction));
+                // KHÔNG làm tròn — xem ghi chú về thuế bên dưới. Cùng một lý do:
+                // chỉ cần làm tròn ở một cấp là tổng theo khách, theo ngày và theo
+                // tháng sẽ lệch nhau. Giữ nguyên phần lẻ khi lưu, làm tròn ở tầng
+                // GIAO DIỆN khi hiện cho KTV và ở lúc chi tiền thật.
+                const gross = paid * (rate / 60);
+                const net = gross * (1 - deduction);
 
                 // Thuế TNCN — KHÔNG làm tròn.
                 //

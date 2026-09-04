@@ -16,6 +16,13 @@ function check(label: string, got: any, want: any) {
 }
 function section(t: string) { console.log(`\n=== ${t} ===`); }
 
+/** Tiền và thuế không còn làm tròn → so xấp xỉ tới 0,001đ. */
+function money(label: string, got: number, want: number) {
+    const ok = Math.abs(got - want) < 0.001;
+    if (ok) { pass++; console.log(`  PASS  ${label}`); }
+    else { fail++; console.log(`  FAIL  ${label}\n          got  = ${got}\n          want = ${want}`); }
+}
+
 const CFG: TypeDConfigs = {
     rateVIP: 180000,
     ratePT: 100000,
@@ -144,9 +151,9 @@ section('computeRows — tua 60 làm 55, PT, 3★ (tính tay)');
     check('paid_minutes', r.paid_minutes, 55);
     check('actual_minutes', r.actual_minutes, 55);
     check('rate_per_60m', r.rate_per_60m, 100000);
-    check('commission_gross', r.commission_gross, 91667);
+    money('commission_gross = 55 × 100.000/60', r.commission_gross, 55 * 100000 / 60);
     check('deduction_rate', r.deduction_rate, 0.25);
-    check('commission_net', r.commission_net, 68750);
+    money('commission_net sau trừ 25%', r.commission_net, 55 * 100000 / 60 * 0.75);
     check('tip', r.tip, 20000);
     check('rating_source', r.rating_source, 'GUEST');
     check('work_date (14:00 VN → ngày 10/09)', r.work_date, '2026-09-10');
@@ -164,8 +171,8 @@ section('computeRows — VIP 4★ không bị trừ');
             segments: [seg()], technicianCodes: ['T016'],
         })],
     })], ['T016'], SERVICES, CFG);
-    check('VIP 60 phút = 180.000', rows[0].commission_gross, 180000);
-    check('4★ không trừ', rows[0].commission_net, 180000);
+    money('VIP 60 phút = 180.000', rows[0].commission_gross, 180000);
+    money('4★ không trừ', rows[0].commission_net, 180000);
     check('rate_category', rows[0].rate_category, 'VIP');
 }
 
@@ -175,7 +182,7 @@ section('Thuế 10% — theo đơn của khách, KHÔNG làm tròn');
         BookingGuests: [{ id: 'G1', rating: 4 }],
         BookingItems: [it({ guest_id: 'G1', status: 'DONE', segments: [seg()], technicianCodes: ['T016'] })],
     })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-09-01' });
-    check('net 100.000 → thuế 10.000', rows[0].tax_amount, 10000);
+    money('net 100.000 → thuế 10.000', rows[0].tax_amount, 10000);
 }
 {
     // 3★ trên 55 phút PT: gross 91.667 → net 68.750 → thuế 6.875,0
@@ -187,7 +194,7 @@ section('Thuế 10% — theo đơn của khách, KHÔNG làm tròn');
             technicianCodes: ['T016'],
         })],
     })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-09-01' });
-    check('giữ nguyên phần lẻ, không làm tròn', rows[0].tax_amount, 6875);
+    money('giữ nguyên phần lẻ, không làm tròn', rows[0].tax_amount, 55 * 100000 / 60 * 0.75 * 0.1);
 }
 {
     // Một khách 2 dịch vụ: thuế cộng từng dòng PHẢI bằng thuế tính trên tổng.
@@ -202,14 +209,14 @@ section('Thuế 10% — theo đơn của khách, KHÔNG làm tròn');
     })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-09-01' });
     const tongThue = rows.reduce((s, r) => s + r.tax_amount, 0);
     const tongTien = rows.reduce((s, r) => s + r.commission_net, 0);
-    check('Σ thuế từng dòng = thuế trên tổng của khách', tongThue, tongTien * 0.1);
+    money('Σ thuế từng dòng = thuế trên tổng của khách', tongThue, tongTien * 0.1);
 }
 {
     const rows = computeRows([booking({
         BookingGuests: [{ id: 'G1', rating: 4 }],
         BookingItems: [it({ guest_id: 'G1', status: 'DONE', segments: [seg()], technicianCodes: ['T016'] })],
     })], ['T016'], SERVICES, { ...CFG, taxEffectiveFrom: '2026-12-01' });
-    check('trước mốc hiệu lực → không thuế', rows[0].tax_amount, 0);
+    money('trước mốc hiệu lực → không thuế', rows[0].tax_amount, 0);
 }
 
 section('Loại trừ & lọc');
@@ -242,8 +249,8 @@ section('Nhiều KTV cùng 1 item → mỗi người 1 dòng');
         })],
     })], ['T016', 'T017'], SERVICES, CFG);
     check('2 dòng', rows.length, 2);
-    check('T016 trả theo 60 phút', rows[0].commission_net, 100000);
-    check('T017 trả theo 30 phút', rows[1].commission_net, 50000);
+    money('T016 trả theo 60 phút', rows[0].commission_net, 100000);
+    money('T017 trả theo 30 phút', rows[1].commission_net, 50000);
     check('co_workers của T016', rows[0].co_workers, ['T017']);
 }
 
@@ -295,7 +302,7 @@ section('Tạm tính khi khách chưa chấm sao');
     })], ['T016'], SERVICES, CFG);
     check('is_provisional', rows[0].is_provisional, true);
     check('entry_status OPEN', rows[0].entry_status, 'OPEN');
-    check('0★ không bị trừ (bảng có "0":0)', rows[0].commission_net, 100000);
+    money('0★ không bị trừ (bảng có "0":0)', rows[0].commission_net, 100000);
 }
 
 section('Idempotent — chạy 2 lần ra kết quả giống hệt');

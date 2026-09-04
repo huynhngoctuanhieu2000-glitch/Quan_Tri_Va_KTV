@@ -255,7 +255,14 @@ Chính việc làm tròn là thứ đã đẻ ra L5: ví tính `dayComm × 0,1` 
 
 Kiểm chứng trên dữ liệu thật (T016, tháng 9): cộng từng dòng = cộng theo khách = tính trên tổng ngày = 10% tổng tháng = **15.558,1đ**.
 
-⚠️ `tax_amount` có phần lẻ (vd `326,2đ`). Khi hiển thị cho KTV thì làm tròn ở tầng giao diện, KHÔNG làm tròn khi lưu.
+**Tiền tua cũng bỏ làm tròn**, cùng một lý do: chỉ cần làm tròn ở một cấp là tổng theo khách, theo ngày, theo tháng sẽ lệch nhau.
+
+```
+T016 tháng 9 — tiền tua:  từng dòng = theo khách = theo ngày = 155.579,3542đ
+                  thuế:  từng dòng = 10% tổng    = 15.557,9354đ
+```
+
+⚠️ `commission_gross`, `commission_net`, `tax_amount` đều có phần lẻ (vd `3.261,9097đ`). Làm tròn ở **tầng giao diện** khi hiện cho KTV và ở **lúc chi tiền thật**, KHÔNG làm tròn khi lưu.
 
 Thuế **thưởng** (bonus) không thuộc bảng này (bonus tính theo khách, không theo item) → xử lý ở tầng ngày cùng `total_bonus`.
 
