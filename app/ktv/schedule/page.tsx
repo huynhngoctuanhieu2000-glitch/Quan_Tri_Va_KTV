@@ -115,7 +115,7 @@ const KTVSchedulePage = () => {
         // Kiểm tra xem user hiện tại đã đăng ký ngày này chưa
         const dayLeaves = leaveByDate[dateStr] || [];
         const myLeave = dayLeaves.find(l => l.employeeId === user?.id);
-        const myWorkReg = workRegByDate[dateStr]?.find((r: any) => r.staff_id === user?.id);
+        const myWorkReg = workRegByDate[dateStr]?.find((r: any) => r.staff_id === user?.code);
         
         // Chỉ cho phép chọn/huỷ chọn những ngày > today VÀ chưa từng đăng ký
         if (!myLeave) {
@@ -209,7 +209,7 @@ const KTVSchedulePage = () => {
                                         
                                         // Kiểm tra xem user hiện tại đã đăng ký ngày này chưa
                                         const myLeave = dayLeaves.find(l => l.employeeId === user?.id);
-                                        const myWorkReg = workRegByDate[dateStr]?.find((r: any) => r.staff_id === user?.id);
+                                        const myWorkReg = workRegByDate[dateStr]?.find((r: any) => r.staff_id === user?.code);
                                         
                                         let cellStyle = 'text-gray-500 hover:bg-gray-50';
                                         
@@ -329,7 +329,7 @@ const KTVSchedulePage = () => {
                 {/* ── DANH SÁCH NGÀY ĐÃ ĐĂNG KÝ ĐI LÀM (ngày + giờ) ── */}
                 {user?.work_type === 'TYPE_D' && (() => {
                     const myWorkDays = (workRegistrationList || [])
-                        .filter((r: any) => r.staff_id === user?.id && r.status === 'REGISTERED')
+                        .filter((r: any) => r.staff_id === user?.code && r.status === 'REGISTERED')
                         .sort((a: any, b: any) => a.work_date.localeCompare(b.work_date));
 
                     if (myWorkDays.length === 0) return null;
@@ -410,7 +410,7 @@ const KTVSchedulePage = () => {
                     // Loại D: OFF nằm ở KTVTypeDDailyRegistration. Loại khác: ở KTVLeaveRequests.
                     const myOffDays = isTypeD
                         ? (workRegistrationList || [])
-                            .filter((r: any) => r.staff_id === user?.id && r.status === 'OFF_REGISTERED')
+                            .filter((r: any) => r.staff_id === user?.code && r.status === 'OFF_REGISTERED')
                             .map((r: any) => ({ date: r.work_date, status: null as string | null, raw: r }))
                             .sort((a: any, b: any) => a.date.localeCompare(b.date))
                         : (leaveList || [])
@@ -719,12 +719,11 @@ const KTVSchedulePage = () => {
                             // 🛡️ RIÊNG TƯ: chỉ hiển thị lịch nghỉ của chính mình, không xem của người khác.
                             const leaves = (leaveByDate[date] || []).filter(l => l.employeeId === user?.id);
                             const myRegRaw = user?.work_type === 'TYPE_D'
-                                ? workRegByDate[date]?.find((r: any) => r.staff_id === user?.id)
+                                ? workRegByDate[date]?.find((r: any) => r.staff_id === user?.code)
                                 : null;
-                            const visibleReg = myRegRaw && myRegRaw.status !== 'REGISTERED' ? myRegRaw : null;
 
                             // Không có gì của mình trong ngày này → không render thẻ rỗng.
-                            if (!visibleReg && leaves.length === 0) return null;
+                            if (!myRegRaw && leaves.length === 0) return null;
 
                             const formattedDate = (() => {
                                 try { return format(new Date(date + 'T00:00:00'), 'EEEE, dd/MM/yyyy', { locale: vi }); }
@@ -738,19 +737,24 @@ const KTVSchedulePage = () => {
                                     </div>
                                     <div className="p-4">
                                         
-                                        {visibleReg && (
-                                            <div className="flex flex-col gap-2 p-3 mb-3 rounded-2xl border border-rose-200 bg-rose-50">
+                                        {myRegRaw && (
+                                            <div className={`flex flex-col gap-2 p-3 mb-3 rounded-2xl border ${myRegRaw.status === 'REGISTERED' ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}>
                                                 <div className="flex justify-between items-center">
                                                     <div className="flex items-center gap-2">
-                                                        <CalendarOff size={16} className="text-rose-600"/>
-                                                        <span className="font-bold text-sm text-rose-700">
-                                                            ĐĂNG KÝ OFF
+                                                        {myRegRaw.status === 'REGISTERED' ? <Briefcase size={16} className="text-emerald-600"/> : <CalendarOff size={16} className="text-rose-600"/>}
+                                                        <span className={`font-bold text-sm ${myRegRaw.status === 'REGISTERED' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                            {myRegRaw.status === 'REGISTERED' ? 'ĐĂNG KÝ ĐI LÀM' : 'ĐĂNG KÝ OFF'}
                                                         </span>
                                                     </div>
+                                                    {myRegRaw.status === 'REGISTERED' && myRegRaw.expected_time && (
+                                                        <span className="text-sm font-bold text-emerald-600 flex items-center gap-1">
+                                                            <Clock size={13} /> {myRegRaw.expected_time.slice(0, 5)}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                {visibleReg.late_report_count > 0 && (
+                                                {myRegRaw.late_report_count > 0 && (
                                                     <p className="text-[10px] text-gray-500 italic mt-1">
-                                                        Số lần báo trễ: {visibleReg.late_report_count}
+                                                        Số lần báo trễ: {myRegRaw.late_report_count}
                                                     </p>
                                                 )}
                                             </div>
