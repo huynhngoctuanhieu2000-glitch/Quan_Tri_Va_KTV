@@ -254,6 +254,35 @@ section('Nhiều KTV cùng 1 item → mỗi người 1 dòng');
     check('co_workers của T016', rows[0].co_workers, ['T017']);
 }
 
+section('Cờ "làm cùng KTV khác loại" — xét theo KHÁCH, không theo bill');
+{
+    // Khách A ← T016 (loại D).  Khách B ← NH021 (KHÔNG thuộc danh sách loại D).
+    // T016 chỉ phục vụ khách A nên KHÔNG được coi là làm chung loại khác.
+    const rows = computeRows([booking({
+        BookingGuests: [{ id: 'G1', rating: 4 }, { id: 'G2', rating: 4 }],
+        BookingItems: [
+            it({ id: 'IA', guest_id: 'G1', status: 'DONE', technicianCodes: ['T016'],
+                 segments: [seg({ ktvId: 'T016' })] }),
+            it({ id: 'IB', guest_id: 'G2', status: 'DONE', technicianCodes: ['NH021'],
+                 segments: [seg({ ktvId: 'NH021' })] }),
+        ],
+    })], ['T016'], SERVICES, CFG);
+    check('KTV loại khác phục vụ KHÁCH KHÁC → không tính là làm chung',
+        rows[0].has_other_type_coworker, false);
+}
+{
+    // Cùng một khách, hai KTV: T016 (loại D) và NH021 (loại khác).
+    const rows = computeRows([booking({
+        BookingGuests: [{ id: 'G1', rating: 4 }],
+        BookingItems: [it({
+            guest_id: 'G1', status: 'DONE', technicianCodes: ['T016', 'NH021'],
+            segments: [seg({ ktvId: 'T016' }), seg({ ktvId: 'NH021' })],
+        })],
+    })], ['T016'], SERVICES, CFG);
+    check('cùng KHÁCH với KTV loại khác → có cờ', rows[0].has_other_type_coworker, true);
+    money('tiền tua vẫn tính bình thường', rows[0].commission_net, 100000);
+}
+
 section('Hậu tố đơn con -A / -B');
 {
     const rows = computeRows([booking({

@@ -379,6 +379,7 @@ export async function GET(request: Request) {
                 let ledgerRating: number | null = null;
                 let ledgerTax: number | null = null;
                 let ledgerActualDuration: number | null = null;
+                let mixedTeamNote: string | null = null;
 
                 if (workType === 'TYPE_D') {
                     const led = ledgerByGroup.get(`${b.id}|${groupId0}`);
@@ -390,6 +391,10 @@ export async function GET(request: Request) {
                         ledgerTax = Math.round(led.tax_amount);
                         ledgerActualDuration = Math.round(led.actual_minutes);
                         totalDuration = Math.round(led.assigned_minutes) || totalDuration;
+                        // Giải thích vì sao tua này không có thưởng dù được chấm cao.
+                        if (led.rows.some((r: any) => r.has_other_type_coworker)) {
+                            mixedTeamNote = 'Làm cùng KTV khác chế độ — tua này không có thưởng';
+                        }
                     } else {
                         // Chưa có dòng trong sổ = tua chưa đủ điều kiện tính tiền
                         // (chưa có segment, hoặc chưa tới trạng thái được tính).
@@ -496,6 +501,7 @@ export async function GET(request: Request) {
                     commissionBeforeDeduction: isFeedbackDone ? commissionBeforeDeduction : null,
                     ratingDeductionRate: isFeedbackDone ? ratingDeductionRate : 0,
                     ratingDeductionAmount: isFeedbackDone ? Math.max(0, commissionBeforeDeduction - commission) : 0,
+                    mixedTeamNote,
                     handover_status,
                     handover_comment,
                     ktv_comment: b.notes,

@@ -80,7 +80,7 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
     // 3. Fetch all Bookings for the day
     const { data: bookings } = await supabase
         .from('Bookings')
-        .select('id, timeStart, status, customerId, rating, BookingItems!fk_bookingitems_booking(*)')
+        .select('id, timeStart, status, customerId, rating, BookingItems!fk_bookingitems_booking(*), BookingGuests(id, rating, ktv_ratings)')
         .gte('timeStart', startTimeStr)
         .lt('timeStart', endTimeStr)
         .neq('status', 'CANCELLED');
@@ -198,18 +198,36 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
             });
             total_tip += bookingTip;
 
-            // Bonus
+            // ─── Thưởng ─────────────────────────────────────────────────
+            // Thưởng tính THEO KHÁCH, không theo bill.
+            //
+            // ⚠️ Trước đây gom work_type của TẤT CẢ KTV trong bill (biến tên là
+            // `...ForGuest` nhưng thực tế quét cả bill). Hệ quả: một KTV loại
+            // khác phục vụ KHÁCH KHÁC trong cùng bill cũng làm KTV loại D mất
+            // thưởng, dù hai người không hề làm chung khách.
+            // Nay lọc theo `guest_id`, và sao cũng lấy theo khách chứ không
+            // phải `Bookings.rating` cấp bill.
             if (staffBonusMap[techCode]) {
-                const ktvWorkTypesForGuest: string[] = [];
-                (b.BookingItems || []).forEach((i: any) => {
-                    if (i.technicianCodes && Array.isArray(i.technicianCodes)) {
-                        i.technicianCodes.forEach((tc: string) => {
+                const guestIds = [...new Set(items.map((i: any) => i.guest_id ?? null))];
+
+                for (const gid of guestIds) {
+                    const itemsOfGuest = (b.BookingItems || []).filter((i: any) =>
+                        gid === null ? true : String(i.guest_id) === String(gid));
+
+                    const ktvWorkTypesForGuest: string[] = [];
+                    itemsOfGuest.forEach((i: any) => {
+                        (i.technicianCodes || []).forEach((tc: string) => {
                             ktvWorkTypesForGuest.push(allStaffWorkTypeMap[tc.toLowerCase()] || 'TYPE_A');
                         });
-                    }
-                });
-                const typeDBonusVND = KtvTypeDBonusService.calculateBonusForTypeD(ktvWorkTypesForGuest, safeRating, basePoints_D, pointRate_D);
-                total_bonus += (typeDBonusVND / pointRate_D); // Points
+                    });
+
+                    const guest = (b as any).BookingGuests?.find((g: any) => String(g.id) === String(gid));
+                    const guestRating = guest?.rating ?? itemsOfGuest[0]?.itemRating ?? b.rating ?? 0;
+
+                    const typeDBonusVND = KtvTypeDBonusService.calculateBonusForTypeD(
+                        ktvWorkTypesForGuest, guestRating, basePoints_D, pointRate_D);
+                    total_bonus += (typeDBonusVND / pointRate_D); // Điểm
+                }
             }
         }
 

@@ -117,6 +117,12 @@ export interface TurnRow {
     handover_status: string | null;
     handover_comment: string | null;
     co_workers: string[];
+    /**
+     * Tua này có KTV KHÁC LOẠI làm cùng (cùng một khách).
+     * Khi true thì không phát thưởng, dù khách chấm 4★ — nhưng tiền tua vẫn
+     * tính và vẫn trừ theo sao. Lưu vào dòng để lịch sử giải thích được.
+     */
+    has_other_type_coworker: boolean;
 }
 
 // ── Tiện ích ────────────────────────────────────────────────────────
@@ -347,6 +353,16 @@ export function computeRows(
                 const opts = parseJson(item.options, {}) || {};
                 const group = groupIdOf(item);
 
+                // KTV cùng phục vụ KHÁCH này mà không thuộc loại D.
+                // Xét theo `guest_id`, KHÔNG theo cả bill: một KTV loại khác
+                // phục vụ khách KHÁC trong cùng bill thì không liên quan.
+                const sameGuestItems = allItems.filter((i: EngineItem) =>
+                    !isUtility(i) && (item.guest_id
+                        ? String(i.guest_id) === String(item.guest_id)
+                        : groupIdOf(i) === group));
+                const hasOtherType = sameGuestItems.some((i: EngineItem) =>
+                    (i.technicianCodes || []).some(c => !staffSet.has(String(c).toLowerCase())));
+
                 rows.push({
                     staff_id: staffId,
                     booking_item_id: item.id,
@@ -386,6 +402,7 @@ export function computeRows(
                     co_workers: techCodes
                         .map(c => String(c).trim().toUpperCase())
                         .filter(c => c && c !== staffId.toUpperCase()),
+                    has_other_type_coworker: hasOtherType,
                 });
             }
         }
