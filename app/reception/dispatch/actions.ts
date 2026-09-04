@@ -152,9 +152,16 @@ export async function getDispatchData(date: string, _timestamp?: number) {
 
         if (typeD.length > 0) {
             const { KtvTypeDTurnService } = await import('@/lib/services/KtvTypeDTurnService');
-            const now = new Date();
-            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-            const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(supabase, typeD.map(t => t.employee_id), vnNow.getMonth() + 1, vnNow.getFullYear());
+            const { getBusinessToday } = await import('@/lib/business-date');
+            // Tháng/năm theo NGÀY LÀM VIỆC, không theo ngày lịch — lúc 02:00 ngày 01/09
+            // ngày làm việc vẫn là 31/08, phải xếp hạng theo giờ tích lũy tháng 8.
+            const businessToday = await getBusinessToday(supabase);
+            const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(
+                supabase,
+                typeD.map(t => t.employee_id),
+                Number(businessToday.slice(5, 7)),
+                Number(businessToday.slice(0, 4))
+            );
             
             typeD.forEach(t => (t as any).net_hours = hoursMap[t.employee_id] || 0);
             

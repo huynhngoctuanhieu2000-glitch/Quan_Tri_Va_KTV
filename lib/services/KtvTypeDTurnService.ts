@@ -1,8 +1,8 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { getDayCutoffHours, toBusinessDate, businessDayRange } from '../business-date';
 
 // 🔧 CONFIGURATION
 const DONE_STATUSES = ['DONE', 'COMPLETED', 'FEEDBACK', 'CLEANING'];
-const VN_TIMEZONE = 'Asia/Ho_Chi_Minh';
 
 export class KtvTypeDTurnService {
 
@@ -55,16 +55,8 @@ export class KtvTypeDTurnService {
      * using the spa's cutoff hours config.
      */
     private static async getBusinessTodayStr(supabase: SupabaseClient): Promise<string> {
-        const { data: configCutoff } = await supabase.from('SystemConfigs').select('value').eq('key', 'spa_day_cutoff_hours').maybeSingle();
-        const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
-
-        const now = new Date();
-        const vnNow = new Date(now.toLocaleString('en-US', { timeZone: VN_TIMEZONE }));
-        const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
-        
-        return businessNow.getFullYear() + '-' +
-            String(businessNow.getMonth() + 1).padStart(2, '0') + '-' +
-            String(businessNow.getDate()).padStart(2, '0');
+        const cutoffHours = await getDayCutoffHours(supabase);
+        return toBusinessDate(new Date(), cutoffHours);
     }
 
     /**
@@ -165,14 +157,21 @@ export class KtvTypeDTurnService {
                 if (s.is_utility) utilitySet.add(String(s.id));
             });
 
+            // ⚠️ Cửa sổ phải theo NGÀY LÀM VIỆC (cutoff), không phải nửa đêm lịch.
+            // `todayStr` đã tính theo cutoff, nên nếu lọc bằng T00:00→T23:59 thì tua
+            // ca đêm (vd bắt đầu 00:30, thuộc ngày làm việc hôm trước) rơi ra ngoài
+            // cửa sổ và biến mất khỏi giờ tích lũy — trong khi sổ cái vẫn ghi nhận nó.
+            const cutoffHours = await getDayCutoffHours(supabase);
+            const { startIso, endIso } = businessDayRange(todayStr, cutoffHours);
+
             const { data: bookings } = await supabase
                 .from('Bookings')
                 .select(`
                     id, timeStart, status,
                     BookingItems!fk_bookingitems_booking ( id, serviceId, technicianCodes, segments, status )
                 `)
-                .gte('timeStart', `${todayStr}T00:00:00+07:00`)
-                .lte('timeStart', `${todayStr}T23:59:59.999+07:00`)
+                .gte('timeStart', startIso)
+                .lt('timeStart', endIso)
                 .neq('status', 'CANCELLED');
 
             for (const staffId of staffIds) {
@@ -254,11 +253,12 @@ export class KtvTypeDTurnService {
 
         const staffIds = queueData.map(q => q.employee_id);
 
-        // Get current month/year from VN timezone
-        const now = new Date();
-        const vnNow = new Date(now.toLocaleString('en-US', { timeZone: VN_TIMEZONE }));
-        const month = vnNow.getMonth() + 1;
-        const year = vnNow.getFullYear();
+        // Tháng/năm phải lấy theo NGÀY LÀM VIỆC, không phải ngày lịch.
+        // Lúc 02:00 ngày 01/09 thì ngày làm việc vẫn là 31/08 → phải xếp hạng theo
+        // giờ tích lũy tháng 8, nếu lấy theo lịch sẽ nhảy sang tháng 9 (rỗng) và
+        // toàn bộ thứ tự tua rơi về check_in_order.
+        const businessToday = await KtvTypeDTurnService.getBusinessTodayStr(supabase);
+        const [year, month] = [Number(businessToday.slice(0, 4)), Number(businessToday.slice(5, 7))];
 
         const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(supabase, staffIds, month, year);
 

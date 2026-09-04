@@ -16,15 +16,8 @@ export async function GET(request: Request) {
         }
 
         if (!date) {
-            // Lấy linh động cutoff hour từ config (mặc định 6h sáng)
-            const { data: configCutoff } = await supabase.from('SystemConfigs').select('value').eq('key', 'spa_day_cutoff_hours').maybeSingle();
-            const cutoffHours = (configCutoff?.value != null) ? Number(configCutoff.value) : 6;
-
-            const now = new Date();
-            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-            const businessNow = new Date(vnNow.getTime() - cutoffHours * 60 * 60 * 1000);
-            
-            date = businessNow.getFullYear() + '-' + String(businessNow.getMonth() + 1).padStart(2, '0') + '-' + String(businessNow.getDate()).padStart(2, '0');
+            const { getBusinessToday } = await import('@/lib/business-date');
+            date = await getBusinessToday(supabase);
         }
 
         // Sync turns first (count tua from TurnLedger)
@@ -89,10 +82,10 @@ export async function GET(request: Request) {
         // D: sort by net_hours DESC → check_in_order ASC → employee_id ASC
         if (typeD.length > 0) {
             const typeDIds = typeD.map((t: any) => t.employee_id);
-            const now = new Date();
-            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-            const month = vnNow.getMonth() + 1;
-            const year = vnNow.getFullYear();
+            // Tháng/năm theo NGÀY LÀM VIỆC đang xét (`date`), không theo ngày lịch —
+            // lúc 02:00 ngày 01/09 thì ngày làm việc vẫn là 31/08.
+            const year = Number(date.slice(0, 4));
+            const month = Number(date.slice(5, 7));
 
             const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(supabase, typeDIds, month, year);
 
