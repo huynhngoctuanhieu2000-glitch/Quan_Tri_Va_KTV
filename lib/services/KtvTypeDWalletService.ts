@@ -210,13 +210,25 @@ export class KtvTypeDWalletService {
         // Cùng nguồn với màn hình lịch sử, nên KTV cộng tay các dòng lịch sử
         // luôn ra đúng số trong ví. Sổ cái lưu KHÔNG làm tròn.
         const { getRows, sumByStaff } = await import('./KtvDLedgerReader');
-        const turnRows = await getRows(supabase, {
+        const allTurnRows = await getRows(supabase, {
             staffIds: [staffId],
             from: GLOBAL_START_DATE_STR,
             to: '2099-12-31',
         });
-        const turnTotals = sumByStaff(turnRows)[staffId]
-            || { commission_net: 0, tax_amount: 0, take_home: 0, tip: 0, hours: 0, turns: 0 };
+
+        // ⚠️ TUA CHƯA CÓ ĐÁNH GIÁ THÌ CHƯA TÍNH TIỀN.
+        // Quy chế: không có cơ sở tính tiền tua mà khách bỏ về không đánh giá.
+        // Đường thoát: khách lười chấm thì lễ tân bấm "đã đánh giá" hoặc kéo
+        // sang cột hoàn tất trên bảng điều phối — item về DONE là hết tạm tính.
+        //
+        // Trước đây ví cộng cả tiền tạm tính trong khi lịch sử thì ẩn đi, nên
+        // hai màn hình nói hai chuyện khác nhau. Giờ cả hai cùng loại.
+        const emptyTotals = { commission_net: 0, tax_amount: 0, take_home: 0, tip: 0, hours: 0, turns: 0 };
+        const turnRows = allTurnRows.filter(r => !r.is_provisional);
+        const provisionalRows = allTurnRows.filter(r => r.is_provisional);
+
+        const turnTotals = sumByStaff(turnRows)[staffId] || emptyTotals;
+        const provisionalTotals = sumByStaff(provisionalRows)[staffId] || emptyTotals;
 
         total_tax_deducted += turnTotals.tax_amount;
 
@@ -245,7 +257,11 @@ export class KtvTypeDWalletService {
             available_balance,
             effective_balance,
             bonus_wallet_total: total_bonus,
-            bonus_wallet_enabled: enableBonus
+            bonus_wallet_enabled: enableBonus,
+            // Tiền của các tua chưa có đánh giá — CHƯA cộng vào số dư.
+            // Hiện riêng để KTV biết còn bao nhiêu đang chờ khách chấm sao.
+            pending_review_amount: provisionalTotals.take_home,
+            pending_review_turns: provisionalTotals.turns
         };
     }
 
