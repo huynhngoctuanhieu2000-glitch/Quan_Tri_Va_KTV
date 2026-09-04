@@ -9,11 +9,13 @@ import { SupabaseClient } from '@supabase/supabase-js';
  *
  * Quy chế: public/regulations/type-d.html — mục "Bảng tự chấm điểm cuối ca".
  *
- * RESET THEO KỲ — không cộng dồn qua kỳ:
- *  - Điểm NGÀY  reset mỗi ngày:   mỗi ngày bắt đầu lại từ 100, trừ dần theo lỗi trong ngày đó.
- *  - Điểm THÁNG reset mỗi tháng:  chỉ đọc phiếu trừ trong khoảng [đầu tháng, cuối tháng],
- *                                 nên sang tháng mới mọi KTV lại bắt đầu từ 100.
- *  - Phạt lỗi lặp cũng chỉ đếm trong phạm vi 1 tháng, không mang sang tháng sau.
+ * CÁCH TÍNH:
+ *  - Điểm NGÀY:  mỗi ngày đi làm bắt đầu từ 100, trừ dần theo lỗi CỦA NGÀY ĐÓ.
+ *  - Điểm THÁNG: TRUNG BÌNH điểm các ngày đi làm trong tháng, rồi trừ phạt lỗi lặp.
+ *                Không phải bộ đếm chạy từ 100 xuống — là trung bình cộng.
+ *  - Phạm vi kỳ: chỉ đọc phiếu trừ trong khoảng [đầu tháng, cuối tháng], nên lỗi
+ *                tháng trước không ảnh hưởng tháng sau. Phạt lỗi lặp cũng chỉ đếm
+ *                trong phạm vi 1 tháng.
  * Không cần job reset định kỳ — kỳ được quyết bởi bộ lọc `month` khi đọc.
  */
 

@@ -404,7 +404,7 @@ const AdminKtvOfficePage = () => {
                                   <b className={o.fundDue === 0 ? 'text-[var(--green)]' : 'text-[var(--rust)]'}>{fmtMoney(o.fundDue)}</b>
                                 </div>
                                 <p className="text-xs text-[var(--muted)] mt-3 pt-3 border-t border-[var(--line)] leading-relaxed">
-                                  Điểm tính riêng từng tháng — sang tháng mới mọi KTV bắt đầu lại từ 100 điểm, lỗi tháng trước không mang sang.
+                                  Mỗi ngày đi làm bắt đầu từ 100 điểm. Điểm tháng là trung bình các ngày đi làm trong tháng — lỗi của tháng trước không tính sang tháng sau.
                                 </p>
                               </div>
 
