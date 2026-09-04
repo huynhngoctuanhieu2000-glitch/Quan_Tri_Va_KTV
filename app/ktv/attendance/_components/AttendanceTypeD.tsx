@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogIn, LogOut, BellRing, MapPin, Loader2, AlertCircle } from 'lucide-react';
+import { LogIn, LogOut, BellRing, MapPin, Loader2, AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
@@ -34,6 +34,55 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
   const [tempMins, setTempMins] = useState(30);
   const [expectedEnd, setExpectedEnd] = useState('');
 
+  // ─── BÁO ĐI MUỘN ────────────────────────────────────────────────
+  // Sau 07:00 thì KTV hết quyền đổi lịch, chỉ còn được BÁO TRỄ đúng 1 lần.
+  // Đến muộn hơn giờ đã hẹn thì bị trừ 5 giờ tích lũy.
+  const [registration, setRegistration] = useState<any>(null);
+  const [showLateModal, setShowLateModal] = useState(false);
+  const [lateTime, setLateTime] = useState('');
+
+  const vnToday = () => {
+    const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const fetchRegistration = async () => {
+    try {
+      const today = vnToday();
+      const res = await apiClient.get<any>(`/api/ktv/daily-registration?from=${today}&to=${today}`);
+      setRegistration((res?.data || [])[0] || null);
+    } catch { /* không chặn màn hình chấm công */ }
+  };
+
+  const handleReportLate = async () => {
+    if (!lateTime) return addToast('Vui lòng chọn giờ bạn sẽ có mặt', 'error');
+    setActionLoading(true);
+    try {
+      const res = await apiClient.post<any>('/api/ktv/attendance-adjustment', {
+        action: 'REPORT_LATE',
+        late_expected_time: lateTime,
+      });
+      if (res?.success) {
+        addToast('✅ Đã báo đi muộn. Nhớ có mặt đúng giờ đã hẹn nhé!', 'success');
+        setShowLateModal(false);
+        fetchRegistration();
+      } else {
+        addToast(res?.error || 'Không báo được', 'error');
+      }
+    } catch (e: any) {
+      addToast('Lỗi kết nối: ' + e.message, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Chỉ hiện nút khi: đã đăng ký LÀM, chưa điểm danh, và chưa dùng lượt báo trễ.
+  const daBaoTre = (registration?.late_report_count || 0) >= 1;
+  const coTheBaoTre = !!registration
+    && registration.status !== 'OFF_REGISTERED'
+    && !registration.check_in_at
+    && !daBaoTre;
+
   const fetchState = async () => {
     try {
       const res = await apiClient.get<any>(`${API.KTV.TYPE_D_ON_CALL}?techCode=${ktvId}`);
@@ -51,7 +100,7 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
   };
 
   useEffect(() => {
-    if (ktvId) fetchState();
+    if (ktvId) { fetchState(); fetchRegistration(); }
     const interval = setInterval(fetchState, 30000); // Polling every 30s
     return () => clearInterval(interval);
   }, [ktvId]);
@@ -148,6 +197,31 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
         </p>
       </div>
 
+      {/* ─── BÁO ĐI MUỘN ─── */}
+      {daBaoTre && registration?.late_expected_time && (
+        <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+          <CheckCircle2 size={20} className="text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-amber-900">
+              Đã báo đi muộn — hẹn có mặt {registration.late_expected_time}
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Chỉ được báo 1 lần. Đến muộn hơn giờ đã hẹn sẽ bị trừ 5 giờ tích lũy.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {coTheBaoTre && (
+        <button
+          onClick={() => setShowLateModal(true)}
+          disabled={actionLoading}
+          className="w-full mb-4 py-3 bg-white border-2 border-amber-300 hover:bg-amber-50 active:scale-95 text-amber-700 font-bold rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <Clock size={20} /> Báo đi muộn
+        </button>
+      )}
+
       {/* CÁC NÚT ĐIỀU KHIỂN */}
       <div className="space-y-4">
         {/* Nếu đang tắt -> Hiện Bật nhận đơn VÀ Tới tiệm luôn */}
@@ -225,6 +299,60 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
              </div>
         )}
       </div>
+
+      {/* HỘP THOẠI BÁO ĐI MUỘN */}
+      {showLateModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center">
+                <Clock size={22} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-800 text-lg">Báo đi muộn</h3>
+                <p className="text-xs text-slate-500">Chỉ được báo 1 lần trong ngày</p>
+              </div>
+            </div>
+
+            <label className="text-sm font-bold text-slate-700 block mb-2">
+              Bạn sẽ có mặt lúc mấy giờ?
+            </label>
+            <input
+              type="time"
+              value={lateTime}
+              onChange={(e) => setLateTime(e.target.value)}
+              className="w-full border-2 border-slate-200 rounded-2xl p-3 text-lg font-bold text-slate-700 focus:border-amber-400 outline-none"
+            />
+
+            <div className="mt-4 p-3 rounded-2xl bg-amber-50 border border-amber-200">
+              <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                Nếu bạn đến muộn hơn giờ vừa hẹn, hệ thống sẽ <strong>trừ 5 giờ tích lũy</strong>.
+                Giờ tích lũy quyết định thứ tự nhận khách của bạn.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowLateModal(false)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={handleReportLate}
+                disabled={actionLoading || !lateTime}
+                className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {actionLoading ? <Loader2 size={18} className="animate-spin" /> : null}
+                Xác nhận
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* POPUP BẬT NHẬN ĐƠN */}
       {showPopup && (
