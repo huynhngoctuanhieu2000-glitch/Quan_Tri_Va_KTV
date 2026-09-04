@@ -17,8 +17,9 @@ export async function POST(request: Request) {
         }
 
         // 1. Lấy thông tin KTV
-        const { data: staffData } = await supabase.from('Staff').select('full_name').eq('id', staffId).single();
+        const { data: staffData } = await supabase.from('Staff').select('full_name, work_type').eq('id', staffId).single();
         const staffName = staffData?.full_name || staffId;
+        const isTypeD = staffData?.work_type === 'TYPE_D';
 
         // 2. Tính thời gian làm việc liên tục
         const { totalMins } = await KtvDisciplineService.calculateContinuousWorkMins(supabase, staffId);
@@ -30,13 +31,56 @@ export async function POST(request: Request) {
         const isExempted = totalMins >= (exemptHours * 60);
 
         // 4. Thực hiện phạt (hoặc miễn phạt nếu đạt)
-        const disciplineResult = await KtvDisciplineService.deductPoints(
-            supabase, 
-            staffId, 
-            'ORDER_REJECT', 
-            `Từ chối nhận đơn ${bookingItemId} - Lý do: ${reason}`, 
-            isExempted
-        );
+        //
+        // Loại D KHÔNG dùng hệ điểm kỷ luật của A/B/C. Quy chế loại D: từ chối
+        // tua đã gán → trừ GẤP 3 LẦN thời lượng gói dịch vụ vào giờ tích lũy
+        // (gói 60 phút → trừ 3 giờ). Hàm deductOrderReject() có sẵn từ lâu
+        // nhưng chưa nơi nào gọi, nên luật này chưa từng được áp dụng.
+        let disciplineResult: any = null;
+        let hoursDeducted = 0;
+
+        if (isTypeD) {
+            if (!isExempted) {
+                const { data: item } = await supabase
+                    .from('BookingItems').select('serviceId, segments').eq('id', bookingItemId).maybeSingle();
+
+                // Thời lượng gói: ưu tiên phút đã gán cho chính KTV này, không
+                // có thì lấy thời lượng chuẩn của dịch vụ.
+                let mins = 0;
+                try {
+                    const segs = typeof item?.segments === 'string' ? JSON.parse(item.segments) : (item?.segments || []);
+                    for (const sg of (Array.isArray(segs) ? segs : [])) {
+                        if (sg?.ktvId && String(sg.ktvId).toLowerCase() === String(staffId).toLowerCase()) {
+                            mins += Number(sg.duration) || 0;
+                        }
+                    }
+                } catch { /* dùng thời lượng chuẩn bên dưới */ }
+
+                if (mins <= 0 && item?.serviceId) {
+                    const { data: svc } = await supabase
+                        .from('Services').select('duration').eq('id', item.serviceId).maybeSingle();
+                    mins = Number(svc?.duration) || 60;
+                }
+                if (mins <= 0) mins = 60;
+
+                const { KtvTypeDDisciplineService } = await import('@/lib/services/KtvTypeDDisciplineService');
+                const { getBusinessToday } = await import('@/lib/business-date');
+                const workDate = await getBusinessToday(supabase);
+
+                hoursDeducted = await KtvTypeDDisciplineService.deductOrderReject(
+                    supabase, staffId, workDate, bookingItemId, mins,
+                );
+                console.log(`[Type D] ${staffId} từ chối tua ${bookingItemId} (${mins}p) → trừ ${hoursDeducted}h`);
+            }
+        } else {
+            disciplineResult = await KtvDisciplineService.deductPoints(
+                supabase,
+                staffId,
+                'ORDER_REJECT',
+                `Từ chối nhận đơn ${bookingItemId} - Lý do: ${reason}`,
+                isExempted
+            );
+        }
 
         // 5. Gỡ KTV khỏi BookingItem và TurnQueue
         // Lấy BookingItem hiện tại
@@ -80,11 +124,13 @@ export async function POST(request: Request) {
             message: `KTV ${staffName} vừa từ chối phục vụ đơn ${bookingItemId}. Lý do: ${reason}`
         });
 
-        return NextResponse.json({ 
-            success: true, 
+        return NextResponse.json({
+            success: true,
             isExempted,
-            penaltyPoints: disciplineResult.penaltyPoints,
-            newTotal: disciplineResult.newTotal,
+            // Loại D trừ GIỜ tích lũy, A/B/C trừ ĐIỂM kỷ luật — hai hệ khác nhau.
+            hoursDeducted: isTypeD ? hoursDeducted : 0,
+            penaltyPoints: disciplineResult?.penaltyPoints ?? 0,
+            newTotal: disciplineResult?.newTotal ?? null,
             totalMins
         });
 

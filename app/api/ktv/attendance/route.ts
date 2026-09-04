@@ -199,9 +199,12 @@ export async function POST(request: Request) {
         const isTypeD = workType === 'TYPE_D';
 
         if (isTypeD && (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN')) {
-            const { vnToday, vnNow } = await import('@/lib/vn-time');
+            const { vnNow } = await import('@/lib/vn-time');
             const { format } = await import('date-fns');
-            const todayStr = vnToday();
+            // Ngày phạt phải theo NGÀY LÀM VIỆC (cutoff), không phải ngày lịch —
+            // để khớp với sổ giờ tích lũy khi trừ giờ.
+            const { getBusinessToday } = await import('@/lib/business-date');
+            const todayStr = await getBusinessToday(supabase);
             const { data: registration } = await supabase
                 .from('KTVTypeDDailyRegistration')
                 .select('id, status, late_expected_time')
