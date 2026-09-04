@@ -38,13 +38,17 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
 
     const basePoints_D = Number(sysConfigs['ktv_type_d_bonus_points']) || 20;
     const pointRate_D = Number(sysConfigs['ktv_bonus_rate_TYPE_D']) || 1000;
-    const rateVIP = Number(sysConfigs['ktv_type_d_vip_rate_60m']) || 180000;
-    const ratePT = Number(sysConfigs['ktv_type_d_pt_rate_60m']) || 100000;
-    const rateCombo = Number(sysConfigs['ktv_type_d_combo_rate_60m']) || 130000;
+    // ⚠️ Key phải khớp CHÍNH XÁC với những gì Admin Settings ghi ra
+    // (app/admin/settings/system/KtvTypeDSettingsBlock.tsx) và với các consumer khác
+    // (history, wallet, timeline). Trước đây file này dùng '..._rate_60m' và
+    // 'rating_deductions' (số nhiều) — không key nào tồn tại trong SystemConfigs, nên
+    // cron luôn rơi về default và bỏ qua mọi thay đổi đơn giá của Admin.
+    const rateVIP = Number(sysConfigs['ktv_type_d_vip_rate_per_60m']) || 180000;
+    const ratePT = Number(sysConfigs['ktv_type_d_pt_rate_per_60m']) || 100000;
 
-    let ratingDeductions: Record<string, number> = { '0':0, '1':0.75, '2':0.5, '3':0.25, '4':0, '5':0 };
-    if (sysConfigs['ktv_type_d_rating_deductions']) {
-        ratingDeductions = sysConfigs['ktv_type_d_rating_deductions'];
+    let ratingDeductions: Record<string, number> = { '0': 0, '1': 0.75, '2': 0.5, '3': 0.25, '4': 0 };
+    if (sysConfigs['ktv_type_d_rating_deduction']) {
+        ratingDeductions = sysConfigs['ktv_type_d_rating_deduction'];
     }
 
     // 2. Fetch KTVs
@@ -129,16 +133,17 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
             const safeRating = b.rating ?? 0;
             if (safeRating < lowestRating) lowestRating = safeRating;
 
-            // Separate items by category
+            // Separate items by category — VIP (NHP/NHT/VIP) vs Phổ thông (còn lại).
+            // Không có nhóm COMBO: không mã dịch vụ nào bắt đầu bằng 'COMBO'
+            // ("Combo King" thực tế là NHS0800 → thuộc nhóm Phổ thông), và Admin Settings
+            // cũng chỉ cấu hình 2 đơn giá. Cách chia này khớp history/wallet/timeline.
             const vipItems = items.filter((i: any) => String(i.serviceId).toUpperCase().startsWith('NHP') || String(i.serviceId).toUpperCase().startsWith('NHT') || String(i.serviceId).toUpperCase().startsWith('VIP'));
-            const comboItems = items.filter((i: any) => String(i.serviceId).toUpperCase().startsWith('COMBO'));
-            const ptItems = items.filter((i: any) => !vipItems.includes(i) && !comboItems.includes(i));
+            const ptItems = items.filter((i: any) => !vipItems.includes(i));
 
             const vipComm = KtvTypeDCommissionService.calculateGuestCommission(vipItems, techCode, safeRating, rateVIP, ratingDeductions);
             const ptComm = KtvTypeDCommissionService.calculateGuestCommission(ptItems, techCode, safeRating, ratePT, ratingDeductions);
-            const comboComm = KtvTypeDCommissionService.calculateGuestCommission(comboItems, techCode, safeRating, rateCombo, ratingDeductions);
-            
-            const bookingComm = vipComm + ptComm + comboComm;
+
+            const bookingComm = vipComm + ptComm;
             total_commission += bookingComm;
 
             // Extract segments duration for breakdown
@@ -231,17 +236,24 @@ async function processLedgerSyncTypeD(targetDateStr: string) {
         }
     }
 
-    // === Upsert hours_earned into KTVServiceHoursLedger (idempotent via unique index) ===
+    // === Insert hours_earned into KTVServiceHoursLedger (idempotent via duplicate skip) ===
+    // NOTE: Cannot use .upsert() because the unique constraint is a PARTIAL index
+    // (WHERE booking_id IS NOT NULL). PostgreSQL rejects ON CONFLICT on partial indexes.
+    // Instead, we INSERT each row individually and skip 23505 (duplicate) errors.
     if (allServiceHoursRows.length > 0) {
-        const { error: shErr } = await supabase
-            .from('KTVServiceHoursLedger')
-            .upsert(allServiceHoursRows, { onConflict: 'staff_id,date,booking_id' });
-        if (shErr) {
-            console.error('[Cron Type D] ServiceHoursLedger Upsert Error:', shErr);
-            // Don't throw — hours ledger failure should not block commission sync
-        } else {
-            console.log(`[Cron Type D] Synced ${allServiceHoursRows.length} service hours entries for ${targetDateStr}`);
+        let insertedCount = 0;
+        for (const row of allServiceHoursRows) {
+            const { error: shErr } = await supabase
+                .from('KTVServiceHoursLedger')
+                .insert(row);
+            if (shErr) {
+                if (shErr.code === '23505') continue; // Already synced, skip
+                console.error(`[Cron Type D] ServiceHoursLedger Insert Error for ${row.staff_id}:`, shErr);
+            } else {
+                insertedCount++;
+            }
         }
+        console.log(`[Cron Type D] Synced ${insertedCount} new service hours entries for ${targetDateStr} (${allServiceHoursRows.length - insertedCount} skipped)`);
     }
 
     const d = new Date(targetDateStr);

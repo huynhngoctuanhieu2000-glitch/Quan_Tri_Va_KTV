@@ -1,0 +1,450 @@
+# Plan: `KTVDTurnLedger` — sổ cái tua loại D + dọn hạ tầng kỷ luật / điểm danh
+
+**Ngày lập:** 2026-09-04
+**Nhánh:** `feat/bit-lo-hong-phase1`
+**Phạm vi:** chỉ KTV `work_type = 'TYPE_D'`. Không đụng A/B/C.
+
+---
+
+## 1. Bối cảnh
+
+Hiện tại tiền tua và giờ tích lũy của loại D được **tính lại độc lập ở 5 nơi**, mỗi nơi một công thức:
+
+| Nơi | Tính gì | Nguồn |
+|---|---|---|
+| [sync-daily-ledger-type-d/route.ts](app/api/cron/sync-daily-ledger-type-d/route.ts) | tiền + giờ → `KTVDailyLedger`, `KTVServiceHoursLedger` | Bookings |
+| [KtvTypeDWalletService.getBalance](lib/services/KtvTypeDWalletService.ts) | số dư ví | Ledger + Bookings |
+| [wallet/timeline/route.ts](app/api/ktv/wallet/timeline/route.ts) | dòng thời gian ví | Ledger + Bookings |
+| [ktv/history/route.ts](app/api/ktv/history/route.ts) | lịch sử theo đơn con | Bookings |
+| [type-d/service-hours/route.ts](app/api/ktv/type-d/service-hours/route.ts) | giờ tích lũy tháng | Bookings (bỏ qua cột `hours_earned`) |
+
+### 1.1. Các điểm lệch đã xác nhận
+
+| # | Lỗi | Bằng chứng |
+|---|---|---|
+| L1 | **Cron loại D đọc sai key config.** Dùng `ktv_type_d_vip_rate_60m` / `pt_rate_60m` / `combo_rate_60m` / `rating_deductions`. Toàn bộ phần còn lại + UI admin dùng `..._per_60m` và `rating_deduction` (số ít) → **admin đổi giá trong Settings thì cron không đọc được, luôn rơi về default** | [route.ts:41-47](app/api/cron/sync-daily-ledger-type-d/route.ts) vs [KtvTypeDSettingsBlock.tsx](app/admin/settings/system/KtvTypeDSettingsBlock.tsx) |
+| L2 | **Nguồn sao khác nhau.** History dùng `itemRating`; cron + wallet dùng `Bookings.rating` | [history/route.ts:342](app/api/ktv/history/route.ts) |
+| L3 | ~~**COMBO** lệch 30k/h~~ — **ghi sai, đã kiểm chứng lại**: không mã dịch vụ nào bắt đầu bằng `COMBO` (0/`danh_sach_dich_vu.csv`; "Combo King" là `NHS0800`). Nhánh COMBO trong cron là **code chết**, `rateCombo` chưa bao giờ được áp dụng → **không có lệch**. Đã gỡ ở bước 0 | [route.ts:138](app/api/cron/sync-daily-ledger-type-d/route.ts) |
+| L4 | **Giờ tích lũy có 2 định nghĩa.** Cron ghi `hours_earned` bằng `calculateActualMinutes` (giờ **thực**); `service-hours` route bỏ qua cột đó, tự tính bằng `calculateItemDuration` (giờ **gán**) | [KtvTypeDTurnService.ts:22](lib/services/KtvTypeDTurnService.ts) vs [service-hours/route.ts:88](app/api/ktv/type-d/service-hours/route.ts) |
+| L5 | **Thuế 10% tính ở 2 tầng.** Ví: `dayComm * 0.1` (tổng ngày). Lịch sử: `Math.round(gross * 0.1)` (từng đơn). `Σ round(đơn) ≠ round(Σ)` → KTV cộng tay lịch sử không ra số trong ví | [history:437](app/api/ktv/history/route.ts) vs [WalletService:59](lib/services/KtvTypeDWalletService.ts) |
+| L6 | **`getMonthlyNetHours` trộn 2 hệ ngày.** `todayStr` tính theo cutoff, nhưng cửa sổ truy vấn là nửa đêm lịch → tua ca đêm mất khỏi bảng xếp hạng | [KtvTypeDTurnService.ts:174](lib/services/KtvTypeDTurnService.ts) |
+| L7 | **Cron ledger không dùng cutoff.** Cắt theo lịch thô `T00:00:00`→`T23:59:59` trong khi tua/điểm danh cắt theo cutoff | [route.ts:25](app/api/cron/sync-daily-ledger-type-d/route.ts) |
+| L8 | 🔴 **2 cron chưa bao giờ chạy.** Vercel Cron gọi **GET**; `reset-type-d-hours` và `daily-absence-check` chỉ export `POST` → 405 | xem §6.1 |
+| L9 | **Grain sai.** `UNIQUE(staff_id, date, booking_id)` = 1 KTV/1 bill/1 dòng → không lưu được `service_id` từng đơn con | [migration:51](supabase/migrations/20260901000000_add_type_d_support.sql) |
+| L10 | **Partial index chặn `ON CONFLICT`** → phải insert từng dòng bắt lỗi 23505 | working diff hiện tại |
+
+---
+
+## 2. Kiến trúc mục tiêu
+
+### 2.1. Nguyên tắc: 1 công thức — 1 nơi ghi — 1 cửa đọc
+
+```
+┌─ TẦNG 1 — GHI (event-driven) ─────────────────────────────────────┐
+│                                                                    │
+│   recomputeTurnRows(supabase, bookingItemIds[])                    │
+│   ── idempotent · tự đọc lại DB · tự upsert                        │
+│   ── KHÔNG hook nào được tự tính công thức                         │
+│                          │                                         │
+│      ┌────────┬──────────┼──────────┬───────────┐                  │
+│   KTV bấm   Khách    Admin sửa   Duyệt      Huỷ / đổi              │
+│    xong    chấm sao    phút     handover      KTV                  │
+│      └────────┴──────────┼──────────┴───────────┘                  │
+│                          ▼                                         │
+│              ┌──────────────────────┐                              │
+│              │   KTVDTurnLedger     │  ◄── NGUỒN SỰ THẬT           │
+│              │  1 dòng = KTV × item │                              │
+│              └──────────────────────┘                              │
+└──────────────────────────┬─────────────────────────────────────────┘
+                           │  chỉ SELECT + SUM — KHÔNG công thức
+┌─ TẦNG 2 — ĐỌC ───────────┼─────────────────────────────────────────┐
+│    ┌─────────┬───────────┼───────────┬──────────────┐              │
+│    ▼         ▼           ▼           ▼              ▼              │
+│ Lịch sử   Ví tua   Giờ tích lũy   Xếp tua    Báo cáo admin         │
+│ list rows  Σ net   Σ actual_min     rank        group by           │
+└────────────────────────────────────────────────────────────────────┘
+
+Cron còn đúng 2 việc (KHÔNG còn tính toán):
+  · lưới an toàn — quét ngày hôm qua tìm item thiếu dòng → gọi lại tầng 1
+  · khoá sổ    — OPEN quá hạn → FINAL/LOCKED
+```
+
+**Ràng buộc kỷ luật:** sau khi hoàn tất, không consumer nào được query `Bookings` để tính tiền/giờ loại D. Ai cần số thì gọi `KtvDLedgerReader.getRows()` rồi `reduce`.
+
+### 2.2. `KtvDLedgerEngine` — công thức duy nhất
+
+Hàm **thuần** (pure), không tự query, không ghi DB:
+
+```ts
+computeRows(bookings: Booking[], configs: TypeDConfigs): TurnRow[]
+```
+
+Nâng từ [history/route.ts:300-460](app/api/ktv/history/route.ts) — chỗ duy nhất hiện tính đủ cả `duration` + `actualDuration` + `commissionBeforeDeduction` + `commission` + `ratingDeductionRate` + thuế + `isProvisional`.
+
+Hai sửa bắt buộc khi nâng lên:
+- đổi nguồn sao sang **chuỗi theo khách** (L2, xem §3.3)
+- đọc **đúng key config** `..._per_60m` / `rating_deduction` (L1 — đã làm ở bước 0)
+
+Phân nhóm đơn giá chỉ có **2 nhóm**: VIP (`NHP`/`NHT`/`VIP`) và Phổ thông (còn lại). Không có nhóm COMBO — xem L3.
+
+### 2.3. `recomputeTurnRows()` — cửa ghi duy nhất
+
+```ts
+recomputeTurnRows(supabase, bookingItemIds: string[]): Promise<void>
+```
+
+- Đọc lại items + bookings + guests + services + configs
+- Gọi `KtvDLedgerEngine.computeRows()`
+- `upsert` theo `UNIQUE(staff_id, booking_item_id)`
+- Bỏ qua dòng đã `LOCKED` (ghi dòng điều chỉnh thay vì sửa đè)
+
+Gọi bao nhiêu lần cũng ra cùng kết quả. Backfill và cron lưới an toàn dùng **chính hàm này**.
+
+### 2.4. `KtvDLedgerReader` — cửa đọc duy nhất
+
+```ts
+getRows(supabase, staffId, fromDate, toDate): Promise<TurnRow[]>
+```
+
+`TurnRow` phải là **cùng một TypeScript type** cho dòng DB và dòng in-memory.
+
+---
+
+## 3. Schema
+
+### 3.1. `KTVDTurnLedger` — nguồn sự thật
+
+Grain: **1 dòng = 1 KTV × 1 BookingItem**. `group_id` để lịch sử gom thành dòng A/B/C lúc đọc.
+
+```sql
+CREATE TABLE "KTVDTurnLedger" (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- KHOÁ -------------------------------------------------------
+  staff_id           TEXT NOT NULL,
+  booking_item_id    TEXT NOT NULL,
+  booking_id         TEXT NOT NULL,
+  guest_id           TEXT,            -- BookingGuests.id  ← "khách"
+  group_id           TEXT NOT NULL,   -- options.mergedIntoId || item.id  ← "đơn con"
+  work_date          DATE NOT NULL,   -- business date theo spa_day_cutoff_hours
+
+  -- SNAPSHOT HIỂN THỊ (lịch sử không cần join Bookings/Services)
+  bill_code          TEXT,
+  bill_suffix        TEXT,            -- '-A' / '-B'
+  service_id         TEXT,            -- NHS0800 / NHP0900 / NHT...
+  service_name       TEXT,
+  rate_category      TEXT,            -- 'VIP' | 'PT'  (xem L3: không có nhóm COMBO)
+  booking_time_start TIMESTAMPTZ,
+
+  -- THỜI GIAN --------------------------------------------------
+  assigned_minutes   NUMERIC DEFAULT 0,  -- tua gán       (60)
+  actual_minutes     NUMERIC DEFAULT 0,  -- làm thực      (55) → GIỜ TÍCH LŨY
+  paid_minutes       NUMERIC DEFAULT 0,  -- phút trả tiền (55) → TIỀN TUA
+  custom_minutes     NUMERIC,            -- admin can thiệp, NULL nếu không
+
+  -- TIỀN -------------------------------------------------------
+  rate_per_60m       NUMERIC NOT NULL,   -- SNAPSHOT đơn giá lúc chốt
+  rating_used        INT,
+  rating_source      TEXT,               -- 'GUEST_KTV'|'GUEST'|'ITEM_KTV'|'ITEM'|'BOOKING'|'NONE'
+  deduction_rate     NUMERIC DEFAULT 0,
+  commission_gross   NUMERIC DEFAULT 0,  -- trước trừ sao
+  commission_net     NUMERIC DEFAULT 0,  -- sau trừ sao  → VÍ TUA
+  tax_amount         NUMERIC DEFAULT 0,  -- thuế TNCN của dòng này (xem §3.4)
+  tip                NUMERIC DEFAULT 0,
+
+  -- TRẠNG THÁI -------------------------------------------------
+  item_status        TEXT,
+  is_provisional     BOOLEAN DEFAULT TRUE,
+  entry_status       TEXT DEFAULT 'OPEN',   -- 'OPEN'|'FINAL'|'LOCKED'|'VOID'
+  locked_at          TIMESTAMPTZ,
+
+  -- PHỤ TRỢ HIỂN THỊ -------------------------------------------
+  handover_status    TEXT,
+  handover_comment   TEXT,
+  co_workers         TEXT[],
+
+  -- TRUY VẾT ---------------------------------------------------
+  source             TEXT,            -- 'EVENT'|'CRON'|'BACKFILL'|'ADMIN_ADJUST'
+  computed_at        TIMESTAMPTZ DEFAULT NOW(),
+  created_at         TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX "uq_ktvd_turn"           ON "KTVDTurnLedger" (staff_id, booking_item_id);
+CREATE INDEX        "idx_ktvd_turn_staff_dt" ON "KTVDTurnLedger" (staff_id, work_date);
+CREATE INDEX        "idx_ktvd_turn_date"     ON "KTVDTurnLedger" (work_date);
+```
+
+**Index toàn phần** → `upsert(onConflict)` chạy được, bỏ được vòng lặp bắt 23505 (L10).
+
+Tách 3 cột phút là chủ ý: `actual_minutes` → **giờ tích lũy**; `paid_minutes` → **tiền**. Đây là chỗ L4 đang lẫn.
+
+Snapshot `rate_per_60m` trả lời "admin đổi giá có tính lại quá khứ không": **không**.
+
+### 3.2. `KTVDPenaltyLedger` — phạt
+
+Phạt không gắn BookingItem nào → không nhét vào bảng trên. Đây chính là lỗi thiết kế của `KTVServiceHoursLedger` hiện tại (trộn 2 loại dòng → sinh 2 partial index).
+
+```sql
+CREATE TABLE "KTVDPenaltyLedger" (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id      TEXT NOT NULL,
+  work_date     DATE NOT NULL,
+  penalty_type  TEXT NOT NULL,      -- LATE_NO_UPDATE | ORDER_REJECT | ACCOUNT_LOCK | ...
+  hours_penalty NUMERIC DEFAULT 0,
+  money_penalty NUMERIC DEFAULT 0,
+  note          TEXT,
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX ON "KTVDPenaltyLedger" (staff_id, work_date, penalty_type);
+```
+
+Ghi thêm `ACCOUNT_LOCK` (0 giờ) để lịch sử KTV có vết vì sao mất tài khoản — hiện chỉ nằm ở `SecurityAuditLogs`.
+
+### 3.3. Chuỗi ưu tiên sao (chốt: **theo khách**)
+
+```
+BookingGuests.ktv_ratings[staff_id]     → rating_source = 'GUEST_KTV'
+  → BookingGuests.rating                → 'GUEST'
+  → BookingItems.ktvRatings[staff_id]   → 'ITEM_KTV'
+  → BookingItems.itemRating             → 'ITEM'
+  → Bookings.rating                     → 'BOOKING'
+  → 0                                   → 'NONE'
+```
+
+`BookingGuests.rating` và `ktv_ratings` được ghi tại [submitFeedbackAction](app/reception/feedback/_components/actions.ts:38).
+
+### 3.4. Thuế 10% — chốt: **tầng dòng**
+
+Lưu `tax_amount` ngay trong dòng; ví `SUM(tax_amount)`. Hai màn hình dùng **chung một cột** → không thể lệch (giải L5).
+
+Thuế **thưởng** (bonus) không thuộc bảng này (bonus tính theo khách, không theo item) → xử lý ở tầng ngày cùng `total_bonus`.
+
+### 3.5. Bảng bị bỏ
+
+| Bảng / cron | Xử lý | Lý do |
+|---|---|---|
+| `KTVServiceHoursLedger` | ngừng ghi → read-only → drop sau backfill | thay bằng 2 bảng mới |
+| `KTVMonthlyServiceHours` | **DROP** | chỉ 1 chỗ đọc ([ktv-summary:310](app/api/finance/ktv-summary/route.ts)), và trường `accumulated_hours` trả ra **không màn hình nào dùng**. Query còn sai: đọc tháng **hiện tại**, cron chỉ ghi tháng **trước** → vĩnh viễn `null` |
+| cron `reset-type-d-hours` | **XOÁ** | "reset tháng" chỉ là mệnh đề `WHERE work_date BETWEEN` |
+
+---
+
+## 4. Quyết định đã chốt
+
+| Hạng mục | Chốt |
+|---|---|
+| Bảng chính | `KTVDTurnLedger` + `KTVDPenaltyLedger` |
+| Cách ghi | **event-driven** qua `recomputeTurnRows()` |
+| Grain | 1 KTV × 1 BookingItem, `UNIQUE(staff_id, booking_item_id)` |
+| Sao | theo khách — chuỗi §3.3 |
+| `paid_minutes` | `min(thực, gán)`, `customCommissionDuration` ưu tiên cao nhất — **giữ nguyên luật hiện tại** |
+| Thuế | tầng dòng, cột `tax_amount` |
+| Backfill | từ **2026-09-01** |
+| `spa_day_cutoff_hours` | **giữ 6 — KHÔNG đổi** (tua muộn nhất ~01:00, xem §6.2) |
+| Khoá sổ `LOCKED` | **cả hai**: auto D+3 từng dòng + "chốt tháng" quét sạch phần còn `OPEN` |
+| Mốc giờ tuyệt đối cho D | **không thêm** — chỉ xếp hạng tương đối (xem §9.1) |
+| `ACCOUNT_LOCK` | **có ghi** vào `KTVDPenaltyLedger`, `hours_penalty = 0` (dấu mốc, không phải phạt) |
+| Cron chốt sổ | dời **06:30 VN** |
+| Cửa sổ giờ tích lũy | **tháng lịch**, reset ngày 1 |
+| `KTVMonthlyServiceHours` + cron reset | **xoá** |
+
+---
+
+## 5. Quy chế đăng ký / kỷ luật — luật mới
+
+### 5.1. Luật chốt
+
+1. Không đăng ký gì (không OFF, không LÀM) cho ngày D → **khoá tài khoản**.
+2. Đã đăng ký LÀM, muốn bỏ → **bắt buộc chuyển sang OFF**, không được huỷ trắng.
+3. Chuyển sang OFF **trước 07:00** → **miễn phạt hoàn toàn**.
+4. Sau 07:00 → chỉ còn quyền **báo trễ 1 lần**. Không đến → **khoá tài khoản**.
+5. Đến trễ hơn giờ đã báo trễ → **−5h** (`LATE_NO_UPDATE`).
+
+### 5.2. Thay đổi cần thực hiện
+
+| # | Việc | File |
+|---|---|---|
+| R1 | **Bỏ `type: 'CANCEL'`** cho ngày hôm nay + tương lai gần. Thay bằng chuyển `OFF_REGISTERED`. Hiện `CANCEL` **xoá bản ghi** → cron thấy `!registration` → **khoá tài khoản**, trong khi UI không cảnh báo gì | [daily-registration/route.ts:86](app/api/ktv/daily-registration/route.ts), [Schedule.logic.ts:199](app/ktv/schedule/Schedule.logic.ts) |
+| R2 | **Gỡ `ABSENT_EARLY_NOTICE` (−5h)** khỏi luồng. Trước 07:00 chuyển OFF đã miễn phí → nút "Báo vắng" tạo ra **hai nút cùng nghĩa, chênh 5 giờ**; chỉ phạt được người bấm nhầm | [attendance-adjustment/route.ts:55](app/api/ktv/attendance-adjustment/route.ts), [daily-absence-check/route.ts:110](app/api/cron/daily-absence-check/route.ts) |
+| R3 | `REPORT_ABSENT` → ghi thẳng `OFF_REGISTERED` thay vì `ABSENT_REPORTED`, hoặc bỏ hẳn action | như trên |
+| R4 | **Gỡ `ABSENT_NO_NOTICE` (−10h)** — hằng số chết, cron không nhánh nào gọi tới | [staff.constants.ts:65](lib/constants/staff.constants.ts) |
+| R5 | Cập nhật nhãn Settings cho khớp luật mới | [KtvTypeDSettingsBlock.tsx:191](app/admin/settings/system/KtvTypeDSettingsBlock.tsx) |
+| R6 | Sửa comment sai ở `canEditRegistration` — ghi "khoá 00:00" nhưng code cho tới 06:59 | [vn-time.ts](lib/vn-time.ts) |
+
+### 5.3. Nút "Báo đi muộn" trên trang điểm danh — **mới**
+
+**Backend đã có đủ**, chỉ thiếu UI:
+- `attendance-adjustment` action `REPORT_LATE` — [route.ts:72](app/api/ktv/attendance-adjustment/route.ts)
+- Guard 1 lần: `if (registration.late_report_count >= 1) → 400`
+- Phạt trễ hơn giờ hẹn: [attendance/route.ts:217](app/api/ktv/attendance/route.ts) → `LATE_NO_UPDATE`
+
+**Cần thêm** vào [AttendanceTypeD.tsx](app/ktv/attendance/_components/AttendanceTypeD.tsx):
+- Nút "Báo đi muộn" + input giờ hẹn, chỉ hiện khi `status = 'REGISTERED'` và chưa check-in
+- Sau khi báo: **ẩn/disable nút**, hiện `late_expected_time` + nhãn "Đã báo trễ — chỉ được 1 lần"
+- Sau 07:00 đây là hành động **duy nhất** còn lại (không được đổi giờ, không được chuyển OFF)
+
+### 5.4. Tích "Yêu cầu rút tiền" — chỉ 1 lần/ngày — **mới**
+
+**Hiện trạng:** checkbox nằm trên form `CHECK_IN` ([page.tsx:850](app/ktv/attendance/page.tsx)). Mỗi lần submit có tick → [attendance/route.ts:657](app/api/ktv/attendance/route.ts) **insert 1 dòng `KTVWithdrawals`** `amount = 1`, `status = 'PENDING'`, không có guard nào.
+
+**Rủi ro đúng như mô tả:** tan ca → đăng nhập lại → check-in lại → tick lại → nhiều dòng.
+
+**Hệ quả sâu hơn:** các dòng `amount = 1` này **không bị lọc** trong `KtvTypeDWalletService` — filter chỉ loại `amount === 1 && note.includes('Bảo trì')`, còn note ở đây là `'Báo trước lúc điểm danh (Chưa chốt số tiền)'`. Nên mỗi dòng trùng **trừ thêm 1đ** vào `total_pending` → `net_balance`, và làm rác hàng đợi duyệt của Thu ngân.
+
+**Sửa:**
+
+```sql
+ALTER TABLE "KTVWithdrawals" ADD COLUMN IF NOT EXISTS "intent_date" DATE;
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_withdrawal_intent_per_day"
+  ON "KTVWithdrawals" ("staff_id", "intent_date")
+  WHERE "intent_date" IS NOT NULL;
+```
+
+- Insert set `intent_date = businessDate(now)`; trùng → bắt `23505` → bỏ qua (an toàn cả khi race)
+- UI: nếu hôm nay đã có intent → checkbox **disabled** + nhãn "Đã gửi yêu cầu rút tiền hôm nay"
+- Sửa filter trong `KtvTypeDWalletService` + `KtvWalletService` để loại dòng `intent_date IS NOT NULL` khỏi `total_pending` / `total_withdrawn` (nó là **tín hiệu**, không phải số tiền)
+
+---
+
+## 6. Sửa hạ tầng
+
+### 6.1. 🔴 Hai cron chưa bao giờ chạy
+
+Vercel Cron gọi endpoint bằng **GET**:
+
+| Cron | Export | Chạy được? |
+|---|---|---|
+| `sync-daily-ledger` | GET + POST | ✅ |
+| `sync-daily-ledger-type-d` | GET + POST | ✅ |
+| `piggy-bank-deduct` | GET + POST | ✅ |
+| `cleanup-online` | GET | ✅ |
+| `reset-type-d-hours` | chỉ POST | 🔴 405 → **xoá luôn** (§3.5) |
+| `daily-absence-check` | chỉ POST | 🔴 405 → **phải bật lại** |
+
+Hệ quả: **toàn bộ kỷ luật loại D chưa bao giờ được áp dụng** — chưa KTV nào bị phạt hay khoá.
+
+⚠️ **Không bật `daily-absence-check` nguyên trạng.** Phải sửa xong §6.3 trước, nếu không đêm đầu tiên có nguy cơ khoá oan hàng loạt.
+
+Nên cân nhắc gửi **thông báo nhắc đăng ký** tối hôm trước trước khi bật luật khoá.
+
+### 6.2. `spa_day_cutoff_hours` — **giữ 6, KHÔNG đổi**
+
+Công thức trong code: `businessDate(t) = date(t − cutoff)` → **cutoff = giờ MỞ ngày mới**, phải nằm **sau** tua muộn nhất trong đêm, có dư biên.
+
+**Thực tế: tua muộn nhất kết thúc khoảng 01:00.**
+
+| cutoff | Tua 01:00 rơi vào | Biên an toàn | |
+|---|---|---|---|
+| 2 | ngày hôm trước | 1h | ✅ đúng nhưng mỏng — tua chạy quá giờ là lệch |
+| 4 | ngày hôm trước | 3h | ✅ |
+| **6 (hiện tại)** | ngày hôm trước | **5h** | ✅ |
+
+Cả ba **cho kết quả giống hệt nhau**, vì từ 01:00 đến 06:00 không có hoạt động nào. Đổi config sẽ tốn 1 migration + kiểm tra lại **13 chỗ** đang dùng, đổi lấy đúng con số 0 khác biệt.
+
+→ **Không đụng vào `spa_day_cutoff_hours`.**
+
+Cặp **6 / 07:00** cũng đang khớp gọn: 06:00 mở ngày làm việc → 07:00 chốt danh sách (hở 1 tiếng).
+
+⚠️ Nếu sau này spa kéo dài giờ mở cửa, phải kiểm lại: cutoff **luôn phải > giờ kết thúc tua muộn nhất**. Đây là lý do phương án cutoff = 2 từng cân nhắc bị loại — nó chỉ còn 1h biên.
+
+### 6.3. Giờ chạy cron
+
+Ngày làm việc D đóng lúc **06:00 VN ngày D+1** (cutoff 6). Cả 4 cron đang chốt sổ **trước** khi ngày đóng:
+
+| Cron | Nay (UTC → VN) | Sửa thành | Ghi chú |
+|---|---|---|---|
+| `sync-daily-ledger` | `0 19` → 02:00 | `30 23` → **06:30** | sớm 4h |
+| `sync-daily-ledger-type-d` | `0 19` → 02:00 | `30 23` → **06:30** | sớm 4h |
+| `daily-absence-check` | `59 16` → 23:59 | `30 23` → **06:30** | sớm 6h |
+| `reset-type-d-hours` | `0 17 1 * *` | — | **xoá** |
+
+⚠️ `daily-absence-check` đang lấy `todayStr = format(nowVn)` ([route.ts:25](app/api/cron/daily-absence-check/route.ts)). Dời sang 06:30 D+1 thì `todayStr` thành **D+1** → phạt rơi sai ngày và không trừ đúng ngày trong sổ giờ. **Phải đổi thành `businessDate(now) − 1 ngày`**, giống cách `sync-daily-ledger` đang làm.
+
+### 6.4. Business date — một hàm dùng chung
+
+Tách `getBusinessDate(supabase, at?: Date)` ra `lib/` dùng chung cho: `work_date` khi ghi ledger, ranh giới đọc, cả 4 cron, `intent_date`. Sửa luôn L6 (cửa sổ truy vấn `getMonthlyNetHours`) — mẫu đúng đã có ở [attendance/status/route.ts:47](app/api/ktv/attendance/status/route.ts).
+
+---
+
+## 7. Lộ trình
+
+| Bước | Việc | Verify |
+|---|---|---|
+| **0** | Sửa L1 (key config cron). Độc lập, đang gây sai số thật | Đổi giá trong Settings → chạy cron tay → số đổi theo |
+| **1** | Tách `getBusinessDate()` dùng chung + sửa L6, L7 | Tua ca đêm 01:00 xuất hiện đúng ngày trong bảng xếp hạng |
+| **2** | Viết `KtvDLedgerEngine.computeRows()` (pure) — nâng từ history, + sao theo khách, + đúng key | Unit test: tua 60 làm 55, 3★, PT → khớp số tính tay |
+| **3** | Migration: tạo 2 bảng mới + `intent_date`. Backfill từ **2026-09-01** bằng `recomputeTurnRows()` | Script đối chiếu `Σ commission_net` theo ngày vs `KTVDailyLedger.total_commission` — chốt từng chênh lệch |
+| **4** | `KtvDLedgerReader.getRows()` | So với API cũ trên 5 KTV × 10 ngày, khớp 100% |
+| **5** | Chuyển consumer lần lượt: `service-hours` → `history` → `wallet/timeline` → `getBalance` | Mỗi lần chuyển, chụp số cũ/mới đối chiếu |
+| **6** | Cắm 4 hook (§2.3) + cron hạ vai trò xuống lưới an toàn | Chạy 3 đêm song song 2 bảng, so |
+| **7** | Quy chế §5: R1–R6 + nút báo trễ + tích rút tiền 1 lần | Kịch bản tay: check-in 2 lần → chỉ 1 dòng intent |
+| **8** | Dời giờ cron §6.3 + bật `daily-absence-check` (GET) | Chạy thử tay 1 ngày, xem danh sách sẽ khoá **trước** khi bật thật |
+| **9** | Drop `KTVServiceHoursLedger`, `KTVMonthlyServiceHours`, cron reset | — |
+
+**Bước 0 và 8 nên tách PR riêng** — bước 0 sửa lỗi tiền đang chạy, bước 8 động tới tài khoản KTV.
+
+---
+
+## 8. Rủi ro
+
+| # | Rủi ro | Chặn bằng |
+|---|---|---|
+| RR1 | **Sót hook → dòng sai vĩnh viễn** (giá của event-driven) | (a) cron lưới an toàn quét ngày hôm qua tìm item thiếu dòng / `OPEN` quá 24h; (b) script đối chiếu hằng tuần `KTVDTurnLedger` vs tính lại từ `Bookings` — chính thứ lẽ ra đã bắt được L1 |
+| RR2 | **Sao về sau khi đã ghi dòng** → tiền đóng băng ở mức chưa trừ sao | Hook 2 (`submitFeedbackAction`) ghi đè; cron reconcile **3 ngày gần nhất**, chỉ `LOCKED` sau đó |
+| RR3 | **Chậm thao tác KTV bấm xong** — `handleFinishService` đã nặng | Gọi `recomputeTurnRows` **sau khi trả response** (không `await`); cron lưới an toàn lo phần thất bại |
+| RR4 | **Bật `daily-absence-check` → khoá oan hàng loạt** | Chạy thử tay in ra danh sách sẽ khoá trước; sửa §6.3 trước; gửi thông báo nhắc đăng ký |
+| RR5 | **Backfill lệch với ledger cũ** | Bước 3 bắt buộc chốt từng chênh lệch trước khi đi tiếp; giữ `KTVDailyLedger` song song tới bước 9 |
+| RR6 | **Reset ngày 1 → mọi người về 0**, thứ tự tua rơi hết về `check_in_order` | Đã biết và chấp nhận (cửa sổ = tháng lịch). Nếu sau này đổi ý → chuyển sang cửa sổ trượt 30 ngày chỉ là đổi mệnh đề `WHERE` |
+
+---
+
+## 9. Các quyết định bổ sung (đã chốt 04/09)
+
+### 9.1. Khoá sổ — dùng **cả hai** cơ chế
+
+Chúng bổ sung nhau, không xung đột:
+
+| Cơ chế | Khi nào | Phạm vi |
+|---|---|---|
+| Auto `D+3` | cron hằng ngày | từng dòng đã `FINAL` quá 3 ngày → `LOCKED` |
+| "Chốt tháng" | admin bấm | quét sạch mọi dòng còn `OPEN` trong tháng → `LOCKED` |
+
+`D+3` lo phần đông đảo; "chốt tháng" quét nốt các dòng kẹt (khách không FB, handover treo) để không sót khi kết sổ.
+
+Sau `LOCKED`: **cấm sửa đè**. Mọi thay đổi ghi dòng mới `source = 'ADMIN_ADJUST'` — ví và lịch sử vẫn `SUM` ra đúng, và có vết truy.
+
+### 9.2. Mốc giờ tuyệt đối — **không có, không thêm**
+
+Loại D không dùng cơ chế milestone như A/B/C. Giờ tích lũy chỉ để **so KTV với nhau** khi sắp thứ tự nhận khách:
+
+```
+sort: net_hours DESC → check_in_order ASC → employee_id ASC
+```
+
+Xếp hạng tương đối nên chuyện tháng 28/30/31 ngày không gây bất công — ai cũng cùng số ngày.
+
+### 9.3. `ACCOUNT_LOCK` — **có ghi**, dạng dấu mốc
+
+Khi cron khoá tài khoản, hiện xảy ra 3 việc:
+
+| Ghi ở đâu | Ai thấy | Tồn tại tới khi nào |
+|---|---|---|
+| `Staff.status = 'KHÓA_TÀI_KHOẢN'` | chặn đăng nhập ([auth-server.ts:216](lib/auth-server.ts)) | tới khi unlock |
+| `SecurityAuditLogs` | **admin + dev**; KTV cũng thấy `reason` qua `lockInfo` ([attendance/status:84](app/api/ktv/attendance/status/route.ts)) | vĩnh viễn, nhưng chỉ tra được bằng cách lục log |
+| Notification `EMERGENCY` | KTV | thấy 1 lần rồi trôi |
+
+Vậy lúc **đang bị khoá** thì KTV biết lý do. Chỗ thiếu là **sau khi đã mở khoá**: `lockInfo` chỉ hiện khi `status = 'KHÓA_TÀI_KHOẢN'`, nên vài tuần sau mở lịch sử ngày-theo-ngày ra thì không còn dấu vết gì ở ngày đó.
+
+**Thêm dòng `KTVDPenaltyLedger` với `hours_penalty = 0`** — dấu mốc, không phải phạt:
+
+```
+work_date:     2026-09-12
+penalty_type:  'ACCOUNT_LOCK'
+hours_penalty: 0
+note:          'Khoá tài khoản — không đăng ký lịch và không điểm danh'
+```
+
+[api/admin/staff/unlock](app/api/admin/staff/unlock/route.ts) ghi thêm dòng gỡ tương ứng khi mở khoá.
+
+Mục đích là **giữ vết trong lịch sử ngày-theo-ngày sau khi đã mở khoá** — không thay thế `SecurityAuditLogs` (vẫn là nguồn chi tiết cho admin/dev), cũng không thay `lockInfo` (vẫn là thứ KTV thấy lúc đang bị khoá).
