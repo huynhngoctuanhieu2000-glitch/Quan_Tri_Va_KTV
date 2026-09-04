@@ -9,7 +9,7 @@ import {
   CheckSquare, Check, XCircle, AlertTriangle, CheckCircle, ShieldAlert, Dumbbell, Target, QrCode, ScanLine, Search, Trash2, Camera, LogOut, FileImage, UploadCloud, FileDown,
   Info, LogIn, ChevronLeft, CalendarClock, History, Calendar, Heart, Shield, Star, Crown, Lock, ChevronDown, CheckIcon, MapPinIcon, LayoutDashboard, CalendarCheck, FileOutput, ShieldCheck,
   Zap, MessageCircle, XOctagon, Hand, ThumbsUp, Map as MapIcon, Navigation2, RefreshCw, Smartphone, MonitorPlay, Wifi, Coffee, Sparkles, Plus, Wallet, FilePlus, ExternalLink, Link as LinkIcon, HandHeart, CheckCheck, HandMetal, Smile, Image as ImageIcon,
-  ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Users, Loader2, ChevronUp, Ban, ScrollText
+  ClipboardList, BookOpen, PlusSquare, PauseCircle, MicOff, Users, Loader2, ChevronUp, Ban, ScrollText, ClipboardCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'next/navigation';
@@ -326,6 +326,7 @@ function ScreenDashboard({ logic }: { logic: any }) {
   const [showQRModal, setShowQRModal] = React.useState(false);
   const [showWallet, setShowWallet] = React.useState(false);
   const [showTurnQueueModal, setShowTurnQueueModal] = React.useState(false);
+  const [showOfficeScoreModal, setShowOfficeScoreModal] = React.useState(false);
 
   const [isAccepting, setIsAccepting] = React.useState(false);
 
@@ -708,6 +709,42 @@ function ScreenDashboard({ logic }: { logic: any }) {
                </button>
              )}
 
+             {/* ĐIỂM OFFICE HÔM NAY — chỉ KTV Loại D mới có */}
+             {logic.officeScore && (() => {
+               const os = logic.officeScore;
+               const hasScore = os.todayScore !== null;
+               // Xanh khi chưa bị trừ gì, hổ phách khi có lỗi trong ngày.
+               const tone = !hasScore ? 'from-slate-400 to-slate-500'
+                 : os.todayHits.length === 0 ? 'from-emerald-500 to-green-600'
+                 : 'from-amber-500 to-orange-600';
+               return (
+                 <button
+                   onClick={() => setShowOfficeScoreModal(true)}
+                   className={`w-full bg-gradient-to-br ${tone} p-4 rounded-[32px] shadow-lg text-white flex items-center justify-between relative active:scale-95 transition-transform`}
+                 >
+                   <div className="flex items-center gap-3">
+                     <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
+                       <ClipboardCheck size={24} />
+                     </div>
+                     <div className="text-left">
+                       <h3 className="font-bold text-[10px] uppercase tracking-widest text-white/80">Điểm hôm nay</h3>
+                       <p className="font-black text-xl leading-none mt-1">
+                         {hasScore ? <>{os.todayScore}<span className="text-sm font-medium opacity-80 ml-0.5">/100</span></> : 'Chưa chấm'}
+                       </p>
+                       {os.todayHits.length > 0 && (
+                         <p className="text-[10px] font-bold text-white/85 mt-1">{os.todayHits.length} lỗi bị trừ hôm nay</p>
+                       )}
+                     </div>
+                   </div>
+                   <div className="text-right">
+                     <h3 className="font-bold text-[10px] uppercase tracking-widest text-white/80">Điểm tháng</h3>
+                     <p className="font-black text-xl leading-none mt-1">{os.monthScore}</p>
+                     <p className="text-[10px] font-bold text-white/85 mt-1">Quỹ đóng {os.fundDue.toLocaleString('vi-VN')}đ</p>
+                   </div>
+                 </button>
+               );
+             })()}
+
              {/* ─── GRID: Quy chế, Mã QR, Chỉ Tiêu ─── */}
              <div className="grid grid-cols-2 gap-4">
                 {/* 1. Nút mở Quy chế */}
@@ -935,6 +972,90 @@ function ScreenDashboard({ logic }: { logic: any }) {
           ktvId={logic.ktvId}
         />
       )}
+
+      {/* Office Score Modal */}
+      {logic.officeScore && showOfficeScoreModal && (
+        <OfficeScoreModal data={logic.officeScore} onClose={() => setShowOfficeScoreModal(false)} />
+      )}
+    </div>
+  );
+}
+
+/** Chi tiết điểm Office: lỗi bị trừ hôm nay + tổng kết tháng. */
+function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => void }) {
+  const hasScore = data.todayScore !== null;
+  return (
+    <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <motion.div
+        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        className="bg-white w-full sm:max-w-md max-h-[85vh] rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col"
+      >
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-black text-slate-800">Điểm Office</h3>
+            <p className="text-[11px] text-slate-400 font-bold">{data.workDays} ngày đi làm trong tháng</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">✕</button>
+        </div>
+
+        <div className="p-5 overflow-y-auto space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 rounded-2xl p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Hôm nay</p>
+              <p className="text-2xl font-black text-slate-800 mt-1">{hasScore ? `${data.todayScore}/100` : '—'}</p>
+              {!hasScore && <p className="text-[11px] text-slate-400 font-bold mt-1">Chưa đi làm hoặc chưa chấm</p>}
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Trung bình tháng</p>
+              <p className="text-2xl font-black text-slate-800 mt-1">{data.monthScore}</p>
+            </div>
+          </div>
+
+          <div className={`rounded-2xl p-4 border ${data.fundDue === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+            <p className="text-[11px] font-bold text-slate-500">Quỹ nội bộ tháng này bạn phải đóng</p>
+            <p className={`text-xl font-black mt-1 ${data.fundDue === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {data.fundDue.toLocaleString('vi-VN')}đ
+            </p>
+            <p className="text-[11px] text-slate-500 font-medium mt-1">
+              {data.exemptPct > 0 ? `Đã được miễn ${data.exemptPct}% trên quỹ gốc 250.000đ` : 'Chưa đạt mức được miễn'}
+            </p>
+          </div>
+
+          {data.todayHits.length > 0 && (
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Lỗi bị trừ hôm nay</p>
+              <div className="space-y-2">
+                {data.todayHits.map((h: any, i: number) => (
+                  <div key={i} className="bg-rose-50 border border-rose-100 rounded-2xl p-3">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-sm font-bold text-rose-800">{h.label}</span>
+                      <span className="text-sm font-black text-rose-600 shrink-0">−{h.points}đ</span>
+                    </div>
+                    {h.note && <p className="text-[11px] text-slate-500 mt-1">{h.note}</p>}
+                    {h.photoCount > 0 && <p className="text-[11px] text-slate-400 font-bold mt-1">📷 {h.photoCount} ảnh minh chứng</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {data.repeats.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3">
+              <p className="text-[11px] font-black text-amber-800 uppercase tracking-widest mb-1">Lỗi lặp lại</p>
+              {data.repeats.map((r: any) => (
+                <p key={r.criteriaId} className="text-[12px] text-amber-800 font-medium">
+                  {r.label} — lặp {r.times} lần, bị trừ thêm {r.points}đ vào điểm tháng
+                </p>
+              ))}
+            </div>
+          )}
+
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Mỗi ngày đi làm bắt đầu từ 100 điểm, trừ dần theo lỗi trong ngày đó. Điểm tháng là trung bình các ngày đi làm.
+            Cùng một lỗi bị trừ từ 3 lần trong tháng sẽ bị trừ thêm một lần nữa vào điểm tháng.
+          </p>
+        </div>
+      </motion.div>
     </div>
   );
 }

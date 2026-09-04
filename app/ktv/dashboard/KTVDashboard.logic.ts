@@ -146,6 +146,9 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     const [turnData, setTurnData] = useState<{ myRank: number; myTime: number; allTypeD: any[] } | null>(null);
 
+    // Điểm Office của chính KTV (chỉ Loại D) — để họ tự xem thay vì cuối tháng mới biết.
+    const [officeScore, setOfficeScore] = useState<any>(null);
+
     const [workType, setWorkType] = useState('TYPE_A');
     useEffect(() => {
         if (!ktvId) return;
@@ -277,6 +280,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
                         myTime: myIndex !== -1 ? (sortedTypeD[myIndex].net_hours || 0) : 0,
                         allTypeD: sortedTypeD
                     });
+                }
+
+                // Điểm Office — API tự nhận diện KTV qua phiên đăng nhập, không nhận staffId
+                // từ client để KTV không xem được điểm của người khác.
+                try {
+                    const officeJson = await apiClient.get<any>('/api/ktv/office-score');
+                    setOfficeScore(officeJson?.applicable ? officeJson.data : null);
+                } catch {
+                    setOfficeScore(null); // không có điểm Office thì ẩn ô, không chặn dashboard
                 }
             } catch (e) {
                 console.error('Error fetching KPI/Discipline state:', e);
@@ -2381,6 +2393,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         unreadCount,
         markNotificationAsRead,
         turnData,
+        officeScore,
         kpiData,
         disciplineStatus,
         canViewWallet,

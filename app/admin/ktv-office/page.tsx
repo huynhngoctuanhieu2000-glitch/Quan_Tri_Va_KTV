@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useAdminKtvOfficeLogic } from './AdminKtvOffice.logic';
+import { useAdminKtvOfficeLogic, vnTodayStr } from './AdminKtvOffice.logic';
 import { Search, ChevronLeft, ChevronRight, X, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -24,21 +24,6 @@ const CSS_VARS = {
   '--radius': '22px',
 } as React.CSSProperties;
 
-const VIOLATIONS = [
-  { group: 'Quy trình công việc', max: 40, items: [
-    { name: 'Trước tua', desc: 'Khi đã có đơn hàng', points: 5 },
-    { name: 'Nhận tua và đón khách', desc: 'Tại khu vực sảnh', points: 5 },
-    { name: 'Trong dịch vụ', desc: 'Không tuân thủ quy trình', points: 10 },
-    { name: 'Kết thúc dịch vụ', desc: 'Bàn giao khách', points: 5 },
-    { name: 'Sau dịch vụ — tại sảnh', desc: 'Thiếu bước chăm sóc sau dịch vụ', points: 5 },
-    { name: 'Sau dịch vụ — tại phòng', desc: 'Phòng hoặc bàn giao chưa đạt', points: 10 }
-  ]},
-  { group: 'Thời gian làm việc', max: 30, items: [
-    { name: 'Bật app không đúng giờ', desc: 'So với lịch đã đăng ký', points: 7.5 },
-    { name: 'Rời vị trí khi đang trong ca', desc: 'Không có xác nhận của quản lý', points: 10 },
-    { name: 'Kết thúc ca sớm', desc: 'Không có lý do được duyệt', points: 5 }
-  ]}
-];
 
 const AdminKtvOfficePage = () => {
   const logic = useAdminKtvOfficeLogic();
@@ -252,59 +237,119 @@ const AdminKtvOfficePage = () => {
               <div className="flex-1 overflow-y-auto p-5 pb-8">
                 {logic.sheetState.type === 'deduct' && (
                   <>
-                    <div className="flex justify-between items-center bg-[var(--surface-soft)] p-3.5 rounded-2xl mb-5">
-                      <div>
-                        <span className="block text-xs text-[var(--muted)]">Ngày vi phạm</span>
-                        <strong className="text-sm">{logic.sheetState.date}</strong>
+                    <div className="bg-[var(--surface-soft)] p-3.5 rounded-2xl mb-5">
+                      <label className="block text-xs text-[var(--muted)] mb-2">Ngày vi phạm</label>
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => logic.setSheetState(p => ({ ...p, workDate: vnTodayStr() }))}
+                          className={`h-11 px-4 rounded-xl font-bold text-sm ${logic.sheetState.workDate === vnTodayStr() ? 'btn-primary' : 'bg-white border border-[var(--line)]'}`}
+                        >Hôm nay</button>
+                        <button
+                          onClick={() => logic.setSheetState(p => ({ ...p, workDate: vnTodayStr(1) }))}
+                          className={`h-11 px-4 rounded-xl font-bold text-sm ${logic.sheetState.workDate === vnTodayStr(1) ? 'btn-primary' : 'bg-white border border-[var(--line)]'}`}
+                        >Hôm qua</button>
+                        <input
+                          type="date"
+                          max={vnTodayStr()}
+                          value={logic.sheetState.workDate}
+                          onChange={e => logic.setSheetState(p => ({ ...p, workDate: e.target.value }))}
+                          className="h-11 px-3 rounded-xl border border-[var(--line)] bg-white text-sm font-bold"
+                        />
                       </div>
-                      <button className="text-[var(--green)] font-bold text-sm">Thay đổi</button>
+                      <p className="text-xs text-[var(--muted)] mt-2">Lễ tân chỉ trừ được hôm nay và hôm qua. Quản lý trừ được mọi ngày.</p>
                     </div>
 
                     <div className="flex justify-between items-center bg-[var(--green-2)] p-4 rounded-2xl mb-6">
                       <div>
-                        <span className="block text-xs text-[var(--muted)]">Điểm hiện tại</span>
-                        <strong className="text-2xl tracking-tight">{logic.sheetState.score}</strong>
+                        <span className="block text-xs text-[var(--muted)]">Điểm ngày này</span>
+                        <strong className="text-2xl tracking-tight">100</strong>
                       </div>
                       <div className="text-right">
                         <span className="block text-xs text-[var(--muted)]">Sau khi trừ</span>
-                        <strong className="text-2xl tracking-tight">{Math.max(0, logic.sheetState.score - logic.sheetState.selectedViolations.reduce((a,b)=>a+b.points,0))}</strong>
+                        <strong className={`text-2xl tracking-tight ${logic.totalPoints > 0 ? 'text-[var(--rust)]' : ''}`}>
+                          {fmtNum(Math.max(0, 100 - logic.totalPoints))}
+                        </strong>
                       </div>
                     </div>
 
-                    {VIOLATIONS.map((group, gIdx) => (
-                      <div key={gIdx} className="mb-6">
+                    {logic.criteriaGroups.length === 0 && (
+                      <p className="py-6 text-center text-[var(--muted)] text-sm">Đang tải danh sách tiêu chí…</p>
+                    )}
+
+                    {logic.criteriaGroups.map((group: any) => (
+                      <div key={group.grp} className="mb-6">
                         <div className="flex justify-between items-center mb-2">
-                          <h3 className="text-xs font-bold uppercase tracking-widest">{group.group}</h3>
-                          <span className="text-xs text-[var(--muted)]">Tối đa {group.max} điểm</span>
+                          <h3 className="text-xs font-bold uppercase tracking-widest">{group.label}</h3>
+                          <span className="text-xs text-[var(--muted)]">Tối đa {fmtNum(group.max)} điểm</span>
                         </div>
                         <div className="border-t border-[var(--line)]">
-                          {group.items.map((item, iIdx) => {
-                            const isChecked = logic.sheetState.selectedViolations.some(v => v.name === item.name);
+                          {group.items.map((item: any) => {
+                            const isChecked = logic.sheetState.selectedIds.includes(item.id);
                             return (
-                              <label key={iIdx} className="flex items-center gap-3 py-3 border-b border-[var(--line)] cursor-pointer">
-                                <input 
-                                  type="checkbox" 
-                                  className="w-5 h-5 accent-[var(--rust)]"
+                              <label key={item.id} className="flex items-center gap-3 py-3 border-b border-[var(--line)] cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="w-5 h-5 accent-[var(--rust)] shrink-0"
                                   checked={isChecked}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      logic.setSheetState(prev => ({...prev, selectedViolations: [...prev.selectedViolations, {name: item.name, points: item.points}]}));
-                                    } else {
-                                      logic.setSheetState(prev => ({...prev, selectedViolations: prev.selectedViolations.filter(v => v.name !== item.name)}));
-                                    }
-                                  }}
+                                  onChange={() => logic.toggleCriteria(item.id)}
                                 />
-                                <div className="flex-1">
-                                  <strong className="block text-sm font-semibold">{item.name}</strong>
-                                  <small className="block text-xs text-[var(--muted)] mt-0.5">{item.desc}</small>
+                                <div className="flex-1 min-w-0">
+                                  <strong className="block text-sm font-semibold">{item.label}</strong>
+                                  {item.requiresPhoto && (
+                                    <small className="inline-block text-[10px] font-bold text-[var(--amber)] bg-[var(--amber-2)] px-2 py-0.5 rounded mt-1">CẦN ẢNH</small>
+                                  )}
                                 </div>
-                                <span className="font-bold text-[var(--rust)]">−{item.points}</span>
+                                <span className="font-bold text-[var(--rust)] shrink-0">−{fmtNum(item.points)}</span>
                               </label>
                             );
                           })}
                         </div>
                       </div>
                     ))}
+
+                    {/* Ảnh minh chứng */}
+                    <div className="border-t border-[var(--line)] pt-5">
+                      <div className="flex items-baseline justify-between mb-1">
+                        <h3 className="text-sm font-bold">Ảnh minh chứng</h3>
+                        {logic.needPhoto
+                          ? <span className="text-[10px] font-bold text-[var(--amber)] bg-[var(--amber-2)] px-2 py-0.5 rounded">BẮT BUỘC</span>
+                          : <span className="text-xs text-[var(--muted)]">(tùy chọn)</span>}
+                      </div>
+                      <p className="text-xs text-[var(--muted)] mb-3">
+                        {logic.needPhoto
+                          ? 'Lỗi bạn chọn cần ảnh để KTV không khiếu nại được.'
+                          : 'Nên có ảnh nếu lỗi dễ gây tranh cãi.'}
+                      </p>
+
+                      <div className="flex gap-2 flex-wrap items-center">
+                        <label className="h-[54px] px-4 rounded-xl border-2 border-dashed border-[var(--line)] bg-[var(--surface-soft)] flex items-center gap-2 cursor-pointer text-sm font-bold text-[var(--green)] hover:border-[var(--green)]">
+                          <ImageIcon size={16} /> Thêm ảnh
+                          <input
+                            type="file" accept="image/*" multiple capture="environment" className="hidden"
+                            onChange={e => { logic.addPhotos(e.target.files); e.target.value = ''; }}
+                          />
+                        </label>
+                        {logic.sheetState.photos.map((src: string, i: number) => (
+                          <div key={i} className="relative w-[54px] h-[54px] rounded-xl overflow-hidden border border-[var(--line)]">
+                            <img src={src} alt={`Minh chứng ${i + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              onClick={() => logic.removePhoto(i)}
+                              aria-label={`Xóa ảnh ${i + 1}`}
+                              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[var(--rust)] text-white text-xs flex items-center justify-center"
+                            >✕</button>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-[var(--muted)] mt-2">{logic.sheetState.photos.length}/{logic.maxPhotos} ảnh</p>
+
+                      <label className="block text-sm font-bold mt-5 mb-2">Ghi chú cho KTV</label>
+                      <textarea
+                        className="w-full min-h-[80px] p-3 rounded-2xl border border-[var(--line)] focus:outline-none focus:ring-2 focus:ring-[var(--green)]/20 text-sm"
+                        placeholder="Ví dụ: Không đeo bảng tên suốt ca chiều."
+                        value={logic.sheetState.note}
+                        onChange={e => logic.setSheetState(p => ({ ...p, note: e.target.value }))}
+                      />
+                    </div>
                   </>
                 )}
 
@@ -504,9 +549,16 @@ const AdminKtvOfficePage = () => {
               <div className="p-4 border-t border-[var(--line)] flex gap-3 bg-white/95">
                 {logic.sheetState.type === 'deduct' && (
                   <>
-                    <button className="flex-none w-24 h-12 rounded-xl font-bold btn-ghost" onClick={logic.closeSheet}>Hủy</button>
-                    <button className="flex-1 h-12 rounded-xl font-bold btn-primary disabled:opacity-50" disabled={logic.sheetState.selectedViolations.length === 0}>
-                      Tiếp tục {logic.sheetState.selectedViolations.length > 0 && `· Trừ ${logic.sheetState.selectedViolations.reduce((a,b)=>a+b.points,0)} điểm`}
+                    <button className="flex-none w-24 h-12 rounded-xl font-bold btn-ghost" onClick={logic.closeSheet} disabled={logic.submitting}>Hủy</button>
+                    <button
+                      className="flex-1 h-12 rounded-xl font-bold btn-primary disabled:opacity-50"
+                      disabled={!logic.canSubmit || logic.submitting}
+                      onClick={logic.submitDeduct}
+                    >
+                      {logic.submitting ? 'Đang lưu…'
+                        : logic.sheetState.selectedIds.length === 0 ? 'Chưa chọn lỗi nào'
+                        : logic.needPhoto && logic.sheetState.photos.length === 0 ? 'Cần thêm ảnh minh chứng'
+                        : `Xác nhận trừ ${fmtNum(logic.totalPoints)} điểm`}
                     </button>
                   </>
                 )}
