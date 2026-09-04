@@ -116,7 +116,7 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
           <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
           <div className="text-left">
             <p className="text-amber-800 font-bold">Hôm nay bạn đã đăng ký nghỉ</p>
-            <p className="text-sm text-amber-600">Bạn không thể Oria Xin chào hoặc nhận đơn trong ngày nghỉ.</p>
+            <p className="text-sm text-amber-600">Nếu đổi ý, bấm bật nhận đơn để đi làm bình thường.</p>
           </div>
         </div>
       )}
@@ -151,7 +151,7 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
       {/* CÁC NÚT ĐIỀU KHIỂN */}
       <div className="space-y-4">
         {/* Nếu đang tắt -> Hiện Bật nhận đơn VÀ Tới tiệm luôn */}
-        {isOffline && !state?.isOffToday && (
+        {isOffline && (
             <div className="space-y-4">
                 <button
                     onClick={() => onCheckIn()}
@@ -175,7 +175,7 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
             <>
                 <button
                     onClick={() => onCheckIn()}
-                    disabled={actionLoading || state?.isOffToday}
+                    disabled={actionLoading}
                     className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-lg rounded-2xl transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                     <LogIn size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin chào'}

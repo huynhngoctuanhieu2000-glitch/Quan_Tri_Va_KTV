@@ -199,19 +199,33 @@ export async function POST(request: Request) {
         const isTypeD = workType === 'TYPE_D';
 
         if (isTypeD && (checkType === 'CHECK_IN' || checkType === 'LATE_CHECKIN')) {
-            const { vnToday } = await import('@/lib/vn-time');
+            const { vnToday, vnNow } = await import('@/lib/vn-time');
+            const { format } = await import('date-fns');
             const todayStr = vnToday();
             const { data: registration } = await supabase
                 .from('KTVTypeDDailyRegistration')
-                .select('status')
+                .select('id, status, late_expected_time')
                 .eq('staff_id', staffCode)
                 .eq('work_date', todayStr)
                 .single();
+                
             if (registration && registration.status === 'OFF_REGISTERED') {
-                return NextResponse.json({ 
-                    success: false, 
-                    error: 'Bạn đã đăng ký nghỉ (OFF) hôm nay. Vui lòng hủy đăng ký trước khi điểm danh.' 
-                }, { status: 403 });
+                await supabase.from('KTVTypeDDailyRegistration')
+                  .update({ status: 'REGISTERED', expected_time: format(vnNow(), 'HH:mm') })
+                  .eq('id', registration.id);
+            }
+            
+            if (registration && registration.status === 'LATE_REPORTED' && registration.late_expected_time) {
+                const now = vnNow();
+                const [h, m] = registration.late_expected_time.split(':').map(Number);
+                const expectedMinutes = h * 60 + m;
+                const actualMinutes = now.getHours() * 60 + now.getMinutes();
+                if (actualMinutes > expectedMinutes) {
+                    await KtvTypeDDisciplineService.deductDailyViolation(
+                      supabase, staffCode, todayStr, 'LATE_NO_UPDATE',
+                      `Trễ hơn giờ đã báo trễ (${registration.late_expected_time})`
+                    );
+                }
             }
         }
 

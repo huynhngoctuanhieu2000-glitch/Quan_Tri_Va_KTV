@@ -80,6 +80,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Bạn chỉ được báo trễ 1 lần trong ngày.' }, { status: 400 });
       }
 
+      const [regH, regM] = (registration.expected_time || '00:00').split(':').map(Number);
+      const regMinutes = regH * 60 + regM;
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      if (nowMinutes >= regMinutes) {
+        return NextResponse.json({ error: 'Đã qua giờ đăng ký gốc, không thể báo trễ.' }, { status: 400 });
+      }
+
+      const [lateH, lateM] = late_expected_time.split(':').map(Number);
+      const lateMinutes = lateH * 60 + lateM;
+      if (lateMinutes <= nowMinutes) {
+        return NextResponse.json({ error: 'Giờ hẹn trễ phải sau thời điểm hiện tại.' }, { status: 400 });
+      }
+
       const { error: updateError } = await supabase
         .from('KTVTypeDDailyRegistration')
         .update({

@@ -106,32 +106,42 @@ export async function POST(request: Request) {
           .limit(1);
 
         if (!attendance || attendance.length === 0) {
-          // BỊ PHẠT DO VẮNG
-          let violationType: 'ABSENT_NO_NOTICE' | 'ABSENT_EARLY_NOTICE' | 'LATE_NO_UPDATE' = 'ABSENT_NO_NOTICE';
-          
           if (registration.status === 'ABSENT_REPORTED' && registration.absent_reported_at) {
-             const absentTimeVn = new Date(new Date(registration.absent_reported_at).getTime() + VN_OFFSET_MS);
-             const absentHour = absentTimeVn.getHours();
-             if (absentHour < 7) {
-                 violationType = 'ABSENT_EARLY_NOTICE'; // -5h
-             } else {
-                 violationType = 'ABSENT_NO_NOTICE'; // -10h
+             const violationType = 'ABSENT_EARLY_NOTICE'; // -5h
+             if (registration.penalty_applied !== violationType) {
+                 console.log(`Penalizing ${staff.id} for ${violationType}`);
+                 await KtvTypeDDisciplineService.deductDailyViolation(
+                     supabase,
+                     staff.id,
+                     todayStr,
+                     violationType,
+                     `Phạt quét cuối ngày: ${violationType}`
+                 );
+                 await supabase.from('KTVTypeDDailyRegistration').update({ penalty_applied: violationType, status: 'COMPLETED' }).eq('id', registration.id);
              }
           } else {
-             // Không báo vắng -> Bỏ lịch
-             violationType = 'ABSENT_NO_NOTICE'; // -10h
-          }
+             // REGISTERED hoặc LATE_REPORTED mà lặn luôn -> KHÓA
+             console.log(`Locking account for ${staff.id} due to registering but not attending`);
+             
+             await supabase.from('SecurityAuditLogs').insert({
+               employee_id: staff.id,
+               employee_name: staff.full_name || staff.id,
+               event_type: 'AUTO_LOCK_ABSENCE',
+               ip_address: '127.0.0.1',
+               user_agent: 'CRON',
+               details: { source: 'CRON', violationDate: todayStr, reason: 'Đăng ký làm nhưng không điểm danh' }
+             });
 
-          if (registration.penalty_applied !== violationType) {
-             console.log(`Penalizing ${staff.id} for ${violationType}`);
-             await KtvTypeDDisciplineService.deductDailyViolation(
-                 supabase,
-                 staff.id,
-                 todayStr,
-                 violationType,
-                 `Phạt quét cuối ngày: ${violationType}`
-             );
-             await supabase.from('KTVTypeDDailyRegistration').update({ penalty_applied: violationType, status: 'COMPLETED' }).eq('id', registration.id);
+             await supabase.from('Staff').update({ status: 'KHÓA_TÀI_KHOẢN' }).eq('id', staff.id);
+             
+             await createNotification({
+               type: 'EMERGENCY',
+               message: `Tài khoản của bạn đã bị khóa kỷ luật do bỏ ca làm việc ngày ${todayStr}.`,
+               employeeId: staff.id
+             });
+             
+             lockedStaffs.push(staff.full_name ? `${staff.full_name} (${staff.id})` : staff.id);
+             await supabase.from('KTVTypeDDailyRegistration').update({ status: 'COMPLETED' }).eq('id', registration.id);
           }
         } else {
            // Đã điểm danh (có lẽ miss check_in_at update)

@@ -289,9 +289,6 @@ const KTVAttendancePage = () => {
                 setSelectedShiftType('VIP');
             } else if (workType === 'TYPE_D') {
                 setSelectedShiftType('');
-            } else if (isOffToday) {
-                // Ngày OFF mà vẫn lên làm → luôn tính là Ca tự do, không theo ca cố định.
-                setSelectedShiftType('FREE');
             } else {
                 setSelectedShiftType(activeShiftType || 'FREE');
             }
@@ -793,7 +790,7 @@ const KTVAttendancePage = () => {
                                                     <span>Hôm nay là ngày OFF của bạn.</span>
                                                 </div>
                                             )}
-                                            {!isOffToday && shiftFetchError ? (
+                                            {shiftFetchError ? (
                                                 <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-2">
                                                     <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
                                                         <AlertCircle size={14} className="shrink-0" />
@@ -814,7 +811,7 @@ const KTVAttendancePage = () => {
                                                 >
                                                     <option value="FREE">Ca tự do (Linh hoạt)</option>
                                                     <option value="REQUEST">Làm khách yêu cầu</option>
-                                                    {!isOffToday && <option value="SUDDEN_OFF">Nghỉ đột xuất</option>}
+                                                    <option value="SUDDEN_OFF">Nghỉ đột xuất</option>
                                                 </select>
                                             )}
                                         </>

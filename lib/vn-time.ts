@@ -32,5 +32,8 @@ export const vnHour = (): number => {
  * @param workDate string format 'yyyy-MM-dd'
  */
 export function canEditRegistration(workDateStr: string): boolean {
-  return workDateStr > vnToday();
+  const today = vnToday();
+  if (workDateStr > today) return true;
+  if (workDateStr === today && vnHour() < 7) return true;
+  return false;
 }
