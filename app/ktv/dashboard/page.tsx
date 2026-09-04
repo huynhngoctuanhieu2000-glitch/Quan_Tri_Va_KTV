@@ -712,10 +712,9 @@ function ScreenDashboard({ logic }: { logic: any }) {
              {/* ĐIỂM OFFICE HÔM NAY — chỉ KTV Loại D mới có */}
              {logic.officeScore && (() => {
                const os = logic.officeScore;
-               const hasScore = os.todayScore !== null;
                // Xanh khi chưa bị trừ gì, hổ phách khi có lỗi trong ngày.
-               const tone = !hasScore ? 'from-slate-400 to-slate-500'
-                 : os.todayHits.length === 0 ? 'from-emerald-500 to-green-600'
+               const tone = os.todayHits.length === 0
+                 ? 'from-emerald-500 to-green-600'
                  : 'from-amber-500 to-orange-600';
                return (
                  <button
@@ -729,11 +728,11 @@ function ScreenDashboard({ logic }: { logic: any }) {
                      <div className="text-left">
                        <h3 className="font-bold text-[10px] uppercase tracking-widest text-white/80">Điểm hôm nay</h3>
                        <p className="font-black text-xl leading-none mt-1">
-                         {hasScore ? <>{os.todayScore}<span className="text-sm font-medium opacity-80 ml-0.5">/100</span></> : 'Chưa chấm'}
+                         {os.todayScore}<span className="text-sm font-medium opacity-80 ml-0.5">/100</span>
                        </p>
-                       {os.todayHits.length > 0 && (
-                         <p className="text-[10px] font-bold text-white/85 mt-1">{os.todayHits.length} lỗi bị trừ hôm nay</p>
-                       )}
+                       <p className="text-[10px] font-bold text-white/85 mt-1">
+                         {os.todayHits.length > 0 ? `${os.todayHits.length} lỗi bị trừ hôm nay` : 'Chưa bị trừ lỗi nào'}
+                       </p>
                      </div>
                    </div>
                    <div className="text-right">
@@ -983,7 +982,6 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
 /** Chi tiết điểm Office: lỗi bị trừ hôm nay + tổng kết tháng. */
 function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => void }) {
-  const hasScore = data.todayScore !== null;
   return (
     <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <motion.div
@@ -1002,8 +1000,8 @@ function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => void })
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-2xl p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Hôm nay</p>
-              <p className="text-2xl font-black text-slate-800 mt-1">{hasScore ? `${data.todayScore}/100` : '—'}</p>
-              {!hasScore && <p className="text-[11px] text-slate-400 font-bold mt-1">Chưa đi làm hoặc chưa chấm</p>}
+              <p className="text-2xl font-black text-slate-800 mt-1">{data.todayScore}/100</p>
+              {data.todayHits.length === 0 && <p className="text-[11px] text-slate-400 font-bold mt-1">Chưa bị trừ lỗi nào</p>}
             </div>
             <div className="bg-slate-50 rounded-2xl p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Trung bình tháng</p>

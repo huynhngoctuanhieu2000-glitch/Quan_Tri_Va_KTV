@@ -47,9 +47,9 @@ export async function GET() {
             applicable: true,
             data: {
                 today,
-                // Chưa đi làm hôm nay thì chưa có điểm ngày — trả null để UI nói rõ,
-                // không hiện 100 làm KTV tưởng đã được chấm.
-                todayScore: todayEntry ? todayEntry.dayScore : null,
+                // Mỗi ngày mặc định 100đ, chỉ giảm khi có phiếu trừ. Không có phiếu nào
+                // thì vẫn là 100 — đúng nguyên tắc "bắt đầu từ 100, trừ dần".
+                todayScore: todayEntry ? todayEntry.dayScore : 100,
                 todayHits: todayEntry ? todayEntry.hits.map(h => ({
                     label: h.label,
                     points: h.points,
