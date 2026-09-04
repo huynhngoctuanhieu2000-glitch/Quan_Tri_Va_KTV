@@ -160,7 +160,12 @@ export const TurnQueueBoard = ({ staffs, ktvDisplayNames, selectedDate: propSele
                         {/* Type D: hiện giờ tích lũy thay vì số tua */}
                         {isTypeD ? (
                             <span className="text-[10px] px-1.5 py-0.5 rounded font-bold border bg-purple-50 text-purple-600 border-purple-100">
-                                {(turn.net_hours || 0).toFixed(1)} giờ tháng này
+                                {(() => {
+                                    const totalHours = turn.net_hours || 0;
+                                    const h = Math.floor(totalHours);
+                                    const m = Math.round((totalHours - h) * 60);
+                                    return `${h}h ${m.toString().padStart(2, '0')}P`;
+                                })()}
                             </span>
                         ) : (
                             (turn.turns_completed > 0 || allowEditTurns) && (

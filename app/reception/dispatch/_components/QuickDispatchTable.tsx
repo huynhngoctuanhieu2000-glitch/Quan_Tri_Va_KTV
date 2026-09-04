@@ -1414,7 +1414,12 @@ const ServiceGroupCard = ({
                       <div className="flex items-center gap-2">
                         {isTypeD ? (
                           <span className="text-[10px] bg-purple-100 px-1.5 py-0.5 rounded-md font-black text-purple-700 border border-purple-200" title="Giờ làm trong tháng">
-                            {turn.net_hours?.toFixed(1) || '0.0'}h
+                            {(() => {
+                                const totalHours = turn.net_hours || 0;
+                                const h = Math.floor(totalHours);
+                                const m = Math.round((totalHours - h) * 60);
+                                return `${h}h ${m.toString().padStart(2, '0')}P`;
+                            })()}
                           </span>
                         ) : (
                           <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md font-black text-slate-500">#{turn.check_in_order}</span>
