@@ -702,9 +702,9 @@ function ScreenDashboard({ logic }: { logic: any }) {
 
                  {/* Đứng tua đầu thì nhắc trực nước ngay trong ô, khỏi banner riêng phía trên. */}
                  {isFirstInQueue && (
-                   <div className="w-full flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl px-3 py-2">
-                     <AlertTriangle size={16} className="shrink-0 animate-pulse" />
-                     <p className="text-[11px] font-bold text-left leading-snug">
+                   <div className="w-full flex items-center gap-2">
+                     <AlertTriangle size={14} className="shrink-0 animate-pulse text-blue-100" />
+                     <p className="text-[11px] font-bold text-left leading-snug text-blue-100">
                        Bạn đang đứng tua đầu — hãy kiểm tra châm nước bình thuỷ các phòng.
                      </p>
                    </div>
