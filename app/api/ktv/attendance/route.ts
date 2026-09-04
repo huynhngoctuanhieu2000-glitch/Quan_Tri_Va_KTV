@@ -657,15 +657,25 @@ export async function POST(request: Request) {
         if (wantsToWithdraw && staffCode) {
             notifMessage += `\n💰 Báo Thu ngân chuẩn bị tiền mặt.`;
             
-            // Insert intent to KTVWithdrawals
+            // Chỉ là TÍN HIỆU báo Thu ngân chuẩn bị tiền mặt, không phải số tiền.
+            // `intent_date` + unique index đảm bảo mỗi KTV chỉ báo 1 lần/ngày —
+            // trước đây tan ca rồi điểm danh lại là tích được lần nữa (T016 từng
+            // tích 3 lần trong ngày 02/09).
             const { error: withdrawErr } = await supabase.from('KTVWithdrawals').insert({
                 staff_id: staffCode,
                 amount: 1, // Dùng số 1 thay vì 0 để vượt qua CHECK constraint KTVWithdrawals_amount_check
                 status: 'PENDING',
                 note: 'Báo trước lúc điểm danh (Chưa chốt số tiền)',
-                wallet_type: 'TUA'
+                wallet_type: 'TUA',
+                intent_date: today,
             });
-            if (withdrawErr) console.error('❌ [Withdrawal Intent] Insert Error:', withdrawErr);
+            if (withdrawErr) {
+                if (withdrawErr.code === '23505') {
+                    console.log(`[Withdrawal Intent] ${staffCode} đã báo rút tiền hôm nay rồi — bỏ qua.`);
+                } else {
+                    console.error('❌ [Withdrawal Intent] Insert Error:', withdrawErr);
+                }
+            }
         }
 
         await createNotification({

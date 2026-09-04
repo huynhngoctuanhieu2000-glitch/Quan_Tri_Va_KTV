@@ -651,17 +651,21 @@ const KTVSchedulePage = () => {
                                             </span>
                                         </div>
                                         
-                                        {editingReg.status === 'REGISTERED' && (
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-700 mb-2">Giờ đến tiệm (Bắt buộc)</label>
-                                                <input 
-                                                    type="time"
-                                                    value={editingReg.expected_time || ""}
-                                                    onChange={e => setEditingReg({ ...editingReg, expected_time: e.target.value })}
-                                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold"
-                                                />
-                                            </div>
-                                        )}
+                                        {/* Đang OFF: nhập giờ để chuyển sang ĐI LÀM.
+                                            Đang ĐI LÀM: sửa giờ đến tiệm. */}
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 mb-2">
+                                                {editingReg.status === 'REGISTERED'
+                                                    ? 'Giờ đến tiệm (Bắt buộc)'
+                                                    : 'Muốn đi làm ngày này? Nhập giờ đến tiệm'}
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={editingReg.expected_time || ""}
+                                                onChange={e => setEditingReg({ ...editingReg, expected_time: e.target.value })}
+                                                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold"
+                                            />
+                                        </div>
                                     </div>
 
                                     {offError && (
@@ -672,21 +676,28 @@ const KTVSchedulePage = () => {
                                     )}
 
                                     <div className="flex flex-col gap-3">
+                                        <button
+                                            onClick={() => handleSaveEditRegistration()}
+                                            disabled={isSubmittingOff || !editingReg.expected_time}
+                                            className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200 disabled:opacity-50 flex justify-center items-center gap-2"
+                                        >
+                                            {isSubmittingOff ? <Loader2 size={18} className="animate-spin" /> : (
+                                                <><CheckCircle2 size={18}/> {editingReg.status === 'REGISTERED' ? 'Lưu thay đổi' : 'Chuyển sang ĐI LÀM'}</>
+                                            )}
+                                        </button>
+
+                                        {/* Chỉ hiện khi đang ĐI LÀM — đang OFF rồi thì không có gì để chuyển. */}
                                         {editingReg.status === 'REGISTERED' && (
-                                            <button 
-                                                onClick={() => handleSaveEditRegistration()}
-                                                disabled={isSubmittingOff || !editingReg.expected_time}
-                                                className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200 disabled:opacity-50 flex justify-center items-center gap-2"
+                                            <button
+                                                onClick={() => setEditingReg({ ...editingReg, step: 'CONFIRM_CANCEL' })}
+                                                className="w-full py-3.5 bg-red-50 text-red-600 border border-red-200 font-bold rounded-2xl hover:bg-red-100 transition-colors flex justify-center items-center gap-2"
                                             >
-                                                {isSubmittingOff ? <Loader2 size={18} className="animate-spin" /> : <><CheckCircle2 size={18}/> Lưu thay đổi</>}
+                                                <CalendarOff size={18} /> Chuyển sang OFF
+                                                {getRegistrationEditWindow(editingReg.date) === 'PENALTY' && (
+                                                    <span className="text-[10px] font-black bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">−5 GIỜ</span>
+                                                )}
                                             </button>
                                         )}
-                                        <button 
-                                            onClick={() => setEditingReg({ ...editingReg, step: 'CONFIRM_CANCEL' })}
-                                            className="w-full py-3.5 bg-red-50 text-red-600 border border-red-200 font-bold rounded-2xl hover:bg-red-100 transition-colors flex justify-center items-center gap-2"
-                                        >
-                                            <Trash2 size={18} /> Hủy đăng ký này
-                                        </button>
                                     </div>
                                 </>
                             )}

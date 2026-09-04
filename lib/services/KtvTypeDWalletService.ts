@@ -2,6 +2,19 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { KtvTypeDCommissionService } from './KtvTypeDCommissionService';
 import { KtvTypeDBonusService } from './KtvTypeDBonusService';
 
+/**
+ * Dòng KHÔNG phải lệnh rút tiền thật:
+ *  · `intent_date` khác null — tín hiệu "báo trước lúc điểm danh"
+ *  · amount = 1 kèm ghi chú "Báo trước" — dòng cũ chưa gắn intent_date
+ *  · amount = 1 kèm ghi chú "Bảo trì"   — dòng kỹ thuật
+ */
+function laDongTinHieu(w: any): boolean {
+    if (w.intent_date) return true;
+    if (Math.abs(Number(w.amount)) !== 1) return false;
+    const note = String(w.note || '');
+    return note.includes('Báo trước') || note.includes('Bảo trì');
+}
+
 export class KtvTypeDWalletService {
     static async getBalance(supabase: SupabaseClient, staffId: string) {
         const GLOBAL_START_DATE_STR = '2026-05-04';
@@ -175,19 +188,22 @@ export class KtvTypeDWalletService {
             .gte('created_at', GLOBAL_START_DATE_ISO);
         const total_adjustment = (adjustments || []).reduce((sum: number, a: any) => sum + Number(a.amount), 0);
 
+        // ⚠️ Loại DÒNG TÍN HIỆU "báo trước lúc điểm danh" (amount = 1) khỏi số dư.
+        // Nó chỉ để báo Thu ngân chuẩn bị tiền mặt, không phải lệnh rút thật —
+        // trước đây mỗi dòng như vậy trừ oan 1đ, và có ngày KTV tích tới 3 lần.
         const { data: withdrawals } = await supabase
             .from('KTVWithdrawals')
-            .select('amount, status, note')
+            .select('amount, status, note, intent_date')
             .eq('staff_id', staffId)
             .eq('work_type_snapshot', 'TYPE_D')
             .gte('request_date', GLOBAL_START_DATE_ISO);
             
         const total_withdrawn = (withdrawals || [])
-            .filter((w: any) => w.status === 'APPROVED' && !(Math.abs(Number(w.amount)) === 1 && w.note?.includes('Bảo trì')))
+            .filter((w: any) => w.status === 'APPROVED' && !laDongTinHieu(w))
             .reduce((sum: number, w: any) => sum + Math.abs(Number(w.amount)), 0);
             
         const total_pending = (withdrawals || [])
-            .filter((w: any) => w.status === 'PENDING' && !(Math.abs(Number(w.amount)) === 1 && w.note?.includes('Bảo trì')))
+            .filter((w: any) => w.status === 'PENDING' && !laDongTinHieu(w))
             .reduce((sum: number, w: any) => sum + Math.abs(Number(w.amount)), 0);
 
         // ─── TIỀN TUA · TIP · THUẾ: đọc từ sổ cái ──────────────────────────
