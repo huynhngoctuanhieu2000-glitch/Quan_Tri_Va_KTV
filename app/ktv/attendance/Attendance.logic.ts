@@ -58,8 +58,8 @@ export const useKTVAttendance = () => {
     const { addToast } = useToast();
     const [checkStatus, setCheckStatus] = useState<CheckStatus>('IDLE');
     const [todayRegistration, setTodayRegistration] = useState<any>(null);
-    // Hôm nay đã báo yêu cầu rút tiền chưa (mỗi ngày 1 lần).
-    const [withdrawIntentToday, setWithdrawIntentToday] = useState(false);
+    // Ô rút tiền chỉ hiện ở lần điểm danh ĐẦU TIÊN trong ngày.
+    const [canRequestWithdraw, setCanRequestWithdraw] = useState(true);
     const [currentRecord, setCurrentRecord] = useState<AttendanceRecord | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [mounted, setMounted] = useState(false);
@@ -113,7 +113,7 @@ export const useKTVAttendance = () => {
                     if (statusRes.incompleteTasksCount !== undefined) setIncompleteTasksCount(statusRes.incompleteTasksCount);
                     if (statusRes.guestArrivalLock) setGuestArrivalLock(statusRes.guestArrivalLock);
                     if (statusRes.todayRegistration) setTodayRegistration(statusRes.todayRegistration);
-                    setWithdrawIntentToday(!!statusRes.withdrawIntentToday);
+                    setCanRequestWithdraw(statusRes.canRequestWithdraw !== false);
                 }
                 
                 if (settingsRes.success && settingsRes.data) {
@@ -426,7 +426,7 @@ export const useKTVAttendance = () => {
 
     return {
         todayRegistration,
-        withdrawIntentToday,
+        canRequestWithdraw,
         isAdjusting,
         setIsAdjusting,
         adjustmentType,
