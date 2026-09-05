@@ -30,7 +30,7 @@ export function KtvTypeDSettingsBlock() {
                 if (!parsed.ktv_type_d_rating_deduction) {
                     parsed.ktv_type_d_rating_deduction = { "0": 0, "1": 0.75, "2": 0.5, "3": 0.25, "4": 0 };
                 }
-                if (!parsed.ktv_type_d_discipline_rules) { parsed.ktv_type_d_discipline_rules = { "ABSENT_NO_NOTICE":10, "ABSENT_EARLY_NOTICE":5, "LATE_NO_UPDATE":5, "ORDER_REJECT_MULTIPLIER":3 }; }
+                if (!parsed.ktv_type_d_discipline_rules) { parsed.ktv_type_d_discipline_rules = { "ABSENT_NO_NOTICE":10, "ABSENT_EARLY_NOTICE":5, "LATE_NO_UPDATE":5, "ORDER_REJECT_MULTIPLIER":3, "MIN_HOURS_TO_REJECT":3 }; }
                 setConfigs(parsed);
             }
         } catch (error) {
@@ -192,6 +192,12 @@ export function KtvTypeDSettingsBlock() {
                     <NumberInput label="Báo vắng hoặc trễ (trước 06:59)" value={configs.ktv_type_d_discipline_rules?.ABSENT_EARLY_NOTICE ?? 5} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, ABSENT_EARLY_NOTICE: v})} suffix="Giờ" />
                     <NumberInput label="Đi trễ không cập nhật" value={configs.ktv_type_d_discipline_rules?.LATE_NO_UPDATE ?? 5} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, LATE_NO_UPDATE: v})} suffix="Giờ" />
                     <NumberInput label="Từ chối tua đã gán (hệ số x thời lượng)" value={configs.ktv_type_d_discipline_rules?.ORDER_REJECT_MULTIPLIER ?? 3} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, ORDER_REJECT_MULTIPLIER: v})} suffix="x giờ tua" />
+                    <NumberInput label="Hạn mức giờ tối thiểu mới được từ chối tua" value={configs.ktv_type_d_discipline_rules?.MIN_HOURS_TO_REJECT ?? 3} onChange={(v:any) => handleChange('ktv_type_d_discipline_rules', {...configs.ktv_type_d_discipline_rules, MIN_HOURS_TO_REJECT: v})} suffix="Giờ" />
+                    <p className="text-xs text-gray-400 italic">
+                        Quỹ giờ tích lũy trong tháng phải <b>nhiều hơn</b> hạn mức thì KTV mới được bấm từ chối
+                        (đặt 3: có đúng 3 giờ là chưa được, phải trên 3 giờ). Bấm tiếp dù đã có cảnh báo
+                        thì <b>khoá tài khoản</b>. Đặt 0 để bỏ cửa chặn.
+                    </p>
                 </div>
             </div>
         </div>

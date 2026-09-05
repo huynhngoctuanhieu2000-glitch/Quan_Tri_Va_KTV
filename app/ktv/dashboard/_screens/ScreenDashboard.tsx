@@ -785,21 +785,25 @@ export function ScreenDashboard({ logic }: { logic: any }) {
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden">
             <div className="bg-rose-600 p-6 text-white">
-              <h3 className="text-lg font-black uppercase tracking-tight">Không đủ giờ để từ chối</h3>
+              <h3 className="text-lg font-black uppercase tracking-tight">Quỹ giờ dưới hạn mức</h3>
             </div>
             <div className="p-5 space-y-4">
               <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2">
                 <div className="flex justify-between text-sm font-bold text-rose-900">
-                  <span>Tua {lockWarning.serviceMins} phút, phạt ×{lockWarning.multiplier}</span>
-                  <span>cần {lockWarning.requiredHours} giờ</span>
+                  <span>Hạn mức tối thiểu để được từ chối</span>
+                  <span>{lockWarning.minHours} giờ</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-rose-900">
-                  <span>Giờ tích lũy của bạn</span>
+                  <span>Quỹ giờ tích lũy của bạn</span>
                   <span>chỉ còn {lockWarning.availableHours} giờ</span>
+                </div>
+                <div className="flex justify-between text-xs font-bold text-rose-500 pt-1 border-t border-rose-200">
+                  <span>Nếu từ chối, tua {lockWarning.serviceMins} phút bị trừ</span>
+                  <span>{lockWarning.penaltyHours} giờ</span>
                 </div>
               </div>
               <p className="text-sm font-bold text-slate-700 leading-relaxed">
-                Không đủ giờ để trừ phạt. Nếu bạn <b>vẫn từ chối</b>, tài khoản sẽ bị
+                Quỹ giờ của bạn đã dưới hạn mức. Nếu bạn <b>vẫn từ chối</b>, tài khoản sẽ bị
                 <b className="text-rose-600"> KHOÁ</b> và phải nhờ quản lý mở lại.
               </p>
               <div className="grid grid-cols-2 gap-3">

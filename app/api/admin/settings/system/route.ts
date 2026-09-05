@@ -35,8 +35,6 @@ const DEFAULT_CONFIGS = {
     ktv_discipline_demotion_threshold: 80,
     ktv_continuous_work_gap_mins: 30,
     ktv_continuous_work_exempt_hours: 4,
-    // Loại D: từ chối tua bị trừ (thời lượng gói × hệ số) giờ tích lũy.
-    ktv_typed_reject_multiplier: 3,
     ktv_discipline_rules: [
         { code: 'ORDER_REJECT', name: 'Từ chối đơn', points: 10 },
         { code: 'LATE', name: 'Đi làm trễ', points: 5 },

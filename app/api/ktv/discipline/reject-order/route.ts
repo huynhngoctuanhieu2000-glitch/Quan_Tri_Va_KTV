@@ -93,34 +93,42 @@ export async function POST(request: Request) {
                 const { getBusinessToday } = await import('@/lib/business-date');
                 const workDate = await getBusinessToday(supabase);
 
-                // ─── Cửa chặn: ví giờ phải đủ để chịu mức phạt ───
+                // ─── Cửa chặn: quỹ giờ phải còn trên hạn mức tối thiểu ───
                 //
-                // Quy chế: muốn từ chối một gói 60 phút thì phải còn ít nhất 180
-                // phút tích lũy (hệ số 3). Không đủ giờ mà vẫn từ chối thì phạt
-                // không có gì để trừ, nên chế tài chuyển thành KHOÁ TÀI KHOẢN.
+                // Quy chế: muốn từ chối tua thì quỹ giờ tích lũy THÁNG phải LỚN HƠN
+                // `minHours` (mặc định 3 giờ) tại thời điểm bấm — bằng đúng hạn mức
+                // là chưa được. Đây là cửa vào, không phải mức sàn: trừ phạt xong
+                // tụt xuống dưới hạn mức vẫn được, nhưng lần từ chối sau bị chặn.
+                //
+                // Dưới hạn mức mà vẫn từ chối thì quỹ gần như không còn gì để trừ,
+                // nên chế tài chuyển thành KHOÁ TÀI KHOẢN.
                 //
                 // Lần gọi đầu chỉ CẢNH BÁO rồi dừng; KTV đọc xong, muốn tiếp thì
                 // gọi lại với confirmLock. Không tự khoá sau một cú chạm nhầm.
                 const multiplier = await KtvTypeDDisciplineService.getRejectMultiplier(supabase);
-                const requiredHours = Math.round((mins / 60) * multiplier * 100) / 100;
+                const minHours = await KtvTypeDDisciplineService.getMinHoursToReject(supabase);
+                const penaltyHours = Math.round((mins / 60) * multiplier * 100) / 100;
 
+                // Cùng nguồn với ô "Thời gian" trên dashboard KTV và với thứ tự nhận
+                // tua — KTV nhìn số nào thì bị chặn theo đúng số đó.
                 const { KtvTypeDTurnService } = await import('@/lib/services/KtvTypeDTurnService');
                 const now = new Date();
                 const netMap = await KtvTypeDTurnService.getMonthlyNetHours(
                     supabase, [staffId], now.getMonth() + 1, now.getFullYear());
                 const availableHours = Math.round((netMap[staffId] || 0) * 100) / 100;
 
-                const notEnough = availableHours < requiredHours;
+                const notEnough = minHours > 0 && availableHours <= minHours;
 
                 if (notEnough && !confirmLock) {
                     return NextResponse.json({
                         success: false,
                         needsLockConfirm: true,
-                        requiredHours,
+                        minHours,
                         availableHours,
+                        penaltyHours,
                         multiplier,
                         serviceMins: mins,
-                        error: `Bạn cần ${requiredHours} giờ tích lũy để từ chối tua ${mins} phút, hiện chỉ còn ${availableHours} giờ.`,
+                        error: `Quỹ giờ phải NHIỀU HƠN ${minHours} giờ mới được từ chối tua, hiện chỉ còn ${availableHours} giờ.`,
                     });
                 }
 
@@ -131,7 +139,7 @@ export async function POST(request: Request) {
 
                 if (notEnough) {
                     await supabase.from('Staff').update({ status: 'KHÓA_TÀI_KHOẢN' }).eq('id', staffId);
-                    const lyDo = `Từ chối tua ${mins} phút khi chỉ còn ${availableHours}/${requiredHours} giờ tích lũy`;
+                    const lyDo = `Từ chối tua khi quỹ giờ chỉ còn ${availableHours} giờ, không vượt hạn mức tối thiểu ${minHours} giờ`;
                     await KtvTypeDDisciplineService.markAccountLock(supabase, staffId, workDate, lyDo);
                     await supabase.from('SecurityAuditLogs').insert({
                         employee_id: staffId,
@@ -139,7 +147,7 @@ export async function POST(request: Request) {
                         event_type: 'AUTO_LOCK_REJECT_NO_HOURS',
                         ip_address: '127.0.0.1',
                         user_agent: 'API',
-                        details: { source: 'REJECT_ORDER', bookingItemId: itemId, requiredHours, availableHours, reason },
+                        details: { source: 'REJECT_ORDER', bookingItemId: itemId, minHours, availableHours, penaltyHours, reason },
                     });
                     await supabase.from('StaffNotifications').insert({
                         employeeId: staffId,

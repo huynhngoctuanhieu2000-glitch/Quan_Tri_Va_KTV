@@ -22,8 +22,27 @@ import { TYPE_D_DISCIPLINE_PENALTIES } from '../constants/staff.constants';
 
 export type DailyViolationType = 'ABSENT_NO_NOTICE' | 'ABSENT_EARLY_NOTICE' | 'LATE_NO_UPDATE';
 
-/** Khoá cấu hình hệ số phạt từ chối tua trong `SystemConfigs`. */
-export const REJECT_MULTIPLIER_KEY = 'ktv_typed_reject_multiplier';
+/**
+ * Mọi mức phạt Loại D nằm chung trong một ô JSON `ktv_type_d_discipline_rules`
+ * của `SystemConfigs` — đúng ô mà trang Cài đặt → Loại D đang ghi.
+ */
+export const DISCIPLINE_RULES_KEY = 'ktv_type_d_discipline_rules';
+
+/** Hạn mức mặc định: quỹ phải còn 3 giờ tích lũy mới được từ chối tua. */
+export const DEFAULT_MIN_HOURS_TO_REJECT = 3;
+
+/** Đọc ô JSON mức phạt; giá trị có thể là object hoặc chuỗi tuỳ đời dữ liệu. */
+async function readRules(supabase: SupabaseClient): Promise<Record<string, any>> {
+    try {
+        const { data } = await supabase
+            .from('SystemConfigs').select('value').eq('key', DISCIPLINE_RULES_KEY).maybeSingle();
+        const v = (data as any)?.value;
+        if (typeof v === 'string') return JSON.parse(v || '{}');
+        return v || {};
+    } catch {
+        return {};
+    }
+}
 
 export class KtvTypeDDisciplineService {
 
@@ -34,13 +53,24 @@ export class KtvTypeDDisciplineService {
      * về hằng số quy chế, không để hệ số 0 biến hình phạt thành vô hiệu.
      */
     static async getRejectMultiplier(supabase: SupabaseClient): Promise<number> {
-        try {
-            const { data } = await supabase
-                .from('SystemConfigs').select('value').eq('key', REJECT_MULTIPLIER_KEY).maybeSingle();
-            const n = Number((data as any)?.value);
-            if (Number.isFinite(n) && n > 0) return n;
-        } catch { /* dùng mặc định bên dưới */ }
+        const n = Number((await readRules(supabase)).ORDER_REJECT_MULTIPLIER);
+        if (Number.isFinite(n) && n > 0) return n;
         return TYPE_D_DISCIPLINE_PENALTIES.ORDER_REJECT_MULTIPLIER;
+    }
+
+    /**
+     * Hạn mức giờ tối thiểu phải có trong quỹ tích lũy THÁNG mới được từ chối tua.
+     *
+     * Đây là CỬA VÀO, không phải mức sàn: chỉ xét ví tại thời điểm bấm. Còn đủ hạn
+     * mức thì được từ chối, và vẫn bị trừ phạt bình thường — trừ xong tụt xuống
+     * dưới hạn mức cũng không sao, nhưng lần từ chối sau sẽ bị chặn.
+     *
+     * Đặt 0 nghĩa là bỏ cửa chặn. Cấu hình hỏng thì lùi về mặc định.
+     */
+    static async getMinHoursToReject(supabase: SupabaseClient): Promise<number> {
+        const n = Number((await readRules(supabase)).MIN_HOURS_TO_REJECT);
+        if (Number.isFinite(n) && n >= 0) return n;
+        return DEFAULT_MIN_HOURS_TO_REJECT;
     }
 
     /**
