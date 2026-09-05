@@ -78,10 +78,14 @@ export async function POST(request: Request) {
             }
         }
 
+        // Type phải có rule trong SystemConfigs.notification_rules, nếu không
+        // NotificationProvider sẽ bỏ qua mọi bộ lọc và phát cho TẤT CẢ vai trò —
+        // quầy nhận được nhưng mọi KTV khác cũng nhận, thành nhiễu.
         await supabase.from('StaffNotifications').insert({
-            employeeId: null,           // gửi chung cho quầy
-            type: 'INFO',
+            employeeId: null,           // không nhắm riêng ai — lọc theo vai trò
+            type: 'KTV_ACCEPT_ORDER',
             message: `✅ KTV ${staffName} đã NHẬN đơn ${bill} và đang tới phòng.`,
+            bookingId: bookingId,
         });
 
         console.log(`[Accept Order] ${staffId} nhận đơn ${bill} (item ${itemId})`);
