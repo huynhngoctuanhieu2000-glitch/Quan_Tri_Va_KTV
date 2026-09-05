@@ -884,8 +884,15 @@ function ScreenDashboard({ logic }: { logic: any }) {
               </div>
             </div>
 
-            {/* Nhận là hành động chính nên chiếm 2 phần, từ chối 1 phần. */}
+            {/* Nhận là hành động chính nên nằm bên phải, chiếm 2 phần. */}
             <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => setShowRejectModal(true)}
+                disabled={isAccepting}
+                className="py-4 bg-rose-50 border border-rose-100 text-rose-600 font-black rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60"
+              >
+                TỪ CHỐI
+              </button>
               <button
                 onClick={handleAcceptOrder}
                 disabled={isAccepting}
@@ -893,13 +900,6 @@ function ScreenDashboard({ logic }: { logic: any }) {
               >
                 <Check size={16} strokeWidth={3} />
                 {isAccepting ? 'ĐANG BÁO…' : 'NHẬN ĐƠN'}
-              </button>
-              <button
-                onClick={() => setShowRejectModal(true)}
-                disabled={isAccepting}
-                className="py-4 bg-rose-50 border border-rose-100 text-rose-600 font-black rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60"
-              >
-                TỪ CHỐI
               </button>
             </div>
             <p className="text-[11px] text-slate-400 text-center font-medium">
