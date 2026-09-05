@@ -20,6 +20,48 @@ const STATUS_CONFIG = [
 
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 
+/**
+ * Dấu tích "KTV đã bấm nhận đơn" — RIÊNG cho từng KTV.
+ *
+ * Mốc nằm ở `options.acceptedByStaff[MÃ_KTV]`. Một dịch vụ gán 2 KTV thì mỗi
+ * người có mốc riêng: người này nhận rồi không làm người kia thành đã nhận.
+ * Đơn cũ (trước khi tách theo người) chỉ có `acceptedBy` + `acceptedAt`.
+ *
+ * Chỉ nhắc "chờ nhận" khi đơn đã gửi mà chưa bắt đầu — lúc khác là nhiễu.
+ */
+function AcceptTick({ options, ktvId, status }: { options: any; ktvId?: string; status?: string }) {
+    if (!ktvId) return null;
+    const opts = typeof options === 'string' ? (() => { try { return JSON.parse(options || '{}'); } catch { return {}; } })() : (options || {});
+    const key = String(ktvId).toUpperCase();
+    const at = opts.acceptedByStaff?.[key]
+        || (opts.acceptedAt && String(opts.acceptedBy || '').toUpperCase() === key ? opts.acceptedAt : null);
+
+    if (at) {
+        const t = new Date(at);
+        const hhmm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+        return (
+            <span
+                className="text-[8px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded-md flex items-center gap-0.5 shrink-0"
+                title={`Đã bấm nhận đơn lúc ${hhmm}`}
+            >
+                <Check size={8} strokeWidth={4} />{hhmm}
+            </span>
+        );
+    }
+
+    if (['PREPARING', 'NEW', 'WAITING'].includes(String(status || '').toUpperCase())) {
+        return (
+            <span
+                className="text-[8px] font-black text-amber-600 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded-md shrink-0"
+                title="KTV chưa bấm nhận đơn"
+            >
+                CHỜ NHẬN
+            </span>
+        );
+    }
+    return null;
+}
+
 const formatCompactPrice = (n: number) => {
     if (n >= 1000000) {
         const tr = Math.floor(n / 1000000);
@@ -839,6 +881,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                         return (
                                                                             <span key={idx} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1.5 ${staffPointsMap[st.ktvId] !== undefined && staffPointsMap[st.ktvId] <= 85 ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse' : 'bg-gray-100 text-gray-500'}`} title={staffPointsMap[st.ktvId] !== undefined && staffPointsMap[st.ktvId] <= 85 ? `Điểm chuyên cần: ${staffPointsMap[st.ktvId]}đ (Nguy hiểm)` : undefined}>
                                                                                 <span className="flex items-center gap-0.5">👤 {(st.ktvId?.startsWith('EXT') || st.ktvId?.startsWith('C_')) ? (st.ktvName || st.ktvId) : (st.ktvId || 'Chưa gán')} <KtvTypeBadge workType={staffWorkTypeMap?.[st.ktvId]} /></span>
+                                                                                <AcceptTick options={s.options} ktvId={st.ktvId} status={s.status} />
                                                                                 {startPhotoUrl && (
                                                                                     <button
                                                                                         onClick={(e) => {
@@ -874,6 +917,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                                 <div key={stIdx} className="flex items-center justify-between bg-indigo-50/70 rounded-lg px-2.5 py-1 border border-indigo-100/50">
                                                                                     <div className="flex items-center gap-1.5">
                                                                                         <span className={`text-[9px] font-bold flex items-center gap-0.5 ${staffPointsMap[st.ktvId] !== undefined && staffPointsMap[st.ktvId] <= 85 ? 'text-red-600 animate-pulse' : 'text-gray-500'}`} title={staffPointsMap[st.ktvId] !== undefined && staffPointsMap[st.ktvId] <= 85 ? `Điểm chuyên cần: ${staffPointsMap[st.ktvId]}đ (Nguy hiểm)` : undefined}>{(st.ktvId?.startsWith('EXT') || st.ktvId?.startsWith('C_')) ? (st.ktvName || st.ktvId) : st.ktvId} <KtvTypeBadge workType={staffWorkTypeMap?.[st.ktvId]} /></span>
+                                                                                        <AcceptTick options={s.options} ktvId={st.ktvId} status={s.status} />
                                                                                         {(() => {
                                                                                             const photoSegment = st.segments?.find((seg: any) => seg.startPhotoUrl);
                                                                                             if (!photoSegment) return null;

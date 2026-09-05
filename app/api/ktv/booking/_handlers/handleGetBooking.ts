@@ -526,8 +526,14 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
             }
             
             if (!activeItemId && assignedItemIds.length > 0) {
-                activeItemId = assignedItemIds[0];
-                statusSource = 'turnqueue_array';
+                // Chỉ nhận item THUỘC VỀ KTV này. Hàng đợi tua có lúc ôm cả các item
+                // của KTV khác trong cùng đơn; lấy bừa phần tử đầu là trả nhầm item
+                // của đồng nghiệp, kéo theo cả trạng thái nhận đơn của họ.
+                const mine = assignedItemIds.find((id: string) => ktvItems.some((i: any) => i.id === id));
+                if (mine) {
+                    activeItemId = mine;
+                    statusSource = 'turnqueue_array';
+                }
             }
             
             if (!activeItemId) {
@@ -792,11 +798,22 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 assignedItemIds: ktvItems.map((i: any) => i.id),
                 // Mốc KTV bấm "Xác nhận nhận đơn". Rỗng nghĩa là đơn vừa được điều phối,
                 // màn KTV phải hỏi nhận hay từ chối trước khi cho vào chi tiết đơn.
+                //
+                // Chỉ tính mốc CỦA CHÍNH KTV đang hỏi. Một item gán 2 người thì người
+                // kia đã nhận không có nghĩa là mình đã nhận.
                 acceptedAt: (() => {
                     const it = itemsWithService.find((i: any) => i.id === activeItemId);
-                    if (!it) return null;
+                    if (!it || !technicianCode) return null;
                     const o = typeof it.options === 'string' ? JSON.parse(it.options || '{}') : (it.options || {});
-                    return o.acceptedAt || null;
+                    const mine = o.acceptedByStaff?.[technicianCode.toUpperCase()];
+                    if (mine) return mine;
+                    // Dữ liệu cũ chỉ có một cặp acceptedAt/acceptedBy — chấp nhận khi
+                    // đúng là mình đã bấm, hoặc khi không rõ ai bấm (đơn trước bản vá).
+                    if (o.acceptedAt && (!o.acceptedBy
+                        || String(o.acceptedBy).toUpperCase() === technicianCode.toUpperCase())) {
+                        return o.acceptedAt;
+                    }
+                    return null;
                 })(),
                 activeSegmentIndex: activeSegmentIndex,
                 statusSource: statusSource,

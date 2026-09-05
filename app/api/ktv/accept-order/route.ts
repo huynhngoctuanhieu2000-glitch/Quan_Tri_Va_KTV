@@ -62,17 +62,34 @@ export async function POST(request: Request) {
 
         // Ghi mốc đã nhận vào options — màn KTV dựa vào đây để biết đơn đã qua bước
         // xác nhận hay chưa. Không có mốc này thì reload trang là mất trạng thái.
+        //
+        // Mốc lưu THEO TỪNG KTV (`acceptedByStaff`), không phải một ô dùng chung.
+        // Một BookingItem có thể gán 2 KTV (dịch vụ 2 người, hoặc 2 khách tách đơn
+        // con); trước đây chỉ có một cặp acceptedAt/acceptedBy nên người bấm trước
+        // vô tình xác nhận thay cả người sau — người thứ hai vào là đã "đã nhận".
         const { data: cur } = await supabase
             .from('BookingItems').select('options').eq('id', itemId).maybeSingle();
         const curOpts = typeof (cur as any)?.options === 'string'
             ? JSON.parse((cur as any).options || '{}')
             : ((cur as any)?.options || {});
 
-        if (!curOpts.acceptedAt) {
+        const key = String(staffId).toUpperCase();
+        const acceptedByStaff = { ...(curOpts.acceptedByStaff || {}) };
+
+        if (!acceptedByStaff[key]) {
+            const now = new Date().toISOString();
+            acceptedByStaff[key] = now;
+
+            const nextOpts: Record<string, any> = { ...curOpts, acceptedByStaff };
+            // Giữ acceptedAt/acceptedBy của người bấm ĐẦU TIÊN cho dữ liệu cũ và cho
+            // những chỗ chỉ cần biết "đơn đã có người nhận chưa". Không ghi đè.
+            if (!nextOpts.acceptedAt) {
+                nextOpts.acceptedAt = now;
+                nextOpts.acceptedBy = staffId;
+            }
+
             const { error: upErr } = await supabase
-                .from('BookingItems')
-                .update({ options: { ...curOpts, acceptedAt: new Date().toISOString(), acceptedBy: staffId } })
-                .eq('id', itemId);
+                .from('BookingItems').update({ options: nextOpts }).eq('id', itemId);
             if (upErr) {
                 console.error('[Accept Order] Không ghi được mốc nhận đơn:', upErr);
                 return NextResponse.json(
