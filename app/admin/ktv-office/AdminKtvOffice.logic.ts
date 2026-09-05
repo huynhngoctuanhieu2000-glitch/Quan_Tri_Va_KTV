@@ -123,6 +123,14 @@ export const useAdminKtvOfficeLogic = () => {
   const [revokeState, setRevokeState] = useState<{ logId: string; reason: string } | null>(null);
   const [logBusy, setLogBusy] = useState(false);
 
+  // Hộp thoại mở khoá: lý do khoá thật + mức phí đang cấu hình, nạp khi mở sheet.
+  const [unlockInfo, setUnlockInfo] = useState<{
+    lockReason: string | null; lockDate: string | null;
+    feeEnabled: boolean; feeMin: number;
+  } | null>(null);
+  const [unlockReason, setUnlockReason] = useState('');
+  const [unlockFee, setUnlockFee] = useState<number>(0);
+
   const [sheetState, setSheetState] = useState<{
     isOpen: boolean;
     type: SheetType;
@@ -262,6 +270,52 @@ export const useAdminKtvOfficeLogic = () => {
     }
     if (type === 'settings') {
       fetchSettings();
+    }
+    if (type === 'unlock') {
+      setUnlockInfo(null);
+      setUnlockReason('');
+      setUnlockFee(0);
+      fetchUnlockInfo(code);
+    }
+  };
+
+  /** Lý do KTV bị khoá + mức phí kích hoạt lại đang áp dụng. */
+  const fetchUnlockInfo = async (code: string) => {
+    try {
+      const res = await apiClient.get<any>(`/api/admin/staff/unlock?staffId=${encodeURIComponent(code)}`);
+      if (res?.data) {
+        setUnlockInfo(res.data);
+        // Mức trong cài đặt là SÀN — điền sẵn, quản lý muốn thu cao hơn thì sửa lên.
+        setUnlockFee(res.data.feeEnabled ? res.data.feeMin : 0);
+      }
+    } catch (error: any) {
+      addToast(error?.message || 'Không lấy được thông tin khoá tài khoản.', 'error');
+    }
+  };
+
+  const canUnlock = unlockReason.trim().length > 0
+    && (!unlockInfo?.feeEnabled || unlockFee >= (unlockInfo?.feeMin || 0));
+
+  const submitUnlock = async () => {
+    if (!canUnlock || submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await apiClient.post<any>('/api/admin/staff/unlock', {
+        staffId: sheetState.code,
+        reason: unlockReason.trim(),
+        reactivationFee: unlockInfo?.feeEnabled ? unlockFee : undefined,
+      });
+      addToast(
+        res?.feeCharged > 0
+          ? `Đã mở khoá ${sheetState.person} và ghi phí kích hoạt ${res.feeCharged.toLocaleString('vi-VN')}đ.`
+          : `Đã mở khoá tài khoản của ${sheetState.person}.`,
+        'success');
+      closeSheet();
+      await fetchSummary();
+    } catch (error: any) {
+      addToast(error?.message || 'Không mở khoá được tài khoản.', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -548,6 +602,7 @@ export const useAdminKtvOfficeLogic = () => {
     sheetState, openSheet, closeSheet, setSheetState,
     criteriaGroups, allCriteria, toggleCriteria, addPhotos, removePhoto,
     totalPoints, needPhoto, canSubmit, submitting, submitDeduct,
+    unlockInfo, unlockReason, setUnlockReason, unlockFee, setUnlockFee, canUnlock, submitUnlock,
     existingHits, existingLoading, changeWorkDate,
     editState, startEditLog, cancelEditLog, patchEdit, addEditPhotos, removeEditPhoto, removeEditNewPhoto, saveEditLog,
     revokeState, startRevokeLog, cancelRevokeLog, setRevokeReason, confirmRevokeLog,

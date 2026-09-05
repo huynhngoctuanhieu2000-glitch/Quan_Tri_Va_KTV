@@ -851,14 +851,47 @@ const AdminKtvOfficePage = () => {
                   <>
                     <div className="bg-[var(--rust-2)] text-[var(--rust)] p-4 rounded-2xl mb-5 text-sm">
                       <strong className="block mb-1">Lý do bị khóa</strong>
-                      Không đăng ký lịch và không điểm danh ngày 04/09/2026<br/>
-                      <span className="opacity-75 text-xs">Hệ thống tự khóa lúc 23:59</span>
+                      {logic.unlockInfo
+                        ? (logic.unlockInfo.lockReason || 'Không tìm thấy ghi chú lý do khóa.')
+                        : 'Đang tải…'}
+                      {logic.unlockInfo?.lockDate && (
+                        <><br/><span className="opacity-75 text-xs">
+                          Khóa ngày {new Date(logic.unlockInfo.lockDate).toLocaleDateString('vi-VN')}
+                        </span></>
+                      )}
                     </div>
+
+                    {/* Phí kích hoạt lại: mức trong cài đặt là SÀN, thu cao hơn được,
+                        thấp hơn thì server chặn. Cần gạt tắt thì không hiện ô này. */}
+                    {logic.unlockInfo?.feeEnabled && (
+                      <div className="mb-5">
+                        <label className="block text-sm font-bold mb-2">Phí kích hoạt lại</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={logic.unlockInfo.feeMin}
+                            step={50000}
+                            value={logic.unlockFee}
+                            onChange={e => logic.setUnlockFee(Number(e.target.value))}
+                            className="w-full p-4 pr-14 rounded-2xl border border-[var(--line)] font-bold focus:outline-none focus:ring-2 focus:ring-[var(--green)]/20"
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)] font-bold">đ</span>
+                        </div>
+                        <p className={`text-xs mt-1.5 ${logic.unlockFee < logic.unlockInfo.feeMin ? 'text-[var(--rust)] font-bold' : 'text-[var(--muted)]'}`}>
+                          {logic.unlockFee < logic.unlockInfo.feeMin
+                            ? `Không được thấp hơn mức tối thiểu ${logic.unlockInfo.feeMin.toLocaleString('vi-VN')}đ`
+                            : `Mức tối thiểu ${logic.unlockInfo.feeMin.toLocaleString('vi-VN')}đ — có thể thu cao hơn.`}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="mt-5">
                       <label className="block text-sm font-bold mb-2">Lý do mở khóa <span className="text-[var(--rust)]">*</span></label>
-                      <textarea 
+                      <textarea
                         className="w-full min-h-[120px] p-4 rounded-2xl border border-[var(--line)] focus:outline-none focus:ring-2 focus:ring-[var(--green)]/20"
                         placeholder="Ví dụ: KTV đã bổ sung lịch làm việc và được quản lý xác nhận."
+                        value={logic.unlockReason}
+                        onChange={e => logic.setUnlockReason(e.target.value)}
                       ></textarea>
                     </div>
                   </>
@@ -1068,7 +1101,18 @@ const AdminKtvOfficePage = () => {
                 {logic.sheetState.type === 'unlock' && (
                   <>
                     <button className="flex-none w-24 h-12 rounded-xl font-bold btn-ghost" onClick={logic.closeSheet}>Hủy</button>
-                    <button className="flex-1 h-12 rounded-xl font-bold btn-primary">Xác nhận mở khóa</button>
+                    <button
+                      className="flex-1 h-12 rounded-xl font-bold btn-primary disabled:opacity-50"
+                      disabled={!logic.canUnlock || logic.submitting}
+                      onClick={logic.submitUnlock}
+                    >
+                      {logic.submitting ? 'Đang mở khóa…'
+                        : !logic.unlockReason.trim() ? 'Nhập lý do mở khóa'
+                        : (logic.unlockInfo?.feeEnabled && logic.unlockFee < logic.unlockInfo.feeMin) ? 'Phí thấp hơn mức tối thiểu'
+                        : logic.unlockInfo?.feeEnabled
+                          ? `Mở khóa & thu ${logic.unlockFee.toLocaleString('vi-VN')}đ`
+                          : 'Xác nhận mở khóa'}
+                    </button>
                   </>
                 )}
                 {(logic.sheetState.type === 'history' || logic.sheetState.type === 'settings') && (

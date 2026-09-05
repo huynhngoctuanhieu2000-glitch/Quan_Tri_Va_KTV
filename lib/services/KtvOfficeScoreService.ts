@@ -272,7 +272,9 @@ export class KtvOfficeScoreService {
                 bookingId: r.bill_code || r.booking_id || null,
                 note: r.service_name,
             })),
-            ...penalties.map((p, i) => ({
+            // Khoản chỉ trừ TIỀN (phí kích hoạt lại) không thuộc sổ giờ — để lại
+            // sẽ thành một dòng '0 giờ' vô nghĩa giữa các tua.
+            ...penalties.filter(p => Number(p.hours_penalty) > 0 || !Number(p.money_penalty)).map((p, i) => ({
                 id: `pen-${p.work_date}-${p.penalty_type}-${i}`,
                 date: p.work_date,
                 earned: 0,
