@@ -120,6 +120,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nhân viên này không bị khóa tài khoản' }, { status: 400 });
     }
 
+    // 2a. Ai bấm mở khoá. bUser.techCode có thể là UUID (tài khoản quản lý không
+    // gắn mã nhân viên) — tra tên thật để nhật ký đọc được, giống cách route
+    // chấm điểm Office đang làm. Không có tên thì lùi về vai trò rồi tới mã.
+    const { data: actor } = await supabase
+      .from('Staff').select('full_name').eq('id', bUser.techCode).maybeSingle();
+    const actorName = (actor as any)?.full_name
+      || (bUser.role ? `Quản lý (${bUser.role})` : null)
+      || bUser.techCode
+      || 'Không rõ';
+
     // 2b. Phí kích hoạt lại — mức trong cài đặt là SÀN, quản lý được thu cao hơn
     // chứ không được thấp hơn. Chặn ở server chứ không chỉ ở ô nhập, vì đây là
     // tiền và request có thể gửi thẳng.
@@ -162,7 +172,7 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       const total = Number((existing as any)?.money_penalty || 0) + feeCharged;
-      const note = [(existing as any)?.note, `${feeCharged.toLocaleString('vi-VN')}đ — ${reason}`]
+      const note = [(existing as any)?.note, `${feeCharged.toLocaleString('vi-VN')}đ — ${actorName} mở khoá: ${reason}`]
         .filter(Boolean).join('; ');
 
       const { error: feeErr } = await supabase.from('KTVDPenaltyLedger').upsert({
@@ -186,7 +196,7 @@ export async function POST(request: Request) {
       ip_address: '127.0.0.1',
       user_agent: 'API',
       details: { 
-        unlocked_by: bUser.techCode,
+        unlocked_by: actorName,
         unlocked_by_id: bUser.businessUserId,
         reason: reason,
         reactivation_fee: feeCharged
