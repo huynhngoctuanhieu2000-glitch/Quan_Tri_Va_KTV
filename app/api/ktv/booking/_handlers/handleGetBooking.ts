@@ -790,6 +790,14 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                 BookingItems: itemsWithService,
                 assignedItemId: activeItemId,
                 assignedItemIds: ktvItems.map((i: any) => i.id),
+                // Mốc KTV bấm "Xác nhận nhận đơn". Rỗng nghĩa là đơn vừa được điều phối,
+                // màn KTV phải hỏi nhận hay từ chối trước khi cho vào chi tiết đơn.
+                acceptedAt: (() => {
+                    const it = itemsWithService.find((i: any) => i.id === activeItemId);
+                    if (!it) return null;
+                    const o = typeof it.options === 'string' ? JSON.parse(it.options || '{}') : (it.options || {});
+                    return o.acceptedAt || null;
+                })(),
                 activeSegmentIndex: activeSegmentIndex,
                 statusSource: statusSource,
                 last_served_at: turnInfo?.last_served_at,

@@ -333,7 +333,11 @@ function ScreenDashboard({ logic }: { logic: any }) {
   // Báo quầy biết KTV đã nhận đơn. KHÔNG đổi trạng thái đơn, không bắt đầu
   // tính giờ — chỉ là tín hiệu cho lễ tân. Bấm xong vẫn đi tiếp như cũ.
   const handleAcceptOrder = async () => {
-    const id = logic.booking?.nextBookingItemId || logic.booking?.nextBookingId;
+    // Đơn kế tiếp (sau khi xong tua) hoặc chính đơn vừa được điều phối.
+    const isNext = !!logic.booking?.nextBookingId;
+    const id = isNext
+      ? (logic.booking?.nextBookingItemId || logic.booking?.nextBookingId)
+      : (logic.booking?.assignedItemId || logic.booking?.id);
     if (!id) return;
     try {
       setIsAccepting(true);
@@ -341,18 +345,26 @@ function ScreenDashboard({ logic }: { logic: any }) {
         staffId: logic.ktvId,
         bookingItemId: id,
       });
-      if (res.success) addToast('✅ Đã báo quầy. Bạn tới phòng nhé!', 'success');
-      else addToast('Lỗi: ' + res.error, 'error');
+      if (res.success) {
+        addToast('✅ Đã báo quầy. Bạn tới phòng nhé!', 'success');
+        if (isNext) logic.goToDashboard(logic.booking.nextBookingId);
+        else await logic.forceRefresh?.();   // nạp lại để lấy acceptedAt, mở màn chi tiết
+      } else {
+        addToast('Lỗi: ' + res.error, 'error');
+      }
     } catch (e: any) {
       addToast('Lỗi kết nối: ' + e.message, 'error');
     } finally {
       setIsAccepting(false);
     }
-    logic.goToDashboard(logic.booking.nextBookingId);
   };
 
   const handleRejectOrder = async (reason: string) => {
-    const rejectId = logic.booking?.nextBookingItemId || logic.booking?.nextBookingId;
+    // Đơn kế tiếp nếu có, ngược lại là chính đơn đang chờ xác nhận.
+    const rejectId = logic.booking?.nextBookingItemId
+      || logic.booking?.nextBookingId
+      || logic.booking?.assignedItemId
+      || logic.booking?.id;
     if (!rejectId) return;
     try {
       logic.setIsLoading(true);
@@ -482,6 +494,19 @@ function ScreenDashboard({ logic }: { logic: any }) {
   
   // Xác định vị trí chặng hiện tại
   const currentSeg = ktvSegments.length > 0 ? ktvSegments[activeSegmentIndex || 0] : null;
+
+  /**
+   * Đơn vừa được điều phối nhưng KTV chưa bấm xác nhận → chặn lại, hỏi nhận hay từ chối.
+   *
+   * Chỉ chặn khi tua CHƯA chạy. KHÔNG dùng `dispatchStartTime` để nhận biết — đó là giờ
+   * DỰ KIẾN đặt sẵn lúc điều phối, có ngay từ đầu nên sẽ chặn nhầm mọi đơn.
+   * Căn cứ đúng là segment đã có actualStartTime, hoặc item đã rời trạng thái chờ.
+   */
+  const STARTED_STATUSES = ['IN_PROGRESS', 'PAUSED', 'CLEANING', 'COMPLETED', 'FEEDBACK', 'DONE'];
+  const alreadyStarted =
+    ktvSegments.some((s: any) => s.actualStartTime) ||
+    STARTED_STATUSES.includes(String(item?.status || '').toUpperCase());
+  const needsAcceptance = !!booking?.id && !booking?.acceptedAt && !alreadyStarted;
 
   // Lấy danh sách đồng đội cùng làm CÙNG 1 DỊCH VỤ (chỉ từ item được gán cho KTV này)
   const assignedItem = booking?.assignedItemId
@@ -821,6 +846,65 @@ function ScreenDashboard({ logic }: { logic: any }) {
           </AnimatePresence>
 
         </div>
+      ) : needsAcceptance ? (
+        /* ─── CHẶN: đơn vừa điều phối, phải xác nhận nhận hay từ chối đã ─── */
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="p-6 rounded-[32px] bg-gradient-to-br from-emerald-500 to-teal-600 shadow-xl shadow-emerald-200/50 relative overflow-hidden"
+        >
+          <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+          <div className="relative z-10 flex flex-col gap-4 text-white">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/30">
+                <Sparkles size={24} className="animate-pulse" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-black text-lg uppercase tracking-tight mb-1">Bạn có đơn mới</p>
+                {booking.billCode && (
+                  <p className="text-base font-black tracking-tight">Đơn {booking.billCode}</p>
+                )}
+                <p className="text-sm font-medium text-emerald-50">
+                  {item?.service_name || 'Dịch vụ'}
+                  {item?.duration ? ` • ${item.duration} phút` : ''}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white/15 border border-white/25 rounded-2xl px-4 py-3 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-emerald-50/80 font-bold">Phòng</p>
+                <p className="font-black">{currentSeg?.roomId || booking.assignedRoomId || booking.roomName || '—'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-emerald-50/80 font-bold">Giường</p>
+                <p className="font-black">
+                  {(currentSeg?.bedId || booking.assignedBedId || booking.bedId)
+                    ? String(currentSeg?.bedId || booking.assignedBedId || booking.bedId).split('-').pop()
+                    : '—'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleAcceptOrder}
+              disabled={isAccepting}
+              className="w-full py-4 bg-white text-emerald-700 font-black rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              <Check size={18} strokeWidth={3} />
+              {isAccepting ? 'ĐANG BÁO QUẦY…' : 'XÁC NHẬN NHẬN ĐƠN'}
+            </button>
+            <button
+              onClick={() => setShowRejectModal(true)}
+              disabled={isAccepting}
+              className="w-full py-3 bg-white/15 border border-white/30 text-white font-bold rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60"
+            >
+              TỪ CHỐI ĐƠN
+            </button>
+            <p className="text-[11px] text-emerald-50/80 text-center font-medium">
+              Xác nhận xong mới xem được chi tiết đơn và bắt đầu tua.
+            </p>
+          </div>
+        </motion.div>
       ) : (
         <div className="space-y-6">
           {/* Active Booking Card - ONLY SHOW ASSIGNED ITEM */}

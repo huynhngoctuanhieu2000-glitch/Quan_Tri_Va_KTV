@@ -58,6 +58,26 @@ export async function POST(request: Request) {
         const staffName = staff?.full_name || staffId;
         const bill = (booking as any)?.billCode || itemId;
 
+        // Ghi mốc đã nhận vào options — màn KTV dựa vào đây để biết đơn đã qua bước
+        // xác nhận hay chưa. Không có mốc này thì reload trang là mất trạng thái.
+        const { data: cur } = await supabase
+            .from('BookingItems').select('options').eq('id', itemId).maybeSingle();
+        const curOpts = typeof (cur as any)?.options === 'string'
+            ? JSON.parse((cur as any).options || '{}')
+            : ((cur as any)?.options || {});
+
+        if (!curOpts.acceptedAt) {
+            const { error: upErr } = await supabase
+                .from('BookingItems')
+                .update({ options: { ...curOpts, acceptedAt: new Date().toISOString(), acceptedBy: staffId } })
+                .eq('id', itemId);
+            if (upErr) {
+                console.error('[Accept Order] Không ghi được mốc nhận đơn:', upErr);
+                return NextResponse.json(
+                    { success: false, error: 'Không lưu được xác nhận. Vui lòng thử lại.' }, { status: 500 });
+            }
+        }
+
         await supabase.from('StaffNotifications').insert({
             employeeId: null,           // gửi chung cho quầy
             type: 'INFO',
