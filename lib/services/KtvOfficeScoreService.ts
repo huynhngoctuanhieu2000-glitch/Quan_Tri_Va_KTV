@@ -1,10 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { getPenalties, getRows } from './KtvDLedgerReader';
 
 /**
  * Điểm Office cho KTV Loại D.
  *
  * Hai thang đo song song, KHÔNG liên quan nhau:
- *  - Giờ tích lũy (KTVServiceHoursLedger) → quyết định thứ tự nhận tua.
+ *  - Giờ tích lũy (KTVDTurnLedger + KTVDPenaltyLedger) → quyết định thứ tự nhận tua.
  *  - Điểm Office (bảng này)               → quyết định mức miễn quỹ nội bộ 250k/tháng.
  *
  * Quy chế: public/regulations/type-d.html — mục "Bảng tự chấm điểm cuối ca".
@@ -243,32 +244,56 @@ export class KtvOfficeScoreService {
 
     /**
      * Sổ cái giờ tích lũy của 1 KTV trong tháng, kèm số dư lũy kế theo thứ tự thời gian.
+     *
+     * Ghép hai nguồn của thứ tự tua: KTVDTurnLedger (mỗi dòng là một tua đã làm)
+     * và KTVDPenaltyLedger (giờ bị trừ). Trả về mới-nhất-trước để admin mở ra là
+     * thấy ngay hôm nay, nhưng số dư vẫn cộng theo chiều thời gian.
      */
     static async hoursLedger(supabase: SupabaseClient, staffId: string, month: string) {
         const { from, to } = monthRange(month);
-        const { data, error } = await supabase
-            .from('KTVServiceHoursLedger')
-            .select('id, date, hours_earned, hours_penalty, penalty_type, booking_id, note, created_at')
-            .eq('staff_id', staffId)
-            .gte('date', from)
-            .lte('date', to)
-            .order('date', { ascending: true })
-            .order('created_at', { ascending: true });
-        if (error) throw error;
+        const [turns, penalties] = await Promise.all([
+            getRows(supabase, { staffIds: [staffId], from, to }),
+            getPenalties(supabase, { staffIds: [staffId], from, to }),
+        ]);
+
+        type Entry = {
+            id: string; date: string; earned: number; penalty: number;
+            penaltyType: string | null; bookingId: string | null; note: string | null;
+        };
+
+        const entries: Entry[] = [
+            ...turns.map((r, i) => ({
+                id: r.id || `turn-${i}`,
+                date: r.work_date,
+                earned: r.actual_minutes / 60,
+                penalty: 0,
+                penaltyType: null,
+                // Mã bill đọc được thì ưu tiên hơn UUID — admin tra đơn bằng mã, không bằng id.
+                bookingId: r.bill_code || r.booking_id || null,
+                note: r.service_name,
+            })),
+            ...penalties.map((p, i) => ({
+                id: `pen-${p.work_date}-${p.penalty_type}-${i}`,
+                date: p.work_date,
+                earned: 0,
+                penalty: Number(p.hours_penalty) || 0,
+                penaltyType: p.penalty_type,
+                bookingId: null,
+                note: p.note,
+            })),
+        ];
+
+        // Cùng ngày thì xếp giờ làm trước, phạt sau — số dư đọc mới xuôi.
+        entries.sort((a, b) =>
+            a.date === b.date ? (b.earned - a.earned) : a.date.localeCompare(b.date));
 
         let balance = 0;
-        const rows = (data || []).map((r: any) => {
-            const earned = Number(r.hours_earned) || 0;
-            const penalty = Number(r.hours_penalty) || 0;
-            balance += earned - penalty;
+        const rows = entries.map(e => {
+            balance += e.earned - e.penalty;
             return {
-                id: r.id,
-                date: r.date,
-                earned,
-                penalty,
-                penaltyType: r.penalty_type,
-                bookingId: r.booking_id,
-                note: r.note,
+                ...e,
+                earned: Math.round(e.earned * 100) / 100,
+                penalty: Math.round(e.penalty * 100) / 100,
                 balance: Math.round(balance * 100) / 100,
             };
         });
@@ -276,25 +301,31 @@ export class KtvOfficeScoreService {
         return { rows: rows.reverse(), total: Math.round(balance * 100) / 100 };
     }
 
-    /** Tổng giờ tích lũy trong tháng cho nhiều KTV — dùng cho bảng xếp hạng. */
+    /**
+     * Tổng giờ tích lũy trong tháng cho nhiều KTV — dùng cho bảng xếp hạng.
+     *
+     * Nguồn là KTVDTurnLedger + KTVDPenaltyLedger, ĐÚNG hai bảng mà thứ tự nhận tua
+     * (`KtvTypeDTurnService.getMonthlyNetHours`) đang đọc. Trước đây hàm này đọc
+     * `KTVServiceHoursLedger` — sổ cũ nay chỉ còn ghi phần PHẠT, không còn ghi giờ
+     * làm — nên màn Chấm điểm hiện 0h trong khi thứ tự tua hiện đủ giờ.
+     */
     static async hoursTotals(supabase: SupabaseClient, staffIds: string[], month: string): Promise<Map<string, number>> {
         const out = new Map<string, number>();
         staffIds.forEach(id => out.set(id, 0));
         if (staffIds.length === 0) return out;
 
         const { from, to } = monthRange(month);
-        const { data, error } = await supabase
-            .from('KTVServiceHoursLedger')
-            .select('staff_id, hours_earned, hours_penalty')
-            .in('staff_id', staffIds)
-            .gte('date', from)
-            .lte('date', to);
-        if (error) throw error;
+        const [rows, penalties] = await Promise.all([
+            getRows(supabase, { staffIds, from, to }),
+            getPenalties(supabase, { staffIds, from, to }),
+        ]);
 
-        (data || []).forEach((r: any) => {
-            const cur = out.get(r.staff_id) || 0;
-            out.set(r.staff_id, cur + (Number(r.hours_earned) || 0) - (Number(r.hours_penalty) || 0));
-        });
+        for (const r of rows) {
+            out.set(r.staff_id, (out.get(r.staff_id) || 0) + r.actual_minutes / 60);
+        }
+        for (const p of penalties) {
+            out.set(p.staff_id, (out.get(p.staff_id) || 0) - p.hours_penalty);
+        }
         for (const [k, v] of out) out.set(k, Math.round(v * 100) / 100);
         return out;
     }
@@ -304,9 +335,11 @@ export class KtvOfficeScoreService {
      *
      * `range` bỏ trống = lũy kế toàn bộ lịch sử.
      *
-     * ⚠️ Phải đọc theo TRANG: Supabase cắt mặc định ở 1000 dòng. Sổ giờ ghi 1 dòng
-     * cho mỗi tua, nên một tháng của cả đội đã có thể vượt mốc này và bản lũy kế thì
-     * chắc chắn vượt — thiếu trang sau là xếp hạng sai chứ không phải chỉ thiếu ít.
+     * Nguồn: KTVDTurnLedger (giờ làm) + KTVDPenaltyLedger (giờ phạt) — ĐÚNG hai
+     * bảng mà thứ tự nhận tua đang đọc, nên bảng xếp hạng, màn Chấm điểm và ô
+     * "Thời gian" trên dashboard KTV không còn lệch nhau.
+     *
+     * `getRows` đã tự phân trang và tự bỏ dòng VOID (đơn huỷ sau khi ghi).
      */
     static async hoursBreakdown(
         supabase: SupabaseClient,
@@ -318,42 +351,34 @@ export class KtvOfficeScoreService {
             out.set(id, { earned: 0, penalty: 0, net: 0, turns: 0, days: 0, lastDate: null }));
         if (staffIds.length === 0) return out;
 
+        // Lũy kế toàn bộ lịch sử thì mở biên thật rộng — reader bắt buộc có from/to.
+        const from = range.from || '2020-01-01';
+        const to = range.to || '2099-12-31';
+
+        const [rows, penalties] = await Promise.all([
+            getRows(supabase, { staffIds, from, to }),
+            getPenalties(supabase, { staffIds, from, to }),
+        ]);
+
         const daysOf = new Map<string, Set<string>>();
-        const PAGE = 1000;
 
-        for (let page = 0; ; page++) {
-            let q = supabase
-                .from('KTVServiceHoursLedger')
-                .select('id, staff_id, date, hours_earned, hours_penalty')
-                .in('staff_id', staffIds)
-                .order('date', { ascending: true })
-                .order('id', { ascending: true })
-                .range(page * PAGE, (page + 1) * PAGE - 1);
-            if (range.from) q = q.gte('date', range.from);
-            if (range.to) q = q.lte('date', range.to);
-
-            const { data, error } = await q;
-            if (error) throw error;
-            const rows = (data || []) as any[];
-
-            for (const r of rows) {
-                const agg = out.get(r.staff_id);
-                if (!agg) continue;
-                const earned = Number(r.hours_earned) || 0;
-                const penalty = Number(r.hours_penalty) || 0;
-                agg.earned += earned;
-                agg.penalty += penalty;
-                // Dòng chỉ có phạt (từ chối tua, nghỉ không báo) không phải là một tua
-                // đã làm, nên không tính vào số tua / số ngày công.
-                if (earned > 0) {
-                    agg.turns++;
-                    if (!daysOf.has(r.staff_id)) daysOf.set(r.staff_id, new Set());
-                    daysOf.get(r.staff_id)!.add(r.date);
-                    if (!agg.lastDate || r.date > agg.lastDate) agg.lastDate = r.date;
-                }
+        for (const r of rows) {
+            const agg = out.get(r.staff_id);
+            if (!agg) continue;
+            const earned = r.actual_minutes / 60;
+            agg.earned += earned;
+            // Mỗi dòng sổ cái là một tua đã làm; tua 0 phút không tính vào ngày công.
+            if (earned > 0) {
+                agg.turns++;
+                if (!daysOf.has(r.staff_id)) daysOf.set(r.staff_id, new Set());
+                daysOf.get(r.staff_id)!.add(r.work_date);
+                if (!agg.lastDate || r.work_date > agg.lastDate) agg.lastDate = r.work_date;
             }
+        }
 
-            if (rows.length < PAGE) break;
+        for (const p of penalties) {
+            const agg = out.get(p.staff_id);
+            if (agg) agg.penalty += Number(p.hours_penalty) || 0;
         }
 
         const round2 = (n: number) => Math.round(n * 100) / 100;

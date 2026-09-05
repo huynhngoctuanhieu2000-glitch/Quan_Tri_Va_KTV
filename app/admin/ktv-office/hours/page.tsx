@@ -258,8 +258,8 @@ const AdminKtvHoursPage = () => {
               <p className="text-xs text-[var(--muted)] leading-relaxed mt-6 bg-[var(--surface-soft)] p-4 rounded-2xl">
                 <b className="text-[var(--ink)]">Giờ làm thực</b> là tổng thời gian đã phục vụ trong dịch vụ, chưa trừ phạt.{' '}
                 <b className="text-[var(--ink)]">Giờ thực nhận</b> là giờ làm thực trừ đi giờ phạt kỷ luật — đây mới là con số
-                quyết định thứ tự nhận tua ở bảng điều phối. Sổ giờ được cron chốt vào sáng hôm sau, nên tua trong ngày hôm nay
-                chưa có ở đây.
+                quyết định thứ tự nhận tua ở bảng điều phối. Số liệu lấy thẳng từ sổ giờ tua, cập nhật ngay khi KTV
+                kết thúc đơn — không phải chờ chốt sổ cuối ngày.
               </p>
             </>
           )}

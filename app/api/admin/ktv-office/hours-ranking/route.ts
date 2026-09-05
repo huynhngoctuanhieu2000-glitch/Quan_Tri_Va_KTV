@@ -8,11 +8,9 @@ export const dynamic = 'force-dynamic';
 /**
  * Bảng xếp hạng GIỜ TÍCH LŨY của KTV Loại D.
  *
- * Nguồn: KTVServiceHoursLedger — sổ giờ do cron chốt sổ ghi mỗi tua, đã loại dịch vụ
- * tiện ích (is_utility) nên đúng nghĩa "giờ làm THỰC trong dịch vụ".
- *
- * Cùng nguồn với cột giờ ở trang Chấm điểm và với thứ tự nhận tua, nên hai màn hình
- * không bao giờ lệch nhau.
+ * Nguồn: KTVDTurnLedger (giờ làm mỗi tua) + KTVDPenaltyLedger (giờ phạt) — đúng hai
+ * bảng mà thứ tự nhận tua ở màn điều phối đang đọc, nên bảng này, trang Chấm điểm và
+ * ô "Thời gian" trên dashboard KTV luôn ra cùng một con số.
  *
  *   ?scope=month (mặc định) + ?month=YYYY-MM  → 1 tháng
  *   ?scope=all                                → lũy kế toàn bộ lịch sử
@@ -49,6 +47,12 @@ export async function GET(request: Request) {
         if (staffIds.length === 0) {
             return NextResponse.json({ success: true, scope, month, range, data: [] });
         }
+
+        // Tua vừa xong còn nằm trong hàng đợi cho tới khi cron chạy (5 phút/lần).
+        // Rút ngay phần của nhóm loại D để bảng xếp hạng không trễ một nhịp so với
+        // màn điều phối. Cron vẫn là lưới an toàn.
+        const { drainQueueForStaff } = await import('@/lib/services/KtvDLedgerWriter');
+        await drainQueueForStaff(supabase, staffIds);
 
         const hours = await KtvOfficeScoreService.hoursBreakdown(supabase, staffIds, range);
 
