@@ -13,6 +13,9 @@ import { QrJourneyModal } from './_components/QrJourneyModal';
 import { StartServiceModal } from './_components/StartServiceModal';
 import { InvoiceLanguageModal } from './_components/InvoiceLanguageModal';
 import { AddServiceModal } from './_components/AddServiceModal';
+import { DispatchConfirmModal } from './_components/DispatchConfirmModal';
+import { SplitDurationModal } from './_components/SplitDurationModal';
+import { getDisplayCustomerName } from './dispatch-display';
 import { formatToHourMinute } from './dispatch-time.logic';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/apiClient';
@@ -129,18 +132,6 @@ const genId = () => Math.random().toString(36).slice(2, 8);
 
 // QUICK_SERVICES_LIST removed — now using allServices from Supabase
 
-const getDisplayCustomerName = (subOrder: any) => {
-    const order = subOrder.originalOrder;
-    let name = order.customerName || order.customerEmail || 'Khách Vãng Lai';
-    if (subOrder.services.length < order.services.length) {
-        if (name.match(/Khách [A-Z]$/i)) {
-            name = name.replace(/Khách ([A-Z])$/i, '[Khách $1]'); // Đưa thành [Khách A] Tên...
-        } else {
-            name = `[Khách ${subOrder.subSuffix || 'A'}] ${name}`;
-        }
-    }
-    return name.toUpperCase();
-};
 
 export default function DispatchBoardPage() {
     
@@ -2963,148 +2954,15 @@ if (!hasPermission('dispatch_board')) {
       />
 
       {/* Dispatch Confirmation Modal */}
-      <AnimatePresence>
-        {showDispatchConfirmModal && (selectedOrder || selectedSubOrder?.originalOrder) && selectedSubOrder && (() => {
-          const orderForModal = selectedOrder || selectedSubOrder.originalOrder;
-          const isMissingKTVs = selectedSubOrder.services.some((svc: any) => {
-            const assignedKTVs = svc.staffList.filter((st: any) => st.ktvId).length;
-            const minKtv = typeof svc.min_ktv_required === 'number' ? svc.min_ktv_required : 1;
-              const nameStr = String(svc.serviceName || '').toLowerCase();
-              const isUtility = isUtilityService(svc);
-              return assignedKTVs < minKtv && !isUtility;
-          });
-
-          return (
-          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-md" 
-              onClick={() => setShowDispatchConfirmModal(false)} 
-            />
-            <motion.div 
-              initial={{ y: '100%', opacity: 0 }} 
-              animate={{ y: 0, opacity: 1 }} 
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative bg-white rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-50">
-                <div>
-                  <h3 className="font-black text-indigo-900 text-lg uppercase tracking-tight">Xác nhận thông tin</h3>
-                  <p className="text-sm text-indigo-600 font-bold mt-1">
-                      Đơn #{selectedSubOrder?.services.length < orderForModal.services.length ? `${(orderForModal.billCode || '').split('-')[0]}-${(selectedSubOrder as any).subSuffix || 'A'}` : (orderForModal.billCode || '').split('-')[0]} - {getDisplayCustomerName(selectedSubOrder || { originalOrder: orderForModal, services: orderForModal.services, subSuffix: 'A' })}
-                  </p>
-                </div>
-                <button 
-                  onClick={() => setShowDispatchConfirmModal(false)}
-                  className="p-3 bg-white hover:bg-gray-100 rounded-2xl text-gray-400 transition-colors shadow-sm"
-                >
-                  <Plus className="rotate-45" size={24} />
-                </button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto no-scrollbar flex-1 space-y-4">
-                <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
-                  <span className="text-gray-500 font-bold">Tổng tiền thu:</span>
-                  <span className="text-xl font-black text-emerald-600">
-                    {((selectedSubOrder?.services.reduce((acc: number, svc: any) => acc + ((svc.price || 0) * (svc.quantity || 1)), 0)) || orderForModal.totalAmount || 0).toLocaleString()}đ
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  {(() => {
-                    const groupedServices = selectedSubOrder.services.filter((svc: any) => !svc.options?.mergedIntoId && !svc.mergedIntoId).map((svc: any) => {
-                      const childIds = svc.options?.mergedServiceIds || svc.mergedServiceIds || [];
-                      const children = selectedSubOrder.services.filter((child: any) => childIds.includes(child.id));
-                      const childNames = children.map((c: any) => c.serviceName).join(' + ');
-                      const displayName = childNames ? `${svc.serviceName} + ${childNames}` : svc.serviceName;
-                      return { ...svc, displayName };
-                    });
-                    
-                    return (
-                      <>
-                        <h4 className="font-black text-gray-900 uppercase tracking-widest text-xs">Chi tiết dịch vụ ({groupedServices.length})</h4>
-                        {groupedServices.map((svc: any, sIdx: number) => (
-                          <div key={svc.id || sIdx} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-                            <div className="mb-3 pb-2 border-b border-gray-100">
-                              <p className="font-bold text-gray-900 text-sm">{sIdx + 1}. {svc.displayName}</p>
-                              {(() => {
-                            const assignedKTVs = svc.staffList.filter((st: any) => st.ktvId).length;
-                            const minKtv = typeof svc.min_ktv_required === 'number' ? svc.min_ktv_required : 1;
-                              const nameStr = String(svc.serviceName || '').toLowerCase();
-                              const isUtility = isUtilityService(svc);
-                              if (assignedKTVs < minKtv && !isUtility) {
-                                return (
-                                    <p className="text-xs text-rose-500 font-bold mt-1">
-                                        ⚠️ Dịch vụ yêu cầu tối thiểu {minKtv} KTV (Đang thiếu {minKtv - assignedKTVs})
-                                    </p>
-                                );
-                            }
-                            return null;
-                        })()}
-                      </div>
-                      <div className="space-y-3">
-                        {svc.staffList.map((st: any, stIdx: number) => (
-                          <div key={st.ktvId ? `${svc.id}-${st.ktvId}` : `${svc.id}-st-${stIdx}`} className="pl-2 border-l-2 border-indigo-200 flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md font-bold">KTV</span>
-                              <span className="text-sm font-black text-gray-800">{st.ktvName || 'Chưa gán'} {st.ktvId ? `[${st.ktvId}]` : ''}</span>
-                            </div>
-                            <div className="text-xs text-gray-600 flex flex-col gap-1">
-                              {st.segments.map((seg: any, segIdx: number) => {
-                                const roomName = rooms.find(r => r.id === seg.roomId)?.name || seg.roomId || 'Chưa xếp phòng';
-                                const bedName = beds.find(b => b.id === seg.bedId)?.name || seg.bedId || 'Chưa xếp giường';
-                                return (
-                                  <div key={`${svc.id}-${stIdx}-seg-${segIdx}`} className="flex items-center gap-2 bg-gray-50 rounded-lg p-1.5">
-                                    <span className="font-semibold text-gray-500">{seg.startTime} - {seg.endTime}</span>
-                                    <span className="text-gray-300">|</span>
-                                    <span className="font-semibold text-indigo-600">{roomName}</span>
-                                    <span className="text-gray-300">|</span>
-                                    <span className="font-semibold text-amber-600">{bedName}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  </>
-                );
-              })()}
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-gray-100 bg-white grid grid-cols-2 gap-3 shrink-0">
-                <button
-                  onClick={() => setShowDispatchConfirmModal(false)}
-                  className="w-full py-4 rounded-2xl font-black text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors uppercase text-sm"
-                >
-                  Quay lại sửa
-                </button>
-                <button
-                  disabled={isMissingKTVs}
-                  onClick={() => {
-                    setShowDispatchConfirmModal(false);
-                    handleDispatch(false, selectedSubOrder?.services.map((s:any) => s.id), selectedSubOrder?.originalOrder.id);
-                  }}
-                  className={`w-full py-4 rounded-2xl font-black text-white transition-colors uppercase text-sm flex items-center justify-center gap-2 shadow-lg ${
-                    isMissingKTVs 
-                      ? 'bg-gray-400 cursor-not-allowed shadow-none'
-                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
-                  }`}
-                >
-                  <Send size={18} strokeWidth={3} /> XÁC NHẬN GỬI KTV
-                </button>
-              </div>
-            </motion.div>
-          </div>
-          );
-        })()}
-      </AnimatePresence>
+      <DispatchConfirmModal
+        open={showDispatchConfirmModal}
+        order={selectedOrder}
+        subOrder={selectedSubOrder}
+        rooms={rooms}
+        beds={beds}
+        onConfirm={(svcIds, orderId) => handleDispatch(false, svcIds, orderId)}
+        onClose={() => setShowDispatchConfirmModal(false)}
+      />
       {/* Context Menu for Cancellation */}
       <AnimatePresence>
         {contextMenu && (
@@ -3286,173 +3144,12 @@ if (!hasPermission('dispatch_board')) {
         selectedDate={selectedDate}
       />
 
-      {/* Split Service Modal */}
-      <AnimatePresence>
-        {mergePromptConfig && (
-          <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6"
-            >
-              <div className="flex justify-center mb-4 text-amber-500">
-                <AlertTriangle size={48} strokeWidth={1.5} />
-              </div>
-              <h3 className="text-xl font-black text-gray-900 text-center mb-2">Gộp Dịch Vụ?</h3>
-              <p className="text-sm text-gray-500 text-center mb-6">
-                Bạn đang gán KTV <span className="font-bold text-gray-900">{mergePromptConfig.ktvId}</span> cho nhiều dịch vụ. Bạn có muốn gộp chúng lại để KTV làm liên tục và chỉ cần chọn Phòng/Giường 1 lần không?
-              </p>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={cancelMergeServices}
-                  className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
-                >
-                  Không, tách riêng
-                </button>
-                <button
-                  onClick={confirmMergeServices}
-                  className="flex-1 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-                >
-                  Gộp dịch vụ
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {splitConfig && (
-          <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6"
-            >
-              <h3 className="text-xl font-black text-gray-900 mb-2">Phân bổ thời gian KTV</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Thời lượng gốc: <span className="font-bold text-gray-900">{splitConfig.duration} phút</span>
-              </p>
-
-              <div className="space-y-4 mb-6">
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">
-                    KTV Hiện Tại (Phút)
-                  </label>
-                  <input
-                    type="number"
-                    value={splitConfig.ktv1Dur}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      if (val >= 0 && val <= splitConfig.duration) {
-                        setSplitConfig(prev => prev ? {
-                          ...prev,
-                          ktv1Dur: val,
-                          ktv2Dur: prev.duration - val
-                        } : null);
-                      }
-                    }}
-                    className="w-full text-center font-black text-2xl text-indigo-600 bg-white border border-gray-200 rounded-xl py-2 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
-                  />
-                  {splitConfig.ktv1Dur !== splitConfig.duration && (
-                    <div className="mt-3">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
-                        Tên Dịch Vụ
-                      </label>
-                      <input
-                        type="text"
-                        value={splitConfig.name1 || ''}
-                        onChange={(e) => setSplitConfig(prev => prev ? { ...prev, name1: e.target.value } : null)}
-                        className="w-full text-center font-bold text-sm text-gray-700 bg-white border border-gray-200 rounded-xl py-1.5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
-                        placeholder={splitConfig.defaultName}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-center text-gray-300">
-                  <Plus size={24} />
-                </div>
-
-                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-                  <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">
-                    KTV Thêm Vào (Phút)
-                  </label>
-                  <input
-                    type="number"
-                    value={splitConfig.ktv2Dur}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      if (val >= 0 && val <= splitConfig.duration) {
-                        setSplitConfig(prev => prev ? {
-                          ...prev,
-                          ktv2Dur: val,
-                          ktv1Dur: prev.duration - val
-                        } : null);
-                      }
-                    }}
-                    className="w-full text-center font-black text-2xl text-indigo-700 bg-white border border-indigo-200 rounded-xl py-2 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
-                  />
-                  {splitConfig.ktv1Dur !== splitConfig.duration && (
-                    <div className="mt-3">
-                      <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-1">
-                        Tên Dịch Vụ
-                      </label>
-                      <input
-                        type="text"
-                        value={splitConfig.name2 || ''}
-                        onChange={(e) => setSplitConfig(prev => prev ? { ...prev, name2: e.target.value } : null)}
-                        className="w-full text-center font-bold text-sm text-indigo-700 bg-white border border-indigo-200 rounded-xl py-1.5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none"
-                        placeholder={splitConfig.defaultName}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {splitConfig.ktv1Dur !== splitConfig.duration && (
-                <div className="mb-6 p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2">
-                  <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700 font-medium">
-                    <span className="font-bold block mb-1">Làm Nối Tiếp</span>
-                    Hệ thống sẽ <strong className="font-black">tách dịch vụ thành 2 dòng riêng biệt</strong> trên màn hình Lễ tân & KTV để tính giờ độc lập.
-                  </p>
-                </div>
-              )}
-              
-              {splitConfig.ktv1Dur === splitConfig.duration && splitConfig.ktv2Dur === splitConfig.duration && (
-                <div className="mb-6 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-2">
-                  <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-emerald-700 font-medium">
-                    <span className="font-bold block mb-1">Làm Chung (Song song)</span>
-                    Hai KTV sẽ cùng dùng chung 1 khung giờ. 1 người bấm sẽ cập nhật cho người kia.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setSplitConfig(null)}
-                  disabled={splitConfig.isSaving}
-                  className="px-4 py-3 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  onClick={confirmSplitService}
-                  disabled={splitConfig.isSaving || (splitConfig.ktv1Dur + splitConfig.ktv2Dur !== splitConfig.duration && splitConfig.ktv1Dur !== splitConfig.duration)}
-                  className="px-6 py-3 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-200 disabled:opacity-50"
-                >
-                  {splitConfig.isSaving ? 'ĐANG LƯU...' : 'LƯU & TIẾP TỤC'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <SplitDurationModal
+        config={splitConfig}
+        onChange={(patch) => setSplitConfig(prev => prev ? { ...prev, ...patch } : null)}
+        onConfirm={confirmSplitService}
+        onCancel={() => setSplitConfig(null)}
+      />
 
       {/* Modal Xem Ảnh Xác Nhận / Ảnh Bàn Giao */}
       <PhotoViewerModal
