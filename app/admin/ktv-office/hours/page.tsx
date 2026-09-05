@@ -3,8 +3,9 @@
 import React from 'react';
 import Link from 'next/link';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { ChevronLeft, ChevronRight, Search, RefreshCw, Timer, Lock, ClipboardCheck } from 'lucide-react';
-import { useAdminKtvHoursLogic, fmtHours, fmtShortDate, HoursRow } from './AdminKtvHours.logic';
+import { motion, AnimatePresence } from 'motion/react';
+import { ChevronLeft, ChevronRight, Search, RefreshCw, Timer, Lock, ClipboardCheck, X } from 'lucide-react';
+import { useAdminKtvHoursLogic, fmtHours, fmtShortDate } from './AdminKtvHours.logic';
 
 // 🔧 UI CONFIGURATION — cùng bảng màu với trang Chấm điểm Office.
 const CSS_VARS = {
@@ -30,7 +31,7 @@ const MEDALS: Record<number, { bg: string; ink: string; label: string }> = {
   3: { bg: '#eddac9', ink: '#8a5230', label: 'Hạng 3' },
 };
 
-const Avatar = ({ row, size = 44 }: { row: HoursRow; size?: number }) => (
+const Avatar = ({ row, size = 44 }: { row: { name: string; avatarUrl: string | null }; size?: number }) => (
   <div
     style={{ width: size, height: size }}
     className="rounded-full bg-[var(--green-2)] text-[var(--green)] font-bold flex items-center justify-center overflow-hidden shrink-0"
@@ -50,18 +51,76 @@ const StatCard = ({ label, value, hint }: { label: string; value: string; hint?:
   </div>
 );
 
+/** Khung 3 con số của 1 KTV: làm thực → bị phạt → thực nhận. */
+const HoursBreakdown = ({ earned, penalty, net }: { earned: number; penalty: number; net: number }) => (
+  <div className="grid grid-cols-3 gap-2">
+    <div className="bg-[var(--green-2)] rounded-2xl p-3 text-center">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--green)]">Làm thực</p>
+      <p className="text-base md:text-xl font-bold tabular-nums mt-1 text-[var(--green)]">{fmtHours(earned)}</p>
+    </div>
+    <div className={`rounded-2xl p-3 text-center ${penalty > 0 ? 'bg-[var(--rust-2)]' : 'bg-[var(--surface-soft)]'}`}>
+      <p className={`text-[10px] font-bold uppercase tracking-widest ${penalty > 0 ? 'text-[var(--rust)]' : 'text-[var(--muted)]'}`}>Bị phạt</p>
+      <p className={`text-base md:text-xl font-bold tabular-nums mt-1 ${penalty > 0 ? 'text-[var(--rust)]' : 'text-[var(--muted)]'}`}>
+        {penalty > 0 ? `− ${fmtHours(penalty)}` : fmtHours(0)}
+      </p>
+    </div>
+    <div className="bg-[var(--ink)] rounded-2xl p-3 text-center">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">Thực nhận</p>
+      <p className="text-base md:text-xl font-bold tabular-nums mt-1 text-white">{fmtHours(net)}</p>
+    </div>
+  </div>
+);
+
+/**
+ * Một dòng sổ giờ.
+ *
+ * Phân loại theo `penaltyType` chứ KHÔNG theo `penalty > 0`: dấu mốc khoá tài khoản
+ * (ACCOUNT_LOCK) có hours_penalty = 0, lấy số làm mốc thì nó hiện nhầm thành một tua
+ * dịch vụ "+0h 00P".
+ */
+const LedgerRow = ({ r }: { r: any }) => {
+  const isPenalty = !!r.penaltyType;
+  const isMarker = isPenalty && r.penalty === 0;
+
+  return (
+    <div className={`rounded-2xl p-3 flex items-center gap-3 ${isMarker ? 'bg-[var(--amber-2)]' : isPenalty ? 'bg-[var(--rust-2)]' : 'bg-[var(--surface-soft)]'}`}>
+      <div className="w-11 shrink-0 text-center">
+        <p className="text-sm font-bold tabular-nums">{fmtShortDate(r.date)}</p>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-bold truncate ${isMarker ? 'text-[var(--amber)]' : isPenalty ? 'text-[var(--rust)]' : ''}`}>
+          {isPenalty ? (r.penaltyLabel || 'Phạt giờ') : (r.note || 'Tua dịch vụ')}
+        </p>
+        <p className="text-[11px] text-[var(--muted)] truncate">
+          {isPenalty ? (r.note || '—') : (r.orderCode || '—')}
+        </p>
+      </div>
+      <div className="text-right shrink-0">
+        {isMarker ? (
+          <p className="text-[11px] font-bold text-[var(--amber)] uppercase tracking-widest">Dấu mốc</p>
+        ) : (
+          <p className={`text-sm font-bold tabular-nums ${isPenalty ? 'text-[var(--rust)]' : 'text-[var(--green)]'}`}>
+            {isPenalty ? `− ${fmtHours(r.penalty)}` : `+ ${fmtHours(r.earned)}`}
+          </p>
+        )}
+        <p className="text-[10px] text-[var(--muted)]">Còn {fmtHours(r.balance)}</p>
+      </div>
+    </div>
+  );
+};
+
 const AdminKtvHoursPage = () => {
   const logic = useAdminKtvHoursLogic();
-  const { totals, maxValue, sort } = logic;
-
-  const sortLabel = sort === 'earned' ? 'giờ làm thực' : 'giờ thực nhận';
+  const { totals, maxValue } = logic;
 
   // Bục chỉ có nghĩa khi cả 3 hạng đầu đều CÓ giờ. Đầu tháng gần như ai cũng 0h,
   // lúc đó bục chỉ tôn vinh thứ tự tên gọi chứ không phải thành tích.
   const top3 = logic.ranked.slice(0, 3);
-  const podium = !logic.searchQuery.trim() && top3.length === 3 && top3.every(r => r[sort] > 0)
+  const podium = !logic.searchQuery.trim() && top3.length === 3 && top3.every(r => r.net > 0)
     ? top3
     : [];
+
+  const d = logic.detail;
 
   return (
     <AppLayout title="Giờ Tích Lũy KTV">
@@ -76,8 +135,8 @@ const AdminKtvHoursPage = () => {
                 <Timer size={30} className="text-[var(--green)]" /> Giờ tích lũy
               </h1>
               <p className="text-sm text-[var(--muted)] mt-2 max-w-xl leading-relaxed">
-                Xếp hạng theo <b className="text-[var(--ink)]">thời gian làm thực trong dịch vụ</b> — cộng từ sổ giờ
-                mỗi tua, đã loại các dịch vụ tiện ích.
+                Xếp hạng theo <b className="text-[var(--ink)]">giờ thực nhận</b> — thời gian làm thực trong dịch vụ trừ
+                đi giờ bị phạt. Bấm vào từng KTV để xem sổ giờ chi tiết.
               </p>
             </div>
 
@@ -110,40 +169,21 @@ const AdminKtvHoursPage = () => {
           {/* Tổng quan */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <StatCard label="Tổng giờ làm thực" value={fmtHours(totals.earned)} hint={`${totals.active}/${totals.staff} KTV có giờ`} />
-            <StatCard label="Trung bình mỗi KTV" value={fmtHours(totals.avg)} hint="Chỉ tính người có giờ" />
+            <StatCard label="Giờ bị phạt" value={fmtHours(totals.penalty)} hint="Trừ theo kỷ luật" />
+            <StatCard label="Tổng thực nhận" value={fmtHours(totals.net)} hint={`TB ${fmtHours(totals.avg)}/KTV có giờ`} />
             <StatCard label="Tổng số tua" value={totals.turns.toLocaleString('vi-VN')} hint="Tua có phát sinh giờ" />
-            <StatCard label="Giờ bị trừ" value={fmtHours(totals.penalty)} hint="Phạt kỷ luật" />
           </div>
 
-          {/* Tìm kiếm + tiêu chí xếp hạng */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-6">
-            <div className="flex-1 flex items-center gap-3 px-4 h-14 bg-[var(--surface)] rounded-2xl shadow-sm">
-              <Search size={20} className="text-[var(--muted)]" />
-              <input
-                type="search"
-                placeholder="Tìm tên hoặc mã KTV"
-                className="w-full bg-transparent border-none focus:outline-none text-[var(--ink)]"
-                value={logic.searchQuery}
-                onChange={e => logic.setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center bg-[var(--surface)] p-1 rounded-2xl shadow-sm">
-              {([
-                { id: 'earned', label: 'Giờ làm thực' },
-                { id: 'net', label: 'Giờ thực nhận' },
-              ] as const).map(o => (
-                <button
-                  key={o.id}
-                  onClick={() => logic.setSort(o.id)}
-                  title={o.id === 'earned'
-                    ? 'Tổng giờ đã làm trong dịch vụ, chưa trừ phạt'
-                    : 'Sau khi trừ giờ phạt — khớp thứ tự nhận tua ở bảng điều phối'}
-                  className={`h-12 px-4 rounded-xl text-sm font-bold transition-colors ${
-                    sort === o.id ? 'bg-[var(--green)] text-white' : 'text-[var(--muted)] hover:bg-[var(--green-2)]'
-                  }`}
-                >{o.label}</button>
-              ))}
-            </div>
+          {/* Tìm kiếm */}
+          <div className="flex items-center gap-3 px-4 h-14 bg-[var(--surface)] rounded-2xl shadow-sm mb-6">
+            <Search size={20} className="text-[var(--muted)]" />
+            <input
+              type="search"
+              placeholder="Tìm tên hoặc mã KTV"
+              className="w-full bg-transparent border-none focus:outline-none text-[var(--ink)]"
+              value={logic.searchQuery}
+              onChange={e => logic.setSearchQuery(e.target.value)}
+            />
           </div>
 
           {logic.loading && (
@@ -172,9 +212,10 @@ const AdminKtvHoursPage = () => {
                     const medal = MEDALS[r.rank];
                     const isTop = r.rank === 1;
                     return (
-                      <div
+                      <button
                         key={r.id}
-                        className={`bg-[var(--surface)] rounded-[var(--radius)] p-4 text-center shadow-sm flex flex-col items-center ${isTop ? 'md:-mt-4 ring-2 ring-[var(--green)]' : ''}`}
+                        onClick={() => logic.openDetail(r)}
+                        className={`bg-[var(--surface)] rounded-[var(--radius)] p-4 text-center shadow-sm flex flex-col items-center hover:shadow-md transition-shadow ${isTop ? 'md:-mt-4 ring-2 ring-[var(--green)]' : ''}`}
                       >
                         <span
                           style={{ background: medal.bg, color: medal.ink }}
@@ -184,26 +225,29 @@ const AdminKtvHoursPage = () => {
                         <p className="font-bold mt-2 text-sm leading-tight line-clamp-2">{r.name}</p>
                         <p className="text-[11px] text-[var(--muted)]">{r.code}</p>
                         <p className={`font-bold tabular-nums mt-2 ${isTop ? 'text-2xl text-[var(--green)]' : 'text-lg'}`}>
-                          {fmtHours(r[sort])}
+                          {fmtHours(r.net)}
                         </p>
                         <p className="text-[11px] text-[var(--muted)]">{r.turns} tua · {r.days} ngày</p>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
               )}
 
               <p className="text-[11px] font-bold uppercase tracking-widest text-[var(--muted)] mb-2">
-                Xếp theo {sortLabel} · {logic.rows.length} KTV
+                Xếp theo giờ thực nhận · {logic.rows.length} KTV
               </p>
 
               <div className="space-y-2">
                 {logic.rows.map(r => {
-                  const value = r[sort];
-                  const pct = maxValue > 0 ? Math.max(0, (value / maxValue) * 100) : 0;
+                  const pct = maxValue > 0 ? Math.max(0, (r.net / maxValue) * 100) : 0;
                   const medal = MEDALS[r.rank];
                   return (
-                    <div key={r.id} className="bg-[var(--surface)] rounded-2xl p-4 shadow-sm flex items-center gap-3 md:gap-4">
+                    <button
+                      key={r.id}
+                      onClick={() => logic.openDetail(r)}
+                      className="w-full text-left bg-[var(--surface)] rounded-2xl p-4 shadow-sm flex items-center gap-3 md:gap-4 hover:shadow-md hover:bg-[var(--surface-soft)] transition-all"
+                    >
                       <div
                         style={medal ? { background: medal.bg, color: medal.ink } : undefined}
                         className={`w-9 h-9 rounded-xl shrink-0 flex items-center justify-center font-bold text-sm tabular-nums ${medal ? '' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}
@@ -226,31 +270,26 @@ const AdminKtvHoursPage = () => {
                         <div className="h-1.5 bg-[var(--surface-soft)] rounded-full mt-2 overflow-hidden">
                           <div
                             style={{ width: `${pct}%` }}
-                            className={`h-full rounded-full ${value < 0 ? 'bg-[var(--rust)]' : 'bg-[var(--green)]'}`}
+                            className={`h-full rounded-full ${r.net < 0 ? 'bg-[var(--rust)]' : 'bg-[var(--green)]'}`}
                           />
                         </div>
 
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--muted)] mt-1.5">
-                          <span>{r.turns} tua</span>
-                          <span>{r.days} ngày</span>
-                          <span>TB {fmtHours(r.avgPerDay)}/ngày</span>
+                          <span>Làm thực {fmtHours(r.earned)}</span>
                           {r.penalty > 0 && (
-                            <span className="text-[var(--rust)] font-bold">− {fmtHours(r.penalty)} phạt</span>
+                            <span className="text-[var(--rust)] font-bold">Phạt − {fmtHours(r.penalty)}</span>
                           )}
+                          <span>{r.turns} tua · {r.days} ngày</span>
                           <span>Gần nhất {fmtShortDate(r.lastDate)}</span>
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <p className="text-lg md:text-xl font-bold tabular-nums leading-tight">{fmtHours(value)}</p>
-                        <p className="text-[10px] text-[var(--muted)] uppercase tracking-widest">
-                          {sort === 'earned' ? 'làm thực' : 'thực nhận'}
-                        </p>
-                        {sort === 'earned' && r.penalty > 0 && (
-                          <p className="text-[11px] text-[var(--muted)]">Còn {fmtHours(r.net)}</p>
-                        )}
+                        <p className="text-lg md:text-xl font-bold tabular-nums leading-tight">{fmtHours(r.net)}</p>
+                        <p className="text-[10px] text-[var(--muted)] uppercase tracking-widest">thực nhận</p>
                       </div>
-                    </div>
+                      <ChevronRight size={18} className="text-[var(--muted)] shrink-0" />
+                    </button>
                   );
                 })}
               </div>
@@ -264,6 +303,82 @@ const AdminKtvHoursPage = () => {
             </>
           )}
         </main>
+
+        {/* Sổ giờ chi tiết của 1 KTV */}
+        <AnimatePresence>
+          {logic.detailOf && (
+            <div
+              className="fixed inset-0 z-50 flex justify-center items-end md:items-center bg-black/40 backdrop-blur-sm p-0 md:p-6"
+              onClick={e => { if (e.target === e.currentTarget) logic.closeDetail(); }}
+            >
+              <motion.div
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="bg-[var(--surface)] w-full max-w-2xl max-h-[92vh] flex flex-col rounded-t-[26px] md:rounded-[26px] overflow-hidden shadow-2xl"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-[var(--line)] flex justify-between items-start gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar row={logic.detailOf} size={46} />
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-bold tracking-tight truncate">{logic.detailOf.name}</h2>
+                      <p className="text-sm text-[var(--muted)]">
+                        {logic.detailOf.code} · Sổ giờ tháng {logic.month} · Hạng {logic.detailOf.rank}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={logic.closeDetail} className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 shrink-0">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-5 pb-8">
+                  {logic.detailLoading && (
+                    <p className="py-10 text-center text-[var(--muted)]">Đang tải sổ giờ…</p>
+                  )}
+
+                  {!logic.detailLoading && !d && (
+                    <p className="py-10 text-center text-[var(--muted)]">Không tải được sổ giờ của KTV này.</p>
+                  )}
+
+                  {!logic.detailLoading && d && (
+                    <>
+                      <HoursBreakdown earned={d.hours.earned} penalty={d.hours.penalty} net={d.hours.net} />
+
+                      <p className="text-xs text-[var(--muted)] text-center mt-3">
+                        {d.hours.turns} tua · {d.hours.days} ngày có tua
+                        {d.hours.days > 0 && ` · TB ${fmtHours(d.hours.earned / d.hours.days)}/ngày`}
+                      </p>
+
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-[var(--muted)] mt-6 mb-2">
+                        Chi tiết từng dòng · mới nhất trước
+                      </p>
+
+                      {d.hours.rows.length === 0 ? (
+                        <p className="py-8 text-center text-[var(--muted)] text-sm">Tháng này chưa có dòng nào trong sổ giờ.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {d.hours.rows.map((r: any) => <LedgerRow key={r.id} r={r} />)}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-[var(--line)]">
+                  <button
+                    onClick={logic.closeDetail}
+                    className="w-full h-12 rounded-xl font-bold bg-[var(--green)] text-white"
+                  >Đóng</button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </AppLayout>
   );

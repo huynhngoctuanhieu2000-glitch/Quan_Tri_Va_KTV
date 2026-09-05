@@ -4,21 +4,17 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { apiClient } from '@/lib/apiClient';
 
-/**
- * Tiêu chí xếp hạng.
- *  - 'earned': giờ làm THỰC trong dịch vụ — mặc định, đúng nghĩa "ai làm nhiều nhất".
- *  - 'net'   : giờ sau khi trừ phạt kỷ luật — khớp với thứ tự nhận tua ở bảng điều phối.
- */
-export type HoursSort = 'earned' | 'net';
-
 export interface HoursRow {
   id: string;
   code: string;
   name: string;
   avatarUrl: string | null;
   locked: boolean;
+  /** Giờ làm THỰC trong dịch vụ, chưa trừ phạt. */
   earned: number;
+  /** Giờ bị trừ do kỷ luật. */
   penalty: number;
+  /** earned − penalty: con số dùng để xếp hạng và quyết định thứ tự nhận tua. */
   net: number;
   turns: number;
   days: number;
@@ -63,12 +59,16 @@ export const useAdminKtvHoursLogic = () => {
   const { addToast } = useToast();
 
   const [month, setMonth] = useState<string>(currentMonthVn());
-  const [sort, setSort] = useState<HoursSort>('earned');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [rawRows, setRawRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Sổ giờ chi tiết của 1 KTV, mở khi bấm vào thẻ.
+  const [detailOf, setDetailOf] = useState<HoursRow | null>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const thisMonth = currentMonthVn();
 
@@ -108,15 +108,17 @@ export const useAdminKtvHoursLogic = () => {
   const canGoNext = month < thisMonth;
 
   /**
-   * Xếp hạng tính trên TOÀN ĐỘI rồi mới lọc theo ô tìm kiếm — gõ tên một người
-   * vẫn phải thấy đúng hạng của người đó trong đội, không phải hạng 1 giả.
+   * Xếp hạng theo GIỜ THỰC NHẬN (đã trừ phạt) — cùng con số quyết định thứ tự
+   * nhận tua ở bảng điều phối, nên hai màn hình không bao giờ đọc ra hai thứ hạng.
+   *
+   * Tính trên TOÀN ĐỘI rồi mới lọc theo ô tìm kiếm: gõ tên một người vẫn phải thấy
+   * đúng hạng của người đó trong đội, không phải hạng 1 giả.
    */
   const ranked: HoursRow[] = useMemo(() => {
-    const key = sort;
     return [...rawRows]
-      .sort((a, b) => (b[key] - a[key]) || a.name.localeCompare(b.name, 'vi'))
+      .sort((a, b) => (b.net - a.net) || (b.earned - a.earned) || a.name.localeCompare(b.name, 'vi'))
       .map((r, i) => ({ ...r, rank: i + 1 }));
-  }, [rawRows, sort]);
+  }, [rawRows]);
 
   const rows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -139,22 +141,43 @@ export const useAdminKtvHoursLogic = () => {
       turns,
       staff: rawRows.length,
       active,
-      avg: active > 0 ? earned / active : 0,
+      avg: active > 0 ? (earned - penalty) / active : 0,
     };
   }, [rawRows]);
 
-  /** Giờ cao nhất — mốc để vẽ thanh tỉ lệ. */
+  /** Giờ thực nhận cao nhất — mốc để vẽ thanh tỉ lệ. */
   const maxValue = useMemo(
-    () => ranked.reduce((m, r) => Math.max(m, r[sort]), 0),
-    [ranked, sort]
+    () => ranked.reduce((m, r) => Math.max(m, r.net), 0),
+    [ranked]
   );
+
+  const openDetail = useCallback(async (row: HoursRow) => {
+    setDetailOf(row);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await apiClient.get<any>(
+        `/api/admin/ktv-office/hours-detail?staffId=${encodeURIComponent(row.code)}&month=${month}`
+      );
+      setDetail(res);
+    } catch (error: any) {
+      addToast(error?.message || 'Không tải được sổ giờ của KTV này.', 'error');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [month, addToast]);
+
+  const closeDetail = () => {
+    setDetailOf(null);
+    setDetail(null);
+  };
 
   return {
     month, changeMonth, canGoNext,
-    sort, setSort,
     searchQuery, setSearchQuery,
     rows, ranked, totals, maxValue,
     loading, loadError,
     refresh: fetchRanking,
+    detailOf, detail, detailLoading, openDetail, closeDetail,
   };
 };

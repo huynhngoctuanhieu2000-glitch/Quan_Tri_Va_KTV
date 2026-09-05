@@ -398,4 +398,6 @@ export const HOURS_PENALTY_VI: Record<string, string> = {
     ABSENT_EARLY_NOTICE: 'Báo vắng trước 07:00',
     LATE_NO_UPDATE: 'Đến muộn hơn giờ đã báo',
     ORDER_REJECT: 'Từ chối tua đã gán',
+    // Dấu mốc, không phải khoản phạt: hours_penalty = 0.
+    ACCOUNT_LOCK: 'Khoá tài khoản',
 };
