@@ -7,6 +7,9 @@ const DEFAULT_DURATION = 60; // Phút mặc định cho mỗi KTV
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { ConfirmActionModal } from './_components/ConfirmActionModal';
+import { PhotoViewerModal } from './_components/PhotoViewerModal';
+import { formatToHourMinute } from './dispatch-time.logic';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
@@ -91,19 +94,6 @@ const formatCompactPrice = (n: number) => {
         return `${Math.floor(n / 1000)}k`;
     }
     return `${n}đ`;
-};
-
-const formatToHourMinute = (isoString?: string | null) => {
-    if (!isoString) return '--:--';
-    if (/^\d{1,2}:\d{2}$/.test(isoString)) return isoString;
-    let parseString = isoString;
-    if (!isoString.endsWith('Z') && !isoString.includes('+')) {
-        parseString = isoString.replace(' ', 'T') + 'Z';
-    }
-    const d = new Date(parseString);
-    if (isNaN(d.getTime())) return isoString;
-    const dVn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
-    return `${String(dVn.getUTCHours()).padStart(2, '0')}:${String(dVn.getUTCMinutes()).padStart(2, '0')}`;
 };
 
 const getDynamicEndTime = (startStr?: string | null, durationMins: number = 60) => {
@@ -1598,13 +1588,11 @@ if (!hasPermission('dispatch_board')) {
     try {
       const res = await cancelBooking(orderId, selectedDate);
       if (res.success) {
-        setOrders(prev => prev.map(o => 
-          o.id === orderId 
-            ? { ...o, dispatchStatus: 'CANCELLED' as any, rawStatus: 'CANCELLED' } 
-            : o
-        ));
         if (selectedOrderId === orderId) setSelectedOrderId(null);
         setContextMenu(null);
+        // Phải tải lại: buildOrderTimeline dựng thẻ Kanban từ status của TỪNG dịch vụ,
+        // không đọc rawStatus của đơn — nên patch lạc quan ở cấp đơn không đổi được gì.
+        await fetchData();
       } else {
         alert('Lỗi khi hủy đơn: ' + res.error);
       }
@@ -3598,109 +3586,12 @@ if (!hasPermission('dispatch_board')) {
       </AnimatePresence>
 
       {/* Modal Xem Ảnh Xác Nhận / Ảnh Bàn Giao */}
-      <AnimatePresence>
-        {selectedPhoto && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => { setSelectedPhoto(null); setPhotoIndex(0); }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-gray-100 flex flex-col"
-            >
-              {/* Header */}
-              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <h3 className={`font-black text-sm ${selectedPhoto.type === 'HANDOVER' ? 'text-emerald-600' : 'text-gray-900'}`}>
-                      {selectedPhoto.type === 'HANDOVER' ? 'Ảnh bàn giao phòng' : 'Ảnh xác nhận khách bắt đầu ca'}
-                  </h3>
-                  <p className="text-xs text-gray-500 font-bold">Kỹ thuật viên: {selectedPhoto.ktvId}</p>
-                </div>
-                <button
-                  onClick={() => { setSelectedPhoto(null); setPhotoIndex(0); }}
-                  className="p-1.5 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Image Body */}
-              <div className="relative aspect-[3/4] bg-gray-50 flex items-center justify-center">
-                {selectedPhoto.urls && selectedPhoto.urls.length > 1 ? (
-                  <>
-                    <img
-                      src={selectedPhoto.urls[photoIndex]}
-                      alt={`${selectedPhoto.type === 'HANDOVER' ? 'Ảnh bàn giao' : 'Ảnh xác nhận khách'} - ${photoIndex + 1}`}
-                      className="w-full h-full object-contain"
-                    />
-                    
-                    {/* Navigation Buttons */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPhotoIndex((prev) => (prev > 0 ? prev - 1 : selectedPhoto.urls!.length - 1));
-                      }}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                    </button>
-                    
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPhotoIndex((prev) => (prev < selectedPhoto.urls!.length - 1 ? prev + 1 : 0));
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                    </button>
-                    
-                    {/* Pagination Indicators */}
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 px-3 py-1.5 bg-black/40 rounded-full backdrop-blur-md">
-                      {selectedPhoto.urls.map((_, idx) => (
-                        <div
-                          key={idx}
-                          className={`w-2 h-2 rounded-full transition-all ${
-                            idx === photoIndex ? 'bg-white scale-110' : 'bg-white/50'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <img
-                    src={selectedPhoto.urls ? selectedPhoto.urls[0] : selectedPhoto.url}
-                    alt={selectedPhoto.type === 'HANDOVER' ? 'Ảnh bàn giao' : 'Ảnh xác nhận khách'}
-                    className="w-full h-full object-contain"
-                  />
-                )}
-              </div>
-
-              {/* Footer */}
-              {selectedPhoto.time && (
-                <div className="p-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                  <span className="text-xs text-gray-500 font-bold">
-                    {selectedPhoto.type === 'HANDOVER' ? 'Thời gian kết thúc:' : 'Thời gian bắt đầu:'}
-                  </span>
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-md border ${
-                      selectedPhoto.type === 'HANDOVER' 
-                      ? 'text-emerald-600 bg-emerald-50 border-emerald-100' 
-                      : 'text-indigo-600 bg-indigo-50 border-indigo-100'
-                  }`}>
-                    {formatToHourMinute(selectedPhoto.time)}
-                  </span>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <PhotoViewerModal
+        selectedPhoto={selectedPhoto}
+        setSelectedPhoto={setSelectedPhoto}
+        photoIndex={photoIndex}
+        setPhotoIndex={setPhotoIndex}
+      />
 
       {/* Modal Tạm Dừng / Đổi KTV */}
       <PauseSwapKtvModal
@@ -3729,44 +3620,12 @@ if (!hasPermission('dispatch_board')) {
       />
 
       {/* Custom Confirm Modal (Fix INP Issue) */}
-      <AnimatePresence>
-        {confirmModal.isOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100"
-            >
-              <div className="p-5 pb-6">
-                <div className="flex items-center gap-3 text-orange-600 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center border border-orange-100">
-                    <AlertTriangle size={24} />
-                  </div>
-                  <h3 className="text-[17px] font-black">Xác nhận</h3>
-                </div>
-                <p className="text-[14px] font-medium text-gray-600 leading-relaxed px-1">
-                  {confirmModal.message}
-                </p>
-              </div>
-              <div className="p-4 bg-gray-50/80 border-t border-gray-100 flex gap-3">
-                <button
-                  onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                  className="flex-1 py-3 rounded-2xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-100 active:scale-95 transition-all"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  onClick={confirmModal.onConfirm}
-                  className="flex-1 py-3 rounded-2xl text-[13px] font-bold text-white bg-orange-600 hover:bg-orange-700 active:scale-95 transition-all shadow-sm"
-                >
-                  Đồng ý
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ConfirmActionModal
+        open={confirmModal.isOpen}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
       {/* Custom Start Service Modal */}
       <AnimatePresence>
         {startServiceModal.isOpen && (
