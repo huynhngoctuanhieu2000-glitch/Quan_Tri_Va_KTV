@@ -1,9 +1,50 @@
 # Kế hoạch tách nhỏ `app/reception/dispatch/page.tsx`
 
-**Ngày lập:** 05/09/2026
+**Ngày lập:** 05/09/2026 · **Cập nhật:** 05/09/2026
 **Nhánh:** `feat/bit-lo-hong-phase1`
-**Trạng thái:** Chờ duyệt.
+**Trạng thái:** ✅ **Đợt 1 XONG** · Đợt 2–4 chưa làm.
 **Tiền lệ:** KTV Dashboard đã tách xong ở `1b1d70f` + `f820f3b` (2549 → 184 dòng, nạp trang 7,16s → 0,44s).
+
+---
+
+## 0. Tình hình hiện tại
+
+| | Dòng | Ghi chú |
+|---|---|---|
+| Ban đầu | 3983 | một hàm duy nhất |
+| **Sau Đợt 1** | **3120** | −863 dòng (−22%), gỡ 3 state (47 → 44 hook) |
+| Mục tiêu sau Đợt 4 | ~900 | |
+
+**Commit của Đợt 1:** `8fa5357` → `c501a41` → `3f65933` → `60455a5` → `d083c23`
+
+### Chín component đã tách (`_components/`)
+
+| File | Props |
+|---|---|
+| `ConfirmActionModal.tsx` | `open`, `message`, `onConfirm`, `onCancel` |
+| `PhotoViewerModal.tsx` | giữ nguyên tên biến (làm trước khi chốt hướng đặt lại props) |
+| `QrJourneyModal.tsx` | `data`, `onClose` — nuốt luôn `JOURNEY_BASE_URL`, `QR_SIZE` |
+| `StartServiceModal.tsx` | `open`, `selectedDate`, `onConfirm`, `onClose` |
+| `InvoiceLanguageModal.tsx` | `invoiceId`, `onClose` |
+| `AddServiceModal.tsx` | 9 props; ô tìm kiếm thành state nội bộ |
+| `DispatchConfirmModal.tsx` | `open`, `order`, `subOrder`, `rooms`, `beds`, `onConfirm`, `onClose` |
+| `SplitDurationModal.tsx` | `config`, `onChange`, `onConfirm`, `onCancel` |
+| `OrderContextMenu.tsx` | `menu`, `orders`, `subOrders`, `onClose`, `actions` (gom 8 handler) |
+
+Kèm 2 file helper dùng chung: `dispatch-display.ts` (`getDisplayCustomerName`) và bổ sung `formatToHourMinute` vào `dispatch-time.logic.ts`.
+
+### Phát hiện khi đọc kỹ từng khối
+
+- **🐞 Lỗi thật đã sửa:** `mergePromptConfig` render **hai lần** — một bản JSX inline trong `page.tsx` và một lần nữa qua `<MergePromptModal>` đã tách sẵn, cùng điều kiện `config != null`. Mỗi lần quầy gán một KTV cho nhiều dịch vụ là **hai hộp thoại chồng lên nhau**. Bản inline là code sót lại, đã xoá.
+- **3 state đặt nhầm chỗ** — chỉ modal đọc, không caller nào ngoài dùng: `svcSearchQuery`, `customStartInputValue`, `showQrForLang`. Đã chuyển vào component, kéo theo 3 dòng `setSvcSearchQuery('')` rải rác và 1 dòng set giờ trước khi mở modal.
+- **Biến chết** `nameStr` (gán rồi không đọc, 2 chỗ).
+- **Code lặp**: logic "thiếu KTV" viết 2 lần; hàm lấy tên dịch vụ đa ngôn ngữ viết 2 lần.
+
+### Bài học công cụ
+
+- **Không cắt theo số dòng.** Lần đầu làm vậy ở KTV Dashboard đã hỏng file (9 lỗi JSX, phải `git restore`). Dùng công cụ cắt theo tên hàm + cân bằng ngoặc, bỏ qua ngoặc nằm trong chuỗi/comment.
+- Với `function X({...})`, phải bỏ qua cặp ngoặc tròn của tham số trước rồi mới tìm `{` thân hàm — nếu không sẽ dừng ở `{` của destructuring.
+- Sau mỗi lần tách: `tsc --noEmit` rồi **thao tác thật trên trình duyệt**, không chỉ tin `tsc`.
 
 ---
 
@@ -61,7 +102,7 @@ Thư mục `_components/` đã có sẵn 13 file (KanbanBoard, QuickDispatchTabl
 
 ## 4. Các đợt
 
-### Đợt 1 — 9 modal (≈1016 dòng) · rủi ro thấp
+### ✅ Đợt 1 — 9 modal · rủi ro thấp · **ĐÃ XONG** (xem mục 0)
 
 Bóc từng modal thành component nhận props rõ ràng, đặt trong `_components/`:
 
@@ -79,15 +120,15 @@ Bóc từng modal thành component nhận props rõ ràng, đặt trong `_compon
 
 Cách làm cho mỗi modal: liệt kê state/handler nó dùng → thành props → thay khối trong `page.tsx` bằng `<XModal ... />`.
 
-→ **page.tsx còn ≈2960 dòng.** Đây là đợt đáng giá nhất so với công sức bỏ ra.
+→ **Thực tế: page.tsx còn 3120 dòng.**
 
-### Đợt 2 — Header (182 dòng) · rủi ro trung bình
+### ⏳ Đợt 2 — Header (182 dòng) · rủi ro trung bình
 
 Tách `DispatchHeader.tsx`: chọn ngày, bộ đếm, nút chuyển chế độ mobile. Chủ yếu đọc state, ít ghi.
 
 → **page.tsx còn ≈2780 dòng.**
 
-### Đợt 3 — Hai panel (840 dòng) · rủi ro cao
+### ⏳ Đợt 3 — Hai panel (840 dòng) · rủi ro cao
 
 - `OrderPanel.tsx` (204 dòng) — danh sách đơn chờ
 - `AssignmentPanel.tsx` (636 dòng) — khối gán KTV, dày state nhất
@@ -96,7 +137,7 @@ Bước này cần khoanh vùng state trước: state nào chỉ panel dùng th�
 
 → **page.tsx còn ≈1940 dòng.**
 
-### Đợt 4 — Handler (≈1000 dòng) · rủi ro cao
+### ⏳ Đợt 4 — Handler (≈1000 dòng) · rủi ro cao
 
 13 handler lớn (`handleDispatch` 305 dòng, `handleSaveDraft` 162 dòng, `handleUpdateStatus` 152 dòng…) chuyển vào `useDispatchBoard.logic.ts` đang có sẵn, hoặc tách `useDispatchActions.ts` riêng.
 
@@ -113,8 +154,14 @@ Bước này cần khoanh vùng state trước: state nào chỉ panel dùng th�
 
 ---
 
-## 6. Đề xuất
+## 6. Làm tiếp thế nào
 
-Làm **Đợt 1** trước rồi dừng lại đánh giá. Nó gỡ được 1/4 số dòng với rủi ro thấp nhất, và cho thấy cách chia props có ổn không trước khi động vào phần khó.
+Đợt 1 đã chứng minh cách chia props chạy được. Hai đợt còn lại khác hẳn về bản chất — modal chỉ *nhận* dữ liệu, còn panel và handler *sở hữu* state đang chạy thật.
 
-Đợt 3 và 4 nên tách thành phiên làm việc riêng, có thời gian kiểm thử luồng điều phối đầy đủ.
+**Trước khi bắt đầu Đợt 2:**
+1. Dọn sạch git — hiện `actions.ts` và `useDispatchBoard.logic.ts` vẫn còn thay đổi chưa commit của phiên song song. Commit hoặc stash trước, nếu không sẽ lẫn.
+2. Chỉ để **một** tiến trình `npm run dev`. Nhiều server cùng ghi `.next` gây `UnrecognizedActionError` và hỏng cache webpack.
+
+**Đợt 3 và 4 nên là phiên làm việc riêng.** Chúng đụng vào state và handler của luồng điều phối đang chạy hằng ngày; cần thời gian đi hết một vòng nghiệp vụ thật (tạo đơn → gán KTV → gửi → tạm dừng → đổi KTV → hoàn tất) chứ không chỉ mở trang xem có render không.
+
+**Thứ tự đề xuất cho Đợt 3** (khó nhất): khoanh vùng state trước khi cắt. Với mỗi state trong `AssignmentPanel`, trả lời "ai ngoài panel này đọc nó?" — không ai thì đẩy hẳn vào panel (như đã làm với `svcSearchQuery` ở Đợt 1). Chỉ những state thật sự chia sẻ mới giữ ở cha. Bỏ qua bước này sẽ đẻ ra một component 20 tham số, còn khó đọc hơn lúc chưa tách.
