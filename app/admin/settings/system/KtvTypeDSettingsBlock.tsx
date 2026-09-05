@@ -129,19 +129,34 @@ export function KtvTypeDSettingsBlock() {
                             </div>
                             <h2 className="text-lg font-black text-gray-900">Phụ phí & Quỹ</h2>
                         </div>
-                        <SaveButton group="funds" savingGroup={savingGroup} saveStatus={saveStatus} onClick={() => handleSaveGroup(['ktv_type_d_internal_fund', 'ktv_type_d_internal_fund_enabled', 'ktv_type_d_reactivation_fee', 'ktv_deposit_amount_TYPE_D'], 'funds')} />
+                        <SaveButton group="funds" savingGroup={savingGroup} saveStatus={saveStatus} onClick={() => handleSaveGroup(['ktv_type_d_internal_fund', 'ktv_type_d_internal_fund_enabled', 'ktv_type_d_reactivation_fee', 'ktv_type_d_reactivation_fee_enabled', 'ktv_deposit_amount_TYPE_D', 'ktv_deposit_enabled_TYPE_D'], 'funds')} />
                     </div>
+                    {/* Mỗi khoản một cần gạt riêng: tắt khoản này không ảnh hưởng khoản kia. */}
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                            <div>
-                                <p className="font-bold text-gray-900">Thu quỹ nội bộ</p>
-                                <p className="text-xs text-gray-500">Thu tự động mỗi tháng</p>
-                            </div>
-                            <Toggle value={configs.ktv_type_d_internal_fund_enabled ?? false} onChange={(v: any) => handleChange('ktv_type_d_internal_fund_enabled', v)} />
-                        </div>
-                        <NumberInput label="Mức thu quỹ nội bộ" value={configs.ktv_type_d_internal_fund ?? 250000} onChange={(v: any) => handleChange('ktv_type_d_internal_fund', v)} />
-                        <NumberInput label="Phí kích hoạt lại" value={configs.ktv_type_d_reactivation_fee ?? 1000000} onChange={(v: any) => handleChange('ktv_type_d_reactivation_fee', v)} />
-                        <NumberInput label="Tiền cọc ví" value={configs.ktv_deposit_amount_TYPE_D ?? 1000000} onChange={(v: any) => handleChange('ktv_deposit_amount_TYPE_D', v)} />
+                        <FeeRow
+                            title="Thu quỹ nội bộ"
+                            hint="Thu tự động mỗi tháng"
+                            enabled={configs.ktv_type_d_internal_fund_enabled ?? false}
+                            onToggle={(v: any) => handleChange('ktv_type_d_internal_fund_enabled', v)}
+                            amount={configs.ktv_type_d_internal_fund ?? 250000}
+                            onAmount={(v: any) => handleChange('ktv_type_d_internal_fund', v)}
+                        />
+                        <FeeRow
+                            title="Phí kích hoạt lại"
+                            hint="Thu khi mở lại tài khoản đã khoá"
+                            enabled={configs.ktv_type_d_reactivation_fee_enabled ?? false}
+                            onToggle={(v: any) => handleChange('ktv_type_d_reactivation_fee_enabled', v)}
+                            amount={configs.ktv_type_d_reactivation_fee ?? 1000000}
+                            onAmount={(v: any) => handleChange('ktv_type_d_reactivation_fee', v)}
+                        />
+                        <FeeRow
+                            title="Tiền cọc ví"
+                            hint="Giữ trong ví khi bắt đầu làm"
+                            enabled={configs.ktv_deposit_enabled_TYPE_D ?? false}
+                            onToggle={(v: any) => handleChange('ktv_deposit_enabled_TYPE_D', v)}
+                            amount={configs.ktv_deposit_amount_TYPE_D ?? 1000000}
+                            onAmount={(v: any) => handleChange('ktv_deposit_amount_TYPE_D', v)}
+                        />
                         <p className="text-xs text-gray-400 italic mt-2">* Phí bảo trì và Giặt đồ dùng chung mức global.</p>
                     </div>
                 </div>
@@ -253,6 +268,30 @@ function NumberInput({ label, value, onChange, suffix = 'VNĐ' }: any) {
                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-3 text-lg font-bold text-gray-900 focus:border-indigo-400 focus:ring-0 transition-colors"
                 />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">{suffix}</span>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Một khoản phụ phí: cần gạt riêng + ô số tiền của chính nó.
+ *
+ * Tắt cần gạt thì làm mờ ô tiền và khoá nhập — nhìn là biết khoản này đang
+ * không thu, khỏi phải đoán qua con số. Số tiền vẫn giữ nguyên để bật lại là
+ * dùng tiếp, không phải gõ lại.
+ */
+function FeeRow({ title, hint, enabled, onToggle, amount, onAmount }: any) {
+    return (
+        <div className={`rounded-xl border-2 transition-colors ${enabled ? 'border-emerald-100 bg-emerald-50/30' : 'border-gray-100 bg-gray-50/60'}`}>
+            <div className="flex items-center justify-between p-4">
+                <div>
+                    <p className={`font-bold ${enabled ? 'text-gray-900' : 'text-gray-400'}`}>{title}</p>
+                    <p className="text-xs text-gray-500">{enabled ? hint : 'Đang tắt — không thu khoản này'}</p>
+                </div>
+                <Toggle value={enabled} onChange={onToggle} />
+            </div>
+            <div className={enabled ? 'px-4 pb-4' : 'px-4 pb-4 opacity-40 pointer-events-none'}>
+                <NumberInput value={amount} onChange={onAmount} />
             </div>
         </div>
     );
