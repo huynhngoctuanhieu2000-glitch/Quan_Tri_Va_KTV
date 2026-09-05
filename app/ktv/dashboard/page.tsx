@@ -853,26 +853,20 @@ function ScreenDashboard({ logic }: { logic: any }) {
           className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.06)]"
         >
           <div className="flex flex-col gap-4">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-center shrink-0">
-                <Sparkles size={24} className="text-emerald-600 animate-pulse" />
-              </div>
-              {/* Tên dịch vụ + thời lượng là thứ KTV cần đọc trước tiên để biết
-                  mình sắp làm gì và trong bao lâu. Mã đơn chỉ để đối chiếu với quầy. */}
-              <div className="min-w-0">
-                <p className="font-bold text-[10px] uppercase tracking-widest text-emerald-600 mb-1">Bạn có đơn mới</p>
-                <p className="font-black text-2xl leading-tight tracking-tight text-slate-800 break-words">
-                  {item?.service_name || 'Dịch vụ'}
+            {/* Tên dịch vụ + thời lượng là thứ KTV cần đọc trước tiên để biết
+                mình sắp làm gì và trong bao lâu. Mã đơn chỉ để đối chiếu với quầy. */}
+            <div className="min-w-0">
+              <p className="font-black text-2xl leading-tight tracking-tight text-slate-800 break-words">
+                {item?.service_name || 'Dịch vụ'}
+              </p>
+              {item?.duration && (
+                <p className="mt-2 inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1 text-sm font-black">
+                  <Clock size={14} strokeWidth={3} /> {item.duration} phút
                 </p>
-                {item?.duration && (
-                  <p className="mt-1.5 inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1 text-sm font-black">
-                    <Clock size={14} strokeWidth={3} /> {item.duration} phút
-                  </p>
-                )}
-                {booking.billCode && (
-                  <p className="text-[11px] font-bold text-slate-400 mt-1.5">Đơn {booking.billCode}</p>
-                )}
-              </div>
+              )}
+              {booking.billCode && (
+                <p className="text-[11px] font-bold text-slate-400 mt-1.5">Đơn {booking.billCode}</p>
+              )}
             </div>
 
             <div className="bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 grid grid-cols-2 gap-3 text-sm">
