@@ -42,6 +42,7 @@ import {
   DoorOpen,
   MessageSquare,
   ToggleLeft,
+  Timer,
   RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -80,6 +81,7 @@ const ICONS: Record<string, React.ReactNode> = {
   support_tasks_admin: <ClipboardCheck size={20} />,
   support_reviews_admin: <CheckSquare size={20} />,
   ktv_office_scoring: <ClipboardCheck size={20} />,
+  ktv_office_hours: <Timer size={20} />,
   system_settings: <Settings size={20} />,
   settings: <Settings size={20} />,
 };
@@ -118,10 +120,25 @@ const PATHS: Record<string, string> = {
   support_tasks_admin: '/admin/support/templates',
   support_reviews_admin: '/admin/support/reviews',
   ktv_office_scoring: '/admin/ktv-office',
+  ktv_office_hours: '/admin/ktv-office/hours',
   employee_tasks: '/support/tasks',
   system_settings: '/admin/settings/system',
   settings: '/settings',
 };
+
+/**
+ * Mục menu có sáng hay không.
+ *
+ * Không dùng startsWith trần: '/admin/ktv-office' là tiền tố của
+ * '/admin/ktv-office/hours', nên đứng ở trang con sẽ làm sáng CẢ HAI mục.
+ * Mục cha nhường cho mục con khi trang con cũng có mặt trên menu.
+ */
+function isPathActive(pathname: string, path: string): boolean {
+  if (!path) return false;
+  const matches = (p: string) => pathname === p || pathname.startsWith(p + '/');
+  if (!matches(path)) return false;
+  return !Object.values(PATHS).some(p => p !== path && p.startsWith(path + '/') && matches(p));
+}
 
 // 🔧 UI CONFIGURATION
 const GROUP_ORDER = ['Vận Hành', 'Tài Chính & Kế Toán', 'Thiết Lập Nội Dung', 'Kỹ Thuật Viên', 'Office', 'Hệ Thống'];
@@ -166,10 +183,7 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
   React.useEffect(() => {
     const newExpanded: Record<string, boolean> = {};
     Object.entries(groupedModules).forEach(([groupName, modules]) => {
-      const hasActiveLink = modules.some(m => {
-        const path = PATHS[m.id];
-        return pathname === path || pathname.startsWith(path + '/');
-      });
+      const hasActiveLink = modules.some(m => isPathActive(pathname, PATHS[m.id]));
       if (hasActiveLink) {
         newExpanded[groupName] = true;
       }
@@ -187,7 +201,7 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
 
   const renderLink = (module: typeof MODULES[0], showLabel: boolean) => {
     const path = PATHS[module.id];
-    const isActive = pathname === path || pathname.startsWith(path + '/');
+    const isActive = isPathActive(pathname, path);
 
     // Đang phục vụ khách: khoá mọi mục trừ chính trang đang đứng.
     if (isServingLocked && !isActive) {
@@ -293,10 +307,7 @@ export function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpand }: 
             GROUP_ORDER.filter(g => groupedModules[g]?.length > 0).map(groupName => {
               const modules = groupedModules[groupName];
               const isGroupExpanded = expandedGroups[groupName];
-              const hasActiveInGroup = modules.some(m => {
-                const path = PATHS[m.id];
-                return pathname === path || pathname.startsWith(path + '/');
-              });
+              const hasActiveInGroup = modules.some(m => isPathActive(pathname, PATHS[m.id]));
 
               return (
                 <div key={groupName} className="mb-0.5">

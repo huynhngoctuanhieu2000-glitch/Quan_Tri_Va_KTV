@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { useAdminKtvOfficeLogic, vnTodayStr } from './AdminKtvOffice.logic';
-import { Search, ChevronLeft, ChevronRight, X, Image as ImageIcon } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, Image as ImageIcon, Pencil, Undo2, Trash2, Plus, SlidersHorizontal, Timer } from 'lucide-react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppLayout } from '@/components/layout/AppLayout';
 
@@ -25,6 +26,459 @@ const CSS_VARS = {
 } as React.CSSProperties;
 
 
+const fmtNum = (n: number) => Number(n ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+
+/**
+ * Một phiếu trừ điểm trong timeline, kèm hai thao tác sửa sai:
+ *  - Sửa: chấm nhầm tiêu chí, thiếu ghi chú hoặc thiếu ảnh thì vá tại chỗ.
+ *  - Thu hồi: phiếu sai hẳn, hoàn điểm cho KTV nhưng vẫn giữ dấu vết.
+ */
+const HitRow = ({ hit, logic }: { hit: any; logic: any }) => {
+  const editing = logic.editState?.logId === hit.logId;
+  const revoking = logic.revokeState?.logId === hit.logId;
+
+  if (editing) {
+    const e = logic.editState;
+    const photoCount = e.keptPhotos.length + e.newPhotos.length;
+    return (
+      <div className="bg-white border-2 border-[var(--green)] rounded-xl p-3 mb-2">
+        <label className="block text-[11px] font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Tiêu chí</label>
+        <select
+          value={e.criteriaId}
+          onChange={ev => logic.patchEdit({ criteriaId: ev.target.value })}
+          className="w-full h-11 px-3 rounded-xl border border-[var(--line)] bg-white text-sm font-semibold mb-3"
+        >
+          {logic.allCriteria.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.label} (−{fmtNum(c.points)}đ)</option>
+          ))}
+        </select>
+
+        <label className="block text-[11px] font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Ghi chú</label>
+        <textarea
+          value={e.note}
+          onChange={ev => logic.patchEdit({ note: ev.target.value })}
+          className="w-full min-h-[64px] p-3 rounded-xl border border-[var(--line)] text-sm mb-3"
+          placeholder="Ghi chú gửi cho KTV"
+        />
+
+        <label className="block text-[11px] font-bold uppercase tracking-widest text-[var(--muted)] mb-2">
+          Ảnh minh chứng ({photoCount}/{logic.maxPhotos})
+        </label>
+        <div className="flex gap-2 flex-wrap items-center mb-3">
+          {e.keptPhotos.map((u: string) => (
+            <div key={u} className="relative w-[54px] h-[54px] rounded-xl overflow-hidden border border-[var(--line)]">
+              <img src={u} alt="Minh chứng" className="w-full h-full object-cover" />
+              <button
+                onClick={() => logic.removeEditPhoto(u)}
+                aria-label="Bỏ ảnh này"
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[var(--rust)] text-white text-xs flex items-center justify-center"
+              >✕</button>
+            </div>
+          ))}
+          {e.newPhotos.map((src: string, i: number) => (
+            <div key={`new-${i}`} className="relative w-[54px] h-[54px] rounded-xl overflow-hidden border-2 border-[var(--green)]">
+              <img src={src} alt={`Ảnh mới ${i + 1}`} className="w-full h-full object-cover" />
+              <button
+                onClick={() => logic.removeEditNewPhoto(i)}
+                aria-label={`Bỏ ảnh mới ${i + 1}`}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[var(--rust)] text-white text-xs flex items-center justify-center"
+              >✕</button>
+            </div>
+          ))}
+          {photoCount < logic.maxPhotos && (
+            <label className="h-[54px] px-3 rounded-xl border-2 border-dashed border-[var(--line)] bg-[var(--surface-soft)] flex items-center gap-2 cursor-pointer text-xs font-bold text-[var(--green)]">
+              <ImageIcon size={14} /> Thêm ảnh
+              <input
+                type="file" accept="image/*" multiple capture="environment" className="hidden"
+                onChange={ev => { logic.addEditPhotos(ev.target.files); ev.target.value = ''; }}
+              />
+            </label>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={logic.saveEditLog}
+            disabled={logic.logBusy}
+            className="flex-1 h-10 rounded-xl font-bold btn-primary disabled:opacity-50"
+          >{logic.logBusy ? 'Đang lưu…' : 'Lưu thay đổi'}</button>
+          <button onClick={logic.cancelEditLog} className="w-20 h-10 rounded-xl font-bold btn-ghost">Hủy</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[var(--surface-soft)] rounded-xl p-3 mb-2">
+      <div className="flex justify-between gap-3">
+        <strong className="text-sm">{hit.label}</strong>
+        <b className="text-[var(--rust)] text-sm whitespace-nowrap">−{fmtNum(hit.points)}đ</b>
+      </div>
+      {hit.note && <p className="text-xs text-[var(--muted)] mt-1">{hit.note}</p>}
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        {hit.photoUrls.map((u: string, i: number) => (
+          <a key={i} href={u} target="_blank" rel="noreferrer"
+             className="w-7 h-7 rounded border border-[var(--line)] flex items-center justify-center bg-white">
+            <ImageIcon size={13} className="text-[var(--muted)]" />
+          </a>
+        ))}
+        <span className="text-xs text-[var(--muted)]">
+          {hit.byName} · {new Date(hit.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+        </span>
+      </div>
+
+      {revoking ? (
+        <div className="mt-3 pt-3 border-t border-[var(--line)]">
+          <label className="block text-[11px] font-bold uppercase tracking-widest text-[var(--muted)] mb-1">
+            Lý do thu hồi <span className="text-[var(--rust)]">*</span>
+          </label>
+          <textarea
+            value={logic.revokeState.reason}
+            onChange={ev => logic.setRevokeReason(ev.target.value)}
+            placeholder="Ví dụ: Chấm nhầm KTV, đã xác minh lại với quản ca."
+            className="w-full min-h-[64px] p-3 rounded-xl border border-[var(--line)] text-sm mb-2"
+          />
+          <p className="text-xs text-[var(--muted)] mb-2">
+            Điểm được hoàn lại ngay. Phiếu vẫn lưu kèm lý do và người thu hồi để đối chiếu sau này.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={logic.confirmRevokeLog}
+              disabled={logic.logBusy}
+              className="flex-1 h-10 rounded-xl font-bold btn-danger disabled:opacity-50"
+            >{logic.logBusy ? 'Đang thu hồi…' : `Xác nhận thu hồi, hoàn ${fmtNum(hit.points)}đ`}</button>
+            <button onClick={logic.cancelRevokeLog} className="w-20 h-10 rounded-xl font-bold btn-ghost">Hủy</button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-2 mt-2 pt-2 border-t border-[var(--line)]">
+          <button
+            onClick={() => logic.startEditLog(hit)}
+            className="h-8 px-3 rounded-lg text-xs font-bold btn-ghost flex items-center gap-1"
+          ><Pencil size={13} /> Sửa</button>
+          {logic.isManager && (
+            <button
+              onClick={() => logic.startRevokeLog(hit.logId)}
+              className="h-8 px-3 rounded-lg text-xs font-bold btn-danger flex items-center gap-1"
+            ><Undo2 size={13} /> Thu hồi</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Cài đặt bộ tiêu chí — sửa nhãn, sửa điểm, đặt trần từng nhóm, thêm và xoá ngay
+ * trên trang, để quy chế đổi mà không phải sửa code rồi deploy lại.
+ *
+ * Trần nhóm là ràng buộc thật: tổng điểm các tiêu chí đang áp dụng không được vượt
+ * trần. Chặn ngay ở đây cho người dùng thấy trước, server vẫn kiểm lại lần nữa.
+ */
+const CriteriaSettings = ({ logic }: { logic: any }) => {
+  const [drafts, setDrafts] = React.useState<Record<string, any>>({});
+  const [groupDrafts, setGroupDrafts] = React.useState<Record<string, any>>({});
+  const [adding, setAdding] = React.useState<Record<string, any>>({});
+
+  /** Giá trị đang gõ dở; chưa đụng tới thì lấy nguyên giá trị trong DB. */
+  const draftFrom = (store: Record<string, any>, item: any) => store[item.id] || {
+    label: item.label ?? '',
+    points: item.points ?? 0,
+    requiresPhoto: !!item.requiresPhoto,
+  };
+  const draftOf = (item: any) => draftFrom(drafts, item);
+
+  // Phải trộn lên bản ĐẦY ĐỦ của dòng, không phải lên {} — gõ vào ô tên mà chỉ lưu
+  // mỗi `label` thì `points` thành undefined và ô điểm rơi từ controlled sang uncontrolled.
+  const setDraft = (item: any, patch: any) =>
+    setDrafts(prev => ({ ...prev, [item.id]: { ...draftFrom(prev, item), ...patch } }));
+
+  const groupDraftFrom = (store: Record<string, any>, group: any) => store[group.grp] || {
+    grpLabel: group.grpLabel ?? '',
+    grpMax: group.max ?? 0,
+  };
+  const groupDraftOf = (group: any) => groupDraftFrom(groupDrafts, group);
+  const setGroupDraft = (group: any, patch: any) =>
+    setGroupDrafts(prev => ({ ...prev, [group.grp]: { ...groupDraftFrom(prev, group), ...patch } }));
+
+  const isDirty = (item: any) => {
+    const d = drafts[item.id];
+    if (!d) return false;
+    return d.label !== item.label || Number(d.points) !== Number(item.points) || d.requiresPhoto !== item.requiresPhoto;
+  };
+  const isGroupDirty = (group: any) => {
+    const d = groupDrafts[group.grp];
+    if (!d) return false;
+    return d.grpLabel !== group.grpLabel || Number(d.grpMax) !== Number(group.max);
+  };
+
+  /** Tổng điểm nhóm sẽ thành bao nhiêu nếu lưu hết những gì đang gõ dở. */
+  const usedOf = (group: any) => {
+    const sum = (group.items || [])
+      .filter((i: any) => i.isActive)
+      .reduce((a: number, i: any) => a + (Number(draftOf(i).points) || 0), 0);
+    return Math.round(sum * 100) / 100;
+  };
+  const capOf = (group: any) => Number(groupDraftOf(group).grpMax) || 0;
+
+  const saveRow = async (item: any) => {
+    const d = draftOf(item);
+    await logic.saveCriteria(item.id, {
+      label: d.label,
+      points: Number(d.points),
+      requiresPhoto: !!d.requiresPhoto,
+    });
+    setDrafts(prev => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+  };
+
+  const saveGroup = async (group: any) => {
+    const d = groupDraftOf(group);
+    const ok = await logic.saveGroup(group.grp, { grpLabel: d.grpLabel, grpMax: Number(d.grpMax) });
+    if (ok) {
+      setGroupDrafts(prev => {
+        const next = { ...prev };
+        delete next[group.grp];
+        return next;
+      });
+    }
+  };
+
+  const addRow = async (grp: string) => {
+    const d = adding[grp] || {};
+    const ok = await logic.addCriteria(grp, {
+      label: d.label || '',
+      points: Number(d.points),
+      requiresPhoto: !!d.requiresPhoto,
+    });
+    if (ok) setAdding(prev => ({ ...prev, [grp]: null }));
+  };
+
+  // Lăn chuột trên ô số của Chrome sẽ đổi giá trị mà người dùng không hề gõ —
+  // trên màn này là âm thầm sửa quy chế, nên bỏ focus trước khi trang cuộn.
+  const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur();
+
+  if (logic.settingsLoading && logic.settingsGroups.length === 0) {
+    return <p className="py-10 text-center text-[var(--muted)]">Đang tải bộ tiêu chí…</p>;
+  }
+
+  const capTotal = logic.settingsGroups.reduce((a: number, g: any) => a + capOf(g), 0);
+
+  return (
+    <>
+      <div className="bg-[var(--surface-soft)] p-4 rounded-2xl mb-5 text-sm">
+        <p className="font-bold mb-1">Sửa quy chế ngay tại đây</p>
+        <p className="text-xs text-[var(--muted)] leading-relaxed">
+          Đổi tên, đổi điểm hay thêm tiêu chí đều áp dụng cho <b>phiếu chấm từ lúc này trở đi</b>.
+          Phiếu đã chấm giữ nguyên nhãn và điểm cũ, nên lịch sử tháng trước không bị sai.
+        </p>
+        <div className="flex justify-between items-baseline mt-2 pt-2 border-t border-[var(--line)]">
+          <span className="text-xs text-[var(--muted)]">Tổng trần 3 nhóm</span>
+          <b className={capTotal === 100 ? 'text-[var(--green)]' : 'text-[var(--rust)]'}>
+            {fmtNum(capTotal)}đ / 100đ
+          </b>
+        </div>
+        {capTotal !== 100 && (
+          <p className="text-xs text-[var(--rust)] mt-1">
+            Điểm mỗi ngày của KTV bắt đầu từ 100. Tổng trần 3 nhóm lệch 100 nghĩa là cơ cấu điểm đã sai —
+            {capTotal > 100 ? ' trừ hết mọi lỗi sẽ âm điểm.' : ' có phần điểm không lỗi nào chạm tới được.'}
+          </p>
+        )}
+        {!logic.isManager && (
+          <p className="text-xs text-[var(--rust)] font-bold mt-2">
+            Bạn đang xem ở chế độ chỉ đọc — chỉ Quản lý mới sửa được bộ tiêu chí.
+          </p>
+        )}
+      </div>
+
+      {logic.settingsGroups.map((group: any) => {
+        const gd = groupDraftOf(group);
+        const cap = capOf(group);
+        const used = usedOf(group);
+        const over = used > cap;
+        const left = Math.round((cap - used) * 100) / 100;
+        const groupDirty = isGroupDirty(group);
+
+        return (
+          <div key={group.grp} className="mb-7">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-9 h-9 shrink-0 rounded-xl bg-[var(--green-2)] text-[var(--green)] font-bold flex items-center justify-center text-sm">{group.grp}</span>
+              <input
+                value={gd.grpLabel}
+                disabled={!logic.isManager}
+                onChange={e => setGroupDraft(group, { grpLabel: e.target.value })}
+                className="flex-1 min-w-0 h-10 px-3 rounded-xl border border-[var(--line)] bg-white font-bold text-sm disabled:bg-transparent disabled:border-transparent disabled:px-0"
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-xs text-[var(--muted)]">Trần</span>
+                <input
+                  type="number" min={0} step={0.5}
+                  value={gd.grpMax}
+                  disabled={!logic.isManager}
+                  onWheel={blurOnWheel}
+                  onChange={e => setGroupDraft(group, { grpMax: e.target.value })}
+                  className="w-16 h-10 px-2 rounded-xl border border-[var(--line)] bg-white text-sm font-bold text-right disabled:bg-transparent disabled:border-transparent"
+                />
+                <span className="text-xs text-[var(--muted)]">đ</span>
+              </div>
+              {logic.isManager && groupDirty && (
+                <button
+                  onClick={() => saveGroup(group)}
+                  disabled={!!logic.savingId}
+                  className="h-10 px-3 rounded-xl text-xs font-bold btn-primary shrink-0"
+                >{logic.savingId === `grp-${group.grp}` ? 'Đang lưu…' : 'Lưu nhóm'}</button>
+              )}
+            </div>
+
+            <div className={`flex justify-between items-baseline text-xs mb-2 px-1 ${over ? 'text-[var(--rust)] font-bold' : 'text-[var(--muted)]'}`}>
+              <span>Đang dùng {fmtNum(used)} / {fmtNum(cap)}đ</span>
+              <span>
+                {over
+                  ? `Vượt trần ${fmtNum(used - cap)}đ — hạ điểm hoặc nâng trần trước khi lưu`
+                  : left > 0 ? `Còn ${fmtNum(left)}đ chưa dùng` : 'Đã dùng hết trần'}
+              </span>
+            </div>
+
+            <div className="border-t border-[var(--line)]">
+              {group.items.map((item: any) => {
+                const d = draftOf(item);
+                const dirty = isDirty(item);
+                return (
+                  <div key={item.id} className={`py-3 border-b border-[var(--line)] ${item.isActive ? '' : 'opacity-55'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[11px] font-mono font-bold text-[var(--muted)] w-8 shrink-0">{item.id}</span>
+                      <input
+                        value={d.label}
+                        disabled={!logic.isManager}
+                        onChange={e => setDraft(item, { label: e.target.value })}
+                        className="flex-1 min-w-0 h-10 px-3 rounded-xl border border-[var(--line)] bg-white text-sm disabled:bg-transparent disabled:border-transparent disabled:px-0"
+                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[var(--rust)] font-bold text-sm">−</span>
+                        <input
+                          type="number" min={0.5} step={0.5}
+                          value={d.points}
+                          disabled={!logic.isManager}
+                          onWheel={blurOnWheel}
+                          onChange={e => setDraft(item, { points: e.target.value })}
+                          className={`w-16 h-10 px-2 rounded-xl border bg-white text-sm font-bold text-right disabled:bg-transparent disabled:border-transparent ${over && item.isActive ? 'border-[var(--rust)]' : 'border-[var(--line)]'}`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-wrap pl-10">
+                      <label className={`flex items-center gap-1.5 text-xs ${logic.isManager ? 'cursor-pointer' : ''}`}>
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 accent-[var(--amber)]"
+                          checked={!!d.requiresPhoto}
+                          disabled={!logic.isManager}
+                          onChange={e => setDraft(item, { requiresPhoto: e.target.checked })}
+                        />
+                        Bắt buộc ảnh
+                      </label>
+
+                      {item.usageCount > 0 && (
+                        <span className="text-xs text-[var(--muted)]">đã dùng {item.usageCount} phiếu</span>
+                      )}
+                      {!item.isActive && (
+                        <span className="text-[10px] font-bold text-[var(--rust)] bg-[var(--rust-2)] px-2 py-0.5 rounded">NGỪNG ÁP DỤNG</span>
+                      )}
+
+                      {logic.isManager && (
+                        <div className="flex gap-2 ml-auto">
+                          {dirty && (
+                            <button
+                              onClick={() => saveRow(item)}
+                              disabled={logic.savingId === item.id || over}
+                              title={over ? 'Tổng điểm của nhóm đang vượt trần' : undefined}
+                              className="h-8 px-3 rounded-lg text-xs font-bold btn-primary disabled:opacity-50"
+                            >{logic.savingId === item.id ? 'Đang lưu…' : 'Lưu'}</button>
+                          )}
+                          <button
+                            onClick={() => logic.saveCriteria(item.id, { isActive: !item.isActive })}
+                            disabled={!!logic.savingId}
+                            className="h-8 px-3 rounded-lg text-xs font-bold btn-ghost"
+                          >{item.isActive ? 'Tạm ngừng' : 'Dùng lại'}</button>
+                          <button
+                            onClick={() => logic.deleteCriteria(item.id, item.label, item.usageCount)}
+                            disabled={!!logic.savingId}
+                            className="h-8 px-3 rounded-lg text-xs font-bold btn-danger flex items-center gap-1"
+                          ><Trash2 size={13} /> Xóa</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {logic.isManager && (
+              adding[group.grp] ? (
+                <div className="mt-3 p-3 rounded-2xl border-2 border-dashed border-[var(--green)] bg-[var(--surface-soft)]">
+                  <input
+                    autoFocus
+                    placeholder="Tên tiêu chí mới"
+                    value={adding[group.grp].label || ''}
+                    onChange={e => setAdding(prev => ({ ...prev, [group.grp]: { ...prev[group.grp], label: e.target.value } }))}
+                    className="w-full h-10 px-3 rounded-xl border border-[var(--line)] bg-white text-sm mb-2"
+                  />
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-[var(--muted)]">Điểm trừ</span>
+                      <input
+                        type="number" min={0.5} step={0.5}
+                        value={adding[group.grp].points ?? ''}
+                        onWheel={blurOnWheel}
+                        onChange={e => setAdding(prev => ({ ...prev, [group.grp]: { ...prev[group.grp], points: e.target.value } }))}
+                        className="w-16 h-9 px-2 rounded-xl border border-[var(--line)] bg-white text-sm font-bold text-right"
+                      />
+                      <span className="text-xs text-[var(--muted)]">/ còn {fmtNum(left)}đ</span>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-[var(--amber)]"
+                        checked={!!adding[group.grp].requiresPhoto}
+                        onChange={e => setAdding(prev => ({ ...prev, [group.grp]: { ...prev[group.grp], requiresPhoto: e.target.checked } }))}
+                      />
+                      Bắt buộc ảnh
+                    </label>
+                    <div className="flex gap-2 ml-auto">
+                      <button
+                        onClick={() => addRow(group.grp)}
+                        disabled={!!logic.savingId}
+                        className="h-9 px-4 rounded-xl text-xs font-bold btn-primary disabled:opacity-50"
+                      >{logic.savingId === `new-${group.grp}` ? 'Đang thêm…' : 'Thêm'}</button>
+                      <button
+                        onClick={() => setAdding(prev => ({ ...prev, [group.grp]: null }))}
+                        className="h-9 px-3 rounded-xl text-xs font-bold btn-ghost"
+                      >Hủy</button>
+                    </div>
+                  </div>
+                  {Number(adding[group.grp].points) > left && (
+                    <p className="text-xs text-[var(--rust)] font-bold mt-2">
+                      Nhóm {group.grp} chỉ còn {fmtNum(left)}đ. Nâng trần nhóm hoặc hạ điểm tiêu chí khác trước.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAdding(prev => ({ ...prev, [group.grp]: { label: '', points: '', requiresPhoto: group.grp === 'III' } }))}
+                  className="mt-3 h-10 px-4 rounded-xl text-sm font-bold btn-ghost border border-dashed border-[var(--line)] flex items-center gap-2"
+                ><Plus size={15} /> Thêm tiêu chí vào nhóm {group.grp}</button>
+              )
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+};
+
 const AdminKtvOfficePage = () => {
   const logic = useAdminKtvOfficeLogic();
   
@@ -37,7 +491,6 @@ const AdminKtvOfficePage = () => {
   const activeList = filteredStaff.filter(ktv => !ktv.locked && ktv.score >= 90);
 
   const fmtMoney = (n: number) => n.toLocaleString('vi-VN') + ' ₫';
-  const fmtNum = (n: number) => Number(n ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
   const fmtDate = (iso: string) => {
     try { return new Date(iso + 'T00:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }); }
     catch { return iso; }
@@ -79,11 +532,19 @@ const AdminKtvOfficePage = () => {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
+            <Link
+              href="/admin/ktv-office/hours"
+              className="h-12 px-4 rounded-2xl bg-[var(--surface)] shadow-sm font-bold text-sm flex items-center justify-center gap-2 hover:bg-[var(--green-2)]"
+            ><Timer size={16} /> Giờ tích lũy</Link>
             <div className="flex items-center bg-[var(--surface)] p-1 rounded-2xl shadow-sm">
               <button onClick={() => logic.changeMonth(-1)} className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-xl"><ChevronLeft size={20}/></button>
               <span className="min-w-[100px] text-center font-bold text-sm">Tháng {logic.month}</span>
               <button onClick={() => logic.changeMonth(1)} className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-xl"><ChevronRight size={20}/></button>
             </div>
+            <button
+              onClick={() => logic.openSheet('settings')}
+              className="h-12 px-5 rounded-2xl font-bold bg-[var(--surface)] shadow-sm flex items-center justify-center gap-2 text-sm"
+            ><SlidersHorizontal size={17}/> Cài đặt tiêu chí</button>
           </div>
         </div>
 
@@ -224,9 +685,14 @@ const AdminKtvOfficePage = () => {
                 <div>
                   <h2 className="text-xl font-bold tracking-tight">
                     {logic.sheetState.type === 'deduct' ? 'Trừ điểm' : 
-                     logic.sheetState.type === 'unlock' ? 'Mở khóa tài khoản' : 'Lịch sử điểm'}
+                     logic.sheetState.type === 'unlock' ? 'Mở khóa tài khoản' :
+                     logic.sheetState.type === 'settings' ? 'Cài đặt tiêu chí chấm điểm' : 'Lịch sử điểm'}
                   </h2>
-                  <p className="text-sm text-[var(--muted)] mt-1">{logic.sheetState.code} · {logic.sheetState.person}</p>
+                  <p className="text-sm text-[var(--muted)] mt-1">
+                    {logic.sheetState.type === 'settings'
+                      ? 'Quy chế KTV Loại D · sửa nội dung và điểm trừ'
+                      : logic.sheetState.code + ' · ' + logic.sheetState.person}
+                  </p>
                 </div>
                 <button onClick={logic.closeSheet} className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100">
                   <X size={20} />
@@ -400,6 +866,30 @@ const AdminKtvOfficePage = () => {
 
                 {logic.sheetState.type === 'history' && (
                   <>
+                    {/* Tháng của sheet tách khỏi tháng bảng danh sách — tra ngược tháng cũ
+                        của một KTV mà không phải đóng sheet rồi đổi tháng cả trang. */}
+                    <div className="flex items-center justify-between gap-3 bg-[var(--surface-soft)] p-2 rounded-2xl mb-5">
+                      <button
+                        onClick={() => logic.changeDetailMonth(-1)}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white"
+                        aria-label="Tháng trước"
+                      ><ChevronLeft size={20}/></button>
+                      <div className="text-center">
+                        <span className="block text-[10px] uppercase tracking-widest text-[var(--muted)]">Kỳ xem</span>
+                        <input
+                          type="month"
+                          value={logic.detailMonth}
+                          onChange={e => logic.setDetailMonth(e.target.value)}
+                          className="bg-transparent font-bold text-sm text-center focus:outline-none"
+                        />
+                      </div>
+                      <button
+                        onClick={() => logic.changeDetailMonth(1)}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white"
+                        aria-label="Tháng sau"
+                      ><ChevronRight size={20}/></button>
+                    </div>
+
                     {logic.detailLoading && (
                       <p className="py-10 text-center text-[var(--muted)]">Đang tải dữ liệu…</p>
                     )}
@@ -415,7 +905,7 @@ const AdminKtvOfficePage = () => {
                         <>
                           <div className="grid grid-cols-2 gap-3 mb-5">
                             <div className="bg-[var(--surface-soft)] p-4 rounded-2xl">
-                              <span className="block text-xs text-[var(--muted)]">Điểm tháng {logic.month}</span>
+                              <span className="block text-xs text-[var(--muted)]">Điểm tháng {Number(logic.detailMonth.slice(5))}</span>
                               <strong className="text-lg">{fmtNum(o.score)} điểm</strong>
                             </div>
                             <div className="bg-[var(--surface-soft)] p-4 rounded-2xl">
@@ -439,7 +929,7 @@ const AdminKtvOfficePage = () => {
                             <>
                               {/* Bóc từng bước ra để KTV không thắc mắc vì sao ra con số này */}
                               <div className="bg-[var(--surface-soft)] p-4 rounded-2xl mb-5 text-sm">
-                                <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Điểm từng ngày · tháng {logic.month}</p>
+                                <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Điểm từng ngày · tháng {Number(logic.detailMonth.slice(5))}</p>
                                 <p className="text-xs text-[var(--muted)] mb-3">Mỗi ngày đi làm bắt đầu từ 100đ, trừ dần theo lỗi trong ngày đó.</p>
                                 {o.days.length === 0 ? (
                                   <p className="py-3 text-xs text-[var(--muted)]">Chưa có ngày đi làm nào trong tháng.</p>
@@ -495,24 +985,7 @@ const AdminKtvOfficePage = () => {
                                         <b className="text-sm">{fmtNum(d.dayScore)} / 100</b>
                                       </div>
                                       {d.hits.map((h: any) => (
-                                        <div key={h.logId} className="bg-[var(--surface-soft)] rounded-xl p-3 mb-2">
-                                          <div className="flex justify-between gap-3">
-                                            <strong className="text-sm">{h.label}</strong>
-                                            <b className="text-[var(--rust)] text-sm whitespace-nowrap">−{fmtNum(h.points)}đ</b>
-                                          </div>
-                                          {h.note && <p className="text-xs text-[var(--muted)] mt-1">{h.note}</p>}
-                                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                            {h.photoUrls.map((u: string, i: number) => (
-                                              <a key={i} href={u} target="_blank" rel="noreferrer"
-                                                 className="w-7 h-7 rounded border border-[var(--line)] flex items-center justify-center bg-white">
-                                                <ImageIcon size={13} className="text-[var(--muted)]" />
-                                              </a>
-                                            ))}
-                                            <span className="text-xs text-[var(--muted)]">
-                                              {h.byName} · {new Date(h.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
-                                            </span>
-                                          </div>
-                                        </div>
+                                        <HitRow key={h.logId} hit={h} logic={logic} />
                                       ))}
                                     </div>
                                   ))}
@@ -571,6 +1044,8 @@ const AdminKtvOfficePage = () => {
                     })()}
                   </>
                 )}
+
+                {logic.sheetState.type === 'settings' && <CriteriaSettings logic={logic} />}
               </div>
 
               {/* Sheet Footer */}
@@ -596,7 +1071,7 @@ const AdminKtvOfficePage = () => {
                     <button className="flex-1 h-12 rounded-xl font-bold btn-primary">Xác nhận mở khóa</button>
                   </>
                 )}
-                {logic.sheetState.type === 'history' && (
+                {(logic.sheetState.type === 'history' || logic.sheetState.type === 'settings') && (
                   <button className="flex-1 h-12 rounded-xl font-bold btn-primary" onClick={logic.closeSheet}>Đóng</button>
                 )}
               </div>

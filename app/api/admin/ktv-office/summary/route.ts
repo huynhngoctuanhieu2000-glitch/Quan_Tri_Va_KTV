@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth-server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { KtvOfficeScoreService } from '@/lib/services/KtvOfficeScoreService';
+import { KtvOfficeScoreService, currentMonthVn } from '@/lib/services/KtvOfficeScoreService';
 
 export const dynamic = 'force-dynamic';
-
-/** 'YYYY-MM' của tháng hiện tại theo giờ VN. */
-function currentMonthVn(): string {
-    const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 export async function GET(request: Request) {
     try {

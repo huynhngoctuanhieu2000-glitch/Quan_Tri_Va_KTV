@@ -182,8 +182,8 @@ export async function requirePermission(permissionId: string) {
         ? bUser.permissions
         : getFallbackPermissions(roleId);
 
-    // Auto-inject ktv_office_scoring for admin, dev, reception (tránh lỗi cache DB cũ)
-    if (permissionId === 'ktv_office_scoring') {
+    // Auto-inject quyền Office mới cho admin, dev, reception (tránh lỗi cache DB cũ)
+    if (permissionId === 'ktv_office_scoring' || permissionId === 'ktv_office_hours') {
         if (roleId === 'admin' || roleId === 'dev' || roleId === 'reception') {
             return true;
         }

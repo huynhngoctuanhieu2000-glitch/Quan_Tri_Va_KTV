@@ -27,6 +27,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: 'device_management', name: 'Thiết Bị', group: 'Hệ Thống' },
   { id: 'support_tasks_admin', name: 'Giao Việc', group: 'Office' },
   { id: 'ktv_office_scoring', name: 'Chấm Điểm', group: 'Office' },
+  { id: 'ktv_office_hours', name: 'Giờ Tích Lũy', group: 'Office' },
   { id: 'employee_tasks', name: 'Công Việc Của Tôi', group: 'Kỹ Thuật Viên' },
   { id: 'system_settings', name: 'Cài Đặt Hệ Thống', group: 'Hệ Thống' },
   { id: 'settings', name: 'Cài Đặt', group: 'Hệ Thống' },

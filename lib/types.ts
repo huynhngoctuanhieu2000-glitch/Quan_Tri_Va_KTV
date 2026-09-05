@@ -34,6 +34,7 @@ export type ModuleId =
   | 'support_reviews_admin'
   | 'employee_tasks'
   | 'ktv_office_scoring'
+  | 'ktv_office_hours'
   | 'settings'
   | 'system_settings';
 

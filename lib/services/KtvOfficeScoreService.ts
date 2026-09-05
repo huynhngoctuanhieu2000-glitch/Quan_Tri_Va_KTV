@@ -71,6 +71,37 @@ export interface OfficeMonth {
     days: OfficeDay[];
 }
 
+export interface HoursAggregate {
+    /** Giờ làm THỰC trong dịch vụ (đã loại dịch vụ tiện ích). */
+    earned: number;
+    /** Giờ bị trừ do kỷ luật (nghỉ không báo, từ chối tua…). */
+    penalty: number;
+    /** earned − penalty. Có thể ÂM khi phạt nhiều hơn giờ làm — không cắt về 0
+     *  để người xem thấy đúng tình trạng thay vì tưởng là chưa làm gì. */
+    net: number;
+    /** Số tua có phát sinh giờ làm. */
+    turns: number;
+    /** Số ngày có ít nhất 1 tua. */
+    days: number;
+    /** Ngày có tua gần nhất. */
+    lastDate: string | null;
+}
+
+/**
+ * Ai được sửa quy chế, chấm điểm cho ngày cũ và thu hồi phiếu.
+ * Lễ tân chỉ chấm điểm theo quy chế có sẵn, trong hôm nay + hôm qua.
+ * Nhận `Staff.role` thô (chữ hoa như trong DB), không phải roleId đã chuẩn hoá.
+ */
+export function isOfficeManager(role?: string | null): boolean {
+    return ['ADMIN', 'DEV', 'MANAGER'].includes(String(role || '').toUpperCase());
+}
+
+/** 'YYYY-MM' của tháng hiện tại theo giờ VN. */
+export function currentMonthVn(): string {
+    const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 /** Khoảng ngày [đầu tháng, cuối tháng] của chuỗi 'YYYY-MM'. */
 export function monthRange(month: string): { from: string; to: string } {
     const [y, m] = month.split('-').map(Number);
@@ -265,6 +296,73 @@ export class KtvOfficeScoreService {
             out.set(r.staff_id, cur + (Number(r.hours_earned) || 0) - (Number(r.hours_penalty) || 0));
         });
         for (const [k, v] of out) out.set(k, Math.round(v * 100) / 100);
+        return out;
+    }
+
+    /**
+     * Giờ tích lũy CHI TIẾT của nhiều KTV — dùng cho bảng xếp hạng giờ làm.
+     *
+     * `range` bỏ trống = lũy kế toàn bộ lịch sử.
+     *
+     * ⚠️ Phải đọc theo TRANG: Supabase cắt mặc định ở 1000 dòng. Sổ giờ ghi 1 dòng
+     * cho mỗi tua, nên một tháng của cả đội đã có thể vượt mốc này và bản lũy kế thì
+     * chắc chắn vượt — thiếu trang sau là xếp hạng sai chứ không phải chỉ thiếu ít.
+     */
+    static async hoursBreakdown(
+        supabase: SupabaseClient,
+        staffIds: string[],
+        range: { from?: string; to?: string } = {}
+    ): Promise<Map<string, HoursAggregate>> {
+        const out = new Map<string, HoursAggregate>();
+        staffIds.forEach(id =>
+            out.set(id, { earned: 0, penalty: 0, net: 0, turns: 0, days: 0, lastDate: null }));
+        if (staffIds.length === 0) return out;
+
+        const daysOf = new Map<string, Set<string>>();
+        const PAGE = 1000;
+
+        for (let page = 0; ; page++) {
+            let q = supabase
+                .from('KTVServiceHoursLedger')
+                .select('id, staff_id, date, hours_earned, hours_penalty')
+                .in('staff_id', staffIds)
+                .order('date', { ascending: true })
+                .order('id', { ascending: true })
+                .range(page * PAGE, (page + 1) * PAGE - 1);
+            if (range.from) q = q.gte('date', range.from);
+            if (range.to) q = q.lte('date', range.to);
+
+            const { data, error } = await q;
+            if (error) throw error;
+            const rows = (data || []) as any[];
+
+            for (const r of rows) {
+                const agg = out.get(r.staff_id);
+                if (!agg) continue;
+                const earned = Number(r.hours_earned) || 0;
+                const penalty = Number(r.hours_penalty) || 0;
+                agg.earned += earned;
+                agg.penalty += penalty;
+                // Dòng chỉ có phạt (từ chối tua, nghỉ không báo) không phải là một tua
+                // đã làm, nên không tính vào số tua / số ngày công.
+                if (earned > 0) {
+                    agg.turns++;
+                    if (!daysOf.has(r.staff_id)) daysOf.set(r.staff_id, new Set());
+                    daysOf.get(r.staff_id)!.add(r.date);
+                    if (!agg.lastDate || r.date > agg.lastDate) agg.lastDate = r.date;
+                }
+            }
+
+            if (rows.length < PAGE) break;
+        }
+
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+        for (const [id, agg] of out) {
+            agg.earned = round2(agg.earned);
+            agg.penalty = round2(agg.penalty);
+            agg.net = round2(agg.earned - agg.penalty);
+            agg.days = daysOf.get(id)?.size ?? 0;
+        }
         return out;
     }
 }

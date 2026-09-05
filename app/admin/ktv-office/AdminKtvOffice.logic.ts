@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { apiClient } from '@/lib/apiClient';
+import { useAuth } from '@/lib/auth-context';
 
-export type SheetType = 'deduct' | 'unlock' | 'history' | null;
+export type SheetType = 'deduct' | 'unlock' | 'history' | 'settings' | null;
 export type FilterMode = 'Tất cả' | 'Cần xử lý' | 'Điểm thấp';
 
 const FILTER_MODES: FilterMode[] = ['Tất cả', 'Cần xử lý', 'Điểm thấp'];
@@ -13,6 +14,13 @@ const MAX_PHOTOS = 5;
 export function vnTodayStr(daysAgo = 0): string {
   const vn = new Date(Date.now() + 7 * 60 * 60 * 1000 - daysAgo * 86400000);
   return vn.toISOString().slice(0, 10);
+}
+
+/** 'YYYY-MM' dịch đi `delta` tháng. */
+function shiftMonth(monthStr: string, delta: number): string {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 /**
@@ -47,8 +55,34 @@ function compressImage(file: File, maxSize = 1280, quality = 0.75): Promise<stri
   });
 }
 
+async function compressMany(files: FileList | File[], room: number, onError: (msg: string) => void) {
+  const picked: string[] = [];
+  for (const file of Array.from(files).slice(0, room)) {
+    try {
+      picked.push(await compressImage(file));
+    } catch (e: any) {
+      onError(e?.message || 'Không xử lý được ảnh này.');
+    }
+  }
+  return picked;
+}
+
+/** Phiếu đang được sửa trong sheet Lịch sử. */
+interface EditState {
+  logId: string;
+  criteriaId: string;
+  note: string;
+  keptPhotos: string[];      // ảnh cũ còn giữ
+  removedPhotos: string[];   // ảnh cũ bị bỏ
+  newPhotos: string[];       // base64 mới thêm
+}
+
 export const useAdminKtvOfficeLogic = () => {
   const { addToast } = useToast();
+  const { role } = useAuth();
+
+  // Sửa quy chế và thu hồi phiếu là quyết định quản lý — lễ tân chỉ chấm điểm.
+  const isManager = role?.id === 'admin' || role?.id === 'dev' || role?.id === 'branch_manager';
 
   const now = new Date(Date.now() + 7 * 60 * 60 * 1000); // giờ VN
   const [month, setMonth] = useState<number>(now.getUTCMonth() + 1);
@@ -64,6 +98,11 @@ export const useAdminKtvOfficeLogic = () => {
   const [detail, setDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [historyTab, setHistoryTab] = useState<'office' | 'hours'>('office');
+  // Tháng xem lịch sử tách riêng khỏi tháng của bảng danh sách: đang xem tháng này
+  // vẫn phải tra ngược được tháng trước của một KTV mà không phải đóng sheet.
+  const [detailMonth, setDetailMonth] = useState<string>(
+    `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+  );
 
   // 18 tiêu chí đọc từ DB — không hard-code ở UI để Admin sửa quy chế khỏi phải deploy.
   const [criteriaGroups, setCriteriaGroups] = useState<any[]>([]);
@@ -73,6 +112,16 @@ export const useAdminKtvOfficeLogic = () => {
   // "mỗi lỗi chỉ trừ 1 lần/ngày dù lặp lại nhiều lần".
   const [existingHits, setExistingHits] = useState<any[]>([]);
   const [existingLoading, setExistingLoading] = useState(false);
+
+  // Màn Cài đặt bộ tiêu chí (gồm cả tiêu chí đã ngừng áp dụng).
+  const [settingsGroups, setSettingsGroups] = useState<any[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  // Sửa / thu hồi phiếu đã gửi.
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [revokeState, setRevokeState] = useState<{ logId: string; reason: string } | null>(null);
+  const [logBusy, setLogBusy] = useState(false);
 
   const [sheetState, setSheetState] = useState<{
     isOpen: boolean;
@@ -118,18 +167,20 @@ export const useAdminKtvOfficeLogic = () => {
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  const fetchDetail = useCallback(async (code: string) => {
+  const fetchDetail = useCallback(async (code: string, m: string) => {
     setDetailLoading(true);
     setDetail(null);
+    setEditState(null);
+    setRevokeState(null);
     try {
-      const res = await apiClient.get<any>(`/api/admin/ktv-office/staff/${code}?month=${monthStr}`);
+      const res = await apiClient.get<any>(`/api/admin/ktv-office/staff/${code}?month=${m}`);
       setDetail(res);
     } catch (error: any) {
       addToast(error?.message || 'Không tải được lịch sử của KTV này.', 'error');
     } finally {
       setDetailLoading(false);
     }
-  }, [monthStr, addToast]);
+  }, [addToast]);
 
   const changeMonth = (delta: number) => {
     let m = month + delta;
@@ -140,8 +191,21 @@ export const useAdminKtvOfficeLogic = () => {
     setYear(y);
   };
 
-  const fetchCriteria = useCallback(async () => {
-    if (criteriaGroups.length > 0) return;
+  /** Đổi tháng ngay trong sheet Lịch sử, không đụng tới tháng của bảng danh sách. */
+  const changeDetailMonth = (delta: number) => {
+    const next = shiftMonth(detailMonth, delta);
+    setDetailMonth(next);
+    if (sheetState.code) fetchDetail(sheetState.code, next);
+  };
+
+  const setDetailMonthDirect = (m: string) => {
+    if (!/^\d{4}-\d{2}$/.test(m)) return;
+    setDetailMonth(m);
+    if (sheetState.code) fetchDetail(sheetState.code, m);
+  };
+
+  const fetchCriteria = useCallback(async (force = false) => {
+    if (!force && criteriaGroups.length > 0) return;
     try {
       const res = await apiClient.get<any>('/api/admin/ktv-office/criteria');
       setCriteriaGroups(res?.groups || []);
@@ -165,19 +229,39 @@ export const useAdminKtvOfficeLogic = () => {
     }
   }, []);
 
-  const openSheet = (type: Exclude<SheetType, null>, person: string, code: string, score = 100) => {
+  /** Bộ tiêu chí đầy đủ cho màn Cài đặt — kèm cả tiêu chí đã tắt và số lần đã dùng. */
+  const fetchSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const res = await apiClient.get<any>('/api/admin/ktv-office/criteria?all=1');
+      setSettingsGroups(res?.groups || []);
+    } catch (error: any) {
+      addToast(error?.message || 'Không tải được bộ tiêu chí.', 'error');
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, [addToast]);
+
+  const openSheet = (type: Exclude<SheetType, null>, person = '', code = '', score = 100) => {
     const today = vnTodayStr();
     setSheetState(prev => ({
       ...prev, isOpen: true, type, person, code, score,
       workDate: today, selectedIds: [], note: '', photos: [],
     }));
+    setEditState(null);
+    setRevokeState(null);
     if (type === 'history') {
       setHistoryTab('office');
-      fetchDetail(code);
+      setDetailMonth(monthStr);
+      fetchDetail(code, monthStr);
+      fetchCriteria();   // cần danh sách tiêu chí cho ô chọn khi sửa phiếu
     }
     if (type === 'deduct') {
       fetchCriteria();
       fetchExisting(code, today);
+    }
+    if (type === 'settings') {
+      fetchSettings();
     }
   };
 
@@ -209,14 +293,7 @@ export const useAdminKtvOfficeLogic = () => {
       addToast(`Tối đa ${MAX_PHOTOS} ảnh.`, 'error');
       return;
     }
-    const picked: string[] = [];
-    for (const file of Array.from(files).slice(0, room)) {
-      try {
-        picked.push(await compressImage(file));
-      } catch (e: any) {
-        addToast(e?.message || 'Không xử lý được ảnh này.', 'error');
-      }
-    }
+    const picked = await compressMany(files, room, msg => addToast(msg, 'error'));
     if (picked.length) setSheetState(prev => ({ ...prev, photos: [...prev.photos, ...picked] }));
   };
 
@@ -248,11 +325,211 @@ export const useAdminKtvOfficeLogic = () => {
       addToast(`Đã trừ ${res.totalPoints} điểm của ${sheetState.person}. KTV đã nhận thông báo.`, 'success');
       closeSheet();
       await fetchSummary();
-      await fetchDetail(sheetState.code).catch(() => {});
     } catch (error: any) {
       addToast(error?.message || 'Không lưu được phiếu trừ điểm.', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ─── Sửa / thu hồi phiếu đã gửi ────────────────────────────────────────────
+
+  const startEditLog = (hit: any) => {
+    setRevokeState(null);
+    setEditState({
+      logId: hit.logId,
+      criteriaId: hit.criteriaId,
+      note: hit.note || '',
+      keptPhotos: [...(hit.photoUrls || [])],
+      removedPhotos: [],
+      newPhotos: [],
+    });
+  };
+
+  const cancelEditLog = () => setEditState(null);
+
+  const patchEdit = (patch: Partial<EditState>) => {
+    setEditState(prev => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  /** Bỏ một ảnh cũ khỏi phiếu — chỉ đánh dấu, tới lúc Lưu mới gửi lên. */
+  const removeEditPhoto = (url: string) => {
+    setEditState(prev => prev ? {
+      ...prev,
+      keptPhotos: prev.keptPhotos.filter(u => u !== url),
+      removedPhotos: [...prev.removedPhotos, url],
+    } : prev);
+  };
+
+  const removeEditNewPhoto = (index: number) => {
+    setEditState(prev => prev ? { ...prev, newPhotos: prev.newPhotos.filter((_, i) => i !== index) } : prev);
+  };
+
+  const addEditPhotos = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !editState) return;
+    const room = MAX_PHOTOS - editState.keptPhotos.length - editState.newPhotos.length;
+    if (room <= 0) {
+      addToast(`Tối đa ${MAX_PHOTOS} ảnh.`, 'error');
+      return;
+    }
+    const picked = await compressMany(files, room, msg => addToast(msg, 'error'));
+    if (picked.length) {
+      setEditState(prev => prev ? { ...prev, newPhotos: [...prev.newPhotos, ...picked] } : prev);
+    }
+  };
+
+  const saveEditLog = async () => {
+    if (!editState || logBusy) return;
+    setLogBusy(true);
+    try {
+      await apiClient.patch<any>('/api/admin/ktv-office/deduct', {
+        logId: editState.logId,
+        criteriaId: editState.criteriaId,
+        note: editState.note,
+        addPhotosBase64: editState.newPhotos,
+        removePhotoUrls: editState.removedPhotos,
+      }, { timeout: 60000 });
+
+      addToast('Đã lưu thay đổi cho phiếu này.', 'success');
+      setEditState(null);
+      await fetchDetail(sheetState.code, detailMonth);
+      await fetchSummary();
+    } catch (error: any) {
+      addToast(error?.message || 'Không sửa được phiếu.', 'error');
+    } finally {
+      setLogBusy(false);
+    }
+  };
+
+  const startRevokeLog = (logId: string) => {
+    setEditState(null);
+    setRevokeState({ logId, reason: '' });
+  };
+
+  const cancelRevokeLog = () => setRevokeState(null);
+
+  const setRevokeReason = (reason: string) => {
+    setRevokeState(prev => (prev ? { ...prev, reason } : prev));
+  };
+
+  const confirmRevokeLog = async () => {
+    if (!revokeState || logBusy) return;
+    if (revokeState.reason.trim().length < 5) {
+      addToast('Cần ghi lý do thu hồi (ít nhất 5 ký tự).', 'error');
+      return;
+    }
+    setLogBusy(true);
+    try {
+      const res = await apiClient.delete<any>(
+        `/api/admin/ktv-office/deduct?logId=${encodeURIComponent(revokeState.logId)}&reason=${encodeURIComponent(revokeState.reason.trim())}`
+      );
+      addToast(`Đã thu hồi phiếu, hoàn lại ${res.restoredPoints} điểm cho KTV.`, 'success');
+      setRevokeState(null);
+      await fetchDetail(sheetState.code, detailMonth);
+      await fetchSummary();
+    } catch (error: any) {
+      addToast(error?.message || 'Không thu hồi được phiếu.', 'error');
+    } finally {
+      setLogBusy(false);
+    }
+  };
+
+  // ─── Cài đặt bộ tiêu chí ───────────────────────────────────────────────────
+
+  /** Sau mỗi lần sửa quy chế phải nạp lại bảng chấm điểm, không dùng bản cache cũ. */
+  const reloadCriteriaEverywhere = async () => {
+    await fetchSettings();
+    await fetchCriteria(true);
+  };
+
+  const saveCriteria = async (id: string, patch: { label?: string; points?: number; requiresPhoto?: boolean; isActive?: boolean }) => {
+    if (savingId) return;
+    setSavingId(id);
+    try {
+      await apiClient.put<any>('/api/admin/ktv-office/criteria', { id, ...patch });
+      addToast('Đã lưu tiêu chí.', 'success');
+      await reloadCriteriaEverywhere();
+    } catch (error: any) {
+      addToast(error?.message || 'Không lưu được tiêu chí.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const addCriteria = async (grp: string, draft: { label: string; points: number; requiresPhoto: boolean }) => {
+    if (savingId) return false;
+    if (!draft.label.trim()) {
+      addToast('Chưa nhập tên tiêu chí.', 'error');
+      return false;
+    }
+    if (!Number.isFinite(draft.points) || draft.points <= 0) {
+      addToast('Điểm trừ phải lớn hơn 0.', 'error');
+      return false;
+    }
+    setSavingId(`new-${grp}`);
+    try {
+      const res = await apiClient.post<any>('/api/admin/ktv-office/criteria', {
+        grp,
+        label: draft.label.trim(),
+        points: draft.points,
+        requiresPhoto: draft.requiresPhoto,
+      });
+      addToast(`Đã thêm tiêu chí ${res.id}.`, 'success');
+      await reloadCriteriaEverywhere();
+      return true;
+    } catch (error: any) {
+      addToast(error?.message || 'Không thêm được tiêu chí.', 'error');
+      return false;
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const deleteCriteria = async (id: string, label: string, usageCount: number) => {
+    if (savingId) return;
+    const warn = usageCount > 0
+      ? `"${label}" đã dùng cho ${usageCount} phiếu đã chấm. Xoá sẽ chuyển sang NGỪNG ÁP DỤNG (phiếu cũ giữ nguyên). Tiếp tục?`
+      : `Xoá hẳn tiêu chí "${label}"?`;
+    if (!window.confirm(warn)) return;
+
+    setSavingId(id);
+    try {
+      const res = await apiClient.delete<any>(`/api/admin/ktv-office/criteria?id=${encodeURIComponent(id)}`);
+      addToast(res?.message || 'Đã xoá tiêu chí.', 'success');
+      await reloadCriteriaEverywhere();
+    } catch (error: any) {
+      addToast(error?.message || 'Không xoá được tiêu chí.', 'error');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  /** Sửa cả nhóm: tên nhóm và/hoặc trần điểm. Server chặn nếu hạ trần xuống dưới tổng đang dùng. */
+  const saveGroup = async (grp: string, patch: { grpLabel?: string; grpMax?: number }) => {
+    if (savingId) return false;
+    if (patch.grpLabel !== undefined && !patch.grpLabel.trim()) {
+      addToast('Tên nhóm không được để trống.', 'error');
+      return false;
+    }
+    if (patch.grpMax !== undefined && (!Number.isFinite(patch.grpMax) || patch.grpMax < 0)) {
+      addToast('Trần điểm của nhóm phải là số không âm.', 'error');
+      return false;
+    }
+    setSavingId(`grp-${grp}`);
+    try {
+      await apiClient.put<any>('/api/admin/ktv-office/criteria', {
+        grp,
+        ...(patch.grpLabel !== undefined ? { grpLabel: patch.grpLabel.trim() } : {}),
+        ...(patch.grpMax !== undefined ? { grpMax: patch.grpMax } : {}),
+      });
+      addToast(`Đã lưu nhóm ${grp}.`, 'success');
+      await reloadCriteriaEverywhere();
+      return true;
+    } catch (error: any) {
+      addToast(error?.message || 'Không lưu được nhóm.', 'error');
+      return false;
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -261,15 +538,21 @@ export const useAdminKtvOfficeLogic = () => {
   };
 
   return {
+    isManager,
     month, year, monthStr, changeMonth,
     searchQuery, setSearchQuery,
     filterMode, toggleFilter,
     staffList, loading, loadError, refresh: fetchSummary,
     detail, detailLoading, historyTab, setHistoryTab,
+    detailMonth, changeDetailMonth, setDetailMonth: setDetailMonthDirect,
     sheetState, openSheet, closeSheet, setSheetState,
-    criteriaGroups, toggleCriteria, addPhotos, removePhoto,
+    criteriaGroups, allCriteria, toggleCriteria, addPhotos, removePhoto,
     totalPoints, needPhoto, canSubmit, submitting, submitDeduct,
     existingHits, existingLoading, changeWorkDate,
+    editState, startEditLog, cancelEditLog, patchEdit, addEditPhotos, removeEditPhoto, removeEditNewPhoto, saveEditLog,
+    revokeState, startRevokeLog, cancelRevokeLog, setRevokeReason, confirmRevokeLog,
+    logBusy,
+    settingsGroups, settingsLoading, savingId, saveCriteria, addCriteria, deleteCriteria, saveGroup,
     maxPhotos: MAX_PHOTOS,
   };
 };

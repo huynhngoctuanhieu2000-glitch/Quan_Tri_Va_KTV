@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth-server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { KtvOfficeScoreService, HOURS_PENALTY_VI } from '@/lib/services/KtvOfficeScoreService';
+import { KtvOfficeScoreService, HOURS_PENALTY_VI, currentMonthVn } from '@/lib/services/KtvOfficeScoreService';
 
 export const dynamic = 'force-dynamic';
-
-function currentMonthVn(): string {
-    const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
-    return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {

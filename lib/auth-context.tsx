@@ -173,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (roleId === 'admin' || roleId === 'dev') {
             permissions = MODULES.map(m => m.id);
           } else if (roleId === 'reception') {
-            permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'room_management', 'leave_management', 'turn_tracking', 'service_handbook', 'staff_notifications', 'settings'];
+            permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'room_management', 'leave_management', 'turn_tracking', 'service_handbook', 'staff_notifications', 'settings', 'ktv_office_scoring', 'ktv_office_hours'];
           } else if (roleId === 'ktv') {
             permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'];
           }
@@ -257,6 +257,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = useCallback((moduleId: ModuleId) => {
     if (!role) return false;
+    
+    // Auto-grant quyền mới cho admin, dev, và lễ tân (tránh lỗi cache session cũ)
+    if (moduleId === 'ktv_office_scoring' || moduleId === 'ktv_office_hours') {
+      if (role.id === 'admin' || role.id === 'dev' || role.id === 'reception') return true;
+    }
+
     // HIỂN THỊ "BÀN GIAO CÔNG VIỆC" NẾU ĐƯỢC BẬT TRONG TÍNH NĂNG NHÂN VIÊN
     if (moduleId === 'employee_tasks') {
       if (role.id === 'admin' || role.id === 'dev') return true;
