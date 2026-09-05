@@ -778,6 +778,7 @@ export function ScreenDashboard({ logic }: { logic: any }) {
         onSubmit={handleRejectOrder}
         disciplineStatus={logic.disciplineStatus}
         isExempted={logic.disciplineStatus ? logic.disciplineStatus.continuousWorkMins >= logic.disciplineStatus.exemptHours * 60 : false}
+        isTypeD={logic.workType === 'TYPE_D'}
       />
 
       {/* Cảnh báo thiếu giờ tích lũy — bước cuối trước khi mất tài khoản */}

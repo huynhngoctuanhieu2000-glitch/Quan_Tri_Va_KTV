@@ -65,8 +65,11 @@ export async function POST(request: Request) {
 
         let accountLocked = false;
 
+        // Ngưỡng miễn phạt theo giờ làm liên tục thuộc hệ ĐIỂM CHUYÊN CẦN của
+        // A/B/C. Loại D không dùng hệ đó — quy chế loại D chỉ có giờ tích lũy và
+        // hạn mức tối thiểu, nên làm liên tục bao lâu cũng không miễn được.
         if (isTypeD) {
-            if (!isExempted) {
+            {
                 const { data: item } = await supabase
                     .from('BookingItems').select('serviceId, segments').eq('id', itemId).maybeSingle();
 
@@ -246,7 +249,9 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             success: true,
-            isExempted,
+            // Loại D không có cơ chế miễn phạt — luôn trả false để màn KTV không
+            // hiện thông báo "bạn được miễn phạt" sai sự thật.
+            isExempted: isTypeD ? false : isExempted,
             // Loại D trừ GIỜ tích lũy, A/B/C trừ ĐIỂM kỷ luật — hai hệ khác nhau.
             hoursDeducted: isTypeD ? hoursDeducted : 0,
             penaltyPoints: disciplineResult?.penaltyPoints ?? 0,

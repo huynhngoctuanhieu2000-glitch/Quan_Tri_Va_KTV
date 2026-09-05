@@ -164,13 +164,16 @@ export function RejectOrderModal({
   onClose, 
   onSubmit, 
   isExempted, 
-  disciplineStatus 
+  disciplineStatus,
+  isTypeD = false
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
   onSubmit: (reason: string) => void, 
   isExempted: boolean,
-  disciplineStatus: any
+  disciplineStatus: any,
+  /** Loại D ăn theo quy chế GIỜ TÍCH LŨY, không phải điểm chuyên cần. */
+  isTypeD?: boolean
 }) {
   const { addToast } = useToast();
   const [reason, setReason] = React.useState('');
@@ -184,7 +187,7 @@ export function RejectOrderModal({
         animate={{ opacity: 1, y: 0 }}
         className="bg-white w-full sm:max-w-md max-h-[90vh] rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col"
       >
-        <div className={`${isExempted ? 'bg-emerald-600' : 'bg-rose-600'} p-6 text-white flex items-center justify-between`}>
+        <div className={`${(isExempted && !isTypeD) ? 'bg-emerald-600' : 'bg-rose-600'} p-6 text-white flex items-center justify-between`}>
           <div>
             <h3 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
               <Ban size={20} />
@@ -197,7 +200,23 @@ export function RejectOrderModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {isExempted ? (
+          {isTypeD ? (
+            /* Loại D: trừ GIỜ TÍCH LŨY, và có cửa chặn hạn mức. Không có miễn
+               phạt theo giờ làm liên tục — cái đó thuộc hệ điểm của A/B/C. */
+            <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl text-rose-800 text-sm font-bold flex gap-3 items-start">
+               <ShieldAlert size={20} className="shrink-0 text-rose-600 mt-0.5" />
+               <div className="space-y-1.5">
+                 <p>
+                   ⚠️ Từ chối tua sẽ bị trừ <b>{disciplineStatus?.rejectMultiplier ?? 3} lần thời lượng gói</b> vào
+                   giờ tích lũy (gói 60 phút → trừ {disciplineStatus?.rejectMultiplier ?? 3} giờ).
+                 </p>
+                 <p>
+                   Quỹ giờ phải <b>nhiều hơn {disciplineStatus?.minHoursToReject ?? 3} giờ</b> mới được từ chối.
+                   Chưa đủ mà vẫn từ chối thì <b>tài khoản bị khoá</b>.
+                 </p>
+               </div>
+            </div>
+          ) : isExempted ? (
             <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-emerald-800 text-sm font-bold flex gap-3 items-start">
                <ShieldAlert size={20} className="shrink-0 text-emerald-600 mt-0.5" />
                <p>
