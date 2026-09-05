@@ -6,7 +6,9 @@ import { ktvDisplayLabel } from '@/lib/constants/staff.constants';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { staffId, bookingItemId, reason } = body;
+        // `confirmLock`: KTV đã đọc cảnh báo thiếu giờ mà vẫn muốn từ chối,
+        // chấp nhận bị khoá tài khoản.
+        const { staffId, bookingItemId, reason, confirmLock } = body;
 
         if (!staffId || !bookingItemId || !reason) {
             return NextResponse.json({ success: false, error: 'Thiếu thông tin bắt buộc (staffId, bookingItemId, reason)' }, { status: 400 });
@@ -61,6 +63,8 @@ export async function POST(request: Request) {
         let disciplineResult: any = null;
         let hoursDeducted = 0;
 
+        let accountLocked = false;
+
         if (isTypeD) {
             if (!isExempted) {
                 const { data: item } = await supabase
@@ -89,10 +93,62 @@ export async function POST(request: Request) {
                 const { getBusinessToday } = await import('@/lib/business-date');
                 const workDate = await getBusinessToday(supabase);
 
+                // ─── Cửa chặn: ví giờ phải đủ để chịu mức phạt ───
+                //
+                // Quy chế: muốn từ chối một gói 60 phút thì phải còn ít nhất 180
+                // phút tích lũy (hệ số 3). Không đủ giờ mà vẫn từ chối thì phạt
+                // không có gì để trừ, nên chế tài chuyển thành KHOÁ TÀI KHOẢN.
+                //
+                // Lần gọi đầu chỉ CẢNH BÁO rồi dừng; KTV đọc xong, muốn tiếp thì
+                // gọi lại với confirmLock. Không tự khoá sau một cú chạm nhầm.
+                const multiplier = await KtvTypeDDisciplineService.getRejectMultiplier(supabase);
+                const requiredHours = Math.round((mins / 60) * multiplier * 100) / 100;
+
+                const { KtvTypeDTurnService } = await import('@/lib/services/KtvTypeDTurnService');
+                const now = new Date();
+                const netMap = await KtvTypeDTurnService.getMonthlyNetHours(
+                    supabase, [staffId], now.getMonth() + 1, now.getFullYear());
+                const availableHours = Math.round((netMap[staffId] || 0) * 100) / 100;
+
+                const notEnough = availableHours < requiredHours;
+
+                if (notEnough && !confirmLock) {
+                    return NextResponse.json({
+                        success: false,
+                        needsLockConfirm: true,
+                        requiredHours,
+                        availableHours,
+                        multiplier,
+                        serviceMins: mins,
+                        error: `Bạn cần ${requiredHours} giờ tích lũy để từ chối tua ${mins} phút, hiện chỉ còn ${availableHours} giờ.`,
+                    });
+                }
+
                 hoursDeducted = await KtvTypeDDisciplineService.deductOrderReject(
-                    supabase, staffId, workDate, itemId, mins,
+                    supabase, staffId, workDate, itemId, mins, undefined, multiplier,
                 );
                 console.log(`[Type D] ${staffId} từ chối tua ${bookingItemId} (${mins}p) → trừ ${hoursDeducted}h`);
+
+                if (notEnough) {
+                    await supabase.from('Staff').update({ status: 'KHÓA_TÀI_KHOẢN' }).eq('id', staffId);
+                    const lyDo = `Từ chối tua ${mins} phút khi chỉ còn ${availableHours}/${requiredHours} giờ tích lũy`;
+                    await KtvTypeDDisciplineService.markAccountLock(supabase, staffId, workDate, lyDo);
+                    await supabase.from('SecurityAuditLogs').insert({
+                        employee_id: staffId,
+                        employee_name: staffData?.full_name || staffId,
+                        event_type: 'AUTO_LOCK_REJECT_NO_HOURS',
+                        ip_address: '127.0.0.1',
+                        user_agent: 'API',
+                        details: { source: 'REJECT_ORDER', bookingItemId: itemId, requiredHours, availableHours, reason },
+                    });
+                    await supabase.from('StaffNotifications').insert({
+                        employeeId: staffId,
+                        type: 'EMERGENCY',
+                        message: `Tài khoản của bạn đã bị khoá: ${lyDo}.`,
+                    });
+                    accountLocked = true;
+                    console.warn(`[Type D] KHOÁ TÀI KHOẢN ${staffId} — ${lyDo}`);
+                }
             }
         } else {
             disciplineResult = await KtvDisciplineService.deductPoints(
@@ -187,7 +243,8 @@ export async function POST(request: Request) {
             hoursDeducted: isTypeD ? hoursDeducted : 0,
             penaltyPoints: disciplineResult?.penaltyPoints ?? 0,
             newTotal: disciplineResult?.newTotal ?? null,
-            totalMins
+            totalMins,
+            accountLocked
         });
 
     } catch (error: any) {

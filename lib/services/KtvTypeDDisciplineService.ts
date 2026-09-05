@@ -22,7 +22,26 @@ import { TYPE_D_DISCIPLINE_PENALTIES } from '../constants/staff.constants';
 
 export type DailyViolationType = 'ABSENT_NO_NOTICE' | 'ABSENT_EARLY_NOTICE' | 'LATE_NO_UPDATE';
 
+/** Khoá cấu hình hệ số phạt từ chối tua trong `SystemConfigs`. */
+export const REJECT_MULTIPLIER_KEY = 'ktv_typed_reject_multiplier';
+
 export class KtvTypeDDisciplineService {
+
+    /**
+     * Hệ số phạt khi từ chối tua đã gán: gói 60 phút × hệ số 3 → trừ 3 giờ.
+     *
+     * Admin chỉnh được ở Cài đặt → Tính năng. Cấu hình hỏng hoặc <= 0 thì lùi
+     * về hằng số quy chế, không để hệ số 0 biến hình phạt thành vô hiệu.
+     */
+    static async getRejectMultiplier(supabase: SupabaseClient): Promise<number> {
+        try {
+            const { data } = await supabase
+                .from('SystemConfigs').select('value').eq('key', REJECT_MULTIPLIER_KEY).maybeSingle();
+            const n = Number((data as any)?.value);
+            if (Number.isFinite(n) && n > 0) return n;
+        } catch { /* dùng mặc định bên dưới */ }
+        return TYPE_D_DISCIPLINE_PENALTIES.ORDER_REJECT_MULTIPLIER;
+    }
 
     /**
      * Phạt trừ giờ theo NGÀY (vắng, trễ) — không gắn với đơn nào.
@@ -74,8 +93,12 @@ export class KtvTypeDDisciplineService {
         bookingItemId: string,
         serviceDurationMins: number,
         createdBy?: string,
+        multiplier?: number,
     ) {
-        const thisPenalty = (serviceDurationMins / 60) * TYPE_D_DISCIPLINE_PENALTIES.ORDER_REJECT_MULTIPLIER;
+        const factor = Number.isFinite(multiplier as number) && (multiplier as number) > 0
+            ? (multiplier as number)
+            : await KtvTypeDDisciplineService.getRejectMultiplier(supabase);
+        const thisPenalty = (serviceDurationMins / 60) * factor;
 
         const { data: existing } = await supabase
             .from('KTVDPenaltyLedger')

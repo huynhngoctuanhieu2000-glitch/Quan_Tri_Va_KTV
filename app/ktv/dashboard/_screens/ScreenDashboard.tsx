@@ -27,6 +27,8 @@ export function ScreenDashboard({ logic }: { logic: any }) {
   const [expectedEnd, setExpectedEnd] = React.useState('');
   const [isFirstInQueue, setIsFirstInQueue] = React.useState(false);
   const [showRejectModal, setShowRejectModal] = React.useState(false);
+  // Cảnh báo "không đủ giờ, từ chối là bị khoá" — do API trả về, không tự đoán.
+  const [lockWarning, setLockWarning] = React.useState<any>(null);
   const [showQRModal, setShowQRModal] = React.useState(false);
   const [showWallet, setShowWallet] = React.useState(false);
   const [showTurnQueueModal, setShowTurnQueueModal] = React.useState(false);
@@ -63,7 +65,7 @@ export function ScreenDashboard({ logic }: { logic: any }) {
     }
   };
 
-  const handleRejectOrder = async (reason: string) => {
+  const handleRejectOrder = async (reason: string, confirmLock = false) => {
     // Đơn kế tiếp nếu có, ngược lại là chính đơn đang chờ xác nhận.
     const rejectId = logic.booking?.nextBookingItemId
       || logic.booking?.nextBookingId
@@ -77,8 +79,18 @@ export function ScreenDashboard({ logic }: { logic: any }) {
         // Ưu tiên id ĐƠN CON. Trước đây luôn gửi booking id nên API tra
         // BookingItems không ra, KTV không bị gỡ khỏi đơn và mức phạt sai.
         bookingItemId: rejectId,
-        reason
+        reason,
+        confirmLock
       });
+
+      // Ví giờ không đủ để chịu mức phạt: API dừng lại và trả về con số cụ thể.
+      // Hỏi lại cho chắc rồi mới gọi tiếp — từ chối lúc này là mất tài khoản,
+      // không thể để mất vì một cú chạm nhầm.
+      if (!res.success && res.needsLockConfirm) {
+        setLockWarning({ reason, ...res });
+        return;
+      }
+
       if (res.success) {
         if (res.isExempted) {
           addToast('✅ Bạn đã được miễn phạt do làm việc liên tục đạt ngưỡng. Lễ tân đã nhận được báo cáo.', 'success');
@@ -89,6 +101,10 @@ export function ScreenDashboard({ logic }: { logic: any }) {
           addToast(`⚠️ Bạn đã bị trừ ${res.penaltyPoints} điểm chuyên cần. Lễ tân đã nhận được báo cáo.`, 'warning');
         }
         setShowRejectModal(false);
+        setLockWarning(null);
+        if (res.accountLocked) {
+          addToast('⛔ Tài khoản của bạn đã bị khoá do từ chối tua khi không đủ giờ tích lũy.', 'error');
+        }
         // Refresh dashboard data
         logic.forceRefresh();
       } else {
@@ -763,6 +779,47 @@ export function ScreenDashboard({ logic }: { logic: any }) {
         disciplineStatus={logic.disciplineStatus}
         isExempted={logic.disciplineStatus ? logic.disciplineStatus.continuousWorkMins >= logic.disciplineStatus.exemptHours * 60 : false}
       />
+
+      {/* Cảnh báo thiếu giờ tích lũy — bước cuối trước khi mất tài khoản */}
+      {lockWarning && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden">
+            <div className="bg-rose-600 p-6 text-white">
+              <h3 className="text-lg font-black uppercase tracking-tight">Không đủ giờ để từ chối</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2">
+                <div className="flex justify-between text-sm font-bold text-rose-900">
+                  <span>Tua {lockWarning.serviceMins} phút, phạt ×{lockWarning.multiplier}</span>
+                  <span>cần {lockWarning.requiredHours} giờ</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold text-rose-900">
+                  <span>Giờ tích lũy của bạn</span>
+                  <span>chỉ còn {lockWarning.availableHours} giờ</span>
+                </div>
+              </div>
+              <p className="text-sm font-bold text-slate-700 leading-relaxed">
+                Không đủ giờ để trừ phạt. Nếu bạn <b>vẫn từ chối</b>, tài khoản sẽ bị
+                <b className="text-rose-600"> KHOÁ</b> và phải nhờ quản lý mở lại.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setLockWarning(null)}
+                  className="py-3.5 rounded-2xl font-black text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors uppercase text-sm"
+                >
+                  Quay lại nhận đơn
+                </button>
+                <button
+                  onClick={() => { const r = lockWarning.reason; setLockWarning(null); handleRejectOrder(r, true); }}
+                  className="py-3.5 rounded-2xl font-black text-white bg-rose-600 hover:bg-rose-700 transition-colors uppercase text-sm"
+                >
+                  Vẫn từ chối
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Turn Queue Modal */}
       {logic.turnData && (

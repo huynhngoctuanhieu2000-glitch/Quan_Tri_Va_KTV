@@ -77,6 +77,7 @@ const useDisciplineConfigs = () => {
                 ktv_discipline_demotion_threshold: Number(data.ktv_discipline_demotion_threshold || 80),
                 ktv_continuous_work_gap_mins: Number(data.ktv_continuous_work_gap_mins || 30),
                 ktv_continuous_work_exempt_hours: Number(data.ktv_continuous_work_exempt_hours || 4),
+                ktv_typed_reject_multiplier: Number(data.ktv_typed_reject_multiplier || 3),
             });
         } catch (err) {
             console.error('Failed to fetch system configs:', err);
@@ -190,6 +191,7 @@ const DisciplineSettingsSection = () => {
                 ktv_discipline_demotion_threshold: values.ktv_discipline_demotion_threshold?.toString() || '80',
                 ktv_continuous_work_gap_mins: values.ktv_continuous_work_gap_mins?.toString() || '30',
                 ktv_continuous_work_exempt_hours: values.ktv_continuous_work_exempt_hours?.toString() || '4',
+                ktv_typed_reject_multiplier: values.ktv_typed_reject_multiplier?.toString() || '3',
             });
         }
     }, [values, loading]);
@@ -248,6 +250,7 @@ const DisciplineSettingsSection = () => {
             {renderInput('ktv_discipline_demotion_threshold', '🚨 Ngưỡng giáng chức (Loại B xuống A)', 'Số điểm tối thiểu để KTV không bị tự động giáng chức.', 'điểm')}
             {renderInput('ktv_continuous_work_gap_mins', '🔗 Khoảng cách ghép tua liên tục', 'Nếu khoảng cách giữa 2 tua <= số phút này, KTV được tính là đang làm việc liên tục.', 'phút')}
             {renderInput('ktv_continuous_work_exempt_hours', '🛡️ Ngưỡng thời gian miễn phạt', 'Nếu KTV làm việc liên tục đạt ngưỡng này, họ có quyền TỪ CHỐI tua tiếp theo mà không bị trừ điểm.', 'giờ')}
+            {renderInput('ktv_typed_reject_multiplier', '⛔ Hệ số phạt từ chối tua (Loại D)', 'Từ chối một gói bị trừ (thời lượng gói × hệ số) giờ tích lũy, và phải còn đủ chừng đó giờ mới được từ chối. Hệ số 3: gói 60 phút cần có 180 phút. Không đủ giờ mà vẫn từ chối thì bị khoá tài khoản.', 'lần')}
         </div>
     );
 };
