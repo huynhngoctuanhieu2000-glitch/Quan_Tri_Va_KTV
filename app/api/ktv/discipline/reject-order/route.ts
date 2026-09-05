@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { KtvDisciplineService } from '@/lib/services/KtvDisciplineService';
+import { ktvDisplayLabel } from '@/lib/constants/staff.constants';
 
 export async function POST(request: Request) {
     try {
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
 
         // 1. Lấy thông tin KTV
         const { data: staffData } = await supabase.from('Staff').select('full_name, work_type').eq('id', staffId).single();
-        const staffName = staffData?.full_name || staffId;
+        // Loại A/B/D hiện MÃ để khớp bảng điều phối; loại C ("Nhập tay") mới hiện tên.
+        const staffName = ktvDisplayLabel(staffData?.work_type, staffId, staffData?.full_name);
         const isTypeD = staffData?.work_type === 'TYPE_D';
 
         // 2. Tính thời gian làm việc liên tục

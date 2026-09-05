@@ -79,3 +79,22 @@ export const TYPE_D_RATING_DEDUCTION = {
 export const TYPE_D_BONUS = {
     BASE_POINTS: 20
 } as const;
+
+/**
+ * Nhãn hiển thị KTV trong thông báo và màn hình vận hành.
+ *
+ * Loại A / B / D là nhân sự nội bộ, quầy gọi nhau bằng MÃ (T079, NH016) nên
+ * hiện tên đầy đủ vừa dài vừa khó đối chiếu với bảng điều phối.
+ * Riêng loại C ("Nhập tay") là người nhập thủ công, mã chỉ là chuỗi sinh tự động
+ * (EXT_G6AMZG…) không ai đọc được — nhóm này phải hiện TÊN.
+ */
+export function ktvDisplayLabel(
+    workType: string | null | undefined,
+    code: string,
+    fullName?: string | null
+): string {
+    if (String(workType || '').toUpperCase() === 'TYPE_C') {
+        return fullName?.trim() || code;
+    }
+    return code;
+}

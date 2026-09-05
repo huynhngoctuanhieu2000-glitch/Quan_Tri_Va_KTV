@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { ktvDisplayLabel } from '@/lib/constants/staff.constants';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,13 +50,14 @@ export async function POST(request: Request) {
         }
 
         const [{ data: staff }, { data: booking }] = await Promise.all([
-            supabase.from('Staff').select('full_name').eq('id', staffId).maybeSingle(),
+            supabase.from('Staff').select('full_name, work_type').eq('id', staffId).maybeSingle(),
             bookingId
                 ? supabase.from('Bookings').select('billCode').eq('id', bookingId).maybeSingle()
                 : Promise.resolve({ data: null }),
         ]);
 
-        const staffName = staff?.full_name || staffId;
+        // Loại A/B/D hiện MÃ để khớp bảng điều phối; loại C ("Nhập tay") mới hiện tên.
+        const staffName = ktvDisplayLabel((staff as any)?.work_type, staffId, (staff as any)?.full_name);
         const bill = (booking as any)?.billCode || itemId;
 
         // Ghi mốc đã nhận vào options — màn KTV dựa vào đây để biết đơn đã qua bước
