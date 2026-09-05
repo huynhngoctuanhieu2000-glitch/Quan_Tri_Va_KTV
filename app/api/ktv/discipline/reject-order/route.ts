@@ -106,15 +106,35 @@ export async function POST(request: Request) {
 
         // 5. Gỡ KTV khỏi BookingItem và TurnQueue
         // Lấy BookingItem hiện tại
-        const { data: itemData } = await supabase.from('BookingItems').select('technicianCodes, status').eq('id', itemId).maybeSingle();
+        const { data: itemData } = await supabase
+            .from('BookingItems').select('technicianCodes, status, options').eq('id', itemId).maybeSingle();
         if (itemData && itemData.technicianCodes) {
-            const newTechCodes = itemData.technicianCodes.filter((id: string) => id !== staffId);
+            // So khớp KHÔNG phân biệt hoa thường — chỗ tra đơn phía trên cũng vậy.
+            // Trước đây so bằng `!==` thuần: lệch một chữ hoa là không gỡ được, KTV
+            // từ chối xong vẫn dính đơn.
+            const me = String(staffId).toLowerCase();
+            const newTechCodes = itemData.technicianCodes.filter((id: string) => String(id).toLowerCase() !== me);
             // Nếu không còn KTV nào thì đưa về PREPARING để Lễ tân điều phối lại
             const newStatus = newTechCodes.length === 0 ? 'PREPARING' : itemData.status;
 
+            // Xoá mốc "đã nhận đơn" CỦA RIÊNG người từ chối. Không xoá thì lúc quầy
+            // điều phối lại chính đơn này cho họ, màn KTV coi như đã xác nhận rồi và
+            // bỏ luôn bước nhận/từ chối. Mốc của đồng nghiệp giữ nguyên.
+            const opts = typeof (itemData as any).options === 'string'
+                ? JSON.parse((itemData as any).options || '{}')
+                : ((itemData as any).options || {});
+            const acceptedByStaff = { ...(opts.acceptedByStaff || {}) };
+            delete acceptedByStaff[String(staffId).toUpperCase()];
+            const nextOpts: Record<string, any> = { ...opts, acceptedByStaff };
+            if (String(nextOpts.acceptedBy || '').toLowerCase() === me) {
+                delete nextOpts.acceptedAt;
+                delete nextOpts.acceptedBy;
+            }
+
             await supabase.from('BookingItems').update({ 
                 technicianCodes: newTechCodes,
-                status: newStatus
+                status: newStatus,
+                options: nextOpts
             }).eq('id', itemId);
         }
 
@@ -141,10 +161,23 @@ export async function POST(request: Request) {
         }
 
         // 6. Gửi thông báo cho Lễ tân
+        //
+        // Type PHẢI có rule trong SystemConfigs.notification_rules. Trước đây dùng
+        // 'WARNING' — type không có rule — mà mọi bộ lọc trong NotificationProvider
+        // đều là `if (rule && ...)`, nên thông báo lọt qua hết và phát cho TẤT CẢ
+        // vai trò: một KTV từ chối thì cả spa cùng nhận.
+        const { data: bookingRow } = await supabase
+            .from('BookingItems').select('bookingId').eq('id', itemId).maybeSingle();
+        const { data: bk } = (bookingRow as any)?.bookingId
+            ? await supabase.from('Bookings').select('billCode').eq('id', (bookingRow as any).bookingId).maybeSingle()
+            : { data: null };
+        const billLabel = (bk as any)?.billCode || itemId;
+
         await supabase.from('StaffNotifications').insert({
-            employeeId: null, // Gửi chung
-            type: 'WARNING',
-            message: `KTV ${staffName} vừa từ chối phục vụ đơn ${itemId}. Lý do: ${reason}`
+            employeeId: null,           // không nhắm riêng ai — lọc theo vai trò
+            type: 'KTV_REJECT_ORDER',
+            message: `⛔ KTV ${staffName} vừa TỪ CHỐI đơn ${billLabel}. Lý do: ${reason}`,
+            bookingId: (bookingRow as any)?.bookingId || null,
         });
 
         return NextResponse.json({
