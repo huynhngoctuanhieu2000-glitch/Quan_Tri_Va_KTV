@@ -928,9 +928,15 @@ function ScreenDashboard({ logic }: { logic: any }) {
                         <span className="text-sm font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-lg">{totalAssignedMins || item.duration} phút</span>
                         {allServiceNames.length > 1 && <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-lg">{allServiceNames.length} DV</span>}
                         <ServiceTypeLabel serviceId={item.serviceId} />
-                        <span className="text-base font-black text-slate-800 truncate block mt-0.5 flex-1 min-w-[120px]">
-                          {item.guest_index ? `[Khách ${String.fromCharCode(64 + item.guest_index)}] ` : ''}{item.guest_customer_name || booking.customerName || booking.customerEmail || 'Khách vãng lai'}
-                        </span>
+                        {/* Không hiện tên khách cho KTV — chỉ cần nhãn khách và mã đơn
+                            là đủ để đối chiếu với quầy. */}
+                        {/* Dùng ternary chứ KHÔNG dùng `&&`: guest_index = 0 sẽ khiến
+                            React render ra số 0 thay vì bỏ qua. */}
+                        {item.guest_index ? (
+                          <span className="text-base font-black text-slate-800 truncate block mt-0.5 flex-1 min-w-[120px]">
+                            Khách {String.fromCharCode(64 + item.guest_index)}
+                          </span>
+                        ) : null}
                         <span className="text-sm font-black text-slate-800 shrink-0">#{item.guest_index ? `${(booking.billCode || '').split('-')[0]}-${String.fromCharCode(64 + item.guest_index)}` : (booking.billCode || '').split('-')[0]}</span>
                       </div>
                       {coWorkers.length > 0 && (
