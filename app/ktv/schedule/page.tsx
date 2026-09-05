@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
-    ShieldAlert, Loader2, CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle, ChevronRight, ChevronLeft, ChevronDown, Send, Briefcase, CalendarDays, ArrowRightLeft, Trash2
+    ShieldAlert, Loader2, CalendarOff, CheckCircle2, Clock, XCircle, AlertCircle, ChevronRight, ChevronLeft, ChevronDown, Send, Briefcase, CalendarDays, ArrowRightLeft, Trash2, Lock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -392,9 +392,11 @@ const KTVSchedulePage = () => {
                                                         <Clock size={13} /> {timeStr}
                                                     </p>
                                                 </div>
-                                                {canEdit
-                                                    ? <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-                                                    : <span className="text-[9px] text-gray-400 font-bold uppercase w-4 text-center">đã<br />khóa</span>}
+                                                <span className="w-4 flex justify-center shrink-0">
+                                                    {canEdit
+                                                        ? <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
+                                                        : <Lock size={14} className="text-gray-300" aria-label="Đã khóa" />}
+                                                </span>
                                             </div>
                                         </button>
                                     );
