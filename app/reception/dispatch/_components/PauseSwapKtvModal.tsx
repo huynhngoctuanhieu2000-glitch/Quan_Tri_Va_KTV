@@ -20,9 +20,15 @@ interface PauseSwapKtvModalProps {
     extraTimeMins?: number,
     keepTurnForOldKtv?: boolean
   ) => Promise<void>;
+  /**
+   * Mở thẳng vào một hành động, bỏ bước chọn.
+   * Thẻ Kanban của đơn tạm dừng đã có sẵn nút riêng cho từng việc, nên khi bấm
+   * "Đổi" thì vào luôn phần đổi KTV — không bắt lễ tân chọn lại lần nữa.
+   */
+  lockAction?: 'SWAP';
 }
 
-export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, availableKtvs, onConfirm }: PauseSwapKtvModalProps) {
+export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, availableKtvs, onConfirm, lockAction }: PauseSwapKtvModalProps) {
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [selectedOldKtv, setSelectedOldKtv] = useState<string>('');
   const [selectedNewKtv, setSelectedNewKtv] = useState<string>('');
@@ -64,6 +70,11 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
 
   const selectedService = activeServices.find((s: any) => s.id === selectedServiceId);
   const isPaused = selectedService?.status === 'PAUSED';
+
+  // Mở từ nút "Đổi" của thẻ tạm dừng → vào thẳng phần đổi KTV.
+  React.useEffect(() => {
+    if (isOpen && lockAction === 'SWAP' && isPaused) setActionType('SWAP');
+  }, [isOpen, lockAction, isPaused, selectedServiceId]);
 
   // Find KTVs currently working on the selected service
   const currentKtvs = selectedService?.staffList.filter((staff: any) => 
@@ -132,7 +143,7 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
                   value={selectedServiceId}
                   onChange={(e) => {
                     setSelectedServiceId(e.target.value);
-                    setActionType('PAUSE');
+                    setActionType(lockAction === 'SWAP' ? 'SWAP' : 'PAUSE');
                     setSelectedOldKtv('');
                   }}
                   disabled={activeServices.length === 1}
@@ -148,7 +159,8 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
 
               {selectedServiceId && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <div className="flex gap-3 mb-4">
+                  {/* lockAction: đã biết muốn làm gì rồi thì không hiện lại hàng nút chọn. */}
+                  <div className={`flex gap-3 mb-4 ${lockAction === 'SWAP' && isPaused ? 'hidden' : ''}`}>
                     {!isPaused ? (
                       <button
                         onClick={() => setActionType('PAUSE')}

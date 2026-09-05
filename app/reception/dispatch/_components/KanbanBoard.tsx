@@ -91,7 +91,8 @@ interface KanbanBoardProps {
     onConfirmAddonPayment?: (orderId: string) => void;
     selectedOrderId?: string | null;
     onContextMenu?: (e: React.MouseEvent, orderId: string, itemId?: string, guestId?: string) => void;
-    onPauseClick?: (orderId: string, itemIds: string[]) => void;
+    // Khai báo cũ ghi `itemIds: string[]` nhưng mọi nơi gọi đều truyền subOrder.
+    onPauseClick?: (orderId: string, subOrder: any) => void;
     roomTransitionTime?: number;
     onUpdateCustomerName?: (orderId: string, itemIds: string[], ktvIds: string[], newName: string) => Promise<void>;
     onReviewClick?: (service: ServiceBlock) => void;
@@ -99,6 +100,8 @@ interface KanbanBoardProps {
     staffs?: any[];
     onSelectOrder?: (orderId: string) => void;
     onFinishEarlyPaused?: (orderId: string, subOrder: any) => void;
+    /** Bấm "Tiếp" trên thẻ tạm dừng: chạy thẳng, không qua popup chọn hành động. */
+    onResumeClick?: (orderId: string, subOrder: any) => Promise<void> | void;
 }
 
 const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services, subOrder?: any) => {
@@ -182,7 +185,19 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     return order.time; 
 };
 
-export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused }: KanbanBoardProps) {
+export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused, onResumeClick }: KanbanBoardProps) {
+    // Khoá nút "Tiếp" của đúng thẻ đang gọi API, tránh bấm hai lần.
+    const [resumingSubOrderId, setResumingSubOrderId] = React.useState<string | null>(null);
+
+    const handleResume = async (orderId: string, subOrder: any) => {
+        if (!onResumeClick || resumingSubOrderId) return;
+        setResumingSubOrderId(subOrder.id);
+        try {
+            await onResumeClick(orderId, subOrder);
+        } finally {
+            setResumingSubOrderId(null);
+        }
+    };
     const [draggedSubOrderId, setDraggedSubOrderId] = useState<string | null>(null);
     const [selectedPhoto, setSelectedPhoto] = useState<{ url: string; ktvId: string; time: string | null } | null>(null);
     const [editingNameSubOrderId, setEditingNameSubOrderId] = useState<string | null>(null);
@@ -1135,12 +1150,19 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                         if (isPaused) {
                                                             return (
                                                                 <>
+                                                                    {/* Thẻ tạm dừng đã có sẵn 4 nút, nên "Tiếp" chạy thẳng —
+                                                                        không mở popup bắt chọn lại Tiếp tục / Đổi KTV nữa. */}
                                                                     <button
-                                                                        onClick={(e) => { e.stopPropagation(); onPauseClick(order.id, subOrder); }}
-                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-green-600 bg-green-50 hover:bg-green-100 transition-all border border-green-100 flex items-center justify-center w-full gap-1"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (onResumeClick) handleResume(order.id, subOrder);
+                                                                            else onPauseClick(order.id, subOrder);
+                                                                        }}
+                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-green-600 bg-green-50 hover:bg-green-100 transition-all border border-green-100 flex items-center justify-center w-full gap-1 disabled:opacity-50"
+                                                                        disabled={resumingSubOrderId === subOrder.id}
                                                                         title="Tiếp tục"
                                                                     >
-                                                                        <PlayCircle size={12} /> Tiếp
+                                                                        <PlayCircle size={12} /> {resumingSubOrderId === subOrder.id ? '...' : 'Tiếp'}
                                                                     </button>
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); onPauseClick(order.id, subOrder); }}

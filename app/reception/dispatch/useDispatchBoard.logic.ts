@@ -90,6 +90,61 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
         }
     }, [selectedOrderId]);
 
+    /**
+     * Áp danh sách nhân viên + sổ tua vào state.
+     * Tách riêng để `refreshStaffOnly` dùng lại được mà không đụng tới `orders`.
+     */
+    function applyStaffAndTurns(sData: any, tData: any) {
+        if (sData) setStaffs(sData as unknown as StaffData[]);
+        if (!tData || !sData) return;
+
+        const merged = (tData as TurnQueueData[]).map((t: TurnQueueData) => ({
+            ...t,
+            staff: (sData as unknown as StaffData[]).find(s => s.id === t.employee_id)
+        }));
+
+        // Thêm các KTV on_call vào merged nếu chưa có (Type B đang rảnh)
+        const onCallStaffs = (sData as unknown as StaffData[]).filter(s => {
+            const flags = s.feature_flags as any;
+            return flags && flags.is_on_call === true;
+        });
+
+        onCallStaffs.forEach(staff => {
+            if (!merged.some(m => m.employee_id === staff.id)) {
+                merged.push({
+                    id: `fake-${staff.id}`,
+                    employee_id: staff.id,
+                    check_in_order: 999, // Đẩy xuống cuối
+                    turns_completed: 0,
+                    status: 'waiting',
+                    date: selectedDate,
+                    queue_position: 999,
+                    staff: staff
+                } as any);
+            }
+        });
+
+        setTurns(merged);
+    }
+
+    /**
+     * Chỉ làm mới NHÂN VIÊN + SỔ TUA, không đụng tới `orders`.
+     *
+     * Khi lễ tân đang mở một đơn, mọi cập nhật realtime bị hoãn để không ghi đè
+     * form đang sửa. Nhưng danh sách KTV không phải dữ liệu của form: KTV vừa
+     * được duyệt điểm danh mà ô "+ Chọn KTV..." không thấy thì không điều phối
+     * được cho họ. Hàm này lấp đúng khoảng đó.
+     */
+    async function refreshStaffOnly() {
+        try {
+            const res = await getDispatchData(selectedDate);
+            if (!res.success || !res.data) return;
+            applyStaffAndTurns(res.data.staffs, res.data.turns);
+        } catch (err) {
+            console.error('❌ [Dispatch] refreshStaffOnly error:', err);
+        }
+    }
+
     async function fetchData() {
         setLoading(true);
         console.log("📡 [Dispatch] Fetching data for date:", selectedDate);
@@ -103,37 +158,7 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
 
             const { staffs: sData, turns: tData, bookings: bData } = res.data;
 
-            if (sData) setStaffs(sData as unknown as StaffData[]);
-
-            if (tData && sData) {
-                const merged = (tData as TurnQueueData[]).map((t: TurnQueueData) => ({
-                    ...t,
-                    staff: (sData as unknown as StaffData[]).find(s => s.id === t.employee_id)
-                }));
-                
-                // Thêm các KTV on_call vào merged nếu chưa có (Type B đang rảnh)
-                const onCallStaffs = (sData as unknown as StaffData[]).filter(s => {
-                    const flags = s.feature_flags as any;
-                    return flags && flags.is_on_call === true;
-                });
-                
-                onCallStaffs.forEach(staff => {
-                    if (!merged.some(m => m.employee_id === staff.id)) {
-                        merged.push({
-                            id: `fake-${staff.id}`,
-                            employee_id: staff.id,
-                            check_in_order: 999, // Đẩy xuống cuối
-                            turns_completed: 0,
-                            status: 'waiting',
-                            date: selectedDate,
-                            queue_position: 999,
-                            staff: staff
-                        } as any);
-                    }
-                });
-                
-                setTurns(merged);
-            }
+            applyStaffAndTurns(sData, tData);
 
             const rData = res.data.rooms || [];
             const bdData = res.data.beds || [];
@@ -476,12 +501,24 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'TurnQueue' }, (payload: any) => {
                 if (payload.eventType === 'UPDATE') {
-                    setTurns(prev => prev.map(t => t.employee_id === payload.new.employee_id ? { ...t, ...payload.new } : t));
+                    setTurns(prev => {
+                        // KTV chưa có trong state (tua tạo sau lần tải gần nhất) thì patch
+                        // không ăn vào đâu cả — phải kéo lại danh sách.
+                        if (!prev.some(t => t.employee_id === payload.new.employee_id)) {
+                            refreshStaffOnly();
+                            return prev;
+                        }
+                        return prev.map(t => t.employee_id === payload.new.employee_id ? { ...t, ...payload.new } : t);
+                    });
                 } else if (payload.eventType === 'DELETE') {
                     setTurns(prev => prev.filter(t => t.id !== payload.old.id));
                 } else {
+                    // INSERT = KTV vừa được duyệt điểm danh, có tên trong sổ tua hôm nay.
+                    // Đang mở đơn thì vẫn phải làm mới danh sách nhân viên ngay, nếu không
+                    // ô "+ Chọn KTV..." không thấy người vừa điểm danh; chỉ hoãn phần đơn hàng.
                     if (selectedOrderIdRef.current) {
                         needsRefreshRef.current = true;
+                        refreshStaffOnly();
                     } else {
                         debouncedFetchData();
                     }

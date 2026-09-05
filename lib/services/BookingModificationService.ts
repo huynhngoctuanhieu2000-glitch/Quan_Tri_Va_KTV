@@ -504,10 +504,31 @@ export class BookingModificationService {
             opts = opts || {};
             opts.cancelReason = reason;
 
-            const { error: updateItemErr } = await supabase.from('BookingItems').update({ 
+            // ⏱️ Chốt mốc kết thúc cho các chặng còn hở. Dịch vụ đang tạm dừng thì
+            // mốc là `pauseStart` (lúc bấm tạm dừng), không phải giờ hiện tại —
+            // thời gian chờ giữa hai mốc đó KTV không làm nên không được tính tiền.
+            const isPausedItem = item.status === 'PAUSED' && !!item.pauseStart;
+            const endMark = isPausedItem ? item.pauseStart : vnTimeStr;
+
+            let segs: any[] = [];
+            try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
+            let segmentsModified = false;
+            segs.forEach((s: any) => {
+                if (s.actualStartTime && !s.actualEndTime) {
+                    s.actualEndTime = endMark;
+                    segmentsModified = true;
+                }
+            });
+
+            const cancelPayload: any = {
                 status: 'CANCELLED',
-                options: opts
-            }).eq('id', itemId);
+                options: opts,
+                timeEnd: endMark,
+            };
+            if (segmentsModified) cancelPayload.segments = JSON.stringify(segs);
+            if (isPausedItem) cancelPayload.pauseStart = null;
+
+            const { error: updateItemErr } = await supabase.from('BookingItems').update(cancelPayload).eq('id', itemId);
             if (updateItemErr) throw updateItemErr;
 
             const itemTotal = (item.price || 0) * (item.quantity || 1);
@@ -533,7 +554,7 @@ export class BookingModificationService {
 
             const { data: turnsAffected } = await supabase
                 .from('TurnQueue')
-                .select('id, status, booking_item_ids')
+                .select('id, status, booking_item_ids, employee_id, date')
                 .eq('current_order_id', bookingId)
                 .contains('booking_item_ids', [itemId]);
 
@@ -549,6 +570,23 @@ export class BookingModificationService {
                             status: newStatus, current_order_id: null, booking_item_id: null, booking_item_ids: [],
                             room_id: null, bed_id: null, start_time: null, estimated_end_time: null
                         }).eq('id', turn.id);
+                    }
+
+                    // Đóng assignment của đúng dịch vụ vừa huỷ rồi kéo đơn kế tiếp lên,
+                    // nếu không KTV vẫn bị coi là đang bận với dịch vụ đã huỷ.
+                    if (turn.employee_id && turn.date) {
+                        await supabase
+                            .from('KtvAssignments')
+                            .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+                            .eq('employee_id', turn.employee_id)
+                            .eq('business_date', turn.date)
+                            .eq('booking_item_id', itemId)
+                            .in('status', ['ACTIVE', 'QUEUED', 'READY']);
+
+                        await supabase.rpc('promote_next_assignment', {
+                            p_employee_id: turn.employee_id,
+                            p_business_date: turn.date,
+                        });
                     }
                 }
             }

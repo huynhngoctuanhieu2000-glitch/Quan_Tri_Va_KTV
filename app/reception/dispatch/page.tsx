@@ -347,6 +347,7 @@ export default function DispatchBoardPage() {
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
   const [pauseModalOrder, setPauseModalOrder] = useState<PendingOrder | null>(null);
   const [pauseModalSubOrder, setPauseModalSubOrder] = useState<any>(null);
+  const [pauseModalLockAction, setPauseModalLockAction] = useState<'SWAP' | undefined>(undefined);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string, guestId?: string } | null>(null);
   const [invoiceLangModal, setInvoiceLangModal] = useState<{ invoiceId: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
@@ -2827,8 +2828,25 @@ if (!hasPermission('dispatch_board')) {
                 if (o) {
                   setPauseModalOrder(o);
                   if (subOrder) setPauseModalSubOrder(subOrder);
+                  // Đơn đang tạm dừng thì chỉ nút "Đổi" mới mở modal này
+                  // (nút "Tiếp" đã chạy thẳng) → vào luôn phần đổi KTV.
+                  const paused = (subOrder?.services || []).some((s: any) => s.status === 'PAUSED');
+                  setPauseModalLockAction(paused ? 'SWAP' : undefined);
                   setPauseModalOpen(true);
                   setContextMenu(null);
+                }
+              }}
+              onResumeClick={async (orderId, subOrder) => {
+                const pausedSvc = (subOrder?.services || []).find((s: any) => s.status === 'PAUSED');
+                if (!pausedSvc) {
+                  alert('Không tìm thấy dịch vụ đang tạm dừng để tiếp tục.');
+                  return;
+                }
+                try {
+                  // resumeItem tự xử lý các dịch vụ gộp chung KTV, chỉ cần truyền 1 item.
+                  await handleConfirmPauseSwap(pausedSvc.id, 'RESUME');
+                } catch (err: any) {
+                  alert('Lỗi tiếp tục đơn: ' + (err?.message || 'Không rõ nguyên nhân'));
                 }
               }}
               onFinishEarlyPaused={async (orderId, subOrder) => {
@@ -3024,11 +3042,12 @@ if (!hasPermission('dispatch_board')) {
       {/* Modal Tạm Dừng / Đổi KTV */}
       <PauseSwapKtvModal
         isOpen={pauseModalOpen}
-        onClose={() => { setPauseModalOpen(false); setPauseModalOrder(null); setPauseModalSubOrder(null); }}
+        onClose={() => { setPauseModalOpen(false); setPauseModalOrder(null); setPauseModalSubOrder(null); setPauseModalLockAction(undefined); }}
         order={pauseModalOrder}
         subOrder={pauseModalSubOrder}
         availableKtvs={staffs.filter(s => s.status === 'ready')}
         onConfirm={handleConfirmPauseSwap}
+        lockAction={pauseModalLockAction}
       />
 
       <MergePromptModal

@@ -1155,15 +1155,40 @@ export async function cancelBooking(bookingId: string, date: string) {
 
         if (bError) throw bError;
 
-        // Cập nhật trạng thái các BookingItems chưa hoàn thành về CANCELLED
-        const { error: itemError } = await supabase
+        // Cập nhật trạng thái các BookingItems chưa hoàn thành về CANCELLED.
+        // ⏱️ Đồng thời CHỐT mốc kết thúc cho các chặng còn hở, nếu không thì
+        // computeMinutes coi chặng là "không có mốc" và trả tiền theo giờ GÁN.
+        // Đơn đang tạm dừng lấy mốc `pauseStart` chứ không lấy giờ hiện tại.
+        const { data: itemsToCancel, error: itemsFetchError } = await supabase
             .from('BookingItems')
-            .update({ status: 'CANCELLED' })
+            .select('id, segments, status, pauseStart')
             .eq('bookingId', bookingId)
             .neq('status', 'DONE')
             .neq('status', 'CANCELLED');
-            
-        if (itemError) console.error('❌ [Server] BookingItems update error:', itemError);
+        if (itemsFetchError) throw itemsFetchError;
+
+        for (const item of itemsToCancel || []) {
+            let segs: any[] = [];
+            try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : ((item.segments as any) || []); } catch {}
+
+            const isPausedItem = item.status === 'PAUSED' && !!(item as any).pauseStart;
+            const endMark = isPausedItem ? (item as any).pauseStart : new Date().toISOString();
+
+            let segmentsModified = false;
+            segs.forEach((s: any) => {
+                if (s.actualStartTime && !s.actualEndTime) {
+                    s.actualEndTime = endMark;
+                    segmentsModified = true;
+                }
+            });
+
+            const payload: any = { status: 'CANCELLED', timeEnd: endMark };
+            if (segmentsModified) payload.segments = JSON.stringify(segs);
+            if (isPausedItem) payload.pauseStart = null;
+
+            const { error: itemError } = await supabase.from('BookingItems').update(payload).eq('id', item.id);
+            if (itemError) throw itemError; // huỷ nửa vời còn tệ hơn báo lỗi
+        }
 
         // 2. Lấy thông tin trạng thái KTV trước khi giải phóng để quyết định có xóa Ledger không
         const { data: currentTurns } = await supabase
@@ -1207,6 +1232,22 @@ export async function cancelBooking(bookingId: string, date: string) {
                 if (tError) {
                     console.error('❌ [Server] TurnQueue cleanup error:', tError);
                 }
+
+                // 4. Đóng KtvAssignments rồi kéo đơn kế tiếp lên.
+                // Thiếu bước này thì assignment còn treo ACTIVE/QUEUED và KTV
+                // không được gán đơn mới dù TurnQueue đã về 'waiting'.
+                await supabase
+                    .from('KtvAssignments')
+                    .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+                    .eq('employee_id', turn.employee_id)
+                    .eq('business_date', date)
+                    .eq('booking_id', bookingId)
+                    .in('status', ['ACTIVE', 'QUEUED', 'READY']);
+
+                await supabase.rpc('promote_next_assignment', {
+                    p_employee_id: turn.employee_id,
+                    p_business_date: date,
+                });
             }
         }
 
@@ -1249,22 +1290,42 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
         // Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
         // 🔧 Cập nhật trạng thái các BookingItems nếu Booking được hoàn thành / huỷ
         if (['DONE', 'CANCELLED', 'CLEANING', 'FEEDBACK'].includes(newStatus)) {
+            // ⚠️ 'PAUSED' phải nằm trong danh sách này. Thiếu nó thì đơn đang tạm dừng
+            // bị bỏ qua khi lễ tân kéo sang Dọn phòng / Huỷ → item kẹt 'PAUSED' vĩnh viễn
+            // và recomputeBookingStatus kéo cả đơn về trạng thái sai.
             const { data: itemsToUpdate } = await supabase
                 .from('BookingItems')
-                .select('id, segments, status')
+                .select('id, segments, status, pauseStart')
                 .eq('bookingId', bookingId)
-                .in('status', ['WAITING', 'PREPARING', 'IN_PROGRESS', 'CLEANING', 'FEEDBACK']);
-            
+                .in('status', ['WAITING', 'PREPARING', 'IN_PROGRESS', 'PAUSED', 'CLEANING', 'FEEDBACK']);
+
             if (itemsToUpdate && itemsToUpdate.length > 0) {
                 const { canTransition: canTransitionItem } = await import('@/lib/dispatch-status');
                 for (const item of itemsToUpdate) {
                     let segs = [];
                     try { segs = typeof item.segments === 'string' ? JSON.parse(item.segments) : (item.segments || []); } catch {}
-                    
+
+                    // ⏱️ Đơn đang tạm dừng thì mốc kết thúc là LÚC BẤM TẠM DỪNG, không phải bây giờ.
+                    // Khoảng chờ giữa tạm dừng và lúc lễ tân chốt đơn không phải giờ làm.
+                    const isPausedItem = (item as any).status === 'PAUSED' && !!(item as any).pauseStart;
+                    const endMark = isPausedItem ? (item as any).pauseStart : new Date().toISOString();
+
                     let segmentsModified = false;
                     segs.forEach((s: any) => {
                         if (!s.actualEndTime) {
-                            s.actualEndTime = new Date().toISOString();
+                            s.actualEndTime = endMark;
+                            // Chốt số phút làm thực cho chặng đã tạm dừng — thiếu con số này thì
+                            // KtvCommissionService trả về giờ GÁN và KTV được trả thừa tiền.
+                            if (isPausedItem && s.actualStartTime && s.customCommissionDuration == null) {
+                                const t1 = new Date(String(s.actualStartTime).replace(' ', 'T')).getTime();
+                                const t2 = new Date(String(endMark).replace(' ', 'T')).getTime();
+                                let worked = (Number.isFinite(t1) && Number.isFinite(t2) && t2 > t1)
+                                    ? Math.round((t2 - t1) / 60000)
+                                    : 0;
+                                const assigned = Number(s.duration) || 0;
+                                if (assigned > 0 && worked > assigned) worked = assigned;
+                                s.customCommissionDuration = worked;
+                            }
                             segmentsModified = true;
                         }
                     });
@@ -1281,8 +1342,9 @@ export async function updateBookingStatus(bookingId: string, newStatus: string, 
 
                     const payload: any = { status: newStatus };
                     if (segmentsModified) payload.segments = JSON.stringify(segs);
+                    if (isPausedItem) payload.pauseStart = null; // gỡ cờ tạm dừng, tránh UI vẫn coi là đang dừng
                     if (newStatus === 'CLEANING' || newStatus === 'DONE' || newStatus === 'CANCELLED') {
-                        payload.timeEnd = new Date().toISOString();
+                        payload.timeEnd = endMark;
                     }
 
                     await supabase.from('BookingItems').update(payload).eq('id', item.id);

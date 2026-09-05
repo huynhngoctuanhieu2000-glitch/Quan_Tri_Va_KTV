@@ -25,7 +25,7 @@ export function canTransition(from: RawStatus | string | null | undefined, to: R
     else if (from === 'cancelled') normalizedFrom = 'CANCELLED';
     else if (from === 'waiting_rating' || from === 'feedback') normalizedFrom = 'FEEDBACK';
     else if (from === 'cleaning' || from === 'COMPLETED') normalizedFrom = 'CLEANING';
-    else if (from === 'in_progress') normalizedFrom = 'IN_PROGRESS';
+    else if (from === 'in_progress' || from === 'PAUSED' || from === 'paused') normalizedFrom = 'IN_PROGRESS';
     else if (from === 'pending' || from === 'dispatched' || from === 'NEW' || from === 'WAITING' || from === 'READY') normalizedFrom = 'PREPARING';
 
     if (normalizedFrom === to) return true; // Giữ nguyên hoặc normalize về cùng bước thì hợp lệ
@@ -88,9 +88,12 @@ export function recomputeBookingStatus(itemStatuses: string[]): string {
     if (!itemStatuses || itemStatuses.length === 0) return 'NEW';
     
     const hasWaitingItems = itemStatuses.some(s => ['PREPARING', 'WAITING', 'NEW'].includes(s));
-    const hasProgressedItems = itemStatuses.some(s => ['IN_PROGRESS', 'COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s));
+    const hasProgressedItems = itemStatuses.some(s => ['IN_PROGRESS', 'PAUSED', 'COMPLETED', 'DONE', 'CANCELLED', 'FEEDBACK', 'CLEANING'].includes(s));
 
-    if (itemStatuses.includes('IN_PROGRESS')) return 'IN_PROGRESS';
+    // PAUSED là đơn ĐANG chạy nhưng bấm tạm dừng — vẫn giữ phòng, vẫn giữ KTV.
+    // Thiếu nhánh này thì ['PAUSED','CANCELLED'] rơi xuống cuối và trả 'NEW',
+    // kéo đơn đã huỷ/đã xử lý ngược về cột chờ.
+    if (itemStatuses.includes('IN_PROGRESS') || itemStatuses.includes('PAUSED')) return 'IN_PROGRESS';
     if (hasWaitingItems && hasProgressedItems) return 'IN_PROGRESS';
     
     // Nếu có item đang Dọn phòng (hoặc vừa Xong và chờ dọn), cả Booking là đang Dọn phòng (Giữ phòng Bận)
