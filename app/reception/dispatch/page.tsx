@@ -11,6 +11,8 @@ import { ConfirmActionModal } from './_components/ConfirmActionModal';
 import { PhotoViewerModal } from './_components/PhotoViewerModal';
 import { QrJourneyModal } from './_components/QrJourneyModal';
 import { StartServiceModal } from './_components/StartServiceModal';
+import { InvoiceLanguageModal } from './_components/InvoiceLanguageModal';
+import { AddServiceModal } from './_components/AddServiceModal';
 import { formatToHourMinute } from './dispatch-time.logic';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/apiClient';
@@ -255,7 +257,6 @@ export default function DispatchBoardPage() {
   const [commentModalData, setCommentModalData] = useState<{subOrder: SubOrder, order: any} | null>(null);
   const [editingSvc, setEditingSvc] = useState<{ orderId: string, svcId: string, oldSvcName: string } | null>(null);
   const [showDispatchConfirmModal, setShowDispatchConfirmModal] = useState(false);
-  const [svcSearchQuery, setSvcSearchQuery] = useState('');
   const [editingGuestInfo, setEditingGuestInfo] = useState<{ nationality: string, guestCount: number, customerGender: string, paymentMethod: string } | null>(null);
   const [showCustomerInfo, setShowCustomerInfo] = useState(false);
   const [fullCustomerData, setFullCustomerData] = useState<Customer | null>(null);
@@ -355,7 +356,7 @@ export default function DispatchBoardPage() {
   const [pauseModalOrder, setPauseModalOrder] = useState<PendingOrder | null>(null);
   const [pauseModalSubOrder, setPauseModalSubOrder] = useState<any>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string, guestId?: string } | null>(null);
-  const [invoiceLangModal, setInvoiceLangModal] = useState<{ invoiceId: string; showQrForLang?: string } | null>(null);
+  const [invoiceLangModal, setInvoiceLangModal] = useState<{ invoiceId: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
   const [dispatchMode, setDispatchMode] = useState<'quick' | 'detail'>('quick');
   const [selectedPhoto, setSelectedPhoto] = useState<{ url?: string; urls?: string[]; ktvId: string; time: string | null; type?: 'START' | 'HANDOVER' } | null>(null);
@@ -952,7 +953,6 @@ if (!hasPermission('dispatch_board')) {
             
             setEditingSvc(null);
             setShowAddSvcModal(false);
-            setSvcSearchQuery('');
             // fetchData(); // Không bắt buộc vì đã patch state
         } else {
             alert('Lỗi đổi dịch vụ: ' + (res.error || 'Unknown error'));
@@ -992,8 +992,7 @@ if (!hasPermission('dispatch_board')) {
           if (res.success) {
               alert(`✅ Thêm "${svcName}" thành công! Tổng tiền mới: ${(res.newTotalAmount || 0).toLocaleString()}đ`);
               setShowAddSvcModal(false);
-              setSvcSearchQuery('');
-              fetchData();
+                fetchData();
           } else {
               alert('Lỗi: ' + res.error);
           }
@@ -2951,108 +2950,17 @@ if (!hasPermission('dispatch_board')) {
       </div>
 
       {/* Add Svc Modal */}
-      <AnimatePresence>
-        {(showAddSvcModal || editingSvc) && (
-          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-md" 
-              onClick={() => { setShowAddSvcModal(false); setEditingSvc(null); }} 
-            />
-            <motion.div 
-              initial={{ y: '100%', opacity: 0 }} 
-              animate={{ y: 0, opacity: 1 }} 
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative bg-white rounded-t-[2.5rem] sm:rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
-            >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <div>
-                  <h3 className="font-black text-gray-900 text-lg uppercase tracking-tight">{editingSvc ? 'Đổi Dịch Vụ' : 'Thêm Dịch Vụ'}</h3>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{editingSvc ? `Đang đổi cho: ${editingSvc.oldSvcName}` : 'Chọn từ danh mục phổ biến'}</p>
-                </div>
-                <button 
-                  onClick={() => { setShowAddSvcModal(false); setEditingSvc(null); setSelectedGuestForAddon(''); }} 
-                  className="p-3 hover:bg-gray-100 rounded-2xl text-gray-400 transition-colors"
-                >
-                  <Plus className="rotate-45" size={24} />
-                </button>
-              </div>
-              {/* Guest Selector */}
-                {!editingSvc && selectedOrder && (
-                  <div className="px-6 pt-4 pb-0">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Thêm cho khách:</label>
-                    <select
-                      value={selectedGuestForAddon || (selectedSubOrder as any)?.guest?.id || ''}
-                      onChange={(e) => setSelectedGuestForAddon(e.target.value)}
-                      className="w-full bg-indigo-50/50 px-3 py-2.5 rounded-xl border-2 border-indigo-100 text-sm font-bold text-indigo-900 outline-none focus:border-indigo-300"
-                    >
-                      {selectedOrder.guests?.map((g: any, idx: number) => (
-                         <option key={g.id} value={g.id}>
-                           {g.guestLabel || `Khách ${idx + 1}`} {(selectedSubOrder as any)?.guest?.id === g.id ? '(Khách hiện tại)' : ''}
-                         </option>
-                      ))}
-                      {(!selectedOrder.guests || selectedOrder.guests.length === 0) && (
-                         <option value={(selectedSubOrder as any)?.guest?.id || 'default'}>Khách hiện tại</option>
-                      )}
-                      <option value="NEW">+ Thêm khách mới</option>
-                    </select>
-                  </div>
-                )}
-                {/* Search bar */}
-              <div className="px-6 pt-4 pb-2">
-                <input
-                  type="text"
-                  placeholder="Tìm dịch vụ..."
-                  value={svcSearchQuery}
-                  onChange={(e) => setSvcSearchQuery(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-100 rounded-2xl text-sm font-medium focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-gray-300"
-                />
-              </div>
-              <div className="p-6 pt-2 grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto no-scrollbar pb-10 sm:pb-6">
-                {allServices
-                  .filter((svc: any) => {
-                    if (!svcSearchQuery.trim()) return true;
-                    const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || '') : (svc.nameVN || svc.nameEN || '');
-                    return name.toLowerCase().includes(svcSearchQuery.toLowerCase());
-                  })
-                  .map((svc: any) => {
-                    const name = (typeof svc.nameVN === 'object' && svc.nameVN !== null) ? (svc.nameVN.vn || svc.nameVN.en || svc.nameVN) : (svc.nameVN || svc.nameEN || `Dịch vụ ${svc.code || svc.id}`);
-                    const dur = svc.duration ?? 60;
-                    const price = svc.priceVND || 0;
-                    const isUtilitySvc = isUtilityService(svc); // Legacy fallback
-                    return (
-                      <button 
-                        key={svc.id} 
-                        onClick={() => editingSvc ? handleEditService(svc.id, name, dur) : addServiceBlock(svc.id, name, dur)} 
-                        className={`group p-5 text-left border-2 rounded-2xl transition-all flex items-center justify-between active:scale-[0.98] ${isUtilitySvc ? 'border-amber-200 hover:border-amber-400 hover:bg-amber-50/30' : 'border-gray-100 hover:border-indigo-500 hover:bg-indigo-50/30'}`}
-                      >
-                        <div>
-                          <p className={`font-black transition-colors ${isUtilitySvc ? 'text-amber-700 group-hover:text-amber-800' : 'text-gray-900 group-hover:text-indigo-600'}`}>{name}</p>
-                          <div className="flex items-center gap-3 mt-1">
-                            {isUtilitySvc 
-                              ? <span className="text-[10px] text-amber-600 font-black bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 uppercase tracking-wider">Tiện ích</span>
-                              : <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">{dur} PHÚT</span>
-                            }
-                            {price > 0 && <span className="text-xs text-emerald-600 font-black">{price.toLocaleString()}đ</span>}
-                          </div>
-                        </div>
-                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm">
-                          <Plus size={20} strokeWidth={3} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                {allServices.length === 0 && (
-                  <p className="text-center text-gray-400 text-sm py-8 font-medium">Đang tải danh sách dịch vụ...</p>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <AddServiceModal
+        open={showAddSvcModal || !!editingSvc}
+        editing={editingSvc}
+        services={allServices}
+        order={selectedOrder}
+        currentGuestId={(selectedSubOrder as any)?.guest?.id}
+        selectedGuestId={selectedGuestForAddon}
+        onSelectGuest={setSelectedGuestForAddon}
+        onPick={(svcId, name, dur) => editingSvc ? handleEditService(svcId, name, dur) : addServiceBlock(svcId, name, dur)}
+        onClose={() => { setShowAddSvcModal(false); setEditingSvc(null); setSelectedGuestForAddon(''); }}
+      />
 
       {/* Dispatch Confirmation Modal */}
       <AnimatePresence>
@@ -3596,99 +3504,10 @@ if (!hasPermission('dispatch_board')) {
       />
 
       {/* Invoice Language Modal */}
-      {invoiceLangModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-6 text-center border-b border-gray-100 relative">
-              <div className="w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                {invoiceLangModal.showQrForLang ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-sky-600"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-sky-600"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                )}
-              </div>
-              <h3 className="text-xl font-black text-gray-900 tracking-tight">
-                {invoiceLangModal.showQrForLang ? 'Quét mã để xem hóa đơn' : 'Chọn ngôn ngữ hóa đơn'}
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                {invoiceLangModal.showQrForLang ? 'Khách hàng có thể quét mã này' : 'Chọn in hoặc hiển thị mã QR'}
-              </p>
-              
-              <button
-                onClick={() => setInvoiceLangModal(null)}
-                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            {invoiceLangModal.showQrForLang ? (
-              <div className="p-6 flex flex-col items-center">
-                <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-100 mb-6">
-                  <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${window.location.origin}/invoice/${invoiceLangModal.invoiceId}?lang=${invoiceLangModal.showQrForLang}`)}`}
-                    alt="Invoice QR Code"
-                    className="w-[200px] h-[200px] object-contain"
-                  />
-                </div>
-                <div className="flex w-full gap-3">
-                  <button
-                    onClick={() => setInvoiceLangModal({ invoiceId: invoiceLangModal.invoiceId })}
-                    className="flex-1 py-3 text-sm font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
-                  >
-                    Quay lại
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.open(`/invoice/${invoiceLangModal.invoiceId}?lang=${invoiceLangModal.showQrForLang}`, '_blank');
-                      setInvoiceLangModal(null);
-                    }}
-                    className="flex-1 py-3 text-sm font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition-colors"
-                  >
-                    Mở tab In
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 flex flex-col gap-2">
-                {[
-                  { code: 'vi', label: 'Tiếng Việt', flag: '🇻🇳' },
-                  { code: 'en', label: 'English', flag: '🇬🇧' },
-                  { code: 'cn', label: '中文 (Chinese)', flag: '🇨🇳' },
-                  { code: 'jp', label: '日本語 (Japanese)', flag: '🇯🇵' },
-                  { code: 'kr', label: '한국어 (Korean)', flag: '🇰🇷' },
-                ].map(lang => (
-                  <div key={lang.code} className="flex items-center gap-2 w-full p-2 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
-                    <div className="flex items-center gap-3 flex-1 pl-2">
-                      <span className="text-2xl">{lang.flag}</span>
-                      <span className="font-bold text-gray-700">{lang.label}</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setInvoiceLangModal({ invoiceId: invoiceLangModal.invoiceId, showQrForLang: lang.code })}
-                        className="px-3 py-2 text-xs font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors flex items-center gap-1"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>
-                        Mã QR
-                      </button>
-                      <button
-                        onClick={() => {
-                          window.open(`/invoice/${invoiceLangModal.invoiceId}?lang=${lang.code}`, '_blank');
-                          setInvoiceLangModal(null);
-                        }}
-                        className="px-3 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition-colors flex items-center gap-1"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                        In
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <InvoiceLanguageModal
+        invoiceId={invoiceLangModal?.invoiceId ?? null}
+        onClose={() => setInvoiceLangModal(null)}
+      />
 
       {commentModalData && (
         <KtvCommentModal 
