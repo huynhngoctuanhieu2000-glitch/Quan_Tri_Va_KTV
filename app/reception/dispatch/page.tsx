@@ -9,6 +9,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ConfirmActionModal } from './_components/ConfirmActionModal';
 import { PhotoViewerModal } from './_components/PhotoViewerModal';
+import { QrJourneyModal } from './_components/QrJourneyModal';
+import { StartServiceModal } from './_components/StartServiceModal';
 import { formatToHourMinute } from './dispatch-time.logic';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/apiClient';
@@ -307,7 +309,6 @@ export default function DispatchBoardPage() {
     onConfirm?: (time: string) => void;
   }>({ isOpen: false, orderId: '', itemIds: undefined, targetKtvIds: undefined, plannedStartTime: null });
 
-  const [customStartInputValue, setCustomStartInputValue] = useState<string>('');
 
   useEffect(() => {
     setEditingGuestInfo(null);
@@ -361,8 +362,6 @@ export default function DispatchBoardPage() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [timeEditorModal, setTimeEditorModal] = useState<{ isOpen: boolean, orderId: string, itemId: string } | null>(null);
   // 🔧 QR CONFIGURATION
-  const JOURNEY_BASE_URL = 'https://nganha.vercel.app';
-  const QR_SIZE = 250;
 
   const soundEnabledRef = useRef(soundEnabled);
   useEffect(() => {
@@ -1732,9 +1731,6 @@ if (!hasPermission('dispatch_board')) {
             }
         } catch(e) {}
         
-        const nowTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-        setCustomStartInputValue(nowTime);
-
         setStartServiceModal({
            isOpen: true,
            orderId,
@@ -3359,42 +3355,7 @@ if (!hasPermission('dispatch_board')) {
       </AnimatePresence>
 
       {/* QR Journey Modal */}
-      <AnimatePresence>
-        {qrModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setQrModal(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full mx-4 text-center"
-            >
-              <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <QrCode size={28} className="text-indigo-600" />
-              </div>
-              <h3 className="text-lg font-black text-gray-900 mb-1">QR Journey</h3>
-              <p className="text-xs text-gray-500 font-medium mb-6">Đơn #{(qrModal.billCode || '').split('-')[0]} — Khách quét để xem lộ trình</p>
-              
-              <div className="bg-gray-50 rounded-2xl p-6 mb-6 inline-block border border-gray-100">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&data=${encodeURIComponent(`${JOURNEY_BASE_URL}/${qrModal.customerLang || 'vi'}/journey/${qrModal.accessToken || qrModal.orderId}${qrModal.guestId ? '?guestId=' + qrModal.guestId : ''}`)}`}
-                  alt="QR Journey"
-                  width={QR_SIZE}
-                  height={QR_SIZE}
-                  className="mx-auto"
-                />
-              </div>
-
-              <button
-                onClick={() => setQrModal(null)}
-                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black rounded-2xl transition-colors text-sm uppercase tracking-wider"
-              >
-                Đóng
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <QrJourneyModal data={qrModal} onClose={() => setQrModal(null)} />
 
       <AnimatePresence>
         {showCustomerInfo && fullCustomerData && (
@@ -3627,75 +3588,12 @@ if (!hasPermission('dispatch_board')) {
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
       {/* Custom Start Service Modal */}
-      <AnimatePresence>
-        {startServiceModal.isOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100"
-            >
-              <div className="p-5 pb-6">
-                <div className="flex items-center gap-3 text-orange-600 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center border border-orange-100">
-                    <Clock size={24} />
-                  </div>
-                  <h3 className="text-[17px] font-black">Bắt đầu dịch vụ</h3>
-                </div>
-                <p className="text-[14px] font-medium text-gray-600 leading-relaxed px-1">
-                  Hệ thống sẽ bắt đầu tính giờ làm. Vui lòng chọn mốc thời gian:
-                </p>
-                <div className="mt-5 flex flex-col gap-3 px-1">
-                  <button
-                    onClick={() => {
-                        setStartServiceModal(prev => ({ ...prev, isOpen: false }));
-                        if (startServiceModal.onConfirm) startServiceModal.onConfirm(new Date().toISOString());
-                    }}
-                    className="w-full py-3.5 rounded-2xl text-[14px] font-bold text-white bg-orange-600 hover:bg-orange-700 active:scale-95 transition-all shadow-sm"
-                  >
-                    Lấy giờ hiện tại ({new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})
-                  </button>
-                  <div className="mt-2 pt-4 border-t border-gray-100">
-                    <p className="text-[13px] font-medium text-gray-500 mb-2">Hoặc nhập giờ tùy chỉnh:</p>
-                    <div className="flex gap-2">
-                      <input 
-                        type="time" 
-                        value={customStartInputValue}
-                        onChange={(e) => setCustomStartInputValue(e.target.value)}
-                        className="flex-1 px-4 py-3 rounded-2xl border border-gray-200 text-[15px] font-semibold text-gray-700 outline-none focus:border-orange-500 transition-all bg-gray-50"
-                      />
-                      <button
-                        onClick={() => {
-                            if (!customStartInputValue) return;
-                            setStartServiceModal(prev => ({ ...prev, isOpen: false }));
-                            
-                            const [h, m] = customStartInputValue.split(':');
-                            const d = new Date(selectedDate);
-                            d.setHours(Number(h), Number(m), 0, 0);
-                            
-                            if (startServiceModal.onConfirm) startServiceModal.onConfirm(d.toISOString());
-                        }}
-                        className="px-6 py-3 rounded-2xl text-[14px] font-bold text-white bg-orange-600 hover:bg-orange-700 active:scale-95 transition-all shadow-sm whitespace-nowrap"
-                      >
-                        Áp dụng
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4 bg-gray-50/80 border-t border-gray-100 flex gap-3">
-                <button
-                  onClick={() => setStartServiceModal(prev => ({ ...prev, isOpen: false }))}
-                  className="flex-1 py-3 rounded-2xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-100 active:scale-95 transition-all"
-                >
-                  Hủy bỏ
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <StartServiceModal
+        open={startServiceModal.isOpen}
+        selectedDate={selectedDate}
+        onConfirm={startServiceModal.onConfirm}
+        onClose={() => setStartServiceModal(prev => ({ ...prev, isOpen: false }))}
+      />
 
       {/* Invoice Language Modal */}
       {invoiceLangModal && (
