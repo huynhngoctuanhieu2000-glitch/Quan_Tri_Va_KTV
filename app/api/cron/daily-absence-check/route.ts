@@ -197,30 +197,56 @@ async function run() {
         }
 
         // ── 2 & 3. ĐĂNG KÝ LÀM NHƯNG KHÔNG ĐẾN ──────────────────────
-        // Có báo vắng → −5h. Không báo gì (kể cả đã báo trễ rồi vẫn lặn) → −10h.
+        // Có báo vắng đúng quy trình (trước 07:00) → −5h.
+        // Không báo gì (REGISTERED lặn luôn, hoặc đã báo trễ rồi vẫn không đến) → KHÓA TÀI KHOẢN.
+        // Theo quy chế mới (chốt 2026-09-03): đăng ký làm mà lặn nặng ngang không đăng ký gì.
         const coBaoVang = registration.status === 'ABSENT_REPORTED' && !!registration.absent_reported_at;
-        const violationType = coBaoVang ? 'ABSENT_EARLY_NOTICE' : 'ABSENT_NO_NOTICE';
-        const lyDo = coBaoVang
-            ? 'Đã báo vắng nhưng không đi làm'
-            : 'Đăng ký làm nhưng không đến và không báo';
 
-        if (registration.penalty_applied !== violationType) {
-            penalised.push({ staff: staff.id, hours: violationType === 'ABSENT_NO_NOTICE' ? 10 : 5, ly_do: lyDo });
-            if (!enabled) continue;
+        if (coBaoVang) {
+            if (registration.penalty_applied !== 'ABSENT_EARLY_NOTICE') {
+                const lyDo = 'Đã báo vắng nhưng không đi làm';
+                penalised.push({ staff: staff.id, hours: 5, ly_do: lyDo });
+                if (!enabled) continue;
 
-            const hours = await KtvTypeDDisciplineService.deductDailyViolation(
-                supabase, staff.id, targetDate, violationType, `Chốt sổ cuối ngày: ${lyDo}`, 'CRON',
-            );
-            await supabase.from('KTVTypeDDailyRegistration')
-                .update({ penalty_applied: violationType, status: 'COMPLETED' })
-                .eq('id', registration.id);
-
-            await createNotification({
-                type: 'WARNING',
-                message: `Bạn bị trừ ${hours} giờ tích lũy ngày ${targetDate}. Lý do: ${lyDo}.`,
-                employeeId: staff.id,
-            });
+                const hours = await KtvTypeDDisciplineService.deductDailyViolation(
+                    supabase, staff.id, targetDate, 'ABSENT_EARLY_NOTICE', `Chốt sổ cuối ngày: ${lyDo}`, 'CRON',
+                );
+                await supabase.from('KTVTypeDDailyRegistration')
+                    .update({ penalty_applied: 'ABSENT_EARLY_NOTICE', status: 'COMPLETED' })
+                    .eq('id', registration.id);
+                await createNotification({
+                    type: 'WARNING',
+                    message: `Bạn bị trừ ${hours} giờ tích lũy ngày ${targetDate}. Lý do: ${lyDo}.`,
+                    employeeId: staff.id,
+                });
+            }
+            continue;
         }
+
+        // Không báo gì → KHÓA TÀI KHOẢN
+        const lyDoKhoa = registration.status === 'LATE_REPORTED'
+            ? 'Đã báo trễ nhưng không đến làm'
+            : 'Đăng ký làm nhưng không đến và không báo';
+        locked.push(staff.full_name ? `${staff.full_name} (${staff.id})` : staff.id);
+        if (!enabled) continue;
+
+        await supabase.from('SecurityAuditLogs').insert({
+            employee_id: staff.id,
+            employee_name: staff.full_name || staff.id,
+            event_type: 'AUTO_LOCK_ABSENCE',
+            ip_address: '127.0.0.1',
+            user_agent: 'CRON',
+            details: { source: 'CRON', violationDate: targetDate, reason: lyDoKhoa },
+        });
+        await supabase.from('Staff').update({ status: 'KHÓA_TÀI_KHOẢN' }).eq('id', staff.id);
+        await KtvTypeDDisciplineService.markAccountLock(supabase, staff.id, targetDate, lyDoKhoa);
+        await supabase.from('KTVTypeDDailyRegistration')
+            .update({ status: 'COMPLETED' }).eq('id', registration.id);
+        await createNotification({
+            type: 'EMERGENCY',
+            message: `Tài khoản của bạn đã bị khóa do ${lyDoKhoa.toLowerCase()} ngày ${targetDate}.`,
+            employeeId: staff.id,
+        });
     }
 
     if (locked.length > 0 && enabled) {
