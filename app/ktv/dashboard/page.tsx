@@ -850,34 +850,39 @@ function ScreenDashboard({ logic }: { logic: any }) {
         /* ─── CHẶN: đơn vừa điều phối, phải xác nhận nhận hay từ chối đã ─── */
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="p-6 rounded-[32px] bg-gradient-to-br from-emerald-500 to-teal-600 shadow-xl shadow-emerald-200/50 relative overflow-hidden"
+          className="p-6 rounded-[32px] bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.06)]"
         >
-          <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-          <div className="relative z-10 flex flex-col gap-4 text-white">
+          <div className="flex flex-col gap-4">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/30">
-                <Sparkles size={24} className="animate-pulse" />
+              <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-center shrink-0">
+                <Sparkles size={24} className="text-emerald-600 animate-pulse" />
               </div>
+              {/* Tên dịch vụ + thời lượng là thứ KTV cần đọc trước tiên để biết
+                  mình sắp làm gì và trong bao lâu. Mã đơn chỉ để đối chiếu với quầy. */}
               <div className="min-w-0">
-                <p className="font-black text-lg uppercase tracking-tight mb-1">Bạn có đơn mới</p>
-                {booking.billCode && (
-                  <p className="text-base font-black tracking-tight">Đơn {booking.billCode}</p>
-                )}
-                <p className="text-sm font-medium text-emerald-50">
+                <p className="font-bold text-[10px] uppercase tracking-widest text-emerald-600 mb-1">Bạn có đơn mới</p>
+                <p className="font-black text-2xl leading-tight tracking-tight text-slate-800 break-words">
                   {item?.service_name || 'Dịch vụ'}
-                  {item?.duration ? ` • ${item.duration} phút` : ''}
                 </p>
+                {item?.duration && (
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1 text-sm font-black">
+                    <Clock size={14} strokeWidth={3} /> {item.duration} phút
+                  </p>
+                )}
+                {booking.billCode && (
+                  <p className="text-[11px] font-bold text-slate-400 mt-1.5">Đơn {booking.billCode}</p>
+                )}
               </div>
             </div>
 
-            <div className="bg-white/15 border border-white/25 rounded-2xl px-4 py-3 grid grid-cols-2 gap-3 text-sm">
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-emerald-50/80 font-bold">Phòng</p>
-                <p className="font-black">{currentSeg?.roomId || booking.assignedRoomId || booking.roomName || '—'}</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Phòng</p>
+                <p className="font-black text-slate-800">{currentSeg?.roomId || booking.assignedRoomId || booking.roomName || '—'}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-emerald-50/80 font-bold">Giường</p>
-                <p className="font-black">
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Giường</p>
+                <p className="font-black text-slate-800">
                   {(currentSeg?.bedId || booking.assignedBedId || booking.bedId)
                     ? String(currentSeg?.bedId || booking.assignedBedId || booking.bedId).split('-').pop()
                     : '—'}
@@ -885,22 +890,25 @@ function ScreenDashboard({ logic }: { logic: any }) {
               </div>
             </div>
 
-            <button
-              onClick={handleAcceptOrder}
-              disabled={isAccepting}
-              className="w-full py-4 bg-white text-emerald-700 font-black rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              <Check size={18} strokeWidth={3} />
-              {isAccepting ? 'ĐANG BÁO QUẦY…' : 'XÁC NHẬN NHẬN ĐƠN'}
-            </button>
-            <button
-              onClick={() => setShowRejectModal(true)}
-              disabled={isAccepting}
-              className="w-full py-3 bg-white/15 border border-white/30 text-white font-bold rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60"
-            >
-              TỪ CHỐI ĐƠN
-            </button>
-            <p className="text-[11px] text-emerald-50/80 text-center font-medium">
+            {/* Nhận là hành động chính nên chiếm 2 phần, từ chối 1 phần. */}
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={handleAcceptOrder}
+                disabled={isAccepting}
+                className="col-span-2 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs uppercase tracking-widest shadow-md shadow-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                <Check size={16} strokeWidth={3} />
+                {isAccepting ? 'ĐANG BÁO…' : 'NHẬN ĐƠN'}
+              </button>
+              <button
+                onClick={() => setShowRejectModal(true)}
+                disabled={isAccepting}
+                className="py-4 bg-rose-50 border border-rose-100 text-rose-600 font-black rounded-2xl text-xs uppercase tracking-widest active:scale-95 transition-all disabled:opacity-60"
+              >
+                TỪ CHỐI
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 text-center font-medium">
               Xác nhận xong mới xem được chi tiết đơn và bắt đầu tua.
             </p>
           </div>
