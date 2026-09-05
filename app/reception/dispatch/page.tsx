@@ -15,6 +15,7 @@ import { InvoiceLanguageModal } from './_components/InvoiceLanguageModal';
 import { AddServiceModal } from './_components/AddServiceModal';
 import { DispatchConfirmModal } from './_components/DispatchConfirmModal';
 import { SplitDurationModal } from './_components/SplitDurationModal';
+import { OrderContextMenu } from './_components/OrderContextMenu';
 import { getDisplayCustomerName } from './dispatch-display';
 import { formatToHourMinute } from './dispatch-time.logic';
 import { useAuth } from '@/lib/auth-context';
@@ -2964,161 +2965,22 @@ if (!hasPermission('dispatch_board')) {
         onClose={() => setShowDispatchConfirmModal(false)}
       />
       {/* Context Menu for Cancellation */}
-      <AnimatePresence>
-        {contextMenu && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            style={{ top: contextMenu.y, left: contextMenu.x }}
-            className="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 p-1.5 min-w-[180px] overflow-hidden"
-          >
-            {/* Các nút chức năng dựa trên trạng thái */}
-            {(() => {
-              const order = orders.find(o => o.id === contextMenu.orderId);
-              if (!order) return null;
-
-              if (order.dispatchStatus === 'PREPARING') {
-                return (
-                  <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'IN_PROGRESS')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
-                  >
-                    <CheckCircle2 size={18} className="shrink-0" />
-                    Bắt đầu làm (Thay KTV)
-                  </button>
-                );
-              }
-              if (order.dispatchStatus === 'IN_PROGRESS') {
-                return (
-                  <>
-                  <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'CLEANING')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
-                  >
-                    <CheckCircle2 size={18} className="shrink-0" />
-                    Hết giờ ➔ Bắt đầu dọn phòng
-                  </button>
-                  <button
-                    onClick={() => { setPauseModalOrder(order); setPauseModalOpen(true); setContextMenu(null); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
-                  >
-                    <AlertTriangle size={18} className="shrink-0" />
-                    Tạm dừng / Đổi KTV
-                  </button>
-                  </>
-                );
-              }
-              if (order.dispatchStatus === 'CLEANING') {
-                return (
-                  <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'FEEDBACK')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
-                  >
-                    <CheckCircle2 size={18} className="shrink-0" />
-                    Dọn xong → Khách đánh giá
-                  </button>
-                );
-              }
-              if (order.dispatchStatus === 'FEEDBACK') {
-                return (
-                  <button
-                    onClick={() => handleUpdateStatus(contextMenu.orderId, 'DONE')}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1 text-left"
-                  >
-                    <CheckCircle2 size={18} className="shrink-0" />
-                    Đã đánh giá → Đóng bill
-                  </button>
-                );
-              }
-              return null;
-            })()}
-
-            {/* QR Journey button */}
-            <button
-              onClick={() => {
-                const order = orders.find(o => o.id === contextMenu.orderId);
-                const invoiceId = order?.parentBookingId || contextMenu.orderId;
-                setInvoiceLangModal({ invoiceId });
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sky-600 hover:bg-sky-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-              Hiện Hoá Đơn
-            </button>
-
-            <button
-              onClick={() => {
-                const order = orders.find(o => o.id === contextMenu.orderId);
-                if (order) {
-                  let finalBillCode = order.billCode;
-                  if (contextMenu.guestId) {
-                     const so = subOrders.find(s => s.id === contextMenu.guestId || (s.services && s.services.some((x: any) => x.guestId === contextMenu.guestId || x.customerGroupId === contextMenu.guestId)));
-                     if (so) finalBillCode = (so as any).billCode || so.originalOrder?.billCode || order.billCode;
-                  }
-                  const invoiceId = order.parentBookingId || contextMenu.orderId;
-                  setQrModal({ orderId: invoiceId, billCode: finalBillCode, accessToken: order.accessToken, customerLang: order.customerLang, guestId: contextMenu.guestId });
-                }
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
-            >
-              <QrCode size={18} />
-              Hiện QR Journey
-            </button>
-
-            {/* Force Dispatch - Skip validation */}
-            <button
-              onClick={() => {
-                if (!confirm('⚡ Xác nhận GỬI ĐƠN ngay? (Bỏ qua kiểm tra thiếu thông tin)')) return;
-                handleDispatch(true, undefined, contextMenu.orderId);
-                setContextMenu(null);
-              }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
-            >
-              <Send size={18} />
-              Gửi đơn ngay (bỏ qua kiểm tra)
-            </button>
-
-            {contextMenu.itemId && (
-              <>
-                <button
-                  onClick={() => {
-                    setTimeEditorModal({ isOpen: true, orderId: contextMenu.orderId, itemId: contextMenu.itemId! });
-                    setContextMenu(null);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
-                >
-                  <Clock size={18} />
-                  Sửa thời gian dịch vụ
-                </button>
-                <button
-                  onClick={() => handleCancelBookingItem(contextMenu.orderId, contextMenu.itemId!)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider border-b border-gray-50 mb-1"
-                >
-                  <Trash2 size={18} />
-                  Hủy dịch vụ này
-                </button>
-              </>
-            )}
-
-            <button
-              onClick={() => handleCancelBooking(contextMenu.orderId)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-black text-xs uppercase tracking-wider"
-            >
-              <Trash2 size={18} />
-              Hủy toàn bộ đơn hàng
-            </button>
-            <button
-              onClick={() => setContextMenu(null)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:bg-gray-50 rounded-xl transition-colors font-bold text-xs uppercase tracking-wider"
-            >
-              Đóng menu
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <OrderContextMenu
+        menu={contextMenu}
+        orders={orders}
+        subOrders={subOrders}
+        onClose={() => setContextMenu(null)}
+        actions={{
+          updateStatus: handleUpdateStatus,
+          cancelBooking: handleCancelBooking,
+          cancelBookingItem: handleCancelBookingItem,
+          dispatch: handleDispatch,
+          showInvoice: setInvoiceLangModal,
+          showQr: setQrModal,
+          openTimeEditor: setTimeEditorModal,
+          openPauseSwap: (order) => { setPauseModalOrder(order); setPauseModalOpen(true); },
+        }}
+      />
 
       {/* QR Journey Modal */}
       <QrJourneyModal data={qrModal} onClose={() => setQrModal(null)} />
