@@ -87,6 +87,12 @@ export async function GET(request: Request) {
             const year = Number(date.slice(0, 4));
             const month = Number(date.slice(5, 7));
 
+            // Tua vừa xong còn nằm trong hàng đợi cho tới khi cron chạy (5 phút/lần).
+            // Rút ngay phần của những KTV đang xem để giờ tích lũy cập nhật tức thì,
+            // giống cách màn Lịch sử và Ví đang làm. Cron vẫn là lưới an toàn.
+            const { drainQueueForStaff } = await import('@/lib/services/KtvDLedgerWriter');
+            await drainQueueForStaff(supabase, typeDIds);
+
             const hoursMap = await KtvTypeDTurnService.getMonthlyNetHours(supabase, typeDIds, month, year);
 
             // Enrich with net_hours

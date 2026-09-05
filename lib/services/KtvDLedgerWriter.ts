@@ -189,6 +189,57 @@ export async function drainQueueFor(
     return itemIds.length;
 }
 
+/**
+ * Rút hàng đợi cho đúng những KTV đang được xem, không cần biết booking nào.
+ *
+ * `drainQueueFor()` yêu cầu biết trước bookingId — màn thứ tự tua chỉ có staffId
+ * và tháng, nên không dùng được. Hàm này lấy một lô nhỏ trong hàng đợi rồi giữ
+ * lại các item có KTV nằm trong danh sách đang xem.
+ *
+ * Nhờ vậy giờ tích lũy cập nhật ngay khi KTV mở màn hình, không phải chờ cron
+ * 5 phút. Cron vẫn giữ vai trò lưới an toàn cho những KTV không ai đang xem.
+ *
+ * Không ném lỗi ra ngoài: hiển thị chậm một nhịp còn hơn là vỡ màn hình.
+ */
+export async function drainQueueForStaff(
+    supabase: SupabaseClient,
+    staffIds: string[],
+    max = 100,
+): Promise<number> {
+    if (staffIds.length === 0) return 0;
+    const wanted = new Set(staffIds.map(s => String(s).toLowerCase()));
+
+    try {
+        const { data: queued } = await supabase
+            .from('KTVDRecomputeQueue')
+            .select('booking_item_id')
+            .lt('attempts', 5)
+            .order('enqueued_at', { ascending: true })
+            .limit(max);
+
+        const ids = (queued || []).map((q: any) => q.booking_item_id);
+        if (ids.length === 0) return 0;
+
+        const { data: items } = await supabase
+            .from('BookingItems')
+            .select('id, technicianCodes')
+            .in('id', ids);
+
+        const mine = (items || [])
+            .filter((i: any) => (i.technicianCodes || [])
+                .some((t: string) => wanted.has(String(t).toLowerCase())))
+            .map((i: any) => i.id);
+        if (mine.length === 0) return 0;
+
+        await supabase.from('KTVDRecomputeQueue').delete().in('booking_item_id', mine);
+        await recomputeTurnRows(supabase, mine);
+        return mine.length;
+    } catch (e) {
+        console.error('[KTVD] drainQueueForStaff lỗi, bỏ qua:', e);
+        return 0;
+    }
+}
+
 export interface DrainResult extends RecomputeResult {
     queueTaken: number;
     queueRemaining: number;
