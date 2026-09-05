@@ -559,7 +559,10 @@ function ScreenDashboard({ logic }: { logic: any }) {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className="absolute top-12 right-0 w-[85vw] sm:w-80 max-w-sm max-h-96 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col z-50"
+                    /* Điện thoại: panel cố định, lề đều 2 bên — trước đây neo phải chuông
+                       kèm w-[85vw] nên tràn khỏi mép trái. Từ sm trở lên mới thả xuống
+                       kiểu dropdown neo vào chuông như cũ. */
+                    className="fixed left-4 right-4 top-20 z-[60] sm:absolute sm:inset-auto sm:top-12 sm:right-0 sm:w-80 sm:max-w-sm max-h-96 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col"
                   >
                     <div className="p-3 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
                       <h3 className="font-bold text-sm text-slate-700">Thông báo</h3>
