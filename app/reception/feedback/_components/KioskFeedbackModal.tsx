@@ -15,7 +15,7 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
         mergedKtvGroups,
         globalRating, handleRatingChange,
         globalComment, handleCommentChange,
-        reminders, violations, getReminderText, toggleViolation,
+        reminders, violations, getReminderText, toggleViolation, maxRating,
         isSubmitting, handleSubmit,
         t, isSuccess
     } = useKioskFeedback(currentBooking, onClose);
@@ -268,13 +268,14 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-4 gap-2 sm:gap-4 mb-8">
+                                    <div className={`grid gap-2 sm:gap-4 mb-8 ${maxRating >= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                                         {[
                                             { score: 1, emoji: '😡', label: t.rateBad || 'Tệ' },
                                             { score: 2, emoji: '😐', label: t.rateOk || 'Bình thường' },
                                             { score: 3, emoji: '🙂', label: t.rateGood || 'Tốt' },
                                             { score: 4, emoji: '🤩', label: t.rateExcellent || 'Tuyệt vời' }
-                                        ].map((r) => {
+                                        // Đã tích lỗi thì bỏ hẳn mức cao nhất — không thể vừa phàn nàn vừa "tuyệt vời".
+                                        ].filter((r) => r.score <= maxRating).map((r) => {
                                             const isSelected = globalRating === r.score;
                                             return (
                                                 <button
@@ -294,6 +295,14 @@ export function KioskFeedbackModal({ group, initialBooking, onClose }: { group: 
                                             );
                                         })}
                                     </div>
+
+                                    {maxRating < 4 && (
+                                        <div className="-mt-6 mb-6 text-center">
+                                            <span className="inline-block text-xs sm:text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                                                {t.cappedByViolation || 'Bạn đã chọn góp ý ở trên nên mức "Tuyệt vời" tạm ẩn. Bỏ chọn góp ý nếu muốn chấm mức cao nhất.'}
+                                            </span>
+                                        </div>
+                                    )}
 
                                     <textarea 
                                         placeholder={t.notePlaceholder}

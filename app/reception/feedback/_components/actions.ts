@@ -2,6 +2,8 @@
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
+import { MAX_RATING_WITH_VIOLATION } from './feedback.constants';
+
 export async function submitFeedbackAction(payload: {
     bookingId: string;
     isGuestFlow: boolean;
@@ -14,7 +16,20 @@ export async function submitFeedbackAction(payload: {
     if (!supabase) return { success: false, error: 'No admin client' };
     
     try {
-        const { bookingId, isGuestFlow, ktvList, globalRating, globalComment, violations } = payload;
+        const { bookingId, isGuestFlow, ktvList, globalComment, violations } = payload;
+
+        // Kẹp trần theo số lỗi khách tích. Mọi chỗ ghi điểm bên dưới đều phải dùng
+        // `globalRating` đã kẹp này, không được dùng lại `payload.globalRating`.
+        const globalRating = (violations && violations.length > 0)
+            ? Math.min(payload.globalRating, MAX_RATING_WITH_VIOLATION)
+            : payload.globalRating;
+
+        if (globalRating !== payload.globalRating) {
+            console.warn(
+                `[Feedback Action] Đơn ${bookingId}: khách tích ${violations.length} lỗi nhưng chấm ` +
+                `${payload.globalRating} sao → hạ về ${globalRating} sao.`
+            );
+        }
         
         // 1. Lấy danh sách các Item ID hoặc Guest ID cần update
         const itemIdsToUpdate = Array.from(new Set(ktvList.map((k) => k.itemId)));
