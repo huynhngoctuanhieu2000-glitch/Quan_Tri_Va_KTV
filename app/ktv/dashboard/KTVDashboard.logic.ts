@@ -1,3 +1,4 @@
+import { pausedMsOf } from '@/lib/segment-time';
 import { isUtilityService } from '@/lib/booking.logic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ktvMatchesSeg } from '@/lib/ktvUtils';
@@ -614,7 +615,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
             
             // 🔒 ABSOLUTE GUARD: Nếu timer đang chạy (isTimerRunning = true) → KHÔNG được chuyển sang CLEANING/FEEDBACK/DONE
             // Ngăn chặn ghost completion do race condition (allDone = true khi actualEndTime từ session cũ còn trong DB)
-            if (isTimerRunningRef.current && ['CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {
+            //
+            // NGOẠI LỆ: quầy kết thúc hộ đơn đang tạm dừng. Lúc đó KTV chưa hề bấm xong nên
+            // isTimerRunning vẫn bật, guard ép ngược về IN_PROGRESS và đồng hồ chạy mãi tới khi F5.
+            // Server đã đánh dấu chặng bằng note FINISHED_EARLY_ON_PAUSE — đó là mốc kết thúc
+            // thật, không phải dữ liệu thừa của phiên cũ, nên phải cho đi tiếp.
+            const endedByReception = allMySegsForStatus.some(
+                (seg: any) => seg.actualEndTime && seg.note === 'FINISHED_EARLY_ON_PAUSE'
+            );
+            if (isTimerRunningRef.current && !endedByReception && ['CLEANING', 'FEEDBACK', 'DONE'].includes(currentStatus)) {
                 console.warn(`🛡️ [ScreenEngine] Timer đang chạy nhưng status=${currentStatus} → ép giữ IN_PROGRESS`);
                 currentStatus = 'IN_PROGRESS';
             }
@@ -1081,8 +1090,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
                                                 now = new Date(pStart.includes('Z') || pStart.includes('+') ? pStart : pStart.replace(' ', 'T') + 'Z').getTime();
                                             }
                                         }
-                                        const elapsed = Math.floor((now - start) / 1000);
-                                        
+                                        // Trừ các khoảng đã tạm dừng. Trước đây resumeItem dời
+                                        // `actualStartTime` tới trước nên đồng hồ tự khớp, nhưng cách đó
+                                        // xoá mất mốc bắt đầu thật. Nay mốc giữ nguyên, phần bù nằm ở
+                                        // `seg.pauses[]` và trừ tại đây (lib/segment-time.ts).
+                                        const pausedMs = pausedMsOf(currentSeg, now);
+                                        const elapsed = Math.floor((now - start - pausedMs) / 1000);
+
                                         // Đếm lùi cho chặng hiện tại
                                         setTimeRemaining(Math.max(0, currentSecs - elapsed));
                                     }
@@ -1482,12 +1496,16 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
 
             if (activeSegStartTime) {
-                const start = new Date(activeSegStartTime).getTime();
                 let now = new Date().getTime() + timeOffsetRef.current;
                 if (assignedItem?.status === 'PAUSED' && assignedItem?.pauseStart) {
                     const pStart = assignedItem.pauseStart;
                     now = new Date(pStart.includes('Z') || pStart.includes('+') ? pStart : pStart.replace(' ', 'T') + 'Z').getTime();
                 }
+
+                // Mốc bắt đầu THẬT không còn bị dời khi tạm dừng, nên đồng hồ phải tự
+                // cộng bù phần đã dừng vào mốc gốc. Chỉ dịch trong bộ nhớ, không ghi DB.
+                const pauseRefSeg = allMySegs[calculatedSegIdx] || allMySegs[0] || {};
+                const start = new Date(activeSegStartTime).getTime() + pausedMsOf(pauseRefSeg, now);
                 const elapsed = Math.floor((now - start) / 1000);
 
                 // 🔥 Lưu vào ref để countdown interval dùng absolute time

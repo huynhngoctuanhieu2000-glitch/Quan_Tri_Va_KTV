@@ -1,3 +1,4 @@
+import { isVoidedSegment, workedMsOf } from '../segment-time';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getDayCutoffHours, toBusinessDate } from '../business-date';
 import { getRows, getPenalties } from './KtvDLedgerReader';
@@ -29,6 +30,9 @@ export class KtvTypeDTurnService {
         if (mySegs.length === 0) return 0;
 
         return mySegs.reduce((sum: number, seg: any) => {
+            // Chặng bị tước quyền lợi → không tính giờ tích luỹ
+            if (isVoidedSegment(seg)) return sum;
+
             const assigned = Number(seg.duration) || 0;
 
             // Priority 1: Admin override — số admin cố ý nhập, KHÔNG chặn
@@ -43,12 +47,10 @@ export class KtvTypeDTurnService {
             // KTV đứng đầu hàng suốt cả tháng. Máy treo hay lỗi ghi nhận thì
             // không thể tính thành giờ làm — chặn tại giờ gán, đúng như tiền
             // (KtvTypeDCommissionService cũng dùng min(thực, gán)).
-            if (seg.actualStartTime && seg.actualEndTime) {
-                const t1 = new Date(seg.actualStartTime).getTime();
-                const t2 = new Date(seg.actualEndTime).getTime();
-                if (!isNaN(t1) && !isNaN(t2) && t2 > t1) {
-                    return sum + Math.min(Math.round((t2 - t1) / 60000), assigned);
-                }
+            // Đã trừ các khoảng tạm dừng — xem lib/segment-time.ts
+            const workedMs = workedMsOf(seg);
+            if (workedMs !== null && workedMs > 0) {
+                return sum + Math.min(Math.round(workedMs / 60000), assigned);
             }
 
             // Priority 3: Assigned duration (fallback)

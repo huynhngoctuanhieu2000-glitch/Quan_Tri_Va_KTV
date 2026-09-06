@@ -4,7 +4,7 @@ import { BookingModificationService } from '@/lib/services/BookingModificationSe
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { bookingId, itemId, reason } = body;
+        const { bookingId, itemId, reason, cancelCredit } = body;
 
         if (!bookingId || !itemId) {
             return NextResponse.json(
@@ -13,7 +13,16 @@ export async function POST(request: Request) {
             );
         }
 
-        const result = await BookingModificationService.cancelBookingItem(bookingId, itemId, reason || '');
+        // Mặc định KHÔNG cộng giờ đã làm — hai trong ba tình huống huỷ là lỗi KTV.
+        // Quầy muốn cho thì phải bật công tắc trong hộp thoại.
+        const credit = cancelCredit === 'WORKED' ? 'WORKED' : 'NONE';
+
+        const result = await BookingModificationService.cancelBookingItem(
+            bookingId,
+            itemId,
+            reason || '',
+            credit
+        );
 
         if (!result.success) {
             return NextResponse.json({ success: false, error: result.error }, { status: 400 });

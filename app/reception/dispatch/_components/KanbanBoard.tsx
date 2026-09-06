@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles, Banknote, CreditCard, Camera, X, PlayCircle, UserMinus, Crown, Stethoscope, Square } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, ArrowRight, QrCode, Star, Check, Sparkles, Banknote, CreditCard, Camera, X, PlayCircle, UserMinus, Crown, Stethoscope, Square, Trash2 } from 'lucide-react';
 import { PendingOrder, ServiceBlock } from '../types';
 import { SubOrder, buildOrderTimeline } from './dispatch-timeline';
 
@@ -144,6 +144,8 @@ interface KanbanBoardProps {
     onFinishEarlyPaused?: (orderId: string, subOrder: any) => void;
     /** Bấm "Tiếp" trên thẻ tạm dừng: chạy thẳng, không qua popup chọn hành động. */
     onResumeClick?: (orderId: string, subOrder: any) => Promise<void> | void;
+    /** Bấm "Huỷ" trên thẻ tạm dừng — huỷ ĐƠN CON của KTV đó, không đụng bill. */
+    onCancelClick?: (orderId: string, subOrder: any) => void;
 }
 
 const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services, subOrder?: any) => {
@@ -227,7 +229,7 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     return order.time; 
 };
 
-export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused, onResumeClick }: KanbanBoardProps) {
+export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused, onResumeClick, onCancelClick }: KanbanBoardProps) {
     // Khoá nút "Tiếp" của đúng thẻ đang gọi API, tránh bấm hai lần.
     const [resumingSubOrderId, setResumingSubOrderId] = React.useState<string | null>(null);
 
@@ -383,7 +385,9 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                 if (subOrder.ktvIds && subOrder.ktvIds.length > 0) {
                     targetKtvIds = subOrder.ktvIds;
                 }
-                if (subOrder.originalOrder?.rating) {
+                // Đơn ra sớm: khách đã về, không còn ai chấm sao → hoàn tất luôn.
+                const earlyLeave = subOrder.services.some((s: any) => s.options?.earlyLeave === true);
+                if (subOrder.originalOrder?.rating || earlyLeave) {
                     onUpdateStatus(subOrder.bookingId, 'DONE', itemIds, true, targetKtvIds);
                 } else {
                     onUpdateStatus(subOrder.bookingId, 'FEEDBACK', itemIds, true, targetKtvIds);
@@ -505,6 +509,17 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                     const cfg = getStatusConfig(subOrder.dispatchStatus || 'PREPARING');
                                     const currentCfg = STATUS_CONFIG.find(c => c.dispatchModeId.includes(subOrder.dispatchStatus)) || cfg;
                                     const isSelected = selectedOrderId === subOrder.bookingId || (subOrder.originalOrder?.parentBookingId && selectedOrderId === subOrder.originalOrder.parentBookingId);
+                                    // Khách xuống sớm, quầy đã chốt đơn → dọn phòng xong là hoàn tất luôn,
+                                    // không qua Chờ đánh giá vì khách đã về, không còn ai chấm sao.
+                                    const isEarlyLeave = services.some((s: any) => s.options?.earlyLeave === true);
+                                    // Thẻ tạm dừng đã có đủ 4 nút (Tiếp · Đổi · Kết thúc · Huỷ) nên bỏ nút Link cho đỡ chật.
+                                    const isPausedCard = services.some((s: any) => s.status === 'PAUSED');
+                                    const nextStatus = (isEarlyLeave && subOrder.dispatchStatus === 'CLEANING')
+                                        ? ('DONE' as RawStatus)
+                                        : currentCfg.next;
+                                    const nextLabel = (isEarlyLeave && subOrder.dispatchStatus === 'CLEANING')
+                                        ? '✅ Hoàn tất (ra sớm)'
+                                        : currentCfg.nextLabel;
 
                                     return (
                                         <motion.div
@@ -560,6 +575,9 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                         </span>
                                                         {order.hasVat && (
                                                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-50 text-blue-600 border border-blue-100" title="Khách yêu cầu xuất hoá đơn VAT">VAT</span>
+                                                        )}
+                                                        {isEarlyLeave && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-50 text-rose-600 border border-rose-100" title="Khách xuống sớm — quầy đã chốt đơn tại thời điểm tạm dừng. Dọn phòng xong là hoàn tất, không chờ đánh giá.">RA SỚM</span>
                                                         )}
                                                     </div>
                                                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400">
@@ -945,9 +963,19 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                                         )}
                                                                                     </div>
                                                                                     <div className="flex items-center gap-1.5">
-                                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>
-                                                                                        <span className="text-indigo-300 text-[8px]">→</span>
-                                                                                        <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvEnd)}</span>
+                                                                                        {/* KTV bị đổi ra: giữ tên trong đơn để biết ai từng làm cho khách,
+                                                                                            kèm số phút đã làm — dù tiền và giờ tích luỹ đều bằng 0. */}
+                                                                                        {seg?.voided ? (
+                                                                                            <span className="text-[9px] font-black text-rose-500 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded" title="KTV bị đổi ra — không tính tiền, không tính giờ tích luỹ, mất lượt tua">
+                                                                                                đã làm {Number(seg.customCommissionDuration) || 0}p · Đã đổi · 0đ
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <>
+                                                                                                <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvStart)}</span>
+                                                                                                <span className="text-indigo-300 text-[8px]">→</span>
+                                                                                                <span className="text-[10px] font-black text-indigo-700">{formatToHourMinute(ktvEnd)}</span>
+                                                                                            </>
+                                                                                        )}
                                                                                     </div>
                                                                                 </div>
                                                                             );
@@ -994,8 +1022,13 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                             }
                                                         </div>
 
-                                                        {/* TAG 2: Đánh giá (Tính theo từng Guest) */}
-                                                        {subOrder.guests && subOrder.guests.length > 0 ? (
+                                                        {/* TAG 2: Đánh giá (Tính theo từng Guest) — đơn ra sớm thì bỏ,
+                                                            khách đã về nên không có ai chấm sao để mà chờ. */}
+                                                        {isEarlyLeave ? (
+                                                            <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] font-bold border bg-rose-50 text-rose-600 border-rose-200">
+                                                                <Check size={12} /> Khách xuống sớm — không chờ đánh giá
+                                                            </div>
+                                                        ) : subOrder.guests && subOrder.guests.length > 0 ? (
                                                             <div className="flex flex-col gap-1.5">
                                                                 {subOrder.guests.map((g: any, index: number) => (
                                                                     <div key={g.id} className="flex flex-col gap-1.5 border rounded-lg px-2.5 py-1.5 bg-white shadow-sm">
@@ -1159,7 +1192,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                             );
                                                         }
                                                         const anyPaused = services.some((s: any) => s.status === 'PAUSED');
-                                                        if (currentCfg.next && !anyPaused) {
+                                                        if (nextStatus && !anyPaused) {
                                                             return (
                                                                 <button
                                                                     onClick={e => { 
@@ -1169,7 +1202,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                             setKtvSelectorState({
                                                                                 isOpen: true,
                                                                                 orderId: order.id,
-                                                                                nextStatus: currentCfg.next!,
+                                                                                nextStatus: nextStatus!,
                                                                                 itemIds,
                                                                                 availableKtvs: subOrder.ktvIds
                                                                             });
@@ -1178,12 +1211,12 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                             if (subOrder.ktvIds && subOrder.ktvIds.length === 1) {
                                                                                 targetKtvIds = subOrder.ktvIds;
                                                                             }
-                                                                            onUpdateStatus(order.id, currentCfg.next!, itemIds, false, targetKtvIds); 
+                                                                            onUpdateStatus(order.id, nextStatus!, itemIds, false, targetKtvIds); 
                                                                         } 
                                                                     }}
                                                                     className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-2 shadow-sm ${currentCfg.activeBg || 'bg-indigo-600'} text-white hover:opacity-90 active:scale-95`}
                                                                 >
-                                                                    {currentCfg.nextLabel}
+                                                                    {nextLabel}
                                                                 </button>
                                                             );
                                                         }
@@ -1227,6 +1260,19 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                     >
                                                                         <Square size={12} /> Kết thúc
                                                                     </button>
+                                                                    {/* Thay cho nút "Link" — đơn đang tạm dừng thì việc cần
+                                                                        là quyết định số phận đơn, không phải gửi link đánh giá.
+                                                                        Link vẫn còn ở thẻ thường và ở menu chuột phải. */}
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (onCancelClick) onCancelClick(order.id, subOrder);
+                                                                        }}
+                                                                        className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all border border-gray-200 flex items-center justify-center w-full gap-1"
+                                                                        title="Huỷ đơn con này"
+                                                                    >
+                                                                        <Trash2 size={12} /> Huỷ
+                                                                    </button>
                                                                 </>
                                                             );
                                                         }
@@ -1241,7 +1287,7 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                         );
                                                     })()}
                                                     
-                                                    {(!subOrder.rating && !['DONE', 'CANCELLED'].includes(subOrder.dispatchStatus)) && (
+                                                    {(!subOrder.rating && !isPausedCard && !['DONE', 'CANCELLED'].includes(subOrder.dispatchStatus)) && (
                                                         <button 
                                                             onClick={(e) => {
                                                                 e.stopPropagation();

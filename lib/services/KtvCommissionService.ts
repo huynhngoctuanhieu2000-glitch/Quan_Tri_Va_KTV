@@ -285,6 +285,9 @@ export class KtvCommissionService {
 
         if (mySegs.length > 0) {
             return mySegs.reduce((sum: number, seg: any) => {
+                // Chặng bị tước quyền lợi (KTV bị đổi ra, huỷ do lỗi KTV) → không trả tiền.
+                // Vẫn giữ trong đơn để biết ai từng làm cho khách — xem lib/segment-time.ts
+                if (seg?.voided === true) return sum;
                 if (seg.customCommissionDuration) return sum + Number(seg.customCommissionDuration);
                 const baseMins = Number(seg.duration) || 0;
                 

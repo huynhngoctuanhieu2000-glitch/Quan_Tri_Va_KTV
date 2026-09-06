@@ -1,3 +1,4 @@
+import { workedMsOf } from '@/lib/segment-time';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { requirePermission } from '@/lib/auth-server';
 import { createNotification } from '@/lib/notification-helper';
@@ -483,7 +484,13 @@ export class BookingModificationService {
         }
     }
 
-    static async cancelBookingItem(bookingId: string, itemId: string, reason: string = '') {
+    /**
+     * @param cancelCredit  'NONE'  = KTV mất sạch tiền, giờ tích luỹ và tua (mặc định).
+     *                      'WORKED' = vẫn cho hưởng theo số phút đã làm thật.
+     *   Lý do huỷ là chữ tự do do quầy gõ, **không** được dùng để quyết định tiền —
+     *   chỉ tham số này mới điều khiển. Xem plans/plan_tam_dung_huy_ket_thuc_som.md.
+     */
+    static async cancelBookingItem(bookingId: string, itemId: string, reason: string = '', cancelCredit: 'NONE' | 'WORKED' = 'NONE') {
         try {
             await requirePermission('dispatch_board');
             const supabase = getSupabaseAdmin();
@@ -516,9 +523,26 @@ export class BookingModificationService {
             segs.forEach((s: any) => {
                 if (s.actualStartTime && !s.actualEndTime) {
                     s.actualEndTime = endMark;
+                    // Còn khoảng tạm dừng đang hở thì đóng lại, nếu không nó sẽ được
+                    // tính tới tận lúc kết thúc và ăn mất phần làm thật.
+                    if (Array.isArray(s.pauses)) {
+                        const openIdx = s.pauses.findIndex((p: any) => p && p.from && !p.to);
+                        if (openIdx !== -1) s.pauses[openIdx] = { ...s.pauses[openIdx], to: endMark };
+                    }
+                    segmentsModified = true;
+                }
+                // Không cho hưởng gì → tước sạch chặng. Vẫn giữ lại trong đơn (kèm
+                // số phút đã làm) để biết ai từng làm cho khách — xem lib/segment-time.ts
+                if (cancelCredit === 'NONE' && s.actualStartTime) {
+                    const worked = workedMsOf(s, s.actualEndTime || endMark);
+                    if (worked !== null) s.customCommissionDuration = Math.round(worked / 60000);
+                    s.voided = true;
+                    s.note = 'CANCELLED_NO_CREDIT';
                     segmentsModified = true;
                 }
             });
+
+            opts.cancelCredit = cancelCredit;
 
             const cancelPayload: any = {
                 status: 'CANCELLED',
@@ -570,6 +594,17 @@ export class BookingModificationService {
                             status: newStatus, current_order_id: null, booking_item_id: null, booking_item_ids: [],
                             room_id: null, bed_id: null, start_time: null, estimated_end_time: null
                         }).eq('id', turn.id);
+
+                        // Mất tua: chỉ đánh dấu khi KTV không còn dịch vụ nào khác trong đơn.
+                        // syncTurnsForDate đã lọc sẵn is_punished khỏi turns_completed.
+                        if (cancelCredit === 'NONE' && turn.employee_id && turn.date) {
+                            await supabase
+                                .from('TurnLedger')
+                                .update({ is_punished: true })
+                                .eq('date', turn.date)
+                                .eq('booking_id', bookingId)
+                                .eq('employee_id', turn.employee_id);
+                        }
                     }
 
                     // Đóng assignment của đúng dịch vụ vừa huỷ rồi kéo đơn kế tiếp lên,

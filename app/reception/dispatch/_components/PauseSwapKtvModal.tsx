@@ -18,7 +18,8 @@ interface PauseSwapKtvModalProps {
     oldKtvId?: string,
     newKtvId?: string,
     extraTimeMins?: number,
-    keepTurnForOldKtv?: boolean
+    keepTurnForOldKtv?: boolean,
+    assignedMins?: number
   ) => Promise<void>;
   /**
    * Mở thẳng vào một hành động, bỏ bước chọn.
@@ -33,6 +34,9 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
   const [selectedOldKtv, setSelectedOldKtv] = useState<string>('');
   const [selectedNewKtv, setSelectedNewKtv] = useState<string>('');
   const [extraTimeMins, setExtraTimeMins] = useState<number>(0);
+  // 'REMAIN' = KTV mới làm phần còn lại (+ giờ bù). 'MANUAL' = quầy gán tay số phút.
+  const [timeMode, setTimeMode] = useState<'REMAIN' | 'MANUAL'>('REMAIN');
+  const [manualMins, setManualMins] = useState<number>(0);
   const [keepTurnForOldKtv, setKeepTurnForOldKtv] = useState<boolean>(false);
   const [actionType, setActionType] = useState<'PAUSE' | 'RESUME' | 'SWAP'>('PAUSE');
   const [loading, setLoading] = useState(false);
@@ -95,7 +99,12 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
           alert(`Thời gian bù thêm không được vượt quá thời gian của dịch vụ (${selectedService.duration} phút)`);
           return;
         }
-        await onConfirm(selectedServiceId, 'SWAP', selectedOldKtv, selectedNewKtv || undefined, extraTimeMins, false);
+        await onConfirm(
+          selectedServiceId, 'SWAP', selectedOldKtv, selectedNewKtv || undefined,
+          timeMode === 'MANUAL' ? 0 : extraTimeMins,
+          false,
+          timeMode === 'MANUAL' ? manualMins : 0
+        );
       } else {
         await onConfirm(selectedServiceId, actionType, undefined, undefined, undefined, false);
       }
@@ -204,7 +213,7 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
                     >
                       <div className="p-3 bg-amber-50 text-amber-700 rounded-lg text-sm font-medium flex gap-2">
                         <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                        KTV bị đổi được tính lương theo đúng thời gian đã làm; KTV mới nhận phần còn lại (+ giờ bù nếu có).
+                        KTV bị đổi MẤT HẾT tiền tua, giờ tích luỹ và lượt tua — kể cả phần đã làm. Tên vẫn được giữ trong đơn kèm số phút đã làm để đối soát.
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -241,7 +250,50 @@ export default function PauseSwapKtvModal({ isOpen, onClose, order, subOrder, av
                         </div>
                       </div>
 
-                      <div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTimeMode('REMAIN')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold border-2 transition-all ${
+                            timeMode === 'REMAIN' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200'
+                          }`}
+                        >
+                          Làm phần còn lại
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTimeMode('MANUAL')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold border-2 transition-all ${
+                            timeMode === 'MANUAL' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200'
+                          }`}
+                        >
+                          Quầy gán tay
+                        </button>
+                      </div>
+
+                      {timeMode === 'MANUAL' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
+                            <Clock size={14} /> Số phút gán cho KTV mới
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max={selectedService?.duration || 0}
+                            className="w-full border-2 border-gray-200 rounded-lg p-2 text-sm focus:border-indigo-500 outline-none font-bold text-indigo-600"
+                            value={manualMins}
+                            onChange={(e) => {
+                              let val = Number(e.target.value) || 0;
+                              const maxVal = selectedService?.duration || 0;
+                              if (val > maxVal) val = maxVal;   // trần = thời lượng dịch vụ, không cho vượt
+                              setManualMins(val);
+                            }}
+                          />
+                          <p className="text-[11px] text-gray-500 mt-1">*Tối đa {selectedService?.duration || 0} phút — bằng đúng thời lượng dịch vụ, không thể hơn.</p>
+                        </div>
+                      )}
+
+                      <div className={timeMode === 'MANUAL' ? 'hidden' : ''}>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
                           <Clock size={14} /> Thời gian bù thêm (Phút)
                         </label>

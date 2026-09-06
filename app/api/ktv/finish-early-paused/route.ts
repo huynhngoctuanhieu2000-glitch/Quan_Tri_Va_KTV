@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { syncTurnsForDate } from '@/lib/turn-sync';
 import { recomputeBookingStatus } from '@/lib/dispatch-status';
 import { getBusinessDate } from '../booking/_shared/utils';
+import { workedMsOf } from '@/lib/segment-time';
 
 /**
  * ============================================================
@@ -15,30 +16,19 @@ import { getBusinessDate } from '../booking/_shared/utils';
  *   - Giờ kết thúc lấy `pauseStart` (lúc bấm tạm dừng), KHÔNG lấy giờ hiện tại.
  *     Khoảng từ lúc tạm dừng đến lúc lễ tân bấm kết thúc là thời gian chờ,
  *     KTV không làm nên không được tính tiền.
- *   - `actualStartTime` đã được resumeItem() dời tới trước đúng bằng tổng thời
- *     gian đã tạm dừng trước đó, nên (pauseStart − actualStartTime) chính là
- *     số phút làm thực của chặng này.
+ *   - Giờ làm thực = (pauseStart − actualStartTime) − Σ(các lần đã tạm dừng trước
+ *     đó trong cùng chặng). Dùng workedMsOf() để tính, ĐỪNG trừ tay: từ 06/09/2026
+ *     `actualStartTime` không còn bị dời nữa nên các khoảng dừng cũ vẫn nằm trong
+ *     hiệu (end − start), tính tay là trả thừa tiền. Xem lib/segment-time.ts.
  *   - Phải ghi `customCommissionDuration`: thiếu nó thì
  *     KtvCommissionService.calculateItemDuration trả về giờ GÁN → trả thừa tiền.
  *   - Chặn trên tại giờ gán, đúng quy tắc của computeMinutes (KtvDLedgerEngine),
  *     để mốc giờ hỏng không đẻ ra tua 24 tiếng.
  *
- * 🔓 GIẢI PHÓNG KTV: phần trước đây thiếu, gây kẹt đơn.
- *   syncTurnsForDate() CHỈ đếm lại turns_completed, không hề nhả KTV.
- *   Phải tự tay: KtvAssignments → COMPLETED, TurnQueue → waiting,
- *   rồi promote_next_assignment() để KTV nhận đơn kế tiếp.
- *   (RPC không tự nhả được khi TurnQueue.status = 'working'.)
+ * 🔓 KHÔNG giải phóng KTV ở đây — xem ghi chú dài phía dưới. KTV còn phải đi qua
+ *   Dọn phòng → Bàn giao rồi mới được nhả tua, giống hệt khi họ tự bấm xong.
  * ============================================================
  */
-
-/** Mốc giờ trong DB có khi là ISO, có khi là 'YYYY-MM-DD HH:mm:ss' không kèm timezone. */
-function parseMs(v: any): number {
-    if (!v) return NaN;
-    if (typeof v !== 'string') return new Date(v).getTime();
-    const normalized = v.includes('T') ? v : v.replace(' ', 'T');
-    const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(normalized);
-    return new Date(hasZone ? normalized : normalized + 'Z').getTime();
-}
 
 export async function POST(req: Request) {
     try {
@@ -59,7 +49,7 @@ export async function POST(req: Request) {
 
         const { data: itemsToProcess, error: itemsError } = await supabase
             .from('BookingItems')
-            .select('id, bookingId, status, pauseStart, segments, "technicianCodes"')
+            .select('id, bookingId, status, pauseStart, segments, options, "technicianCodes"')
             .in('id', itemIds);
 
         if (itemsError) throw itemsError;
@@ -78,32 +68,48 @@ export async function POST(req: Request) {
         for (const it of pausedItems) {
             // Mốc kết thúc = lúc bấm tạm dừng. Chỉ khi thiếu pauseStart (dữ liệu cũ) mới đành lấy giờ hiện tại.
             const effectiveEnd = it.pauseStart || new Date().toISOString();
-            const endMs = parseMs(effectiveEnd);
 
             let segs = it.segments;
             if (typeof segs === 'string') {
                 try { segs = JSON.parse(segs); } catch { segs = []; }
             }
 
+            // Nhãn "ra sớm": đơn kết thúc trước giờ vì khách xuống sớm, không phải
+            // lỗi KTV. Kanban dựa vào cờ này để hiện nhãn và để BỎ QUA bước Chờ đánh
+            // giá khi dọn phòng xong — khách đã về thì không còn ai chấm sao.
+            let opts = it.options;
+            if (typeof opts === 'string') { try { opts = JSON.parse(opts); } catch { opts = {}; } }
+            opts = opts || {};
+            opts.earlyLeave = true;
+
             const payload: any = {
                 status: 'CLEANING',
                 pauseStart: null,          // gỡ cờ tạm dừng, nếu không UI vẫn coi đơn đang dừng
                 timeEnd: effectiveEnd,     // khớp với actualEndTime của chặng
+                options: opts,
             };
 
             if (Array.isArray(segs)) {
                 for (const seg of segs) {
                     if (!seg.actualStartTime || seg.actualEndTime) continue;
 
-                    const startMs = parseMs(seg.actualStartTime);
-                    let workedMins = 0;
-                    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
-                        workedMins = Math.round((endMs - startMs) / 60000);
-                    }
+                    // ⚠️ Phải dùng workedMsOf: nó trừ các lần đã tạm dừng TRƯỚC ĐÓ trong
+                    // cùng chặng. Tính tay (end − start) sẽ tính luôn cả những khoảng
+                    // ngồi chờ đó thành giờ làm, trả thừa tiền.
+                    const workedMs = workedMsOf(seg, effectiveEnd);
+                    let workedMins = workedMs === null ? 0 : Math.round(workedMs / 60000);
 
                     // Chặn trên tại giờ gán — mốc hỏng không được đẻ ra giờ làm ảo.
                     const assignedMins = Number(seg.duration) || 0;
                     if (assignedMins > 0 && workedMins > assignedMins) workedMins = assignedMins;
+
+                    // Đóng khoảng tạm dừng còn hở ngay tại mốc dừng. Không đóng thì nó
+                    // treo mãi không có `to`, và bất kỳ chỗ nào tính với mốc muộn hơn
+                    // sẽ trừ nhầm phần thời gian đó của KTV.
+                    if (Array.isArray(seg.pauses)) {
+                        const openIdx = seg.pauses.findIndex((p: any) => p && p.from && !p.to);
+                        if (openIdx !== -1) seg.pauses[openIdx] = { ...seg.pauses[openIdx], to: effectiveEnd };
+                    }
 
                     seg.actualEndTime = effectiveEnd;
                     seg.customCommissionDuration = workedMins;
@@ -151,83 +157,27 @@ export async function POST(req: Request) {
             if (bUpdErr) throw bUpdErr;
         }
 
-        // ─── Giải phóng KTV ───
-        // Tìm tua theo current_order_id chứ KHÔNG theo ngày: tua ca đêm bắt đầu
-        // trước mốc cắt ngày (06:00) nằm ở ngày làm việc hôm trước, lọc theo
-        // ngày hôm nay sẽ không thấy và KTV kẹt đơn.
-        const { data: turnsHolding } = await supabase
-            .from('TurnQueue')
-            .select('id, employee_id, date, status')
-            .in('current_order_id', allBookingIds);
-
-        const releasedDates = new Set<string>();
-        const handledKtvIds = new Set<string>();
-
-        for (const turn of turnsHolding || []) {
-            if (!turn.employee_id) continue;
-            handledKtvIds.add(String(turn.employee_id));
-            const turnDate = turn.date || getBusinessDate();
-            releasedDates.add(turnDate);
-
-            await supabase
-                .from('KtvAssignments')
-                .update({ status: 'COMPLETED', updated_at: new Date().toISOString() })
-                .eq('employee_id', turn.employee_id)
-                .eq('business_date', turnDate)
-                .in('booking_id', allBookingIds)
-                .in('status', ['ACTIVE', 'QUEUED', 'READY']);
-
-            // promote_next_assignment KHÔNG nhả TurnQueue khi status='working',
-            // nên phải hạ 'working' xuống trước rồi mới gọi RPC.
-            // KTV đã xin nghỉ (off) thì giữ nguyên off, đừng kéo về hàng chờ.
-            await supabase
-                .from('TurnQueue')
-                .update({
-                    status: turn.status === 'off' ? 'off' : 'waiting',
-                    current_order_id: null,
-                    booking_item_id: null,
-                    booking_item_ids: [],
-                    room_id: null,
-                    bed_id: null,
-                    start_time: null,
-                    estimated_end_time: null,
-                })
-                .eq('id', turn.id);
-
-            await supabase.rpc('promote_next_assignment', {
-                p_employee_id: turn.employee_id,
-                p_business_date: turnDate,
-            });
-        }
-
-        // KTV có trong chặng nhưng TurnQueue không còn trỏ vào đơn này:
-        // vẫn phải đóng assignment treo, nếu không họ không được gán đơn mới.
+        // ─── KHÔNG giải phóng KTV ở đây ───
+        // ⚠️ ĐỪNG xoá TurnQueue.current_order_id hay đóng KtvAssignments tại bước này.
+        // Màn KTV tìm đơn của mình theo thứ tự: item IN_PROGRESS → TurnQueue.current_order_id
+        // → KtvAssignments QUEUED/READY (handleGetBooking). Item vừa chuyển sang CLEANING
+        // nên nhánh đầu đã trượt; cắt nốt hai nhánh sau thì API trả `data: null` và KTV bị
+        // đá thẳng về Dashboard, MẤT luôn bước Dọn phòng → Bàn giao (không có ảnh bàn giao,
+        // đơn nằm lại CLEANING).
+        //
+        // Luồng chuẩn khi KTV tự bấm xong cũng không đụng TurnQueue: handleFinishService chỉ
+        // đổi trạng thái item, việc nhả tua để handleReleaseKTV làm SAU khi bàn giao xong.
+        // Kết thúc hộ từ quầy phải đi đúng đường đó.
+        //
+        // Trường hợp KTV bỏ khách, không có ai bàn giao → dùng luồng HUỶ đơn (luồng đó mới
+        // giải phóng tua), xem plans/plan_tam_dung_huy_ket_thuc_som.md.
         const businessDate = getBusinessDate();
-        for (const ktvId of Array.from(affectedKtvIds)) {
-            if (handledKtvIds.has(ktvId)) continue;
-            await supabase
-                .from('KtvAssignments')
-                .update({ status: 'COMPLETED', updated_at: new Date().toISOString() })
-                .eq('employee_id', ktvId)
-                .in('booking_id', allBookingIds)
-                .in('status', ['ACTIVE', 'QUEUED', 'READY']);
-
-            await supabase.rpc('promote_next_assignment', {
-                p_employee_id: ktvId,
-                p_business_date: businessDate,
-            });
-        }
-
-        // TurnLedger đã được ghi từ lúc điều phối (DISPATCH_CONFIRM) nên tua vẫn
-        // được tính đủ; đây chỉ là đồng bộ lại turns_completed cho đúng.
-        releasedDates.add(businessDate);
-        for (const d of Array.from(releasedDates)) {
-            await syncTurnsForDate(d);
-        }
+        await syncTurnsForDate(businessDate);
 
         return NextResponse.json({
             success: true,
-            data: { itemIdsFinished: finishedItemIds, releasedKtvIds: Array.from(affectedKtvIds) },
+            // KTV chưa được nhả tua ở đây — họ còn phải đi qua Dọn phòng → Bàn giao.
+            data: { itemIdsFinished: finishedItemIds, ktvIds: Array.from(affectedKtvIds) },
         });
     } catch (e: any) {
         const msg = e?.message || 'Server error';

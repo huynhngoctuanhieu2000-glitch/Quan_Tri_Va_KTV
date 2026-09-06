@@ -1,0 +1,71 @@
+/**
+ * Kiểm chứng nền mốc giờ mới: giữ nguyên `actualStartTime`, trừ `seg.pauses[]`.
+ *
+ * Chạy: npx ts-node -O "{\"module\":\"commonjs\"}" scripts/simulate_pause_windows.ts
+ */
+import assert from 'assert';
+import { computeMinutes } from '../lib/services/KtvDLedgerEngine';
+import { KtvTypeDTurnService } from '../lib/services/KtvTypeDTurnService';
+import { KtvCommissionService } from '../lib/services/KtvCommissionService';
+import { pausedMsOf, workedMsOf, expectedEndMs } from '../lib/segment-time';
+
+const T = (m: number) => new Date(Date.UTC(2026, 8, 6, 10, m, 0)).toISOString();
+const item = (segs: any[]) => ({ segments: JSON.stringify(segs) });
+const ok: string[] = [];
+function check(label: string, actual: any, expected: any) {
+    assert.deepStrictEqual(actual, expected, `${label}: mong ${JSON.stringify(expected)}, nhận ${JSON.stringify(actual)}`);
+    ok.push(`✓ ${label} = ${JSON.stringify(actual)}`);
+}
+
+// ── 1. Dữ liệu CŨ (không có `pauses`) phải cho kết quả y hệt trước đây ──────
+const cu = { ktvId: 'T016', duration: 60, actualStartTime: T(0), actualEndTime: T(50) };
+check('cũ · không pauses · computeMinutes', computeMinutes([cu]), { assigned: 60, actual: 50, paid: 50, custom: null });
+check('cũ · không pauses · giờ tích luỹ', KtvTypeDTurnService.calculateActualMinutes(item([cu]), 'T016'), 50);
+
+// ── 2. Một lần tạm dừng 10 phút ────────────────────────────────────────────
+// bắt đầu 10:00 → dừng 10:20 → tiếp 10:30 → kết thúc 10:60. Làm thực = 50'.
+const motLan = {
+    ktvId: 'T016', duration: 60,
+    actualStartTime: T(0), actualEndTime: T(60),
+    pauses: [{ from: T(20), to: T(30) }],
+};
+check('1 lần dừng 10p · trừ đúng', pausedMsOf(motLan, motLan.actualEndTime) / 60000, 10);
+check('1 lần dừng 10p · làm thực', workedMsOf(motLan)! / 60000, 50);
+check('1 lần dừng 10p · computeMinutes', computeMinutes([motLan]), { assigned: 60, actual: 50, paid: 50, custom: null });
+check('1 lần dừng 10p · giờ tích luỹ', KtvTypeDTurnService.calculateActualMinutes(item([motLan]), 'T016'), 50);
+check('1 lần dừng 10p · mốc bắt đầu KHÔNG đổi', motLan.actualStartTime, T(0));
+
+// ── 3. Hai lần tạm dừng ────────────────────────────────────────────────────
+const haiLan = {
+    ktvId: 'T016', duration: 60,
+    actualStartTime: T(0), actualEndTime: T(75),
+    pauses: [{ from: T(10), to: T(20) }, { from: T(40), to: T(45) }],
+};
+check('2 lần dừng 15p · làm thực', workedMsOf(haiLan)! / 60000, 60);
+check('2 lần dừng 15p · computeMinutes', computeMinutes([haiLan]), { assigned: 60, actual: 60, paid: 60, custom: null });
+
+// ── 4. Chặn trên tại giờ gán vẫn còn nguyên tác dụng ───────────────────────
+const quaGio = { ktvId: 'T016', duration: 60, actualStartTime: T(0), actualEndTime: T(200), pauses: [{ from: T(10), to: T(20) }] };
+check('làm quá giờ gán · vẫn chặn tại 60', computeMinutes([quaGio]), { assigned: 60, actual: 60, paid: 60, custom: null });
+
+// ── 5. Chặng bị tước quyền lợi (KTV bị đổi ra) ─────────────────────────────
+const bidoi = { ktvId: 'T016', duration: 60, actualStartTime: T(0), actualEndTime: T(25), customCommissionDuration: 25, voided: true };
+const nguoiMoi = { ktvId: 'T079', duration: 35, actualStartTime: T(25), actualEndTime: T(60), customCommissionDuration: 35 };
+check('bị đổi · mất sạch tiền và giờ', computeMinutes([bidoi]), { assigned: 0, actual: 0, paid: 0, custom: null });
+check('bị đổi · giờ tích luỹ = 0', KtvTypeDTurnService.calculateActualMinutes(item([bidoi]), 'T016'), 0);
+check('bị đổi · tiền A/B/C = 0', KtvCommissionService.calculateItemDuration(item([bidoi]), 'T016', 60), 0);
+check('bị đổi · VẪN giữ số phút đã làm để đối soát', bidoi.customCommissionDuration, 25);
+check('người thay · nhận phần còn lại', computeMinutes([nguoiMoi]), { assigned: 35, actual: 35, paid: 35, custom: 35 });
+
+// ── 6. Đồng hồ đếm ngược: hạn kết thúc phải lùi đúng bằng thời gian đã dừng ─
+const dangChay = { ktvId: 'T016', duration: 60, actualStartTime: T(0), pauses: [{ from: T(10), to: T(25) }] };
+const han = expectedEndMs(dangChay, 60, new Date(T(30)).getTime())!;
+check('đồng hồ · hạn kết thúc lùi 15p', (han - new Date(T(0)).getTime()) / 60000, 75);
+
+// ── 7. Đang tạm dừng, chưa bấm tiếp: khoảng hở không được tự phình ─────────
+const dangDung = { ktvId: 'T016', duration: 60, actualStartTime: T(0), pauses: [{ from: T(20) }] };
+check('đang dừng · đóng tại mốc dừng thì cộng 0', pausedMsOf(dangDung, T(20)) / 60000, 0);
+check('đang dừng · tính tới 10:35 thì đã dừng 15p', pausedMsOf(dangDung, T(35)) / 60000, 15);
+
+console.log(ok.join('\n'));
+console.log(`\n✅ ${ok.length}/${ok.length} phép thử đạt.`);

@@ -1,3 +1,4 @@
+import { isVoidedSegment, workedMsOf } from '../segment-time';
 import { toBusinessDate } from '../business-date';
 
 /**
@@ -223,6 +224,10 @@ export function computeMinutes(segs: any[]): {
     let assigned = 0, actual = 0, paid = 0, custom: number | null = null;
 
     for (const seg of segs) {
+        // Chặng bị tước quyền lợi (KTV bị đổi ra, huỷ do lỗi KTV): không tiền,
+        // không giờ, không cả giờ gán. Vẫn nằm trong đơn để biết ai từng làm.
+        if (isVoidedSegment(seg)) continue;
+
         const gan = Number(seg?.duration) || 0;
         assigned += gan;
 
@@ -236,18 +241,15 @@ export function computeMinutes(segs: any[]): {
             continue;
         }
 
-        let t1 = NaN, t2 = NaN;
-        if (seg?.actualStartTime && seg?.actualEndTime) {
-            t1 = new Date(seg.actualStartTime).getTime();
-            t2 = new Date(seg.actualEndTime).getTime();
-        }
-        const hasMarks = Number.isFinite(t1) && Number.isFinite(t2);
+        // Đã trừ các khoảng tạm dừng — xem lib/segment-time.ts
+        const workedMs = workedMsOf(seg);
+        const hasMarks = workedMs !== null;
 
         // TIỀN — phút lẻ, mốc lỗi trả 0, chặn tại giờ gán
-        paid += hasMarks ? Math.min(Math.max(0, (t2 - t1) / 60000), gan) : gan;
+        paid += hasMarks ? Math.min(workedMs / 60000, gan) : gan;
 
         // GIỜ — phút làm tròn, mốc lỗi lùi về giờ gán, chặn tại giờ gán
-        actual += (hasMarks && t2 > t1) ? Math.min(Math.round((t2 - t1) / 60000), gan) : gan;
+        actual += (hasMarks && workedMs > 0) ? Math.min(Math.round(workedMs / 60000), gan) : gan;
     }
 
     return { assigned, actual, paid, custom };

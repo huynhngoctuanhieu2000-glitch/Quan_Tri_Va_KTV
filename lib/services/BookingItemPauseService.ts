@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { workedMsOf } from '@/lib/segment-time';
 
 export class BookingItemPauseService {
     /**
@@ -54,7 +55,7 @@ export class BookingItemPauseService {
         // Cập nhật trạng thái và lưu thời gian pause
         const { error } = await supabase
             .from('BookingItems')
-            .update({ 
+            .update({
                 status: 'PAUSED',
                 pauseStart: now
             })
@@ -65,7 +66,44 @@ export class BookingItemPauseService {
             throw new Error('Không thể tạm ngưng dịch vụ.');
         }
 
+        // Mở một khoảng dừng trên mọi chặng còn đang chạy.
+        // resumeItem sẽ đóng lại bằng `to`. Nhờ vậy giờ làm thực trừ được đúng
+        // phần ngồi chờ mà KHÔNG phải dời `actualStartTime` (xem lib/segment-time.ts).
+        await BookingItemPauseService.openPauseWindows(supabase, itemIdsToPause, now);
+
         return { success: true, pauseStart: now, pausedItemIds: itemIdsToPause };
+    }
+
+    /** Ghi `pauses[].from` vào các chặng đang chạy của những item vừa tạm dừng. */
+    private static async openPauseWindows(supabase: SupabaseClient, itemIds: string[], at: string) {
+        const { data: rows } = await supabase
+            .from('BookingItems')
+            .select('id, segments')
+            .in('id', itemIds);
+
+        for (const row of rows || []) {
+            const isString = typeof row.segments === 'string';
+            let segs: any = row.segments;
+            if (isString) { try { segs = JSON.parse(segs); } catch { segs = []; } }
+            if (!Array.isArray(segs)) continue;
+
+            let touched = false;
+            const updated = segs.map((seg: any) => {
+                if (!seg.actualStartTime || seg.actualEndTime) return seg;
+                const pauses = Array.isArray(seg.pauses) ? [...seg.pauses] : [];
+                // Đã có khoảng còn hở thì thôi, đừng mở chồng lên nhau.
+                if (pauses.some((p: any) => p && p.from && !p.to)) return seg;
+                pauses.push({ from: at });
+                touched = true;
+                return { ...seg, pauses };
+            });
+
+            if (!touched) continue;
+            await supabase
+                .from('BookingItems')
+                .update({ segments: isString ? JSON.stringify(updated) : updated })
+                .eq('id', row.id);
+        }
     }
 
     /**
@@ -93,26 +131,15 @@ export class BookingItemPauseService {
             return { success: true };
         }
 
-        const { data: booking, error: errBooking } = await supabase
-            .from('Bookings')
-            .select('id, timeStart')
-            .eq('id', item.bookingId)
-            .single();
+        // ⚠️ Trước đây chỗ này phải đọc `Bookings.timeStart` để tịnh tiến nó, và
+        // nếu thiếu thì thoát sớm — nhánh thoát đó nay CỰC nguy hiểm: nó bỏ qua
+        // việc đóng khoảng dừng, khiến khoảng hở kéo dài tới tận lúc kết thúc và
+        // ăn mất phần làm thật của KTV. Không còn dời timeStart nữa nên bỏ luôn
+        // cả truy vấn lẫn nhánh thoát; mọi đường đều phải đóng khoảng dừng.
 
-        if (errBooking || !booking || !booking.timeStart) {
-            // Fallback: Just resume
-            await supabase.from('BookingItems').update({ status: 'IN_PROGRESS', pauseStart: null }).eq('id', bookingItemId);
-            return { success: true };
-        }
-
-        // 2. Tính toán tịnh tiến thời gian
+        // 2. Mốc tiếp tục — dùng để đóng khoảng dừng trên từng chặng.
         const nowMs = Date.now();
-        const pauseStartMs = new Date(item.pauseStart).getTime();
-        const pauseDurationMs = nowMs - pauseStartMs;
-
-        const originalTimeStartMs = new Date(booking.timeStart).getTime();
-        const newTimeStartMs = originalTimeStartMs + pauseDurationMs;
-        const newTimeStartIso = new Date(newTimeStartMs).toISOString();
+        const resumeAt = new Date(nowMs).toISOString();
 
         // Tìm các KTV đang thực sự bị Pause
         let activeKtvIds: string[] = [];
@@ -162,15 +189,22 @@ export class BookingItemPauseService {
 
             if (Array.isArray(updatedSegments)) {
                 updatedSegments = updatedSegments.map((seg: any) => {
-                    if (seg.actualStartTime && !seg.actualEndTime) {
-                        const oldStartMs = new Date(seg.actualStartTime.replace(' ', 'T') + (seg.actualStartTime.includes('Z') ? '' : 'Z')).getTime();
-                        const shiftedStartMs = oldStartMs + pauseDurationMs;
-                        return {
-                            ...seg,
-                            actualStartTime: new Date(shiftedStartMs).toISOString()
-                        };
+                    if (!seg.actualStartTime || seg.actualEndTime) return seg;
+
+                    // ⚠️ TUYỆT ĐỐI KHÔNG dời `actualStartTime` nữa.
+                    // Cách cũ cộng thời gian dừng vào mốc bắt đầu → ô "Bắt đầu" trên
+                    // Kanban nhảy muộn sau mỗi lần tạm dừng và mất mốc thật vĩnh viễn.
+                    // Nay chỉ đóng khoảng dừng lại; giờ làm thực do lib/segment-time.ts trừ ra.
+                    const pauses = Array.isArray(seg.pauses) ? [...seg.pauses] : [];
+                    const openIdx = pauses.findIndex((p: any) => p && p.from && !p.to);
+                    if (openIdx !== -1) {
+                        pauses[openIdx] = { ...pauses[openIdx], to: resumeAt };
+                    } else {
+                        // Chặng bị dừng bằng code cũ (chưa có `pauses`) — dựng lại
+                        // khoảng dừng từ `pauseStart` để không mất phần đã chờ.
+                        pauses.push({ from: item.pauseStart, to: resumeAt });
                     }
-                    return seg;
+                    return { ...seg, pauses };
                 });
             }
             
@@ -188,13 +222,11 @@ export class BookingItemPauseService {
                 .eq('id', updateItem.id);
         }
 
-        // Cập nhật Bookings timeStart
-        await supabase
-            .from('Bookings')
-            .update({ timeStart: newTimeStartIso })
-            .eq('id', booking.id);
+        // ⚠️ KHÔNG dời `Bookings.timeStart` nữa — cùng lý do với `actualStartTime`:
+        // đó là mốc đơn bắt đầu thật, dời đi là mất. Phần bù thời gian tạm dừng
+        // nay nằm ở `seg.pauses[]` và được trừ lúc tính (lib/segment-time.ts).
 
-        return { success: true, newTimeStart: newTimeStartIso, resumedItemIds: itemsToUpdate.map(i => i.id) };
+        return { success: true, resumedAt: resumeAt, resumedItemIds: itemsToUpdate.map(i => i.id) };
     }
 
     /**
@@ -207,7 +239,13 @@ export class BookingItemPauseService {
         newKtvId?: string, 
         extraTimeMins: number = 0,
         businessDate?: string,
-        keepTurnForOldKtv: boolean = false
+        keepTurnForOldKtv: boolean = false,
+        /**
+         * Số phút quầy gán tay cho KTV mới. Bỏ trống (0) thì dùng công thức cũ:
+         * phần còn lại của dịch vụ + giờ bù. Luôn bị kẹp trần bằng thời lượng
+         * dịch vụ, không cho vượt (chốt 06/09/2026).
+         */
+        assignedMins: number = 0
     ) {
         // 1. Fetch Item & Booking & Service
         const { data: item, error: errItem } = await supabase
@@ -259,28 +297,57 @@ export class BookingItemPauseService {
         let segments = Array.isArray(parsedSegments) ? [...parsedSegments] : [];
         
         // --- XỬ LÝ LƯƠNG & TUA KTV CŨ ---
+        // Quy chế (chốt 06/09/2026): KTV bị đổi ra MẤT HẾT — tiền, giờ tích luỹ, tua.
+        // Nhưng vẫn GIỮ trong đơn kèm số phút đã làm, để còn biết ai từng làm cho
+        // khách và giải thích được khi đối soát. Cờ `voided` mới là thứ chặn tiền.
         const aIndex = segments.findIndex(seg => seg.ktvId === oldKtvId && !seg.endTime);
         let oldWorkedMins = 0;
         const pauseTime = item.pauseStart || new Date().toISOString();
         if (aIndex !== -1) {
             const oldSeg = segments[aIndex];
-            const pauseTimeMs = new Date(pauseTime).getTime();
-            const oldStartMs = oldSeg.actualStartTime ? new Date(oldSeg.actualStartTime).getTime() : pauseTimeMs;
-            oldWorkedMins = Math.max(0, Math.round((pauseTimeMs - oldStartMs) / 60000));
-            
+
+            // Đóng khoảng tạm dừng còn hở tại mốc bấm dừng, rồi tính giờ làm thực
+            // (đã trừ các lần dừng trước đó) — xem lib/segment-time.ts
+            const pauses = Array.isArray(oldSeg.pauses) ? [...oldSeg.pauses] : [];
+            const openIdx = pauses.findIndex((p: any) => p && p.from && !p.to);
+            if (openIdx !== -1) pauses[openIdx] = { ...pauses[openIdx], to: pauseTime };
+
+            const workedMs = workedMsOf({ ...oldSeg, pauses }, pauseTime);
+            oldWorkedMins = workedMs === null ? 0 : Math.round(workedMs / 60000);
+
             segments[aIndex] = {
                 ...oldSeg,
+                pauses,
                 endTime: pauseTime,
                 actualEndTime: pauseTime,
+                // Số phút đã làm — CHỈ để hiển thị/đối soát. `voided` khiến mọi hàm
+                // tính tiền bỏ qua con số này, đừng xoá nó đi.
                 customCommissionDuration: oldWorkedMins,
+                voided: true,
                 note: 'CHANGED'
             };
         }
 
+        // --- MẤT TUA CỦA KTV CŨ ---
+        // syncTurnsForDate đã lọc sẵn is_punished khỏi turns_completed; trước đây
+        // cột này có mà chưa nơi nào ghi, nên "mất tua" chỉ nằm trên giấy.
+        if (businessDate && !keepTurnForOldKtv) {
+            await supabase
+                .from('TurnLedger')
+                .update({ is_punished: true })
+                .eq('date', businessDate)
+                .eq('booking_id', item.bookingId)
+                .eq('employee_id', oldKtvId);
+        }
+
         // --- NẾU CÓ KTV MỚI VÀO THAY ---
         if (newKtvId) {
-            // Tính số phút KTV B làm (phần còn lại + bù thêm)
-            const remainingMins = Math.max(0, originalDuration - oldWorkedMins) + extraTimeMins;
+            // Số phút KTV mới được tính:
+            //   - assignedMins > 0 : quầy gán tay (đã kẹp trần bằng thời lượng dịch vụ)
+            //   - còn lại          : phần còn lại của dịch vụ + giờ bù
+            const remainingMins = assignedMins && assignedMins > 0
+                ? Math.min(assignedMins, originalDuration)
+                : Math.max(0, originalDuration - oldWorkedMins) + extraTimeMins;
 
             if (businessDate) {
                 // Thêm tua cho KTV B
@@ -313,9 +380,12 @@ export class BookingItemPauseService {
         }
 
         // --- CẬP NHẬT TECHNICIAN CODES ---
+        // ⚠️ KHÔNG gỡ KTV cũ ra khỏi danh sách nữa (chốt 06/09/2026).
+        // `technicianCodes` là nguồn dữ liệu DUY NHẤT mà sổ cái loại D, tiền A/B/C,
+        // lịch sử KTV và thẻ Kanban đọc. Gỡ khỏi đó là KTV cũ biến mất sạch khỏi
+        // đơn — không giải thích được cho họ, không thống kê được ai bị đổi.
+        // Việc tước tiền/giờ do cờ `voided` trên chặng lo, tước tua do `is_punished`.
         let newTechCodes = Array.isArray(item.technicianCodes) ? [...item.technicianCodes] : [];
-        newTechCodes = newTechCodes.filter(id => id !== oldKtvId);
-        
         if (newKtvId && !newTechCodes.includes(newKtvId)) {
             newTechCodes.push(newKtvId);
         }

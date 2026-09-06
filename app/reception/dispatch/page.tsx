@@ -42,6 +42,8 @@ import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { AddOrderModal } from './_components/AddOrderModal';
 import { ReviewHandoverModal } from './_components/ReviewHandoverModal';
 import PauseSwapKtvModal from './_components/PauseSwapKtvModal';
+import CancelItemModal from './_components/CancelItemModal';
+import { workedMsOf } from '@/lib/segment-time';
 import { useDispatchBoard } from './useDispatchBoard.logic';
 import { MergePromptModal } from '@/app/reception/dispatch/_components/MergePromptModal';
 import { useNotifications } from '@/components/NotificationProvider';
@@ -348,6 +350,7 @@ export default function DispatchBoardPage() {
   const [pauseModalOrder, setPauseModalOrder] = useState<PendingOrder | null>(null);
   const [pauseModalSubOrder, setPauseModalSubOrder] = useState<any>(null);
   const [pauseModalLockAction, setPauseModalLockAction] = useState<'SWAP' | undefined>(undefined);
+  const [cancelItemModal, setCancelItemModal] = useState<{ orderId: string; itemIds: string[]; ktvLabel?: string; customerName?: string; workedMinutes: number | null } | null>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string, guestId?: string } | null>(null);
   const [invoiceLangModal, setInvoiceLangModal] = useState<{ invoiceId: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
@@ -1591,28 +1594,48 @@ if (!hasPermission('dispatch_board')) {
       alert('Lỗi hệ thống khi hủy đơn.');
     }
   };
-  const handleCancelBookingItem = async (orderId: string, itemId: string) => {
-    const reason = prompt('Nhập lý do hủy dịch vụ này (không bắt buộc):');
-    if (reason === null) return; // user clicked Cancel on prompt
-    try {
-      const res = await apiClient.post<any>('/api/bookings/cancel-item', {
-        bookingId: orderId,
-        itemId: itemId,
-        reason: reason
-      });
-      if (res.success) {
-        fetchData(); // reload data
-        setContextMenu(null);
-      } else {
-        alert('Lỗi khi hủy dịch vụ: ' + res.error);
+  /** Mở hộp thoại huỷ — thay cho prompt() cũ, vì còn phải hỏi có cộng giờ hay không. */
+  const handleCancelBookingItem = (orderId: string, itemId: string, subOrder?: any) => {
+    const svcs = subOrder?.services || [];
+    const itemIds: string[] = svcs.length > 0 ? svcs.map((s: any) => s.id) : [itemId];
+
+    // Số phút đã làm, để quầy biết đang tước của KTV bao nhiêu.
+    let workedMinutes: number | null = null;
+    for (const s of svcs) {
+      for (const st of (s.staffList || [])) {
+        for (const seg of (st.segments || [])) {
+          const ms = workedMsOf(seg, seg.actualEndTime || Date.now());
+          if (ms !== null) workedMinutes = (workedMinutes || 0) + Math.round(ms / 60000);
+        }
       }
-    } catch (err) {
-      alert('Lỗi hệ thống khi hủy dịch vụ.');
     }
+
+    setCancelItemModal({
+      orderId,
+      itemIds,
+      ktvLabel: (subOrder?.ktvIds || []).join(', ') || undefined,
+      customerName: orders.find(o => o.id === orderId)?.customerName,
+      workedMinutes,
+    });
+    setContextMenu(null);
+  };
+
+  const submitCancelItems = async (reason: string, cancelCredit: 'NONE' | 'WORKED') => {
+    if (!cancelItemModal) return;
+    for (const itemId of cancelItemModal.itemIds) {
+      const res = await apiClient.post<any>('/api/bookings/cancel-item', {
+        bookingId: cancelItemModal.orderId,
+        itemId,
+        reason,
+        cancelCredit,
+      });
+      if (!res.success) throw new Error(res.error || 'Không huỷ được dịch vụ');
+    }
+    await fetchData();
   };
 
 
-  async function handleConfirmPauseSwap(bookingItemId: string, action: 'PAUSE' | 'RESUME' | 'SWAP', oldKtvId?: string, newKtvId?: string, extraTimeMins?: number, keepTurnForOldKtv?: boolean) {
+  async function handleConfirmPauseSwap(bookingItemId: string, action: 'PAUSE' | 'RESUME' | 'SWAP', oldKtvId?: string, newKtvId?: string, extraTimeMins?: number, keepTurnForOldKtv?: boolean, assignedMins?: number) {
     try {
       const data = await apiClient.post<any>(API.KTV.PAUSE_SWAP, {
           action,
@@ -1621,6 +1644,7 @@ if (!hasPermission('dispatch_board')) {
           newKtvId,
           extraTimeMins,
           keepTurnForOldKtv,
+          assignedMins,
           businessDate: selectedDate
       });
       if (!data.success) throw new Error(data.error || 'Có lỗi xảy ra');
@@ -2836,6 +2860,7 @@ if (!hasPermission('dispatch_board')) {
                   setContextMenu(null);
                 }
               }}
+              onCancelClick={(orderId, subOrder) => handleCancelBookingItem(orderId, subOrder?.services?.[0]?.id, subOrder)}
               onResumeClick={async (orderId, subOrder) => {
                 const pausedSvc = (subOrder?.services || []).find((s: any) => s.status === 'PAUSED');
                 if (!pausedSvc) {
@@ -3048,6 +3073,15 @@ if (!hasPermission('dispatch_board')) {
         availableKtvs={staffs.filter(s => s.status === 'ready')}
         onConfirm={handleConfirmPauseSwap}
         lockAction={pauseModalLockAction}
+      />
+
+      <CancelItemModal
+        isOpen={cancelItemModal !== null}
+        onClose={() => setCancelItemModal(null)}
+        onConfirm={submitCancelItems}
+        ktvLabel={cancelItemModal?.ktvLabel}
+        customerName={cancelItemModal?.customerName}
+        workedMinutes={cancelItemModal?.workedMinutes ?? null}
       />
 
       <MergePromptModal
