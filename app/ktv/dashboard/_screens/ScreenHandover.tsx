@@ -177,10 +177,22 @@ export function ScreenHandover({ logic }: { logic: any }) {
                     setConfirmDialog({
                         open: true,
                         title: 'Thiếu Ảnh Bàn Giao',
-                        message: 'Bạn chưa chụp đủ ảnh bàn giao, nếu bỏ qua sẽ bị phạt. Nếu bạn đã bàn giao có thể bỏ qua.',
+                        message: 'Bạn chưa chụp đủ ảnh bàn giao, nếu bỏ qua sẽ bị ghi NỢ BÀN GIAO. Còn nợ thì chưa tan ca được.',
                         onConfirm: () => {
                             setConfirmDialog(null);
-                            handleFinishHandover();
+                            // PHẢI đi qua handleSkipHandover để ghi nợ, giống hệt nhánh
+                            // "có đơn kế tiếp" ngay trên.
+                            //
+                            // Trước đây nhánh này gọi thẳng handleFinishHandover: API
+                            // /handover/skip không bao giờ được gọi nên handover_status
+                            // KHÔNG chuyển sang SKIPPED — đơn nằm lại ở 'PENDING', y hệt
+                            // đơn chưa từng bàn giao. Không có nợ nào được ghi, ô "Nợ bàn
+                            // giao" trống, nút Tan ca vẫn mở, và lời hứa "sẽ bị phạt"
+                            // trong chính hộp thoại này chưa từng thành sự thật.
+                            //
+                            // handleSkipHandover tự gọi handleFinishHandover khi ghi nợ
+                            // xong, và chặn lại nếu KTV đã quá số lần nợ cho phép.
+                            handleSkipHandover();
                         },
                         onCancel: () => setConfirmDialog(null),
                         variant: 'danger'
