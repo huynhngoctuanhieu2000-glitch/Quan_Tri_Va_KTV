@@ -241,6 +241,14 @@ export async function handleFinishService(ctx: HandlerContext): Promise<HandlerR
             } else if (item.handover_status !== 'APPROVED') {
                 updatePayload.handover_status = 'PENDING';
             }
+            // Có ảnh mới nộp thì cờ "bỏ qua" phải hạ theo. Cùng ràng buộc với
+            // handleReleaseKTV và HandoverService.submitHandover — DB có CHECK
+            // chặn cặp PENDING + skipped=true (xem migration
+            // 20260907120000_handover_skipped_invariant), thiếu dòng này là
+            // update văng lỗi chứ không phải hỏng lặng lẽ như trước.
+            if (updatePayload.handover_status === 'PENDING') {
+                updatePayload.handover_skipped = false;
+            }
         }
         
         await supabase.from('BookingItems').update(updatePayload).eq('id', item.id);

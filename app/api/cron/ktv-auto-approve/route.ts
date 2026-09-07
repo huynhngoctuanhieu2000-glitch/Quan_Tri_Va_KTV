@@ -32,6 +32,9 @@ export async function GET(request: Request) {
                 .from('BookingItems')
                 .update({ 
                     handover_status: 'APPROVED', 
+                    // Đã duyệt thì không thể còn là "bỏ qua" — DB có CHECK chặn
+                    // cặp APPROVED + skipped=true.
+                    handover_skipped: false,
                     handover_comment: 'Tự động duyệt do quá thời gian' 
                 })
                 .in('id', itemIds);
