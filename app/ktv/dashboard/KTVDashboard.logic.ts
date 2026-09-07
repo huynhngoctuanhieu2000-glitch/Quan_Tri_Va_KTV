@@ -712,6 +712,26 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     if (mySegs.length > 0) {
                         allHandover = mySegs.every((s: any) => !!s.handoverTime);
                     }
+
+                    // `handoverTime` KHÔNG đủ để kết luận đã bàn giao: luồng "bỏ qua bàn
+                    // giao" vẫn đi qua release-KTV, mà chỗ đó luôn đóng dấu handoverTime
+                    // kể cả khi không có ảnh. Nên đơn đang NỢ bàn giao vẫn có dấu thời
+                    // gian, và KTV bấm vào ô nợ thì bị đẩy thẳng sang màn Thưởng / Đánh
+                    // giá quầy — không còn đường nào để nộp ảnh.
+                    //
+                    // Trạng thái của item mới là căn cứ đúng, cũng chính là nguồn mà ô
+                    // "Nợ bàn giao" đang đếm.
+                    const myItemIds: string[] = booking.assignedItemIds?.length
+                        ? booking.assignedItemIds
+                        : (booking.assignedItemId ? [booking.assignedItemId] : []);
+                    const owesHandover = booking.BookingItems.some((i: any) => {
+                        const mine = myItemIds.length
+                            ? myItemIds.includes(i.id)
+                            : (i.technicianCodes || []).some((c: string) =>
+                                String(c).toUpperCase() === String(ktvId).toUpperCase());
+                        return mine && ['SKIPPED', 'REJECTED'].includes(String(i.handover_status || '').toUpperCase());
+                    });
+                    if (owesHandover) allHandover = false;
                 }
 
                 // Nếu đã Review xong, chuyển sang HANDOVER (nếu chưa ở đó hoặc chưa tới REWARD)
