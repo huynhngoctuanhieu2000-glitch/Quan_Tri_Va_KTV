@@ -701,12 +701,18 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
 
             // Extra 2: Âm thầm tải trước Checklist Bàn giao ngay từ lúc KTV đang làm dịch vụ (IN_PROGRESS)
             // Để triệt tiêu hoàn toàn thời gian load (0 giây) khi chuyển sang màn Bàn Giao
-            (computedStatus === 'IN_PROGRESS' || computedStatus === 'FEEDBACK' || computedStatus === 'CLEANING')
+            // DONE cũng phải nạp trước: đơn NỢ bàn giao luôn ở DONE, mà đó đúng là
+            // lúc KTV mở màn Bàn giao lại để trả nợ. Thiếu DONE ở đây thì lần nào
+            // vào cũng phải gọi thêm một vòng API nữa, chờ thêm ~1 giây.
+            (computedStatus === 'IN_PROGRESS' || computedStatus === 'FEEDBACK'
+                || computedStatus === 'CLEANING' || computedStatus === 'DONE')
                 ? (async () => {
                     try {
                         const sCode = activeItemForStatus?.serviceCode || activeItemForStatus?.service_code || '';
                         const sCat = activeItemForStatus?.service_category || activeItemForStatus?.category || '';
-                        const rId = turnInfo?.room_id || booking.roomId || activeItemForStatus?.roomId || null;
+                        // `roomId` không phải cột của BookingItems — tên phòng nằm ở `roomName`,
+                        // và Rooms.id chính là tên phòng ('T', 'V2') nên dùng thẳng được.
+                        const rId = turnInfo?.room_id || booking.roomId || activeItemForStatus?.roomName || null;
                         const sId = activeItemForStatus?.serviceId || null;
                         console.log(`🔍 [Prefetch Checklist] sCode=${sCode} sCat=${sCat} rId=${rId} itemId=${activeItemId || activeItemForStatus?.id} serviceId=${sId}`);
                         const result = await HandoverService.generateDynamicChecklist(

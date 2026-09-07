@@ -328,6 +328,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
             const ktvIdMatches = !savedKtvId || !ktvId || savedKtvId === ktvId;
             if (savedScreen && ['REVIEW', 'HANDOVER', 'REWARD'].includes(savedScreen) && savedBookingId && ktvIdMatches) {
                 setScreenState(savedScreen);
+                // Phải gán tay screenRef: setScreenState là setter THÔ, không đi qua
+                // setScreen nên ref không được cập nhật, mà ref chỉ theo kịp ở vòng
+                // render sau. Trong khi đó fetchBooking đọc screenRef ngay lượt đầu
+                // để quyết định có kèm bookingId hay không — ref còn là DASHBOARD thì
+                // nó gọi trần `?techCode=...`, server trả về rỗng vì KTV không còn
+                // đơn đang chạy, và màn Bàn giao rơi về checklist mặc định
+                // "Ảnh tổng quan phòng" thay vì danh sách thật của phòng.
+                screenRef.current = savedScreen;
                 prevBookingIdRef.current = savedBookingId;
                 postServiceBookingIdRef.current = savedBookingId;
             } else {
@@ -2167,10 +2175,15 @@ export function useKTVDashboard(config?: DashboardConfig) {
                 booking.assignedItemIds?.includes(i.id) || booking.assignedItemId === i.id
             );
             if (!item) return;
+            // Item KHÔNG có `roomId` lẫn `serviceCode` — cột thật là `roomName` và
+            // `serviceId`. Trước đây gửi lên toàn chuỗi rỗng nên API không biết
+            // phòng nào, dịch vụ nào, trả về danh sách rỗng và màn Bàn giao chỉ
+            // hiện mục mặc định "Ảnh tổng quan phòng".
             const params = new URLSearchParams({
-                roomId: booking.assignedRoomId || item.roomId || '',
+                roomId: booking.assignedRoomId || item.roomName || '',
                 serviceCode: item.serviceCode || item.service_code || '',
                 serviceCategory: item.service_category || item.category || '',
+                serviceId: item.serviceId || '',
                 bookingId: booking.id,
                 bookingItemId: item.id,
             });
