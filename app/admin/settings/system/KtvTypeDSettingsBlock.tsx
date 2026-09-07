@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Loader2, CheckCircle2, DollarSign, Star, Coins, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Save, Loader2, CheckCircle2, DollarSign, Star, Coins, AlertTriangle, ShieldCheck, Trophy } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
 
@@ -215,11 +215,48 @@ export function KtvTypeDSettingsBlock() {
                     </p>
                 </div>
             </div>
+
+            {/* 6. Hien thi cho KTV */}
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
+                            <Trophy size={20} className="text-violet-500" />
+                        </div>
+                        <h2 className="text-lg font-black text-gray-900">Hiển thị cho KTV</h2>
+                    </div>
+                    <SaveButton group="ktvVisibility" savingGroup={savingGroup} saveStatus={saveStatus} onClick={() => handleSaveGroup(['ktv_type_d_hours_ranking_enabled'], 'ktvVisibility')} />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl max-w-2xl">
+                    <div className="pr-4">
+                        <p className="font-bold text-gray-900">Bảng xếp hạng giờ tích lũy</p>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                            BẬT = KTV Loại D tự xem được thứ hạng giờ của cả nhóm ngay trên app của họ.
+                            TẮT = chỉ quầy và quản lý xem được.
+                        </p>
+                    </div>
+                    <Toggle
+                        value={boolConfig(configs.ktv_type_d_hours_ranking_enabled, true)}
+                        onChange={(v: any) => handleChange('ktv_type_d_hours_ranking_enabled', v)}
+                    />
+                </div>
+            </div>
         </div>
     );
 }
 
 // ----- UI Helpers -----
+
+/**
+ * SystemConfigs.value là jsonb — cùng một cần gạt có thể về `true`, `"true"` hoặc
+ * `'\"true\"'` tuỳ nó được ghi từ đâu. So `=== true` là hỏng thầm lặng.
+ */
+function boolConfig(raw: any, fallback: boolean): boolean {
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    if (typeof raw === 'boolean') return raw;
+    return String(raw).replace(/"/g, '').toLowerCase() === 'true';
+}
 
 function SaveButton({ group, savingGroup, saveStatus, onClick }: any) {
     return (

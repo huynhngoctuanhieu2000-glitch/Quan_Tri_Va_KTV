@@ -21,6 +21,7 @@ export type ModuleId =
   | 'ktv_schedule'
   | 'ktv_performance'
   | 'ktv_history'
+  | 'ktv_hours_ranking'
   | 'turn_tracking'
   | 'service_handbook'
   | 'ai_features'

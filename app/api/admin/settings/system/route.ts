@@ -42,6 +42,10 @@ const DEFAULT_CONFIGS = {
         { code: 'BAD_HANDOVER', name: 'Lỗi bàn giao phòng', points: 5 }
     ],
 
+    // KTV Loai D
+    // BAT = KTV loai D tu xem duoc bang xep hang gio cua ca nhom tren app cua ho.
+    ktv_type_d_hours_ranking_enabled: true,
+
     // Global
     enable_web_advance_booking_email: false,
     enable_maintenance_fee: false,

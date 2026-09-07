@@ -20,6 +20,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: 'ktv_schedule', name: 'Lịch Làm Việc', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_performance', name: 'Hiệu Suất', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_history', name: 'Lịch Sử', group: 'Kỹ Thuật Viên' },
+  { id: 'ktv_hours_ranking', name: 'Xếp Hạng Giờ', group: 'Kỹ Thuật Viên' },
   { id: 'ktv_hub', name: 'Quản Lý KTV', group: 'Vận Hành' },
   { id: 'room_management', name: 'Quản Lý Phòng', group: 'Vận Hành' },
   { id: 'service_handbook', name: 'Sổ Tay Dịch Vụ', group: 'Kỹ Thuật Viên' },

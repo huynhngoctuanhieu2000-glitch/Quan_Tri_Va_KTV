@@ -1,0 +1,132 @@
+import { NextResponse } from 'next/server';
+import { requireBusinessUser } from '@/lib/auth-server';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { KtvOfficeScoreService, monthRange, currentMonthVn } from '@/lib/services/KtvOfficeScoreService';
+
+export const dynamic = 'force-dynamic';
+
+/** Cần gạt cho phép KTV tự xem bảng xếp hạng. Mặc định BẬT. */
+const FEATURE_KEY = 'ktv_type_d_hours_ranking_enabled';
+
+/**
+ * `SystemConfigs.value` là jsonb — cùng một cần gạt có thể về `true`, `"true"`
+ * hoặc `'"true"'` tuỳ nó được ghi từ đâu. So `=== true` là hỏng thầm lặng.
+ */
+function toBool(raw: any, fallback: boolean): boolean {
+    if (raw === undefined || raw === null || raw === '') return fallback;
+    if (typeof raw === 'boolean') return raw;
+    return String(raw).replace(/"/g, '').toLowerCase() === 'true';
+}
+
+/**
+ * Bảng xếp hạng giờ tích luỹ cho CHÍNH KTV đang đăng nhập xem.
+ *
+ * Chỉ Loại D: sổ giờ (KTVDTurnLedger + KTVDPenaltyLedger) chỉ ghi cho nhóm này,
+ * loại A/B/C chia tua theo SỐ TUA nên bảng giờ với họ sẽ toàn 0h.
+ *
+ * KTV chỉ thấy đồng nghiệp CÙNG LOẠI, và chỉ thấy tên + giờ thực nhận + số tua
+ * của người khác. Giờ làm thực, giờ bị phạt và sổ giờ từng dòng chỉ trả về cho
+ * chính người đang xem — giờ phạt là chuyện kỷ luật riêng, không phải thứ để cả
+ * nhóm soi nhau.
+ *
+ * ⚠️ KHÔNG nhận `staffId` từ client. Danh tính lấy từ phiên đăng nhập, nếu không
+ * KTV chỉ cần sửa query là xem được của người khác.
+ */
+export async function GET(request: Request) {
+    try {
+        const bUser = await requireBusinessUser();
+        if (!bUser) {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const supabase = getSupabaseAdmin();
+        if (!supabase) {
+            return NextResponse.json({ success: false, error: 'Supabase admin chưa được cấu hình' }, { status: 500 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const monthParam = searchParams.get('month');
+        const month = /^\d{4}-\d{2}$/.test(monthParam || '') ? monthParam! : currentMonthVn();
+
+        const meId = bUser.techCode;
+        const { data: me } = await supabase
+            .from('Staff')
+            .select('id, work_type')
+            .eq('id', meId)
+            .maybeSingle();
+
+        // Không phải KTV Loại D → UI ẩn hẳn mục này thay vì hiện bảng rỗng.
+        if (!me || me.work_type !== 'TYPE_D') {
+            return NextResponse.json({ success: true, applicable: false, enabled: true, month, data: [] });
+        }
+
+        const { data: cfg } = await supabase
+            .from('SystemConfigs')
+            .select('value')
+            .eq('key', FEATURE_KEY)
+            .maybeSingle();
+
+        if (!toBool(cfg?.value, true)) {
+            return NextResponse.json({ success: true, applicable: true, enabled: false, month, data: [] });
+        }
+
+        // Cùng bộ lọc với trang Office (/api/admin/ktv-office/hours-ranking): hai màn
+        // hình mà lệch danh sách thì KTV và quầy đọc ra hai thứ hạng khác nhau.
+        const { data: staff, error: staffError } = await supabase
+            .from('Staff')
+            .select('id, full_name, status, avatar_url')
+            .eq('work_type', me.work_type)
+            .neq('status', 'ĐÃ NGHỈ');
+        if (staffError) throw staffError;
+
+        const staffList = staff || [];
+        const staffIds = staffList.map((s: any) => s.id);
+        if (staffIds.length === 0) {
+            return NextResponse.json({ success: true, applicable: true, enabled: true, month, data: [] });
+        }
+
+        // Tua vừa xong còn nằm trong hàng đợi cho tới khi cron chạy (5 phút/lần).
+        // Rút ngay để KTV vừa kết thúc đơn là thấy giờ mình tăng, không phải chờ.
+        const { drainQueueForStaff } = await import('@/lib/services/KtvDLedgerWriter');
+        await drainQueueForStaff(supabase, staffIds);
+
+        const hours = await KtvOfficeScoreService.hoursBreakdown(supabase, staffIds, monthRange(month));
+
+        const rows = staffList.map((s: any) => {
+            const h = hours.get(s.id)!;
+            const isMe = s.id === meId;
+            return {
+                id: s.id,
+                code: s.id,
+                name: s.full_name || s.id,
+                avatarUrl: s.avatar_url,
+                isMe,
+                net: h.net,
+                turns: h.turns,
+                // Chi tiết chỉ mở cho chính chủ.
+                earned: isMe ? h.earned : null,
+                penalty: isMe ? h.penalty : null,
+                days: isMe ? h.days : null,
+                lastDate: isMe ? h.lastDate : null,
+            };
+        });
+
+        rows.sort((a: any, b: any) =>
+            (b.net - a.net) || a.name.localeCompare(b.name, 'vi'));
+        rows.forEach((r: any, i) => { r.rank = i + 1; });
+
+        return NextResponse.json({
+            success: true,
+            applicable: true,
+            enabled: true,
+            month,
+            workType: me.work_type,
+            meId,
+            data: rows,
+        });
+    } catch (error: any) {
+        const msg = error?.message || 'Lỗi không xác định';
+        console.error('Lỗi khi lấy bảng xếp hạng giờ cho KTV:', error);
+        return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
+}

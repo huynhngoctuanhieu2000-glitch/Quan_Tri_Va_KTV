@@ -43,6 +43,7 @@ import {
   MessageSquare,
   ToggleLeft,
   Timer,
+  Trophy,
   RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -66,6 +67,7 @@ const ICONS: Record<string, React.ReactNode> = {
   ktv_schedule: <CalendarDays size={20} />,
   ktv_performance: <TrendingUp size={20} />,
   ktv_history: <History size={20} />,
+  ktv_hours_ranking: <Trophy size={20} />,
   turn_tracking: <ListOrdered size={20} />,
   ktv_hub: <UserCheck size={20} />,
   ktv_wallet: <Wallet size={20} />,
@@ -105,6 +107,7 @@ const PATHS: Record<string, string> = {
   ktv_schedule: '/ktv/schedule',
   ktv_performance: '/ktv/performance',
   ktv_history: '/ktv/history',
+  ktv_hours_ranking: '/ktv/hours-ranking',
   turn_tracking: '/reception/turns',
   ktv_hub: '/reception/ktv-hub',
   ktv_wallet: '/ktv/wallet',

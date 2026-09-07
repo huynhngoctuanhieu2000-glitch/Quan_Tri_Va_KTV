@@ -63,6 +63,7 @@ function getFallbackPermissions(roleId: string) {
             'ktv_schedule',
             'ktv_performance',
             'ktv_history',
+            'ktv_hours_ranking',
             'service_handbook',
             'settings'
         ];

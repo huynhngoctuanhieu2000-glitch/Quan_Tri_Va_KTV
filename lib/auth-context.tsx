@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else if (roleId === 'reception') {
             permissions = ['dashboard', 'dispatch_board', 'order_management', 'customer_management', 'ktv_hub', 'room_management', 'leave_management', 'turn_tracking', 'service_handbook', 'staff_notifications', 'settings', 'ktv_office_scoring', 'ktv_office_hours'];
           } else if (roleId === 'ktv') {
-            permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'service_handbook', 'settings'];
+            permissions = ['ktv_dashboard', 'ktv_attendance', 'ktv_schedule', 'ktv_performance', 'ktv_history', 'ktv_hours_ranking', 'service_handbook', 'settings'];
           }
         }
 
@@ -261,6 +261,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Auto-grant quyền mới cho admin, dev, và lễ tân (tránh lỗi cache session cũ)
     if (moduleId === 'ktv_office_scoring' || moduleId === 'ktv_office_hours') {
       if (role.id === 'admin' || role.id === 'dev' || role.id === 'reception') return true;
+    }
+
+    // Bảng xếp hạng giờ chỉ có nghĩa với KTV Loại D — sổ giờ chỉ ghi cho nhóm này,
+    // nhóm khác chia tua theo SỐ TUA nên mở ra sẽ toàn 0h. Quyết theo work_type ở
+    // đây để KTV Loại D thấy ngay, admin không phải vào Phân quyền cấp lại từng vai trò.
+    if (moduleId === 'ktv_hours_ranking') {
+      return user?.work_type === 'TYPE_D';
     }
 
     // HIỂN THỊ "BÀN GIAO CÔNG VIỆC" NẾU ĐƯỢC BẬT TRONG TÍNH NĂNG NHÂN VIÊN

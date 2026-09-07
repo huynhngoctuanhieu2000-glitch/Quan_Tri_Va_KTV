@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { apiClient } from '@/lib/apiClient';
+import { shiftMonth, currentMonthVn } from '@/lib/hours-format';
 
 export interface HoursRow {
   id: string;
@@ -23,37 +24,9 @@ export interface HoursRow {
   rank: number;
 }
 
-/** Giờ thập phân → "18h 30P". Cùng định dạng với bảng điều phối và trang chấm điểm. */
-export function fmtHours(h: number): string {
-  const total = Number(h) || 0;
-  const sign = total < 0 ? '−' : '';
-  const abs = Math.abs(total);
-  const hh = Math.floor(abs);
-  const mm = Math.round((abs - hh) * 60);
-  // Làm tròn phút có thể đẩy lên 60 (vd 2.999h) — dồn lên giờ cho khỏi hiện "2h 60P".
-  if (mm === 60) return `${sign}${hh + 1}h 00P`;
-  return `${sign}${hh}h ${String(mm).padStart(2, '0')}P`;
-}
-
-/** 'YYYY-MM-DD' → '03/09'. */
-export function fmtShortDate(iso: string | null): string {
-  if (!iso) return '—';
-  const [, m, d] = iso.split('-');
-  return m && d ? `${d}/${m}` : iso;
-}
-
-/** 'YYYY-MM' dịch đi `delta` tháng. */
-function shiftMonth(monthStr: string, delta: number): string {
-  const [y, m] = monthStr.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-/** 'YYYY-MM' của tháng hiện tại theo giờ VN. */
-function currentMonthVn(): string {
-  const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
-  return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}`;
-}
+// Định dạng giờ và tiện ích tháng nay nằm ở lib/hours-format.ts để trang này và
+// trang KTV đọc ra cùng một chuỗi. Re-export cho page.tsx khỏi phải đổi import.
+export { fmtHours, fmtShortDate } from '@/lib/hours-format';
 
 export const useAdminKtvHoursLogic = () => {
   const { addToast } = useToast();
