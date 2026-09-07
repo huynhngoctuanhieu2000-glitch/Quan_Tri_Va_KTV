@@ -229,7 +229,16 @@ export class HandoverService {
     }
 
     /**
-     * Get list of pending handovers for a KTV (for Dashboard reminder widget).
+     * Danh sách bàn giao KTV còn nợ — ô nhắc trên Dashboard KTV.
+     *
+     * Nợ ở đây là bàn giao BỊ BỎ QUA hoặc BỊ TRẢ LẠI, không phải phòng đang dọn
+     * dở: item còn ở trạng thái CLEANING là đang làm, chưa tính là nợ.
+     *
+     * ⚠️ Câu này từng hỏng câm suốt: `roomId` và `serviceCode` không phải cột của
+     * bảng (thật ra là `roomName` và `serviceId`), còn `Bookings(billCode)` thì
+     * nhập nhằng vì có nhiều khoá ngoại trỏ sang Bookings. Lỗi bị nuốt bởi
+     * `if (error) return { items: [], count: 0 }` nên Dashboard luôn nhận 0 và
+     * KTV không bao giờ thấy ô nhắc, dù đang có nợ thật.
      */
     static async getPendingHandovers(
         supabase: SupabaseClient,
@@ -238,14 +247,17 @@ export class HandoverService {
         const { data, error } = await supabase
             .from('BookingItems')
             .select(`
-                id, bookingId, roomId, serviceCode, handover_status, handover_skipped,
-                Bookings(billCode)
+                id, bookingId, roomName, serviceId, handover_status, handover_skipped,
+                Bookings!fk_bookingitems_booking(billCode)
             `)
-            .or('handover_skipped.eq.true,handover_status.eq.REJECTED')
             .in('handover_status', ['SKIPPED', 'REJECTED'])
             .contains('technicianCodes', [ktvCode]);
 
-        if (error) return { items: [], count: 0 };
+        if (error) {
+            // Không nuốt im nữa — hỏng câu truy vấn là ô nhắc biến mất không dấu vết.
+            console.error('[HandoverService] getPendingHandovers lỗi:', error);
+            return { items: [], count: 0 };
+        }
         return { items: data || [], count: data?.length || 0 };
     }
 

@@ -408,7 +408,7 @@ export function ScreenDashboard({ logic }: { logic: any }) {
               <div className="space-y-2">
                 {logic.pendingHandovers.map((item: any) => (
                   <div key={item.id} onClick={() => logic.handleSelectDebt(item.bookingId)} className="bg-white p-2.5 rounded-2xl flex items-center justify-between border border-amber-100 cursor-pointer hover:bg-amber-100/50">
-                    <span className="text-xs font-bold text-slate-700">#{item.guest_index ? `${(item.Bookings?.billCode || '').split('-')[0]}-${String.fromCharCode(64 + item.guest_index)}` : ((item.Bookings?.billCode || '---').split('-')[0])} <span className="text-[10px] text-slate-400 font-normal ml-1">P.{item.roomId}</span></span>
+                    <span className="text-xs font-bold text-slate-700">#{item.guest_index ? `${(item.Bookings?.billCode || '').split('-')[0]}-${String.fromCharCode(64 + item.guest_index)}` : ((item.Bookings?.billCode || '---').split('-')[0])} <span className="text-[10px] text-slate-400 font-normal ml-1">P.{item.roomName}</span></span>
                     <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-1 rounded-lg">Chưa nộp</span>
                   </div>
                 ))}
