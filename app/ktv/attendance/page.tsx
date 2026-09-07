@@ -469,12 +469,23 @@ const KTVAttendancePage = () => {
                     )}
 
                     {/* Nếu là KTV Loại B thì hiển thị component riêng của Loại B, nếu không thì hiển thị luồng mặc định (IDLE/PENDING/CONFIRMED...) */}
+                    {/* Trong lúc gửi điểm danh (tải ảnh lên) phải thấy rõ là đang chạy.
+                        Khối báo trạng thái LOADING_GPS bên dưới chỉ nằm trong luồng mặc
+                        định, nên loại B/D bấm xong màn hình y nguyên — nhân viên tưởng
+                        hỏng rồi bấm lại. Lớp phủ này vừa báo vừa chặn bấm trùng. */}
+                    {checkStatus === 'LOADING_GPS' && (workType === 'TYPE_B' || workType === 'TYPE_D') && (
+                        <div className="w-full bg-blue-50 border border-blue-200 rounded-2xl px-4 py-4 flex items-center justify-center gap-3 mb-4">
+                            <Loader2 size={20} className="animate-spin text-blue-500" />
+                            <span className="text-blue-700 font-bold text-sm">Đang gửi điểm danh & tải ảnh…</span>
+                        </div>
+                    )}
+
                     {workType === 'TYPE_B' && user?.code ? (
-                        <div className="w-full">
+                        <div className={`w-full ${checkStatus === 'LOADING_GPS' ? 'opacity-40 pointer-events-none' : ''}`}>
                             <AttendanceTypeB ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} roomDebt={roomDebt} />
                         </div>
                     ) : workType === 'TYPE_D' && user?.code ? (
-                        <div className="w-full">
+                        <div className={`w-full ${checkStatus === 'LOADING_GPS' ? 'opacity-40 pointer-events-none' : ''}`}>
                             <AttendanceTypeD ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} roomDebt={roomDebt} guestArrivalLock={guestArrivalLock} />
                         </div>
                     ) : (

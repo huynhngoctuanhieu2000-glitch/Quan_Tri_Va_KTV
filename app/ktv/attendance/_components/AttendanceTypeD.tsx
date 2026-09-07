@@ -107,6 +107,18 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
     return () => clearInterval(interval);
   }, [ktvId]);
 
+  // Điểm danh xong là nạp lại NGAY, đừng bắt chờ vòng poll 30 giây.
+  //
+  // `checkStatus` do trang cha đổi ngay khi API trả về, nhưng trạng thái hiện trên
+  // component này lại lấy từ `state.online_status` của chính nó — nên trước đây bấm
+  // xong màn hình đứng yên tới nửa phút, nhân viên tưởng hỏng và bấm lại lần nữa.
+  useEffect(() => {
+    if (!ktvId) return;
+    if (checkStatus === 'CONFIRMED' || checkStatus === 'CHECKED_OUT' || checkStatus === 'PENDING') {
+      fetchState(); fetchRegistration();
+    }
+  }, [checkStatus, ktvId]);
+
   const handleToggleOnCall = async (isOnCall: boolean, mins: number, end?: string) => {
     setActionLoading(true);
     try {
