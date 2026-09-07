@@ -2042,6 +2042,12 @@ export function useKTVDashboard(config?: DashboardConfig) {
             const assignedItems = itemIds.length > 0
                 ? booking.BookingItems?.filter((i: any) => itemIds.includes(i.id)) || []
                 : [booking.BookingItems?.[0]].filter(Boolean);
+
+            // Đây là lần TRẢ NỢ hay lần bàn giao bình thường?
+            // Phải chốt TRƯỚC khi gọi PATCH, vì RELEASE_KTV sẽ lật handover_status
+            // từ SKIPPED sang PENDING — hỏi sau thì không còn dấu vết nợ nữa.
+            const isDebtRepay = assignedItems.some((i: any) =>
+                ['SKIPPED', 'REJECTED'].includes(String(i.handover_status || '').toUpperCase()));
             
             // Filter bỏ dịch vụ tiện ích (is_utility) — không tính vào tiền tua
             const serviceItems = assignedItems.filter((item: any) => {
@@ -2135,6 +2141,17 @@ export function useKTVDashboard(config?: DashboardConfig) {
             setIsPrepping(false);
             setPrepTimeRemaining(0);
             
+            // Trả nợ dọn phòng thì KHÔNG qua màn Thưởng / Đánh giá quầy: tiền tua đã
+            // trả từ lần làm xong trước đó, quầy cũng đã đánh giá rồi. Bắt đi lại một
+            // vòng nữa chỉ tổ rối, mà còn dễ tưởng được trả tiền thêm lần hai.
+            if (isDebtRepay) {
+                addToast('✅ Đã nộp ảnh bàn giao. Bạn hết nợ phòng này rồi!', 'success');
+                isTransitioningRef.current = true;
+                goToDashboard();
+                fetchPendingHandovers();
+                return;
+            }
+
             if (booking?.ktv_instant_reward_enabled === false) {
                 // Tính năng hiện tiền tua tắt -> quay về trang chờ
                 isTransitioningRef.current = true;
