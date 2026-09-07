@@ -52,10 +52,14 @@ export async function GET(request: Request) {
         // Tìm những item đang FEEDBACK, đã APPROVED bàn giao, và cập nhật đã quá 10 phút
         const { data: feedbackItems } = await supabase
             .from('BookingItems')
-            .select('id, updated_at, bookingId')
+            .select('id, bookingId')
             .eq('status', 'FEEDBACK')
             .eq('handover_status', 'APPROVED')
-            .lte('updated_at', mins10Ago);
+            // "BookingItems" khong co cot `updated_at` — truy van cu loi va bi nuot,
+            // nen auto-PASS danh gia khach chua bao gio chay. Dem han tu `timeEnd`
+            // (luc ket thuc dich vu), day cung la moc khach bat dau danh gia duoc.
+            .not('timeEnd', 'is', null)
+            .lte('timeEnd', mins10Ago);
 
         if (feedbackItems && feedbackItems.length > 0) {
             const itemIds = feedbackItems.map(i => i.id);

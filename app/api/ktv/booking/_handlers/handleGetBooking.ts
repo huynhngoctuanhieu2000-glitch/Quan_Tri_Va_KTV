@@ -693,7 +693,10 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                     try {
                         const { data: allNextItems } = await supabase
                             .from('BookingItems')
-                            .select('serviceId, options, duration, technicianCodes')
+                            // Bo `duration`: BookingItems khong co cot nay va doan duoi
+                            // cung khong dung toi. Chi vi no ma ca truy van loi, nen ten
+                            // don ke tiep chua bao gio hien duoc.
+                            .select('serviceId, options, technicianCodes')
                             .eq('bookingId', validNextAssign.booking_id);
 
                         let nextItems: any[] = [];

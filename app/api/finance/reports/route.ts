@@ -112,10 +112,13 @@ export async function GET(request: Request) {
         const commConfigC = await KtvCommissionService.getCommissionConfig(supabase as any, 'TYPE_C');
         const commConfigs: Record<string, any> = { TYPE_A: commConfigA, TYPE_B: commConfigB, TYPE_C: commConfigC };
 
-        const { data: staffData } = await supabase.from('Staff').select('code, work_type');
+        // `code` khong phai cot cua Staff — ma nhan vien chinh la `id`. Truy van cu
+        // loi nen ban do nay rong, va dong duoi rot het ve 'TYPE_A': MOI KTV bi tinh
+        // hoa hong theo TYPE_A trong bao cao, ke ca loai D.
+        const { data: staffData } = await supabase.from('Staff').select('id, work_type');
         const staffWorkTypeMap: Record<string, string> = {};
         (staffData || []).forEach((s: any) => {
-            if (s.code) staffWorkTypeMap[s.code.trim()] = s.work_type || 'TYPE_A';
+            if (s.id) staffWorkTypeMap[String(s.id).trim()] = s.work_type || 'TYPE_A';
         });
 
         // ─── 1. Fetch completed bookings in date range ───────────────────

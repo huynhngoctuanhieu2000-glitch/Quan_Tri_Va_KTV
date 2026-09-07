@@ -157,9 +157,10 @@ export async function GET(request: Request) {
 
         // Lấy tên thật của KTV
         if (topKtv) {
-            const { data: ktvData } = await supabase.from('Staff').select('name').eq('code', topKtv).single();
-            if (ktvData && ktvData.name) {
-                topKtv = ktvData.name;
+            // Ma nhan vien la `id`, ten day du la `full_name` — khong phai code/name.
+            const { data: ktvData } = await supabase.from('Staff').select('full_name').eq('id', topKtv).maybeSingle();
+            if (ktvData && ktvData.full_name) {
+                topKtv = ktvData.full_name;
             }
         }
 
