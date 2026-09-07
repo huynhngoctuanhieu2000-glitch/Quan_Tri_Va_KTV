@@ -551,7 +551,12 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                     ...svc, 
                                     status: newItem.status,
                                     itemRating: newItem.itemRating,
-                                    ktvRatings: newItem.ktvRatings 
+                                    ktvRatings: newItem.ktvRatings,
+                                    // Phải chép cả `options`: dấu tích "KTV đã nhận đơn" đọc
+                                    // từ options.acceptedByStaff. Thiếu dòng này thì KTV bấm
+                                    // nhận xong quầy vẫn thấy "CHỜ NHẬN" cho tới khi F5.
+                                    options: newItem.options ?? svc.options,
+                                    handover_status: newItem.handover_status ?? svc.handover_status
                                 } : svc
                             );
                             return { ...o, services: updatedServices };

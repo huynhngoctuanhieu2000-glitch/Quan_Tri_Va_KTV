@@ -856,6 +856,8 @@ export function useKTVDashboard(config?: DashboardConfig) {
     }, []);
 
     const isFetchingRef = useRef(false);
+    // Có lệnh nạp lại tới trong lúc đang nạp dở → xếp hàng chờ, đừng vứt đi.
+    const pendingRefetchRef = useRef(false);
     const realtimeFetchTimerRef = useRef<NodeJS.Timeout | null>(null);
     const lastVisibilityFetchMsRef = useRef(0);
     const isCheckingNextRef = useRef(false);
@@ -874,7 +876,18 @@ export function useKTVDashboard(config?: DashboardConfig) {
         };
 
         const fetchBooking = async () => {
-            if (isFetchingRef.current) return;
+            // Đang có một lượt nạp chạy dở thì GHI NHẬN rồi nạp lại ngay sau đó,
+            // thay vì bỏ luôn lệnh này.
+            //
+            // Vì sao cần: KTV bấm "Nhận đơn" → ghi DB → realtime bắn về và kích một
+            // lượt nạp; ngay sau đó handleAcceptOrder gọi forceRefresh(). Lượt của
+            // forceRefresh đâm vào cờ này và bị vứt, trong khi lượt của realtime lại
+            // xuất phát TRƯỚC lúc DB ghi xong nên trả về acceptedAt cũ (rỗng). Kết
+            // quả: màn hình đứng ở thẻ "Nhận đơn" cho tới khi KTV tự F5.
+            if (isFetchingRef.current) {
+                pendingRefetchRef.current = true;
+                return;
+            }
             isFetchingRef.current = true;
             try {
                 if (!ktvId) return;
@@ -1197,6 +1210,11 @@ export function useKTVDashboard(config?: DashboardConfig) {
             } finally {
                 setIsLoading(false);
                 isFetchingRef.current = false;
+                // Có lệnh bị dồn lại lúc nãy → chạy nốt, lần này dữ liệu đã mới.
+                if (pendingRefetchRef.current) {
+                    pendingRefetchRef.current = false;
+                    setTimeout(() => { fetchBooking(); }, 0);
+                }
             }
         };
 
