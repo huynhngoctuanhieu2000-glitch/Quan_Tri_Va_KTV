@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   X, AlertTriangle, Camera, Trash2, Loader2, ShieldAlert, Crown, BookOpen,
-  Clock, CheckCircle2, XCircle, Ban,
+  Clock, CheckCircle2, XCircle, Ban, CalendarDays, ChevronLeft, ChevronRight,
 } from 'lucide-react';
+import { apiClient } from '@/lib/apiClient';
+import { shiftMonth, currentMonthVn } from '@/lib/hours-format';
 import { ROOM_ISSUE_OPTIONS } from '../KTVDashboard.logic';
 import { useToast } from '@/components/ui/Toast';
 import { THEME } from '../_shared/ui';
@@ -340,49 +342,219 @@ export function TurnQueueTypeDModal({ isOpen, onClose, turnData, ktvId }: { isOp
   );
 }
 
+/** Nhãn ngày ngắn gọn: '2026-09-03' → 'Th 5, 03/09'. */
+function dayLabel(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const names = ['CN', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7'];
+  return `${names[wd]}, ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Lịch chọn ngày trong tháng.
+ *
+ * Tuần bắt đầu THỨ 2 cho khớp cách người Việt đọc lịch: `getUTCDay()` trả CN = 0
+ * nên phải dịch đi, nếu không cả lưới lệch một ô.
+ */
+function MonthCalendar({ month, byDate, selected, today, onPick }: {
+  month: string;
+  byDate: Record<string, any>;
+  selected: string;
+  today: string;
+  onPick: (iso: string) => void;
+}) {
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const firstWeekday = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+
+  return (
+    <div>
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
+          <div key={d} className="text-center text-[9px] font-black uppercase text-slate-300 py-1">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: firstWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1;
+          const iso = `${month}-${String(day).padStart(2, '0')}`;
+          const entry = byDate[iso];
+          const isSelected = iso === selected;
+          // Ngày không đi làm vẫn bấm được — bấm vào để thấy rõ "ngày này bạn không
+          // đi làm", đỡ phải hỏi quầy.
+          const tone = isSelected
+            ? 'bg-indigo-600 text-white shadow-md'
+            : !entry
+              ? 'bg-slate-50 text-slate-300'
+              : entry.hits.length > 0
+                ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                : 'bg-emerald-50 text-emerald-600 border border-emerald-100';
+
+          return (
+            <button
+              key={iso}
+              onClick={() => onPick(iso)}
+              className={`aspect-square rounded-xl text-xs font-black flex flex-col items-center justify-center ${tone} ${iso === today && !isSelected ? 'ring-2 ring-indigo-400' : ''}`}
+            >
+              {day}
+              {entry && entry.hits.length > 0 && (
+                <span className={`text-[8px] font-bold leading-none ${isSelected ? 'text-white/80' : ''}`}>
+                  {entry.dayScore}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => void }) {
+  const today = data.today;
+  // Tháng và ngày đang xem tự quản trong modal. Dashboard chỉ đưa dữ liệu tháng
+  // hiện tại làm điểm khởi đầu; tra tháng cũ thì modal tự gọi API.
+  const initialMonth = data.month || today.slice(0, 7);
+  const [month, setMonth] = useState<string>(initialMonth);
+  const [view, setView] = useState<any>(data);
+  const [selected, setSelected] = useState<string>(today);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const thisMonth = currentMonthVn();
+
+  React.useEffect(() => {
+    // Tháng đang xem trùng tháng dashboard đã tải sẵn thì dùng lại, khỏi gọi API.
+    if (month === initialMonth) { setView(data); return; }
+    let alive = true;
+    setLoading(true);
+    apiClient.get<any>(`/api/ktv/office-score?month=${month}`)
+      .then(res => { if (alive && res?.data) setView(res.data); })
+      .catch(() => { if (alive) setView(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [month, initialMonth, data]);
+
+  const byDate: Record<string, any> = {};
+  (view?.days || []).forEach((d: any) => { byDate[d.workDate] = d; });
+
+  const entry = byDate[selected];
+  const isToday = selected === today;
+  // Ngày đi làm mà không có phiếu trừ nào vẫn là 100 — đúng nguyên tắc "bắt đầu
+  // từ 100, trừ dần". Ngày không đi làm thì không có điểm để hiện.
+  const dayScore = entry ? entry.dayScore : (isToday ? (view?.todayScore ?? 100) : null);
+  const hits = entry ? entry.hits : (isToday ? (view?.todayHits || []) : []);
+
+  const changeMonth = (delta: number) => {
+    const next = shiftMonth(month, delta);
+    if (next > thisMonth) return;
+    setMonth(next);
+    // Nhảy tháng thì chọn ngày 1, trừ khi quay về tháng này thì về hôm nay.
+    setSelected(next === thisMonth ? today : `${next}-01`);
+  };
+
   return (
     <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <motion.div
         initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
         className="bg-white w-full sm:max-w-md max-h-[85vh] rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col"
       >
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <h3 className="font-black text-slate-800">Điểm Office</h3>
-            <p className="text-[11px] text-slate-400 font-bold">{data.workDays} ngày đi làm trong tháng</p>
+            <p className="text-[11px] text-slate-400 font-bold">
+              {loading ? 'Đang tải…' : `${view?.workDays ?? 0} ngày đi làm trong tháng ${month}`}
+            </p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">✕</button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowCalendar(v => !v)}
+              title="Chọn ngày"
+              className={`w-9 h-9 rounded-full flex items-center justify-center ${showCalendar ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}
+            >
+              <CalendarDays size={17} />
+            </button>
+            <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
+              <X size={17} />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 overflow-y-auto space-y-4">
+          {showCalendar && (
+            <div className="bg-slate-50 rounded-2xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <button onClick={() => changeMonth(-1)} className="w-8 h-8 rounded-lg bg-white text-slate-500 flex items-center justify-center shadow-sm">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-xs font-black text-slate-600">Tháng {month}</span>
+                <button
+                  onClick={() => changeMonth(1)}
+                  disabled={month >= thisMonth}
+                  className="w-8 h-8 rounded-lg bg-white text-slate-500 flex items-center justify-center shadow-sm disabled:opacity-30"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {loading
+                ? <p className="py-8 text-center text-slate-400 text-xs font-bold">Đang tải…</p>
+                : <MonthCalendar month={month} byDate={byDate} selected={selected} today={today} onPick={iso => { setSelected(iso); setShowCalendar(false); }} />}
+
+              <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center gap-2 text-[9px] font-bold text-slate-400">
+                  <span className="flex items-center gap-1"><i className="w-2 h-2 rounded bg-emerald-200" /> Không lỗi</span>
+                  <span className="flex items-center gap-1"><i className="w-2 h-2 rounded bg-rose-200" /> Có lỗi</span>
+                  <span className="flex items-center gap-1"><i className="w-2 h-2 rounded bg-slate-200" /> Nghỉ</span>
+                </div>
+                <button
+                  onClick={() => { setMonth(thisMonth); setSelected(today); setShowCalendar(false); }}
+                  className="text-[10px] font-black uppercase tracking-widest text-indigo-600 shrink-0"
+                >Hôm nay</button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-2xl p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Hôm nay</p>
-              <p className="text-2xl font-black text-slate-800 mt-1">{data.todayScore}/100</p>
-              {data.todayHits.length === 0 && <p className="text-[11px] text-slate-400 font-bold mt-1">Chưa bị trừ lỗi nào</p>}
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {isToday ? 'Hôm nay' : dayLabel(selected)}
+              </p>
+              <p className="text-2xl font-black text-slate-800 mt-1">
+                {dayScore === null ? '—' : `${dayScore}/100`}
+              </p>
+              <p className="text-[11px] text-slate-400 font-bold mt-1">
+                {dayScore === null
+                  ? 'Ngày này bạn không đi làm'
+                  : hits.length === 0 ? 'Chưa bị trừ lỗi nào' : `${hits.length} lỗi bị trừ`}
+              </p>
             </div>
             <div className="bg-slate-50 rounded-2xl p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Trung bình tháng</p>
-              <p className="text-2xl font-black text-slate-800 mt-1">{data.monthScore}</p>
+              <p className="text-2xl font-black text-slate-800 mt-1">{view?.monthScore ?? '—'}</p>
             </div>
           </div>
 
-          <div className={`rounded-2xl p-4 border ${data.fundDue === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
-            <p className="text-[11px] font-bold text-slate-500">Quỹ nội bộ tháng này bạn phải đóng</p>
-            <p className={`text-xl font-black mt-1 ${data.fundDue === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-              {data.fundDue.toLocaleString('vi-VN')}đ
-            </p>
-            <p className="text-[11px] text-slate-500 font-medium mt-1">
-              {data.exemptPct > 0 ? `Đã được miễn ${data.exemptPct}% trên quỹ gốc 250.000đ` : 'Chưa đạt mức được miễn'}
-            </p>
-          </div>
+          {view && (
+            <div className={`rounded-2xl p-4 border ${view.fundDue === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+              <p className="text-[11px] font-bold text-slate-500">Quỹ nội bộ tháng {month} bạn phải đóng</p>
+              <p className={`text-xl font-black mt-1 ${view.fundDue === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {view.fundDue.toLocaleString('vi-VN')}đ
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium mt-1">
+                {view.exemptPct > 0 ? `Đã được miễn ${view.exemptPct}% trên quỹ gốc 250.000đ` : 'Chưa đạt mức được miễn'}
+              </p>
+            </div>
+          )}
 
-          {data.todayHits.length > 0 && (
+          {hits.length > 0 && (
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Lỗi bị trừ hôm nay</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                Lỗi bị trừ {isToday ? 'hôm nay' : dayLabel(selected)}
+              </p>
               <div className="space-y-2">
-                {data.todayHits.map((h: any, i: number) => (
+                {hits.map((h: any, i: number) => (
                   <div key={i} className="bg-rose-50 border border-rose-100 rounded-2xl p-3">
                     <div className="flex justify-between gap-3">
                       <span className="text-sm font-bold text-rose-800">{h.label}</span>
@@ -396,10 +568,10 @@ export function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => 
             </div>
           )}
 
-          {data.repeats.length > 0 && (
+          {(view?.repeats || []).length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3">
               <p className="text-[11px] font-black text-amber-800 uppercase tracking-widest mb-1">Lỗi lặp lại</p>
-              {data.repeats.map((r: any) => (
+              {view.repeats.map((r: any) => (
                 <p key={r.criteriaId} className="text-[12px] text-amber-800 font-medium">
                   {r.label} — lặp {r.times} lần, bị trừ thêm {r.points}đ vào điểm tháng
                 </p>
