@@ -676,15 +676,28 @@ export function useKTVDashboard(config?: DashboardConfig) {
             }
         }
 
-        // 🚫 CANCELLED: luôn xử lý (booking-level)
+        // 🚫 CANCELLED (booking-level)
+        //
+        // ⚠️ Huỷ đơn KHÔNG đồng nghĩa với "chưa làm gì". Nút Huỷ ở thẻ tạm dừng
+        // dành cho tình huống ĐANG LÀM RỒI mà khách không ưng — phòng vẫn bẩn,
+        // vẫn phải dọn và bàn giao. Đá thẳng KTV về Dashboard là mất luôn hai
+        // bước đó, y hệt lỗi đã gặp với "Kết thúc sớm".
+        //
+        // Chỉ văng ra khi KTV thật sự CHƯA bắt đầu chặng nào.
         if (booking.status === 'CANCELLED') {
             if (['REVIEW', 'HANDOVER', 'REWARD'].includes(currentScreen)) {
                 console.log("🔒 [KTV] Chặn thoát ra Dashboard vì đang trong màn hình Hậu kỳ (ScreenEngine CANCELLED).");
                 return;
             }
-            setBooking(null);
-            setScreen('DASHBOARD');
-            return;
+            const daBatDau = allMySegsForStatus.some((seg: any) => seg.actualStartTime);
+            if (daBatDau) {
+                console.log("🧹 [KTV] Đơn bị huỷ SAU khi đã bắt đầu → vẫn phải đi Đánh giá → Bàn giao.");
+                currentStatus = 'CLEANING';
+            } else {
+                setBooking(null);
+                setScreen('DASHBOARD');
+                return;
+            }
         }
 
         if (currentStatus === 'READY' && currentScreen === 'DASHBOARD') {
@@ -1239,6 +1252,17 @@ export function useKTVDashboard(config?: DashboardConfig) {
                     if (['REVIEW', 'HANDOVER', 'REWARD'].includes(screenRef.current)) {
                         console.log(`🔒 [KTV] Chặn thoát ra Dashboard vì đang trong màn hình Hậu kỳ (Realtime ${payload.new.status}).`);
                         return;
+                    }
+                    // Đơn huỷ mà KTV đã bắt đầu làm thì vẫn còn phòng phải dọn —
+                    // để ScreenEngine đưa họ sang Đánh giá → Bàn giao, đừng đá ra.
+                    if (payload.new.status === 'CANCELLED') {
+                        const items = bookingRef.current?.BookingItems || [];
+                        const daBatDau = items.some((i: any) => {
+                            let segs: any[] = [];
+                            try { segs = typeof i.segments === 'string' ? JSON.parse(i.segments) : (Array.isArray(i.segments) ? i.segments : []); } catch {}
+                            return segs.some((s: any) => ktvMatchesSeg(s.ktvId, ktvId) && s.actualStartTime);
+                        });
+                        if (daBatDau) { scheduleRealtimeFetch(); return; }
                     }
                     setBooking(null);
                     setScreen('DASHBOARD');

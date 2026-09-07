@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { workedMsOf } from '@/lib/segment-time';
 import { punishTurnIfIdle } from '@/lib/turn-punish';
+import { logCounterAction, currentCounterActor } from '@/lib/counter-action-log';
 
 export class BookingItemPauseService {
     /**
@@ -71,6 +72,11 @@ export class BookingItemPauseService {
         // resumeItem sẽ đóng lại bằng `to`. Nhờ vậy giờ làm thực trừ được đúng
         // phần ngồi chờ mà KHÔNG phải dời `actualStartTime` (xem lib/segment-time.ts).
         await BookingItemPauseService.openPauseWindows(supabase, itemIdsToPause, now);
+
+        const actorPause = await currentCounterActor();
+        await logCounterAction(supabase, itemIdsToPause, {
+            action: 'PAUSE', by: actorPause.id, byName: actorPause.name, at: now,
+        });
 
         return { success: true, pauseStart: now, pausedItemIds: itemIdsToPause };
     }
@@ -226,6 +232,11 @@ export class BookingItemPauseService {
         // ⚠️ KHÔNG dời `Bookings.timeStart` nữa — cùng lý do với `actualStartTime`:
         // đó là mốc đơn bắt đầu thật, dời đi là mất. Phần bù thời gian tạm dừng
         // nay nằm ở `seg.pauses[]` và được trừ lúc tính (lib/segment-time.ts).
+
+        const actorResume = await currentCounterActor();
+        await logCounterAction(supabase, itemsToUpdate.map(i => i.id), {
+            action: 'RESUME', by: actorResume.id, byName: actorResume.name, at: resumeAt,
+        });
 
         return { success: true, resumedAt: resumeAt, resumedItemIds: itemsToUpdate.map(i => i.id) };
     }
@@ -401,6 +412,12 @@ export class BookingItemPauseService {
             .eq('id', bookingItemId);
             
         if (errUpdate) throw new Error('Lỗi khi cập nhật BookingItem.');
+
+        const actorSwap = await currentCounterActor();
+        await logCounterAction(supabase, [bookingItemId], {
+            action: 'SWAP_KTV', by: actorSwap.id, byName: actorSwap.name,
+            note: `${oldKtvId} → ${newKtvId || '(rút, chưa có người thay)'}`,
+        });
 
         return { success: true };
     }

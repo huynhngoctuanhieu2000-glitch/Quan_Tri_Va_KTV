@@ -18,6 +18,15 @@ const STATUS_CONFIG = [
     { id: 'CANCELLED' as RawStatus, dispatchModeId: ['CANCELLED'], label: 'Đã Huỷ', shortLabel: 'Đã huỷ', color: 'text-rose-600', bg: 'bg-rose-50', activeBg: 'bg-rose-600', border: 'border-rose-200', dot: 'bg-rose-500', next: null, nextLabel: null },
 ];
 
+/** Nhãn tiếng Việt cho nhật ký thao tác quầy (lib/counter-action-log.ts). */
+const ACTION_LABEL: Record<string, string> = {
+    PAUSE: 'Tạm dừng',
+    RESUME: 'Tiếp tục',
+    FINISH_EARLY: 'Kết thúc sớm',
+    CANCEL: 'Huỷ',
+    SWAP_KTV: 'Đổi KTV',
+};
+
 const formatVND = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 
 /**
@@ -519,6 +528,10 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                     const cancelReason = services.map((s: any) => s.options?.cancelReason).find(Boolean);
                                     // 'WORKED' = quầy đã bật công tắc cộng giờ đã làm cho KTV.
                                     const cancelCredited = services.some((s: any) => s.options?.cancelCredit === 'WORKED');
+                                    // Nhật ký thao tác tại quầy — ai bấm gì, lúc nào.
+                                    const counterLog = services
+                                        .flatMap((s: any) => Array.isArray(s.options?.counterLog) ? s.options.counterLog : [])
+                                        .sort((a: any, b: any) => String(a.at).localeCompare(String(b.at)));
                                     // Gộp lỗi khách tích của mọi dịch vụ trong thẻ, khử trùng theo id.
                                     const subOrderViolations = Array.from(
                                         new Map(
@@ -1194,6 +1207,23 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                             </div>
                                                         ) : null
                                                     )
+                                                )}
+
+                                                {counterLog.length > 0 && (
+                                                    <details className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5">
+                                                        <summary className="cursor-pointer text-[10px] font-black text-gray-500 uppercase tracking-wider select-none">
+                                                            Quầy đã thao tác ({counterLog.length})
+                                                        </summary>
+                                                        <div className="mt-1 flex flex-col gap-0.5">
+                                                            {counterLog.map((c: any, k: number) => (
+                                                                <span key={k} className="text-[10px] font-medium text-gray-600 leading-snug">
+                                                                    {formatToHourMinute(c.at)} · {ACTION_LABEL[c.action] || c.action}
+                                                                    {c.byName || c.by ? ` · ${c.byName || c.by}` : ' · (không rõ người bấm)'}
+                                                                    {c.note ? ` — ${c.note}` : ''}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </details>
                                                 )}
 
                                                 {/* Đặt NGOÀI nhánh Dọn phòng/Đánh giá — thẻ đã huỷ và thẻ hoàn tất

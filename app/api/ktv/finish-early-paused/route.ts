@@ -5,6 +5,7 @@ import { syncTurnsForDate } from '@/lib/turn-sync';
 import { recomputeBookingStatus } from '@/lib/dispatch-status';
 import { getBusinessDate } from '../booking/_shared/utils';
 import { workedMsOf } from '@/lib/segment-time';
+import { logCounterAction, currentCounterActor } from '@/lib/counter-action-log';
 
 /**
  * ============================================================
@@ -128,6 +129,14 @@ export async function POST(req: Request) {
             if (updErr) throw updErr;
             finishedItemIds.push(it.id);
         }
+
+        const actor = await currentCounterActor();
+        await logCounterAction(supabase, finishedItemIds, {
+            action: 'FINISH_EARLY',
+            by: actor.id,
+            byName: actor.name,
+            note: 'chốt tại mốc tạm dừng',
+        });
 
         // ─── Tính lại trạng thái Booking (cả đơn cha lẫn đơn con) ───
         const { data: booking, error: bookingErr } = await supabase
