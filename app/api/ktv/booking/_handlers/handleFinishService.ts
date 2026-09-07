@@ -248,6 +248,7 @@ export async function handleFinishService(ctx: HandlerContext): Promise<HandlerR
             // update văng lỗi chứ không phải hỏng lặng lẽ như trước.
             if (updatePayload.handover_status === 'PENDING') {
                 updatePayload.handover_skipped = false;
+                updatePayload.handover_submitted_at = new Date().toISOString();
             }
         }
         

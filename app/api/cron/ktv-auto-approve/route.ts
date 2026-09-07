@@ -20,11 +20,17 @@ export async function GET(request: Request) {
 
         // 1. Auto Approve Handover (Reception timeout 15 mins)
         // Tìm những item có handover_status = PENDING và cập nhật đã quá 15 phút
-        const { data: pendingItems } = await supabase
+        // Đếm hạn từ MỐC NỘP. `updated_at` không tồn tại trên bảng này nên truy
+        // vấn cũ lỗi âm thầm; và lọc theo `handover_status` không thôi là sai vì
+        // cột đó mặc định 'PENDING' cho cả item chưa từng bàn giao.
+        const { data: pendingItems, error: pendingErr } = await supabase
             .from('BookingItems')
-            .select('id, updated_at')
+            .select('id')
             .eq('handover_status', 'PENDING')
-            .lte('updated_at', mins15Ago);
+            .not('handover_submitted_at', 'is', null)
+            .lte('handover_submitted_at', mins15Ago);
+
+        if (pendingErr) console.error('[Cron] Loi tim don cho duyet:', pendingErr);
 
         if (pendingItems && pendingItems.length > 0) {
             const itemIds = pendingItems.map(i => i.id);

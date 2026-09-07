@@ -176,6 +176,7 @@ export class HandoverService {
                 handover_images: images,
                 handover_status: 'PENDING',
                 handover_skipped: false,
+                handover_submitted_at: new Date().toISOString(),
             })
             .eq('id', itemId);
 
@@ -468,19 +469,24 @@ export class HandoverService {
 
         // Find items that are PENDING and were submitted before cutoff
         // We use updated_at as the submission time proxy
+        // Đếm hạn từ MỐC NỘP, không từ `updated_at` — bảng này không có cột đó,
+        // truy vấn cũ lỗi âm thầm nên auto-duyệt chưa bao giờ chạy được.
+        // `handover_submitted_at IS NOT NULL` cũng là bộ lọc quan trọng: nó loại
+        // hết item chỉ mang 'PENDING' do giá trị mặc định mà chưa ai nộp gì.
         const { data: expired, error } = await supabase
             .from('BookingItems')
             .select('id')
             .eq('handover_status', 'PENDING')
             .eq('handover_skipped', false)
-            .lt('updated_at', cutoff);
+            .not('handover_submitted_at', 'is', null)
+            .lt('handover_submitted_at', cutoff);
 
         if (error || !expired?.length) return { approved: 0 };
 
         const ids = expired.map(e => e.id);
         const { error: updateErr } = await supabase
             .from('BookingItems')
-            .update({ handover_status: 'APPROVED' })
+            .update({ handover_status: 'APPROVED', handover_skipped: false })
             .in('id', ids);
 
         if (updateErr) return { approved: 0 };
