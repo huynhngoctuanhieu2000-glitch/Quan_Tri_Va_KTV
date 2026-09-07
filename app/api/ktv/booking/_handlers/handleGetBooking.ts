@@ -112,9 +112,28 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
             }
         }
 
+        // Hai truy vấn mở đầu KHÔNG phụ thuộc nhau — bắn cùng lúc thay vì nối đuôi.
+        // Mỗi vòng tới Supabase tốn ~90ms, xếp hàng hai vòng là mất gần 200ms trước
+        // khi chạm được dữ liệu thật.
+        const bookingIdAtStart = bookingId;
+        const [rawBookingRes, preAssignRes] = await Promise.all([
+            (bookingId && technicianCode)
+                ? supabase.from('Bookings').select('id, status').eq('id', bookingId).maybeSingle()
+                : Promise.resolve({ data: null }),
+            (bookingId && technicianCode)
+                ? supabase
+                    .from('KtvAssignments')
+                    .select('id, status, booking_item_id, room_id, bed_id')
+                    .eq('employee_id', technicianCode)
+                    .eq('booking_id', bookingId)
+                    .eq('business_date', getBusinessDate())
+                    .maybeSingle()
+                : Promise.resolve({ data: null }),
+        ]);
+
         // 🔥 LỚP 2: SPLIT GUARD - Tự động đá văng hoặc chuyển hướng đơn cha bị tách
         if (bookingId && technicianCode) {
-            const { data: rawBooking } = await supabase.from('Bookings').select('id, status').eq('id', bookingId).maybeSingle();
+            const rawBooking = rawBookingRes.data as any;
             if (rawBooking && rawBooking.status === 'SPLIT') {
                 console.warn(`🚫 [KTV] Đơn cha SPLIT bị đá văng: KTV ${technicianCode} đang giữ mã ${bookingId}`);
                 
@@ -172,13 +191,19 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
         // (PHẢI tuần tự - có write operations / side effects)
         if (bookingId && technicianCode) {
             const today = getBusinessDate();
-            const { data: assign } = await supabase
-                .from('KtvAssignments')
-                .select('id, status, booking_item_id, room_id, bed_id')
-                .eq('employee_id', technicianCode)
-                .eq('booking_id', bookingId)
-                .eq('business_date', today)
-                .maybeSingle();
+            // Dùng lại kết quả đã bắn song song ở trên. Chỉ hỏi lại khi SPLIT GUARD
+            // vừa chuyển hướng sang đơn con — lúc đó bản đã lấy thuộc về đơn cha.
+            let assign = preAssignRes.data as any;
+            if (bookingId !== bookingIdAtStart) {
+                const { data: reAssign } = await supabase
+                    .from('KtvAssignments')
+                    .select('id, status, booking_item_id, room_id, bed_id')
+                    .eq('employee_id', technicianCode)
+                    .eq('booking_id', bookingId)
+                    .eq('business_date', today)
+                    .maybeSingle();
+                assign = reAssign;
+            }
             
             if (assign && (assign.status === 'QUEUED' || assign.status === 'READY')) {
                 // 2a. Tự động giải phóng các active assignment khác bị kẹt của KTV này trong ngày
@@ -340,12 +365,21 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
 
         const [svcsRes, roomDataRes] = await Promise.all([
             // Q6: Fetch all services (for enrichment)
-            (items && items.length > 0)
-                ? supabase
+            // Chỉ lấy đúng những dịch vụ đơn này dùng. Trước đây kéo cả danh mục
+            // (149 dòng, kèm procedure/description dài) chỉ để tra 1-2 dòng.
+            // Tra theo cả id lẫn code vì BookingItems.serviceId đang mang giá trị
+            // kiểu 'NHS1014' — trùng cả hai cột, nhưng đừng phụ thuộc vào đó.
+            (() => {
+                const ids = Array.from(new Set(
+                    (items || []).map((i: any) => String(i.serviceId || '').trim()).filter(Boolean)
+                ));
+                if (ids.length === 0) return Promise.resolve({ data: null, error: null });
+                const list = `(${ids.map(v => `"${v}"`).join(',')})`;
+                return supabase
                     .from('Services')
                     .select('id, code, nameVN, nameEN, duration, focusConfig, description, procedure, service_description, is_utility')
-                    .limit(1000)
-                : Promise.resolve({ data: null, error: null }),
+                    .or(`id.in.${list},code.in.${list}`);
+            })(),
 
             // Q7: Fetch room procedures
             roomId
@@ -675,10 +709,15 @@ export async function handleGetBooking(request: Request): Promise<NextResponse> 
                         if (nextItems && nextItems.length > 0) {
                             const svcIds = nextItems.map((ni: any) => String(ni.serviceId || '').trim().toLowerCase()).filter(Boolean);
                             if (svcIds.length > 0) {
+                                // Lấy đúng vài dịch vụ cần tên, không kéo cả danh mục.
+                                const rawIds = Array.from(new Set(
+                                    nextItems.map((ni: any) => String(ni.serviceId || '').trim()).filter(Boolean)
+                                ));
+                                const nextList = `(${rawIds.map((v: string) => `"${v}"`).join(',')})`;
                                 const { data: svcs } = await supabase
                                     .from('Services')
                                     .select('id, code, nameVN')
-                                    .limit(500);
+                                    .or(`id.in.${nextList},code.in.${nextList}`);
                                 const svcMap = new Map();
                                 if (svcs) svcs.forEach((s: any) => {
                                     if (s.id) svcMap.set(String(s.id).trim().toLowerCase(), s);
