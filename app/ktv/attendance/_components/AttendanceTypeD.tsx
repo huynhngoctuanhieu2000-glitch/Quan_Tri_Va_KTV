@@ -20,10 +20,12 @@ interface Props {
   onCheckOut: () => void;
   onRefreshStatus?: () => void;
   incompleteTasksCount?: number;
+  /** Nợ phòng: bàn giao chưa nộp / phòng đang dọn dở. Còn nợ là chưa cho tan ca. */
+  roomDebt?: { handover: number; cleaning: number; total: number; items: any[] };
   guestArrivalLock?: { active: boolean; message: string };
 }
 
-export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, guestArrivalLock }: Props) {
+export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, roomDebt, guestArrivalLock }: Props) {
   const { addToast } = useToast();
   const [state, setState] = useState<OnCallState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -257,10 +259,10 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
                 <div className="w-full">
                   <button
                       onClick={() => {
-                        if (incompleteTasksCount > 0 || guestArrivalLock?.active) return;
+                        if (incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0 || guestArrivalLock?.active) return;
                         handleToggleOnCall(false, state.travel_time_mins);
                       }}
-                      disabled={actionLoading || incompleteTasksCount > 0 || guestArrivalLock?.active}
+                      disabled={actionLoading || incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0 || guestArrivalLock?.active}
                       className={`w-full py-4 font-bold text-lg rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all
                         ${guestArrivalLock?.active 
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
@@ -281,10 +283,10 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
              <div className="w-full">
                <button
                   onClick={() => {
-                    if (incompleteTasksCount > 0 || guestArrivalLock?.active) return;
+                    if (incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0 || guestArrivalLock?.active) return;
                     onCheckOut();
                   }}
-                  disabled={actionLoading || incompleteTasksCount > 0 || guestArrivalLock?.active}
+                  disabled={actionLoading || incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0 || guestArrivalLock?.active}
                   className={`w-full py-4 font-bold text-lg rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50
                     ${guestArrivalLock?.active 
                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
@@ -293,7 +295,15 @@ export default function AttendanceTypeD({ ktvId, checkStatus, onCheckIn, onCheck
               >
                   <LogOut size={22} /> {actionLoading ? 'Đang xử lý...' : 'Oria Xin cảm ơn'}
               </button>
-              {incompleteTasksCount > 0 && !guestArrivalLock?.active && (
+              {(roomDebt?.total ?? 0) > 0 && !guestArrivalLock?.active && (
+                  <p className="text-red-500 text-xs text-center mt-2 font-medium">
+                    Bạn còn nợ {roomDebt!.total} phòng
+                    {roomDebt!.handover > 0 ? ` · ${roomDebt!.handover} chưa nộp ảnh bàn giao` : ''}
+                    {roomDebt!.cleaning > 0 ? ` · ${roomDebt!.cleaning} đang dọn dở` : ''}.
+                    Trả hết nợ mới tan ca được.
+                  </p>
+              )}
+              {incompleteTasksCount > 0 && (roomDebt?.total ?? 0) === 0 && !guestArrivalLock?.active && (
                   <p className="text-red-500 text-xs text-center mt-2 font-medium">Bạn còn {incompleteTasksCount} công việc chưa hoàn thành. Không thể tan ca.</p>
               )}
              </div>

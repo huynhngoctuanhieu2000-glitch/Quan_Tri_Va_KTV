@@ -167,6 +167,49 @@ export async function GET(request: Request) {
              }
         }
 
+        // ─── Nợ phòng: chưa trả xong thì không cho tan ca ───
+        //
+        // Trong ca thì cứ nợ thoải mái — chỉ chặn ở bước TAN CA.
+        //
+        //  · Nợ bàn giao : item KTV đã bấm "Bỏ qua" hoặc bị quầy trả lại. Không
+        //                  giới hạn ngày — nợ là nợ, còn thì phải trả.
+        //  · Nợ dọn phòng: item còn ở CLEANING của CHÍNH NGÀY LÀM VIỆC này. Giới
+        //                  hạn theo ngày vì trong DB còn nhiều dòng CLEANING cũ
+        //                  hàng tháng trời, chặn theo chúng là khoá người ta vĩnh
+        //                  viễn vì rác dữ liệu chứ không phải vì lỗi hôm nay.
+        let roomDebt = { handover: 0, cleaning: 0, total: 0, items: [] as any[] };
+        if (userRow?.code) {
+            const { getBusinessDate } = await import('@/app/api/ktv/booking/_shared/utils');
+            const bizDate = getBusinessDate();
+
+            const { data: debtRows, error: debtErr } = await supabase
+                .from('BookingItems')
+                .select('id, roomName, status, handover_status, timeStart')
+                .contains('technicianCodes', [userRow.code])
+                .or(`handover_status.in.(SKIPPED,REJECTED),status.eq.CLEANING`);
+
+            if (debtErr) {
+                console.error('[Attendance] Không đọc được nợ phòng:', debtErr);
+            } else {
+                for (const it of (debtRows || [])) {
+                    const owesHandover = ['SKIPPED', 'REJECTED'].includes(String(it.handover_status || '').toUpperCase());
+                    const owesCleaning = it.status === 'CLEANING'
+                        && String(it.timeStart || '').slice(0, 10) === bizDate;
+                    if (!owesHandover && !owesCleaning) continue;
+
+                    if (owesHandover) roomDebt.handover++;
+                    else roomDebt.cleaning++;
+
+                    roomDebt.items.push({
+                        id: it.id,
+                        roomName: it.roomName,
+                        kind: owesHandover ? 'HANDOVER' : 'CLEANING',
+                    });
+                }
+                roomDebt.total = roomDebt.handover + roomDebt.cleaning;
+            }
+        }
+
         // ─── Fetch Guest Arrival Lock (Only for TYPE_D) ───
         let guestArrivalLock = { active: false, lockedBy: '', lockedAt: '', message: '' };
         if (workType === 'TYPE_D') {
@@ -201,11 +244,11 @@ export async function GET(request: Request) {
                     await KtvOnlineService.goOffline(supabase, userRow.code);
                 }
             }
-            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration, canRequestWithdraw: !daDiemDanhHomNay });
+            return NextResponse.json({ success: true, checkStatus: 'IDLE', record: null, workType, availableUntil, incompleteTasksCount, roomDebt, guestArrivalLock, lockInfo, todayRegistration, canRequestWithdraw: !daDiemDanhHomNay });
         }
 
         const { checkStatus, record } = resolveAttendanceStatus(records, workType);
-        return NextResponse.json({ success: true, checkStatus, record, workType, availableUntil, incompleteTasksCount, guestArrivalLock, lockInfo, todayRegistration, canRequestWithdraw: !daDiemDanhHomNay });
+        return NextResponse.json({ success: true, checkStatus, record, workType, availableUntil, incompleteTasksCount, roomDebt, guestArrivalLock, lockInfo, todayRegistration, canRequestWithdraw: !daDiemDanhHomNay });
 
     } catch (error: any) {
         console.error('❌ [Attendance Status] Unhandled error:', error);

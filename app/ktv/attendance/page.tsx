@@ -26,6 +26,7 @@ const KTVAttendancePage = () => {
         initialLoading,
         canAccessPage,
         canCheckOut,
+        roomDebt,
         checkoutBlockedUntil,
         isLoadingShift,
         isLate,
@@ -470,11 +471,11 @@ const KTVAttendancePage = () => {
                     {/* Nếu là KTV Loại B thì hiển thị component riêng của Loại B, nếu không thì hiển thị luồng mặc định (IDLE/PENDING/CONFIRMED...) */}
                     {workType === 'TYPE_B' && user?.code ? (
                         <div className="w-full">
-                            <AttendanceTypeB ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} />
+                            <AttendanceTypeB ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} roomDebt={roomDebt} />
                         </div>
                     ) : workType === 'TYPE_D' && user?.code ? (
                         <div className="w-full">
-                            <AttendanceTypeD ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} guestArrivalLock={guestArrivalLock} />
+                            <AttendanceTypeD ktvId={user.code} checkStatus={checkStatus} onCheckIn={() => openForm('CHECK_IN')} onCheckOut={() => openForm('CHECK_OUT')} onRefreshStatus={refreshAttendanceStatus} incompleteTasksCount={incompleteTasksCount} roomDebt={roomDebt} guestArrivalLock={guestArrivalLock} />
                         </div>
                     ) : (
                         <>
@@ -609,7 +610,22 @@ const KTVAttendancePage = () => {
                                             ) : (
                                                 <>
 
-                                                    {incompleteTasksCount > 0 ? (
+                                                    {roomDebt?.total > 0 ? (
+                                                        <div className="w-full bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center space-y-2 mb-3">
+                                                            <p className="text-red-700 text-sm font-semibold">
+                                                                ⚠️ Bạn còn nợ {roomDebt.total} phòng chưa trả xong.
+                                                            </p>
+                                                            <p className="text-red-600 text-xs">
+                                                                {[
+                                                                    roomDebt.handover > 0 ? `${roomDebt.handover} phòng chưa nộp ảnh bàn giao` : '',
+                                                                    roomDebt.cleaning > 0 ? `${roomDebt.cleaning} phòng đang dọn dở` : '',
+                                                                ].filter(Boolean).join(' · ')}
+                                                            </p>
+                                                            <p className="text-red-600 text-xs">
+                                                                Vào Dashboard trả hết nợ rồi mới tan ca được.
+                                                            </p>
+                                                        </div>
+                                                    ) : incompleteTasksCount > 0 ? (
                                                         <div className="w-full bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center space-y-2 mb-3">
                                                             <p className="text-red-700 text-sm font-semibold">
                                                                 ⚠️ Bạn còn {incompleteTasksCount} công việc chưa được Admin nghiệm thu (Passed).
@@ -629,6 +645,7 @@ const KTVAttendancePage = () => {
                                                     <button
                                                         onClick={() => {
                                                             if (incompleteTasksCount > 0) return;
+                                                            if (roomDebt?.total > 0) return;
                                                             if (guestArrivalLock?.active) return;
                                                             
                                                             const isEarly = activeShiftType !== 'FREE' && !canCheckOut && allowEarlyCheckout;
@@ -657,17 +674,17 @@ const KTVAttendancePage = () => {
 
                                                             openForm('CHECK_OUT', isEarly);
                                                         }}
-                                                        disabled={guestArrivalLock?.active || incompleteTasksCount > 0 || isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
+                                                        disabled={guestArrivalLock?.active || incompleteTasksCount > 0 || roomDebt?.total > 0 || isLoadingShift || (!allowEarlyCheckout && !canCheckOut)}
                                                         title={guestArrivalLock?.active ? (guestArrivalLock.message || 'Quầy đang báo có khách, chưa thể tan ca.') : undefined}
                                                         className={`w-full py-4 font-bold text-lg rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all ${
                                                             guestArrivalLock?.active
                                                                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                                                                : incompleteTasksCount > 0
+                                                                : (incompleteTasksCount > 0 || roomDebt?.total > 0)
                                                                 ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
                                                                 : 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white shadow-md shadow-rose-200'
                                                         }`}
                                                     >
-                                                        <LogOut size={22} /> {incompleteTasksCount > 0 ? 'CHƯA THỂ TAN CA' : 'Oria Xin Cảm ơn'}
+                                                        <LogOut size={22} /> {(incompleteTasksCount > 0 || roomDebt?.total > 0) ? 'CHƯA THỂ TAN CA' : 'Oria Xin Cảm ơn'}
                                                     </button>
                                                 </>
                                             )}

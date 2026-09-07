@@ -85,6 +85,9 @@ export const useKTVAttendance = () => {
     const [availableUntil, setAvailableUntil] = useState<string | null>(null);
     const [showOvertimeFeature, setShowOvertimeFeature] = useState(false);
     const [incompleteTasksCount, setIncompleteTasksCount] = useState(0);
+    // Nợ phòng (bàn giao chưa nộp / phòng đang dọn dở) — chặn ở bước tan ca.
+    const [roomDebt, setRoomDebt] = useState<{ handover: number; cleaning: number; total: number; items: any[] }>(
+        { handover: 0, cleaning: 0, total: 0, items: [] });
     const [guestArrivalLock, setGuestArrivalLock] = useState<{ active: boolean; lockedBy: string; lockedAt: string; message: string }>({
         active: false,
         lockedBy: '',
@@ -111,6 +114,7 @@ export const useKTVAttendance = () => {
                     if (statusRes.workType) setWorkType(statusRes.workType);
                     if (statusRes.availableUntil) setAvailableUntil(statusRes.availableUntil);
                     if (statusRes.incompleteTasksCount !== undefined) setIncompleteTasksCount(statusRes.incompleteTasksCount);
+                    if (statusRes.roomDebt) setRoomDebt(statusRes.roomDebt);
                     if (statusRes.guestArrivalLock) setGuestArrivalLock(statusRes.guestArrivalLock);
                     if (statusRes.todayRegistration) setTodayRegistration(statusRes.todayRegistration);
                     setCanRequestWithdraw(statusRes.canRequestWithdraw !== false);
@@ -468,6 +472,7 @@ export const useKTVAttendance = () => {
         availableUntil,
         refreshAttendanceStatus,
         incompleteTasksCount,
+        roomDebt,
         guestArrivalLock,
     };
 };

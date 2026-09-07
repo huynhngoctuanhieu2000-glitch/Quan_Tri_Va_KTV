@@ -19,10 +19,12 @@ interface Props {
   onCheckOut: () => void;
   onRefreshStatus?: () => void;
   incompleteTasksCount?: number;
+  /** Nợ phòng: bàn giao chưa nộp / phòng đang dọn dở. Còn nợ là chưa cho tan ca. */
+  roomDebt?: { handover: number; cleaning: number; total: number; items: any[] };
   guestArrivalLock?: { active: boolean; message: string };
 }
 
-export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, guestArrivalLock }: Props) {
+export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheckOut, onRefreshStatus, incompleteTasksCount = 0, roomDebt, guestArrivalLock }: Props) {
   const { addToast } = useToast();
   const [state, setState] = useState<OnCallState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,10 +170,10 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
                 <div className="w-full">
                   <button
                       onClick={() => {
-                        if (incompleteTasksCount > 0) return;
+                        if (incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0) return;
                         handleToggleOnCall(false, state.travel_time_mins);
                       }}
-                      disabled={actionLoading || incompleteTasksCount > 0}
+                      disabled={actionLoading || incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0}
                       className="w-full py-4 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                       <LogOut size={22} className="rotate-180" /> {actionLoading ? 'Đang xử lý...' : 'Tắt Nhận Đơn'}
@@ -188,10 +190,10 @@ export default function AttendanceTypeB({ ktvId, checkStatus, onCheckIn, onCheck
              <div className="w-full">
                    <button
                       onClick={() => {
-                        if (incompleteTasksCount > 0 || guestArrivalLock?.active) return;
+                        if (incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0 || guestArrivalLock?.active) return;
                         onCheckOut();
                       }}
-                      disabled={actionLoading || incompleteTasksCount > 0 || guestArrivalLock?.active}
+                      disabled={actionLoading || incompleteTasksCount > 0 || (roomDebt?.total ?? 0) > 0 || guestArrivalLock?.active}
                       className={`w-full py-4 font-bold text-lg rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50
                         ${guestArrivalLock?.active
                             ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
