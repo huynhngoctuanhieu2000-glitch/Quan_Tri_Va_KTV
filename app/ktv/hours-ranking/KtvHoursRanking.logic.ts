@@ -20,6 +20,19 @@ export interface RankRow {
   lastDate: string | null;
 }
 
+/** Một dòng trong sổ giờ của chính mình. */
+export interface LedgerRow {
+  id: string;
+  date: string;
+  earned: number;
+  penalty: number;
+  balance: number;
+  note: string | null;
+  /** Có giá trị nghĩa là dòng PHẠT, không phải tua làm. */
+  penaltyLabel: string | null;
+  orderCode: string | null;
+}
+
 export const useKtvHoursRankingLogic = () => {
   const [month, setMonth] = useState<string>(currentMonthVn());
   const [rows, setRows] = useState<RankRow[]>([]);
@@ -27,6 +40,8 @@ export const useKtvHoursRankingLogic = () => {
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [showDetail, setShowDetail] = useState(false);
 
   const thisMonth = currentMonthVn();
 
@@ -41,9 +56,11 @@ export const useKtvHoursRankingLogic = () => {
       setApplicable(res?.applicable !== false);
       setEnabled(res?.enabled !== false);
       setRows(res?.data || []);
+      setLedger(res?.myLedger || []);
     } catch (error: any) {
       setLoadError(error?.message || 'Không tải được bảng xếp hạng giờ.');
       setRows([]);
+      setLedger([]);
     } finally {
       setLoading(false);
     }
@@ -55,6 +72,7 @@ export const useKtvHoursRankingLogic = () => {
     // Không cho nhảy sang tháng chưa tới — sổ giờ chưa có gì, chỉ gây hiểu nhầm.
     const next = shiftMonth(month, delta);
     if (next > thisMonth) return;
+    setShowDetail(false);   // đổi tháng thì đóng bảng chi tiết của tháng cũ
     setMonth(next);
   };
 
@@ -72,6 +90,7 @@ export const useKtvHoursRankingLogic = () => {
     month, changeMonth, canGoNext,
     rows, me, maxNet,
     applicable, enabled,
+    ledger, showDetail, setShowDetail,
     loading, loadError,
     refresh: fetchRanking,
   };

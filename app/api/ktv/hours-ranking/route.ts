@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireBusinessUser } from '@/lib/auth-server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { KtvOfficeScoreService, monthRange, currentMonthVn } from '@/lib/services/KtvOfficeScoreService';
+import { KtvOfficeScoreService, HOURS_PENALTY_VI, monthRange, currentMonthVn } from '@/lib/services/KtvOfficeScoreService';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +115,26 @@ export async function GET(request: Request) {
             (b.net - a.net) || a.name.localeCompare(b.name, 'vi'));
         rows.forEach((r: any, i) => { r.rank = i + 1; });
 
+        // Sổ giờ TỪNG DÒNG — chỉ của chính người đang xem. Dùng đúng hàm mà màn
+        // Office của quầy đang dùng, để hai bên không bao giờ ra số khác nhau.
+        //
+        // orderCode: booking_id đôi khi là UUID nội bộ (đơn cũ), đôi khi là mã đơn
+        // đọc được. UUID thì rút gọn cho đỡ chiếm chỗ trên màn điện thoại.
+        const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        const ledger = await KtvOfficeScoreService.hoursLedger(supabase, meId, month);
+        const myLedger = ledger.rows.map(r => ({
+            id: r.id,
+            date: r.date,
+            earned: r.earned,
+            penalty: r.penalty,
+            balance: r.balance,
+            note: r.note,
+            penaltyLabel: r.penaltyType ? (HOURS_PENALTY_VI[r.penaltyType] || r.penaltyType) : null,
+            orderCode: r.bookingId
+                ? (isUuid(r.bookingId) ? `#${r.bookingId.slice(0, 8)}` : r.bookingId)
+                : null,
+        }));
+
         return NextResponse.json({
             success: true,
             applicable: true,
@@ -123,6 +143,7 @@ export async function GET(request: Request) {
             workType: me.work_type,
             meId,
             data: rows,
+            myLedger,
         });
     } catch (error: any) {
         const msg = error?.message || 'Lỗi không xác định';
