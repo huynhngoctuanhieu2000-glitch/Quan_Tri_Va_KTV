@@ -35,6 +35,15 @@ const DEFAULT_CONFIGS = {
     ktv_discipline_demotion_threshold: 80,
     ktv_continuous_work_gap_mins: 30,
     ktv_continuous_work_exempt_hours: 4,
+
+    // Bàn giao phòng (áp cho mọi loại KTV)
+    // Số đơn được NỢ bàn giao — tính chung mọi lúc, không reset theo ngày:
+    // nợ đủ số này là chặn bấm "Bỏ qua" cho tới khi trả bớt.
+    max_handover_skip: 2,
+    // Quầy có ngần này phút để duyệt ảnh bàn giao, quá hạn thì cron tự duyệt.
+    reception_auto_approve_minutes: 15,
+    // Số lần quầy được trả lại (bắt dọn lại) trên cùng một đơn.
+    max_handover_reject: 2,
     ktv_discipline_rules: [
         { code: 'ORDER_REJECT', name: 'Từ chối đơn', points: 10 },
         { code: 'LATE', name: 'Đi làm trễ', points: 5 },

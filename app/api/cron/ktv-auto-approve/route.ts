@@ -15,7 +15,15 @@ export async function GET(request: Request) {
         }
 
         const now = new Date();
-        const mins15Ago = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+
+        // Hạn duyệt lấy từ cài đặt (Cài đặt > Tính năng > Bàn giao phòng), không
+        // để số cứng ở đây — HandoverService.autoApproveExpired đã đọc khoá này,
+        // hai nơi cùng một luật thì phải cùng một nguồn.
+        const { data: apCfg } = await supabase
+            .from('SystemConfigs').select('value').eq('key', 'reception_auto_approve_minutes').maybeSingle();
+        const approveMins = Number.parseInt(String((apCfg as any)?.value ?? '15'), 10) || 15;
+
+        const mins15Ago = new Date(now.getTime() - approveMins * 60 * 1000).toISOString();
         const mins10Ago = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
 
         // 1. Auto Approve Handover (Reception timeout 15 mins)
