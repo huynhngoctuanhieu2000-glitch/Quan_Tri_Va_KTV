@@ -11,7 +11,7 @@ export function ScreenHandover({ logic }: { logic: any }) {
   const { addToast } = useToast();
   const [confirmDialog, setConfirmDialog] = useState<any>(null);
   const { handoverPhotosBase64, setHandoverPhotosBase64, isHandoverComplete, handleFinishHandover, booking, minBrightness = 40 } = logic;
-  const { dynamicChecklist = [], isFetchingChecklist, handleSkipHandover, isSkippingHandover } = logic;
+  const { dynamicChecklist = [], isFetchingChecklist, handleSkipHandover, isSkippingHandover, isRepayingDebt } = logic;
   
   // V5: Use dynamic checklist from API, fallback to old checklist from booking
   let checklist: string[] = dynamicChecklist.length > 0
@@ -156,9 +156,18 @@ export function ScreenHandover({ logic }: { logic: any }) {
       </button>
 
       {/* Nút tích hợp V5: Xử lý dựa trên hasNextOrder và isHandoverComplete */}
+      {/* Đang trả nợ mà vẫn thiếu ảnh thì không cho bấm: món nợ này sinh ra đúng
+          vì lần trước bỏ qua, cho bỏ qua tiếp là nợ không bao giờ trả xong. */}
+      {isRepayingDebt && !isHandoverComplete && (
+        <p className="text-xs text-center font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3">
+          Đây là phòng bạn đang NỢ bàn giao — phải chụp đủ ảnh mới nộp được, không bỏ qua thêm lần nữa.
+        </p>
+      )}
+
       <button
-        disabled={logic.isLoading || isSkippingHandover}
+        disabled={logic.isLoading || isSkippingHandover || (isRepayingDebt && !isHandoverComplete)}
         onClick={() => {
+            if (isRepayingDebt && !isHandoverComplete) return;
             if (!isHandoverComplete) {
                 if (hasNextOrder) {
                     // Nếu có đơn mới và chưa chụp ảnh -> Cho nợ ảnh và qua đơn luôn
@@ -182,14 +191,18 @@ export function ScreenHandover({ logic }: { logic: any }) {
             }
         }}
         className={`w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl transition-all
-        ${isHandoverComplete 
-            ? 'bg-blue-600 text-white shadow-blue-200' 
+        ${isRepayingDebt && !isHandoverComplete
+            ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+            : isHandoverComplete
+            ? 'bg-blue-600 text-white shadow-blue-200'
             : (hasNextOrder ? 'bg-amber-500 text-white shadow-amber-200' : 'bg-rose-500 text-white shadow-rose-200')}`}
       >
         {logic.isLoading || isSkippingHandover 
           ? 'Đang xử lý...' 
-          : (isHandoverComplete 
-              ? (hasNextOrder ? 'Xong & Nhận đơn mới' : 'Xong & Sẵn sàng đón khách') 
+          : (isRepayingDebt && !isHandoverComplete)
+              ? 'Chưa chụp đủ ảnh'
+          : (isHandoverComplete
+              ? (isRepayingDebt ? 'Nộp ảnh & Trả nợ' : (hasNextOrder ? 'Xong & Nhận đơn mới' : 'Xong & Sẵn sàng đón khách'))
               : (hasNextOrder ? '⏭ Bỏ qua — Nhận đơn mới' : 'Bỏ qua')
             )
         }

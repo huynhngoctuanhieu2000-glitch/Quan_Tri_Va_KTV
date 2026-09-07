@@ -1,6 +1,6 @@
 import { pausedMsOf } from '@/lib/segment-time';
 import { isUtilityService } from '@/lib/booking.logic';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ktvMatchesSeg } from '@/lib/ktvUtils';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
@@ -86,6 +86,21 @@ export function useKTVDashboard(config?: DashboardConfig) {
 
     // === HANDOVER V5: Dynamic checklist + Skip + Pending debt ===
     const [dynamicChecklist, setDynamicChecklist] = useState<{label: string; source: string}[]>([]);
+
+    /**
+     * Đơn đang mở là đơn TRẢ NỢ bàn giao (đã bấm Bỏ qua hoặc bị quầy trả lại).
+     *
+     * Màn Bàn giao dùng cờ này để KHÔNG cho bỏ qua lần nữa — nợ sinh ra chính vì
+     * bỏ qua, cho bỏ qua tiếp thì món nợ không bao giờ trả được.
+     */
+    const isRepayingDebt = useMemo(() => {
+        const ids: string[] = booking?.assignedItemIds?.length
+            ? booking.assignedItemIds
+            : (booking?.assignedItemId ? [booking.assignedItemId] : []);
+        return (booking?.BookingItems || []).some((i: any) =>
+            (ids.length === 0 || ids.includes(i.id))
+            && ['SKIPPED', 'REJECTED'].includes(String(i.handover_status || '').toUpperCase()));
+    }, [booking]);
     const [isFetchingChecklist, setIsFetchingChecklist] = useState(false);
     const fetchedChecklistBookingIdRef = useRef<string | null>(null);
     const [pendingHandovers, setPendingHandovers] = useState<any[]>([]);
@@ -2121,12 +2136,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
             console.log("💰 [Commission] Items:", itemIds.length, "Total Duration:", totalMins, "Total Commission:", totalCommission);
 
             // 1. Giải phóng KTV khỏi TurnQueue
+            const photosToSubmit = Object.values(handoverPhotosBase64);
             const res = await apiClient.patch<any>(API.KTV.BOOKING, { 
                 bookingId: postServiceBookingIdRef.current || booking.id, 
                 status: 'FEEDBACK', // Dọn xong → chờ khách đánh giá. Nếu đã có rating → API sẽ set DONE
                 action: 'RELEASE_KTV', // BÂY GIỜ mới giải phóng KTV
                 techCode: ktvId,
-                photosBase64: Object.values(handoverPhotosBase64)
+                photosBase64: photosToSubmit
             });
             
             if (!res.success) {
@@ -2145,7 +2161,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
             // trả từ lần làm xong trước đó, quầy cũng đã đánh giá rồi. Bắt đi lại một
             // vòng nữa chỉ tổ rối, mà còn dễ tưởng được trả tiền thêm lần hai.
             if (isDebtRepay) {
-                addToast('✅ Đã nộp ảnh bàn giao. Bạn hết nợ phòng này rồi!', 'success');
+                // Không có ảnh thì RELEASE_KTV không đụng tới handover_status, nợ vẫn
+                // nguyên đó. Báo "đã nộp xong" lúc này là nói sai — KTV tưởng hết nợ
+                // rồi đi tan ca, tới nơi mới thấy vẫn bị chặn.
+                if (photosToSubmit.length > 0) {
+                    addToast('✅ Đã nộp ảnh bàn giao. Bạn hết nợ phòng này rồi!', 'success');
+                } else {
+                    addToast('⚠️ Bạn chưa chụp ảnh nên phòng này VẪN CÒN NỢ. Chụp đủ ảnh rồi nộp lại nhé.', 'warning');
+                }
                 isTransitioningRef.current = true;
                 goToDashboard();
                 fetchPendingHandovers();
@@ -2427,6 +2450,7 @@ export function useKTVDashboard(config?: DashboardConfig) {
         handleFinishHandover,
         // Handover V5
         dynamicChecklist,
+        isRepayingDebt,
         isFetchingChecklist,
         pendingHandovers,
         isSkippingHandover,
