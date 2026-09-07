@@ -14,10 +14,15 @@ interface AppLayoutProps {
   children: React.ReactNode;
   hideAI?: boolean;
   title?: string;
+  /**
+   * Nút riêng của từng trang, đặt bên phải tiêu đề trên thanh header MOBILE.
+   * Không truyền thì header giữ nguyên như cũ — mọi trang khác không đổi gì.
+   */
+  headerRight?: React.ReactNode;
   disablePullToRefresh?: boolean;
 }
 
-export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa', disablePullToRefresh = false }: AppLayoutProps) {
+export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa', disablePullToRefresh = false, headerRight }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar state
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true); // Desktop sidebar state
   const [mounted, setMounted] = useState(false);
@@ -139,6 +144,9 @@ export function AppLayout({ children, hideAI = false, title = 'Ngân Hà Spa', d
           <div id="mobile-page-title" className="font-black text-sm uppercase tracking-widest text-slate-800 truncate">
             {title}
           </div>
+          {headerRight && (
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">{headerRight}</div>
+          )}
         </div>
 
         {/* 🛡️ LUÔN wrap PullToRefresh — chỉ toggle isDisabled.

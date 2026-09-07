@@ -40,26 +40,47 @@ const KtvHoursRankingPage = () => {
   const logic = useKtvHoursRankingLogic();
   const me = logic.me;
 
+  /**
+   * Chọn tháng + tải lại.
+   *
+   * Bản `compact` nằm gọn trên thanh header của điện thoại — màn nhỏ thì mỗi dòng
+   * đều quý, để một hàng riêng chỉ để chọn tháng là phí. Bản thường vẫn ở trong
+   * trang cho màn lớn, nơi header mobile không tồn tại.
+   */
+  const MonthControls = ({ compact = false }: { compact?: boolean }) => (
+    <div className={compact ? 'flex items-center gap-1' : 'flex items-center justify-between gap-3'}>
+      <div className={`flex items-center bg-white rounded-2xl border border-slate-100 ${compact ? 'p-0.5 shadow-none' : 'p-1 shadow-sm'}`}>
+        <button
+          onClick={() => logic.changeMonth(-1)}
+          aria-label="Tháng trước"
+          className={`flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50 ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
+        ><ChevronLeft size={compact ? 15 : 19} /></button>
+        <span className={`text-center font-black text-slate-700 ${compact ? 'min-w-[76px] text-xs' : 'min-w-[104px] text-sm'}`}>
+          {compact ? logic.month : `Tháng ${logic.month}`}
+        </span>
+        <button
+          onClick={() => logic.changeMonth(1)}
+          disabled={!logic.canGoNext}
+          aria-label="Tháng sau"
+          className={`flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
+        ><ChevronRight size={compact ? 15 : 19} /></button>
+      </div>
+      <button
+        onClick={logic.refresh}
+        title="Tải lại"
+        aria-label="Tải lại"
+        className={`rounded-2xl bg-white border border-slate-100 text-slate-500 flex items-center justify-center ${compact ? 'w-8 h-8 shadow-none' : 'w-11 h-11 shadow-sm'}`}
+      ><RefreshCw size={compact ? 14 : 17} className={logic.loading ? 'animate-spin' : ''} /></button>
+    </div>
+  );
+
   return (
-    <AppLayout title="Xếp Hạng Giờ">
+    <AppLayout title="Xếp Hạng Giờ" headerRight={<MonthControls compact />}>
       <div className="max-w-2xl mx-auto pb-24 space-y-4">
 
-        {/* Chọn tháng */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center bg-white p-1 rounded-2xl shadow-sm border border-slate-100">
-            <button onClick={() => logic.changeMonth(-1)} className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50"><ChevronLeft size={19} /></button>
-            <span className="min-w-[104px] text-center font-black text-sm text-slate-700">Tháng {logic.month}</span>
-            <button
-              onClick={() => logic.changeMonth(1)}
-              disabled={!logic.canGoNext}
-              className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent"
-            ><ChevronRight size={19} /></button>
-          </div>
-          <button
-            onClick={logic.refresh}
-            title="Tải lại"
-            className="w-11 h-11 rounded-2xl bg-white shadow-sm border border-slate-100 text-slate-500 flex items-center justify-center"
-          ><RefreshCw size={17} className={logic.loading ? 'animate-spin' : ''} /></button>
+        {/* Màn lớn không có header mobile nên vẫn cần hàng chọn tháng trong trang. */}
+        <div className="hidden lg:block">
+          <MonthControls />
         </div>
 
         {logic.loading && (
