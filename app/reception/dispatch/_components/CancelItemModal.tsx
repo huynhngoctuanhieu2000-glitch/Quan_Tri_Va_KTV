@@ -19,6 +19,7 @@ export default function CancelItemModal({
     ktvLabel,
     customerName,
     workedMinutes,
+    wholeBooking,
 }: {
     isOpen: boolean;
     onClose: () => void;
@@ -26,6 +27,8 @@ export default function CancelItemModal({
     ktvLabel?: string;
     customerName?: string;
     workedMinutes?: number | null;
+    /** true = huỷ cả bill, false/undefined = chỉ huỷ đơn con của một KTV. */
+    wholeBooking?: boolean;
 }) {
     const [reason, setReason] = useState('');
     const [credit, setCredit] = useState(false);
@@ -64,7 +67,7 @@ export default function CancelItemModal({
                         <div className="flex items-center justify-between pb-4 border-b">
                             <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                                 <Trash2 className="text-rose-500" size={20} />
-                                Huỷ đơn con
+                                {wholeBooking ? 'Huỷ toàn bộ đơn hàng' : 'Huỷ đơn con'}
                             </h3>
                             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                                 <X size={18} className="text-gray-500" />
@@ -77,7 +80,9 @@ export default function CancelItemModal({
                             {customerName ? <span className="font-black text-gray-900">{customerName}</span> : null}
                         </p>
                         <p className="mt-1 text-[11px] text-gray-400 font-medium">
-                            Chỉ huỷ đơn con này, các khách khác trong cùng bill không bị ảnh hưởng.
+                            {wholeBooking
+                                ? 'Huỷ TẤT CẢ dịch vụ chưa hoàn tất của bill này, mọi khách trong bill đều bị huỷ.'
+                                : 'Chỉ huỷ đơn con này, các khách khác trong cùng bill không bị ảnh hưởng.'}
                         </p>
 
                         <div className="mt-5">

@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { requirePermission } from '@/lib/auth-server';
 import { sendPushNotification } from '@/lib/push-helper';
 import { createNotification } from '@/lib/notification-helper';
+import { workedMsOf } from '@/lib/segment-time';
 import { BookingModificationService } from '@/lib/services/BookingModificationService';
 import { recalculateEstimatedEndTime } from '@/lib/time-helper';
 import { COMPLETED_STATUSES, isDummyPhone, isDummyEmail, isReturningCustomer, isNameMatch } from '@/lib/customer.logic';
@@ -1138,7 +1139,16 @@ export async function saveDraftDispatch(bookingId: string, dispatchData: {
     }
 }
 
-export async function cancelBooking(bookingId: string, date: string) {
+/**
+ * Huỷ TOÀN BỘ đơn hàng.
+ *
+ * @param cancelCredit  'NONE'  = KTV mất sạch tiền, giờ tích luỹ và tua (mặc định).
+ *                      'WORKED' = vẫn cho hưởng theo số phút đã làm thật.
+ *   Giống hệt quy tắc của cancelBookingItem — lý do huỷ là chữ tự do do quầy gõ,
+ *   KHÔNG được dùng để quyết định tiền; chỉ tham số này mới điều khiển.
+ *   Xem plans/plan_tam_dung_huy_ket_thuc_som.md §5 bước 8.
+ */
+export async function cancelBooking(bookingId: string, date: string, cancelCredit: 'NONE' | 'WORKED' = 'NONE', reason: string = '') {
     try {
         await requirePermission('dispatch_board');
         const supabase = getSupabaseAdmin();
@@ -1161,7 +1171,7 @@ export async function cancelBooking(bookingId: string, date: string) {
         // Đơn đang tạm dừng lấy mốc `pauseStart` chứ không lấy giờ hiện tại.
         const { data: itemsToCancel, error: itemsFetchError } = await supabase
             .from('BookingItems')
-            .select('id, segments, status, pauseStart')
+            .select('id, segments, status, pauseStart, options')
             .eq('bookingId', bookingId)
             .neq('status', 'DONE')
             .neq('status', 'CANCELLED');
@@ -1178,11 +1188,32 @@ export async function cancelBooking(bookingId: string, date: string) {
             segs.forEach((s: any) => {
                 if (s.actualStartTime && !s.actualEndTime) {
                     s.actualEndTime = endMark;
+                    // Đóng nốt khoảng tạm dừng còn hở, nếu không nó tính tới tận lúc
+                    // kết thúc và ăn mất phần làm thật của KTV.
+                    if (Array.isArray(s.pauses)) {
+                        const openIdx = s.pauses.findIndex((p: any) => p && p.from && !p.to);
+                        if (openIdx !== -1) s.pauses[openIdx] = { ...s.pauses[openIdx], to: endMark };
+                    }
+                    segmentsModified = true;
+                }
+                // Không cho hưởng gì → tước sạch chặng, nhưng VẪN giữ lại trong đơn
+                // kèm số phút đã làm để biết ai từng làm cho khách (lib/segment-time.ts).
+                if (cancelCredit === 'NONE' && s.actualStartTime) {
+                    const worked = workedMsOf(s, s.actualEndTime || endMark);
+                    if (worked !== null) s.customCommissionDuration = Math.round(worked / 60000);
+                    s.voided = true;
+                    s.note = 'CANCELLED_NO_CREDIT';
                     segmentsModified = true;
                 }
             });
 
-            const payload: any = { status: 'CANCELLED', timeEnd: endMark };
+            let opts: any = (item as any).options;
+            if (typeof opts === 'string') { try { opts = JSON.parse(opts); } catch { opts = {}; } }
+            opts = opts || {};
+            opts.cancelCredit = cancelCredit;
+            if (reason) opts.cancelReason = reason;
+
+            const payload: any = { status: 'CANCELLED', timeEnd: endMark, options: opts };
             if (segmentsModified) payload.segments = JSON.stringify(segs);
             if (isPausedItem) payload.pauseStart = null;
 
@@ -1208,9 +1239,19 @@ export async function cancelBooking(bookingId: string, date: string) {
                         .eq('date', date)
                         .eq('booking_id', bookingId)
                         .eq('employee_id', turn.employee_id);
+                } else if (cancelCredit === 'NONE') {
+                    // Đã bắt đầu làm nhưng huỷ mà KHÔNG cộng gì → tước luôn lượt tua.
+                    // syncTurnsForDate đã lọc sẵn is_punished khỏi turns_completed.
+                    console.log(`⛔ KTV ${turn.employee_id} mất lượt tua do huỷ đơn không cộng giờ.`);
+                    await supabase
+                        .from('TurnLedger')
+                        .update({ is_punished: true })
+                        .eq('date', date)
+                        .eq('booking_id', bookingId)
+                        .eq('employee_id', turn.employee_id);
                 } else {
-                    // ⚠️ Nếu đã đang làm (working) mà bị hủy -> GIỮ Ledger để tính tua/tiền cho KTV
-                    console.log(`⚠️ KTV ${turn.employee_id} giữ nguyên lượt tua do hủy đơn KHI ĐANG LÀM.`);
+                    // ⚠️ Quầy chọn cộng giờ đã làm -> GIỮ Ledger để tính tua/tiền cho KTV
+                    console.log(`⚠️ KTV ${turn.employee_id} giữ nguyên lượt tua do quầy cho cộng giờ.`);
                 }
 
                 // 3. Giải phóng KTV trong TurnQueue

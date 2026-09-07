@@ -384,6 +384,9 @@ export function useDispatchBoard(selectedDate: string, selectedOrderId: string |
                                 handover_images: bi.handover_images,
                                 itemRating: bi.itemRating || null,
                                 ktvRatings: bi.ktvRatings || {},
+                                // Ô góp ý khách tích khi đánh giá — [{id, text}].
+                                // Có từ migration 20260907000000; đơn cũ thì null.
+                                violations: Array.isArray(bi.violations) ? bi.violations : null,
                                 customerGroupId: dStatus === 'pending' ? undefined : (bi.guest_id || parsedOptions?.customerGroupId),
                                 guestId: bi.guest_id
                             };

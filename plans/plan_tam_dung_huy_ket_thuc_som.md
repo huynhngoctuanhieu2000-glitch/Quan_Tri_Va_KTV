@@ -109,6 +109,12 @@ Riêng **tua** thì tước bằng `TurnLedger.is_punished = true` — hạ tầ
 > `KTVServiceHoursLedger`, bảng đã bị đợt refactor sổ cái trước thay bằng
 > `KTVDPenaltyLedger` / `KTVDTurnLedger`; không liên quan tới thay đổi này.
 > **CHƯA chạy thử end-to-end trên giao diện** — cần một đơn thật để bấm.
+>
+> **Rà soát lại 09/09/2026:** đối chiếu từng bước với code, phát hiện **bước 8 mới
+> làm một nửa** — `cancelBooking` (huỷ cả bill) chưa có `cancelCredit`. Đã vá:
+> thêm tham số, tước chặng bằng `voided`, tước tua bằng `is_punished`, và đưa
+> luồng huỷ cả bill dùng chung hộp thoại với huỷ đơn con thay cho `confirm()` trơn.
+> Các bước còn lại đã kiểm chứng có mặt đầy đủ trong code.
 
 
 ### Đợt 1 — Nền mốc giờ *(chạm tiền, làm trước và làm một mình)*
@@ -124,12 +130,16 @@ Riêng **tua** thì tước bằng `TurnLedger.is_punished = true` — hạ tầ
      rồi Kanban dựa vào `earlyLeave` để nhảy thẳng từ Dọn phòng sang `DONE`, **bỏ qua
      `FEEDBACK`** — đúng yêu cầu "không qua đánh giá" mà không mất bước dọn phòng.
    - `PAYABLE_STATUSES` đã có `DONE`; `SETTLED_STATUSES` cũng có → tiền hiện ngay, không chờ sao.
-   - Không có sao ⇒ `rating = 0` ⇒ `ratingDeductions['0'] = 0` ⇒ **không bị trừ**. Cần bạn xác nhận đây là ý định (xem Q2).
+   - Không có sao ⇒ `rating = 0` ⇒ `ratingDeductions['0'] = 0` ⇒ **không bị trừ**.
+     ✅ Đã chốt 06/09: đúng ý — quy chế không hề nói trừ, khách về sớm KTV đã thiệt giờ rồi.
 6. Kanban: hiện nhãn **"RA SỚM"** trên thẻ; thẻ hiển thị **giờ bấm bắt đầu → giờ bấm dừng**.
 7. **Sửa L6**: guard `isTimerRunning` không được chặn khi kết thúc đến từ quầy. Cách gọn nhất là bỏ qua guard khi segment của KTV đã có `actualEndTime` do server ghi (`note` = `FINISHED_EARLY_ON_PAUSE`), thay vì tin vào cờ phía client.
 
 ### Đợt 3 — Huỷ đơn phân loại (A, C3, C4)
 8. `cancelBooking` / `cancelBookingItem` nhận thêm `cancelCredit`.
+   - ⚠️ **Rà lại 09/09: lúc đầu chỉ làm `cancelBookingItem`, bỏ sót `cancelBooking`.**
+     Nghĩa là huỷ TOÀN BỘ đơn từ menu chuột phải vẫn trả tiền theo giờ đã làm và
+     giữ nguyên lượt tua — đúng kịch bản A/C4 mà lại không mất trắng. Đã vá.
    - `'NONE'` (mặc định) → đánh dấu chặng `voided`, set `TurnLedger.is_punished = true` → mất tiền, mất giờ, mất tua.
    - `'WORKED'` → giữ nguyên cách chốt hiện tại (đóng chặng tại mốc thực, được tính theo giờ đã làm).
 9. Hộp thoại huỷ thay cho `prompt()` hiện tại ([actions.ts:1616](app/reception/dispatch/page.tsx)): **ô nhập tay lý do** + **công tắc "Cộng giờ đã làm cho KTV"** (mặc định tắt). Không có danh mục lý do cố định — quầy gõ gì thì lưu nấy vào `options.cancelReason`.

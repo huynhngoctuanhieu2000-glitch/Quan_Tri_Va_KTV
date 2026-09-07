@@ -350,7 +350,7 @@ export default function DispatchBoardPage() {
   const [pauseModalOrder, setPauseModalOrder] = useState<PendingOrder | null>(null);
   const [pauseModalSubOrder, setPauseModalSubOrder] = useState<any>(null);
   const [pauseModalLockAction, setPauseModalLockAction] = useState<'SWAP' | undefined>(undefined);
-  const [cancelItemModal, setCancelItemModal] = useState<{ orderId: string; itemIds: string[]; ktvLabel?: string; customerName?: string; workedMinutes: number | null } | null>(null);
+  const [cancelItemModal, setCancelItemModal] = useState<{ orderId: string; itemIds: string[]; wholeBooking?: boolean; ktvLabel?: string; customerName?: string; workedMinutes: number | null } | null>(null);
   const [qrModal, setQrModal] = useState<{ orderId: string; billCode: string; accessToken?: string | null; customerLang?: string, guestId?: string } | null>(null);
   const [invoiceLangModal, setInvoiceLangModal] = useState<{ invoiceId: string } | null>(null);
   const [expandedSvcIds, setExpandedSvcIds] = useState<string[]>([]);
@@ -1577,22 +1577,34 @@ if (!hasPermission('dispatch_board')) {
 
 
 
-  const handleCancelBooking = async (orderId: string) => {
-    if (!confirm('Bạn có chắc chắn muốn HỦY đơn hàng này không?')) return;
-    try {
-      const res = await cancelBooking(orderId, selectedDate);
-      if (res.success) {
-        if (selectedOrderId === orderId) setSelectedOrderId(null);
-        setContextMenu(null);
-        // Phải tải lại: buildOrderTimeline dựng thẻ Kanban từ status của TỪNG dịch vụ,
-        // không đọc rawStatus của đơn — nên patch lạc quan ở cấp đơn không đổi được gì.
-        await fetchData();
-      } else {
-        alert('Lỗi khi hủy đơn: ' + res.error);
+  /**
+   * Huỷ TOÀN BỘ đơn. Dùng chung hộp thoại với huỷ đơn con, vì cũng phải hỏi
+   * lý do và quyết định có cộng giờ đã làm cho KTV hay không.
+   */
+  const handleCancelBooking = (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+
+    let workedMinutes: number | null = null;
+    const ktvSet = new Set<string>();
+    for (const s of (order?.services || [])) {
+      for (const st of ((s as any).staffList || [])) {
+        if (st.ktvId) ktvSet.add(st.ktvId);
+        for (const seg of (st.segments || [])) {
+          const ms = workedMsOf(seg, seg.actualEndTime || Date.now());
+          if (ms !== null) workedMinutes = (workedMinutes || 0) + Math.round(ms / 60000);
+        }
       }
-    } catch (err) {
-      alert('Lỗi hệ thống khi hủy đơn.');
     }
+
+    setCancelItemModal({
+      orderId,
+      itemIds: [],            // rỗng = huỷ cả đơn, không phải từng dịch vụ
+      wholeBooking: true,
+      ktvLabel: Array.from(ktvSet).join(', ') || undefined,
+      customerName: order?.customerName,
+      workedMinutes,
+    });
+    setContextMenu(null);
   };
   /** Mở hộp thoại huỷ — thay cho prompt() cũ, vì còn phải hỏi có cộng giờ hay không. */
   const handleCancelBookingItem = (orderId: string, itemId: string, subOrder?: any) => {
@@ -1622,6 +1634,15 @@ if (!hasPermission('dispatch_board')) {
 
   const submitCancelItems = async (reason: string, cancelCredit: 'NONE' | 'WORKED') => {
     if (!cancelItemModal) return;
+
+    if (cancelItemModal.wholeBooking) {
+      const res = await cancelBooking(cancelItemModal.orderId, selectedDate, cancelCredit, reason);
+      if (!res.success) throw new Error(res.error || 'Không huỷ được đơn');
+      if (selectedOrderId === cancelItemModal.orderId) setSelectedOrderId(null);
+      await fetchData();
+      return;
+    }
+
     for (const itemId of cancelItemModal.itemIds) {
       const res = await apiClient.post<any>('/api/bookings/cancel-item', {
         bookingId: cancelItemModal.orderId,
@@ -3082,6 +3103,7 @@ if (!hasPermission('dispatch_board')) {
         ktvLabel={cancelItemModal?.ktvLabel}
         customerName={cancelItemModal?.customerName}
         workedMinutes={cancelItemModal?.workedMinutes ?? null}
+        wholeBooking={cancelItemModal?.wholeBooking}
       />
 
       <MergePromptModal

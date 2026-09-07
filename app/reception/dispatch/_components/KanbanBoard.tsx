@@ -514,6 +514,15 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                     const isEarlyLeave = services.some((s: any) => s.options?.earlyLeave === true);
                                     // Thẻ tạm dừng đã có đủ 4 nút (Tiếp · Đổi · Kết thúc · Huỷ) nên bỏ nút Link cho đỡ chật.
                                     const isPausedCard = services.some((s: any) => s.status === 'PAUSED');
+                                    // Gộp lỗi khách tích của mọi dịch vụ trong thẻ, khử trùng theo id.
+                                    const subOrderViolations = Array.from(
+                                        new Map(
+                                            services
+                                                .flatMap((s: any) => Array.isArray(s.violations) ? s.violations : [])
+                                                .filter((v: any) => v && v.id)
+                                                .map((v: any) => [String(v.id), v])
+                                        ).values()
+                                    ) as any[];
                                     const nextStatus = (isEarlyLeave && subOrder.dispatchStatus === 'CLEANING')
                                         ? ('DONE' as RawStatus)
                                         : currentCfg.next;
@@ -1087,6 +1096,22 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                         <><Star size={12} /> Đánh giá: Chờ khách...</>
                                                                     )}
                                                                 </div>
+
+                                                                {/* Khách tích ô góp ý nào thì phải thấy được ngay ở đây.
+                                                                    Việc tích lỗi kéo trần đánh giá xuống 3 sao (tức trừ 25%
+                                                                    tiền KTV), nên lý do bị trừ không được phép vô hình. */}
+                                                                {subOrderViolations.length > 0 && (
+                                                                    <div className="flex flex-col gap-1 rounded-lg px-2.5 py-1.5 border bg-rose-50 border-rose-200">
+                                                                        <span className="flex items-center gap-1.5 text-[10px] font-black text-rose-700 uppercase tracking-wider">
+                                                                            <AlertCircle size={11} /> Khách phản ánh ({subOrderViolations.length})
+                                                                        </span>
+                                                                        {subOrderViolations.map((v: any) => (
+                                                                            <span key={v.id} className="text-[11px] font-medium text-rose-600 leading-snug">
+                                                                                • {v.text || v.id}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                                 {!subOrder.rating && (
                                                                     <div className="flex flex-col items-center justify-center gap-1 mt-3 pb-1">
                                                                         <div className="flex items-center justify-between w-full">
