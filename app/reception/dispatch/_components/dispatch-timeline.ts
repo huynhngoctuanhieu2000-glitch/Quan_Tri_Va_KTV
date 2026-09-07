@@ -365,7 +365,11 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 if (['IN_PROGRESS', 'PAUSED'].includes(st)) return 'IN_PROGRESS';
                 if (['CLEANING', 'COMPLETED'].includes(st)) return 'CLEANING';
                 if (st === 'FEEDBACK') return 'FEEDBACK';
-                if (['DONE', 'CANCELLED'].includes(st)) return 'DONE';
+                // Huỷ KHÁC hoàn tất. Trước đây gộp chung vào 'DONE' nên cột "Đã Huỷ"
+                // trên Kanban vĩnh viễn rỗng, còn đơn bị huỷ thì nằm lẫn trong cột
+                // Hoàn Tất — lễ tân không phân biệt được.
+                if (st === 'CANCELLED') return 'CANCELLED';
+                if (st === 'DONE') return 'DONE';
                 return 'PREPARING';
             };
 
@@ -483,6 +487,7 @@ export function buildOrderTimeline(orders: PendingOrder[]): SubOrder[] {
                 if (statuses.includes('IN_PROGRESS') || statuses.includes('PAUSED')) dStatus = 'IN_PROGRESS';
                 else if (statuses.includes('CLEANING')) dStatus = 'CLEANING';
                 else if (statuses.includes('FEEDBACK')) dStatus = 'FEEDBACK';
+                else if (statuses.includes('CANCELLED') && statuses.every(x => x === 'CANCELLED')) dStatus = 'CANCELLED';
                 else if (statuses.includes('DONE') || statuses.includes('CANCELLED')) dStatus = 'DONE';
                 else if (statuses.includes('PREPARING')) dStatus = 'PREPARING';
 

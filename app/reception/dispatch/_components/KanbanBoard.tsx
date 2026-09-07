@@ -514,6 +514,11 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                     const isEarlyLeave = services.some((s: any) => s.options?.earlyLeave === true);
                                     // Thẻ tạm dừng đã có đủ 4 nút (Tiếp · Đổi · Kết thúc · Huỷ) nên bỏ nút Link cho đỡ chật.
                                     const isPausedCard = services.some((s: any) => s.status === 'PAUSED');
+                                    const isCancelledCard = subOrder.dispatchStatus === 'CANCELLED'
+                                        || services.every((s: any) => s.status === 'CANCELLED');
+                                    const cancelReason = services.map((s: any) => s.options?.cancelReason).find(Boolean);
+                                    // 'WORKED' = quầy đã bật công tắc cộng giờ đã làm cho KTV.
+                                    const cancelCredited = services.some((s: any) => s.options?.cancelCredit === 'WORKED');
                                     // Gộp lỗi khách tích của mọi dịch vụ trong thẻ, khử trùng theo id.
                                     const subOrderViolations = Array.from(
                                         new Map(
@@ -584,6 +589,9 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                         </span>
                                                         {order.hasVat && (
                                                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-50 text-blue-600 border border-blue-100" title="Khách yêu cầu xuất hoá đơn VAT">VAT</span>
+                                                        )}
+                                                        {isCancelledCard && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-600 text-white" title={cancelReason ? `Lý do: ${cancelReason}` : 'Đơn đã bị huỷ'}>ĐÃ HUỶ</span>
                                                         )}
                                                         {isEarlyLeave && (
                                                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-rose-50 text-rose-600 border border-rose-100" title="Khách xuống sớm — quầy đã chốt đơn tại thời điểm tạm dừng. Dọn phòng xong là hoàn tất, không chờ đánh giá.">RA SỚM</span>
@@ -1097,21 +1105,6 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                                     )}
                                                                 </div>
 
-                                                                {/* Khách tích ô góp ý nào thì phải thấy được ngay ở đây.
-                                                                    Việc tích lỗi kéo trần đánh giá xuống 3 sao (tức trừ 25%
-                                                                    tiền KTV), nên lý do bị trừ không được phép vô hình. */}
-                                                                {subOrderViolations.length > 0 && (
-                                                                    <div className="flex flex-col gap-1 rounded-lg px-2.5 py-1.5 border bg-rose-50 border-rose-200">
-                                                                        <span className="flex items-center gap-1.5 text-[10px] font-black text-rose-700 uppercase tracking-wider">
-                                                                            <AlertCircle size={11} /> Khách phản ánh ({subOrderViolations.length})
-                                                                        </span>
-                                                                        {subOrderViolations.map((v: any) => (
-                                                                            <span key={v.id} className="text-[11px] font-medium text-rose-600 leading-snug">
-                                                                                • {v.text || v.id}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
                                                                 {!subOrder.rating && (
                                                                     <div className="flex flex-col items-center justify-center gap-1 mt-3 pb-1">
                                                                         <div className="flex items-center justify-between w-full">
@@ -1201,6 +1194,38 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                             </div>
                                                         ) : null
                                                     )
+                                                )}
+
+                                                {/* Đặt NGOÀI nhánh Dọn phòng/Đánh giá — thẻ đã huỷ và thẻ hoàn tất
+                                                    không đi qua nhánh đó nên nhét vào trong là không bao giờ hiện. */}
+                                                {isCancelledCard && (
+                                                    <div className="flex flex-col gap-1 rounded-lg px-2.5 py-1.5 border bg-rose-50 border-rose-200 mb-3">
+                                                        <span className="flex items-center gap-1.5 text-[10px] font-black text-rose-700 uppercase tracking-wider">
+                                                            <Trash2 size={11} /> Đã huỷ
+                                                        </span>
+                                                        <span className="text-[11px] font-medium text-rose-600 leading-snug">
+                                                            {cancelReason ? `Lý do: ${cancelReason}` : 'Không ghi lý do'}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-rose-500">
+                                                            {cancelCredited ? 'Có cộng giờ đã làm cho KTV' : 'KTV không được tính tiền, giờ và tua'}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Khách tích ô góp ý nào thì lễ tân phải thấy ngay: việc tích lỗi
+                                                    kéo trần đánh giá xuống 3 sao (trừ 25% tiền KTV), nên lý do bị
+                                                    trừ không được phép vô hình. */}
+                                                {subOrderViolations.length > 0 && (
+                                                    <div className="flex flex-col gap-1 rounded-lg px-2.5 py-1.5 border bg-rose-50 border-rose-200 mb-3">
+                                                        <span className="flex items-center gap-1.5 text-[10px] font-black text-rose-700 uppercase tracking-wider">
+                                                            <AlertCircle size={11} /> Khách phản ánh ({subOrderViolations.length})
+                                                        </span>
+                                                        {subOrderViolations.map((v: any) => (
+                                                            <span key={v.id} className="text-[11px] font-medium text-rose-600 leading-snug">
+                                                                • {v.text || v.id}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 )}
 
                                                 <div className={`gap-2 w-full ${services.some((s: any) => s.status === 'PAUSED') ? 'grid grid-cols-2' : 'flex items-center'}`}>
