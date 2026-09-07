@@ -342,12 +342,10 @@ export function TurnQueueTypeDModal({ isOpen, onClose, turnData, ktvId }: { isOp
   );
 }
 
-/** Nhãn ngày ngắn gọn: '2026-09-03' → 'Th 5, 03/09'. */
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  const names = ['CN', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7'];
-  return `${names[wd]}, ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+/** Ngày đầy đủ cho ô chọn ngày: '2026-09-05' → '05/09/2026'. */
+function fmtDayFull(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 /**
@@ -468,12 +466,19 @@ export function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => 
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* Ô ngày kiêm nút mở lịch — ngày đang xem hiện ngay tại đây nên các ô
+                bên dưới không phải lặp lại nó nữa. */}
             <button
               onClick={() => setShowCalendar(v => !v)}
               title="Chọn ngày"
-              className={`w-9 h-9 rounded-full flex items-center justify-center ${showCalendar ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}
+              className={`h-9 pl-3 pr-2 rounded-xl border flex items-center gap-2 transition-colors ${
+                showCalendar
+                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-indigo-300'
+              }`}
             >
-              <CalendarDays size={17} />
+              <span className="text-xs font-black tabular-nums">{fmtDayFull(selected)}</span>
+              <CalendarDays size={16} className={showCalendar ? 'text-white' : 'text-indigo-500'} />
             </button>
             <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center">
               <X size={17} />
@@ -519,7 +524,7 @@ export function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => 
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-50 rounded-2xl p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                {isToday ? 'Hôm nay' : dayLabel(selected)}
+                {isToday ? 'Hôm nay' : 'Điểm ngày'}
               </p>
               <p className="text-2xl font-black text-slate-800 mt-1">
                 {dayScore === null ? '—' : `${dayScore}/100`}
@@ -551,7 +556,7 @@ export function OfficeScoreModal({ data, onClose }: { data: any, onClose: () => 
           {hits.length > 0 && (
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                Lỗi bị trừ {isToday ? 'hôm nay' : dayLabel(selected)}
+                Lỗi bị trừ {isToday ? 'hôm nay' : 'trong ngày'}
               </p>
               <div className="space-y-2">
                 {hits.map((h: any, i: number) => (

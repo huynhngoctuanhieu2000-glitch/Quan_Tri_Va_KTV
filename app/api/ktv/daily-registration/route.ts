@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { format } from 'date-fns';
 import { requireActiveStaff } from '@/lib/auth-server';
+import { vnDate } from '@/lib/vn-time';
 
 export async function POST(request: Request) {
   try {
@@ -59,10 +60,10 @@ export async function POST(request: Request) {
       
       if (type === 'WORKING') {
         if (!entry.expected_time) {
-          return NextResponse.json({ error: `Vui lòng nhập giờ đến tiệm cho ngày ${entry.work_date}` }, { status: 400 });
+          return NextResponse.json({ error: `Vui lòng nhập giờ đến tiệm cho ngày ${vnDate(entry.work_date)}` }, { status: 400 });
         }
         if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.expected_time)) {
-          return NextResponse.json({ error: `Giờ đến tiệm ngày ${entry.work_date} không hợp lệ (HH:mm)` }, { status: 400 });
+          return NextResponse.json({ error: `Giờ đến tiệm ngày ${vnDate(entry.work_date)} không hợp lệ (HH:mm)` }, { status: 400 });
         }
       }
     }

@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, requireBusinessUser } from '@/lib/auth-server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { vnDate } from '@/lib/vn-time';
 import { createNotification } from '@/lib/notification-helper';
 import { vnToday } from '@/lib/vn-time';
 import { isOfficeManager } from '@/lib/services/KtvOfficeScoreService';
 
 export const dynamic = 'force-dynamic';
+
 
 const MAX_PHOTOS = 5;
 
@@ -237,7 +239,7 @@ export async function POST(request: Request) {
         // Báo cho KTV biết ngay, kèm lý do — không để họ cuối tháng mới ngã ngửa.
         await createNotification({
             type: 'WARNING',
-            message: `Bạn bị trừ ${totalPoints} điểm Office ngày ${workDate}: ${detail}.${photoUrls.length ? ` Có ${photoUrls.length} ảnh minh chứng.` : ''}`,
+            message: `Bạn bị trừ ${totalPoints} điểm Office ngày ${vnDate(workDate)}: ${detail}.${photoUrls.length ? ` Có ${photoUrls.length} ảnh minh chứng.` : ''}`,
             employeeId: staffId,
         }).catch(err => console.error('❌ [Office] Không gửi được thông báo:', err));
 
@@ -432,7 +434,7 @@ export async function PATCH(request: Request) {
         if (newCriteria) {
             await createNotification({
                 type: 'WARNING',
-                message: `Phiếu trừ điểm Office ngày ${log.work_date} đã được sửa: "${log.criteria_label}" (−${log.points_deducted}đ) → "${newCriteria.label}" (−${newCriteria.points}đ).`,
+                message: `Phiếu trừ điểm Office ngày ${vnDate(log.work_date)} đã được sửa: "${log.criteria_label}" (−${log.points_deducted}đ) → "${newCriteria.label}" (−${newCriteria.points}đ).`,
                 employeeId: log.staff_id,
             }).catch(err => console.error('❌ [Office] Không gửi được thông báo sửa phiếu:', err));
         }
@@ -519,7 +521,7 @@ export async function DELETE(request: Request) {
 
         await createNotification({
             type: 'SUCCESS',
-            message: `Đã hoàn lại ${log.points_deducted} điểm Office ngày ${log.work_date}: phiếu "${log.criteria_label}" được thu hồi. Lý do: ${reason}`,
+            message: `Đã hoàn lại ${log.points_deducted} điểm Office ngày ${vnDate(log.work_date)}: phiếu "${log.criteria_label}" được thu hồi. Lý do: ${reason}`,
             employeeId: log.staff_id,
         }).catch(err => console.error('❌ [Office] Không gửi được thông báo thu hồi:', err));
 

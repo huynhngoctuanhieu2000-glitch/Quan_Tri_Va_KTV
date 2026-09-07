@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { LeaveRequestSchema, LeavePatchSchema } from '@/lib/schemas/ktv.schema';
 import { createNotification } from '@/lib/notification-helper';
+import { vnDate } from '@/lib/vn-time';
 import { requireBusinessUser } from '@/lib/auth-server';
 
 /**
@@ -314,7 +315,7 @@ export async function POST(request: Request) {
         // Send notification
         let notifMessage = '';
         if (registeredByAdmin) {
-            notifMessage = `📋 [ADMIN] Đã đăng ký OFF cho ${employeeName || employeeId} ngày ${validDates.join(', ')}`;
+            notifMessage = `📋 [ADMIN] Đã đăng ký OFF cho ${employeeName || employeeId} ngày ${validDates.map(vnDate).join(', ')}`;
         } else if (isSuddenOff) {
             notifMessage = `⚠️ [KỶ LUẬT] ${employeeName || employeeId} đăng ký NGHỈ ĐỘT XUẤT ${validDates.length} ngày (${validDates.join(', ')}) do hết lượt gia hạn! (Lý do: ${reason})`;
         } else if (isExtension) {
@@ -391,7 +392,7 @@ export async function PATCH(request: Request) {
 
         // Notify KTV about the decision
         const statusText = action === 'APPROVE' ? '✅ được duyệt' : '❌ bị từ chối';
-        const ktvMessage = `📋 Yêu cầu OFF ngày ${leave.date} đã ${statusText}.`;
+        const ktvMessage = `📋 Yêu cầu OFF ngày ${vnDate(leave.date)} đã ${statusText}.`;
 
         await createNotification({
             type: 'LEAVE_RESPONSE',

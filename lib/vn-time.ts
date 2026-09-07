@@ -25,6 +25,21 @@ export const vnHour = (): number => {
 };
 
 /**
+ * 'yyyy-MM-dd' → 'dd/MM/yyyy' để hiện cho người đọc.
+ *
+ * Dùng cho MỌI thông báo và thông điệp lỗi gửi tới nhân viên: họ đọc trên điện
+ * thoại, in nguyên ngày ISO ra là bắt họ tự dịch ngược. Chuỗi không đúng dạng thì
+ * trả lại nguyên vẹn, không nuốt mất dữ liệu.
+ */
+export function vnDate(iso: string): string {
+  const raw = String(iso ?? '');
+  // Khớp CHẶT yyyy-MM-dd. Nếu chỉ kiểm "tách ra đủ 3 mảnh" thì một chuỗi bất kỳ
+  // có 2 dấu gạch cũng lọt và bị đảo lộn thành rác, ví dụ 'khong-phai-ngay'.
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : raw;
+}
+
+/**
  * Sửa / huỷ lịch ngày D được phép đến 06:59 sáng chính ngày D.
  * Từ 07:00 thì đóng băng — chỉ còn quyền BÁO TRỄ 1 lần.
  *

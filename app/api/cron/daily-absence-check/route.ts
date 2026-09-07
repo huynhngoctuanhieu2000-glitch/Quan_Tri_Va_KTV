@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { KtvTypeDDisciplineService } from '@/lib/services/KtvTypeDDisciplineService';
 import { getBusinessToday, previousBusinessDate } from '@/lib/business-date';
 import { createNotification } from '@/lib/notification-helper';
+import { vnDate } from '@/lib/vn-time';
 
 export const dynamic = 'force-dynamic';
 
@@ -172,7 +173,7 @@ async function run() {
             await KtvTypeDDisciplineService.markAccountLock(supabase, staff.id, targetDate, lyDo);
             await createNotification({
                 type: 'EMERGENCY',
-                message: `Tài khoản của bạn đã bị khóa do không đăng ký lịch và không đi làm ngày ${targetDate}.`,
+                message: `Tài khoản của bạn đã bị khóa do không đăng ký lịch và không đi làm ngày ${vnDate(targetDate)}.`,
                 employeeId: staff.id,
             });
             continue;
@@ -216,7 +217,7 @@ async function run() {
                     .eq('id', registration.id);
                 await createNotification({
                     type: 'WARNING',
-                    message: `Bạn bị trừ ${hours} giờ tích lũy ngày ${targetDate}. Lý do: ${lyDo}.`,
+                    message: `Bạn bị trừ ${hours} giờ tích lũy ngày ${vnDate(targetDate)}. Lý do: ${lyDo}.`,
                     employeeId: staff.id,
                 });
             }
@@ -244,7 +245,7 @@ async function run() {
             .update({ status: 'COMPLETED' }).eq('id', registration.id);
         await createNotification({
             type: 'EMERGENCY',
-            message: `Tài khoản của bạn đã bị khóa do ${lyDoKhoa.toLowerCase()} ngày ${targetDate}.`,
+            message: `Tài khoản của bạn đã bị khóa do ${lyDoKhoa.toLowerCase()} ngày ${vnDate(targetDate)}.`,
             employeeId: staff.id,
         });
     }
@@ -252,7 +253,7 @@ async function run() {
     if (locked.length > 0 && enabled) {
         await createNotification({
             type: 'EMERGENCY',
-            message: `Hệ thống vừa khóa ${locked.length} KTV do không đăng ký lịch ngày ${targetDate}: ${locked.join(', ')}`,
+            message: `Hệ thống vừa khóa ${locked.length} KTV do không đăng ký lịch ngày ${vnDate(targetDate)}: ${locked.join(', ')}`,
             employeeId: null,
         });
     }
