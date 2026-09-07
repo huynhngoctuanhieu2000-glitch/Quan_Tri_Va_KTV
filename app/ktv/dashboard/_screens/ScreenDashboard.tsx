@@ -9,9 +9,32 @@ import { ProcedureModal, RoomIssueModal, RejectOrderModal, TurnQueueTypeDModal, 
 import { ScreenTimer, WorkingTimeline } from './ScreenTimer';
 import { THEME, ANIMATION, DEFAULT_BOOKING_URL, formatMultiServiceNames, WebBookingQR, ServiceTypeLabel } from '../_shared/ui';
 import { apiClient } from '@/lib/apiClient';
+import { notificationKind, NOTIFICATION_TITLE, type NotificationKind } from '@/lib/notification-kind';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/Toast';
+
+/**
+ * Giao diện một dòng trong danh sách chuông, theo NHÓM thông báo.
+ *
+ * ⚠️ Trước đây chỗ này chỉ biết REWARD và DISCIPLINE, mọi loại còn lại đổ vào một
+ * bong bóng chat xanh — tin KHOÁ TÀI KHOẢN hay TRỪ ĐIỂM Office trông hệt một lời
+ * nhắn bình thường. Nay dùng chung bảng phân loại với toast (lib/notification-kind.ts).
+ */
+const BELL_STYLE: Record<NotificationKind, { bg: string; icon: React.ReactNode }> = {
+    complaint: { bg: 'bg-rose-100 text-rose-600', icon: <ShieldAlert size={14} /> },
+    lock: { bg: 'bg-rose-100 text-rose-600', icon: <ShieldAlert size={14} /> },
+    penalty: { bg: 'bg-amber-100 text-amber-600', icon: <AlertTriangle size={14} /> },
+    reward: { bg: 'bg-emerald-100 text-emerald-600', icon: <Gift size={14} /> },
+    success: { bg: 'bg-emerald-100 text-emerald-600', icon: <CheckCircle size={14} /> },
+    order: { bg: 'bg-amber-100 text-amber-600', icon: <BellRing size={14} /> },
+    checkin: { bg: 'bg-blue-100 text-blue-600', icon: <CheckCircle size={14} /> },
+    shift: { bg: 'bg-indigo-100 text-indigo-600', icon: <Clock size={14} /> },
+    leave: { bg: 'bg-violet-100 text-violet-600', icon: <Coffee size={14} /> },
+    wallet: { bg: 'bg-teal-100 text-teal-600', icon: <Wallet size={14} /> },
+    reception: { bg: 'bg-emerald-100 text-emerald-600', icon: <CheckCircle size={14} /> },
+    info: { bg: 'bg-slate-100 text-slate-500', icon: <MessageSquare size={14} /> },
+};
 
 export function ScreenDashboard({ logic }: { logic: any }) {
   const { addToast } = useToast();
@@ -304,13 +327,19 @@ export function ScreenDashboard({ logic }: { logic: any }) {
                       {(!logic.notifications || logic.notifications.length === 0) ? (
                         <div className="text-center py-6 text-slate-400 text-xs">Chưa có thông báo nào</div>
                       ) : (
-                        logic.notifications.map((n: any) => (
+                        logic.notifications.map((n: any) => {
+                          const kind = notificationKind(n.type);
+                          const st = BELL_STYLE[kind];
+                          return (
                            <div key={n.id} className={`relative p-3 rounded-xl border ${n.isRead ? 'bg-white border-transparent' : 'bg-indigo-50/50 border-indigo-100'} flex gap-3 group`}>
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${n.type === 'REWARD' ? 'bg-amber-100 text-amber-600' : n.type === 'DISCIPLINE' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                                 {n.type === 'REWARD' ? <Gift size={14} /> : n.type === 'DISCIPLINE' ? <ShieldAlert size={14} /> : <MessageSquare size={14} />}
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${st.bg}`}>
+                                 {st.icon}
                               </div>
                               <div className="flex-1 pr-6">
-                                 <h4 className={`text-xs font-bold ${n.isRead ? 'text-slate-700' : 'text-indigo-900'}`}>{n.title}</h4>
+                                 {/* Tiêu đề lấy từ NHÓM. Trước đây đọc `n.title` — cột đó không tồn tại
+                                     trong StaffNotifications và API cũng không trả, nên mọi dòng đều có
+                                     một dòng đậm TRỐNG phía trên nội dung. */}
+                                 <h4 className={`text-xs font-bold ${n.isRead ? 'text-slate-700' : 'text-indigo-900'}`}>{NOTIFICATION_TITLE[kind]}</h4>
                                  <p className="text-[11px] text-slate-500 mt-0.5">{n.message}</p>
                               </div>
                               {!n.isRead && (
@@ -323,7 +352,8 @@ export function ScreenDashboard({ logic }: { logic: any }) {
                                 </button>
                               )}
                            </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </motion.div>

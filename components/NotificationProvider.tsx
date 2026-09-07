@@ -9,6 +9,7 @@ import { Bell, ShieldAlert, X, CheckCircle, Info, AlertTriangle, Check, Star, Ar
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 import { API } from '@/lib/api-endpoints';
+import { notificationKind, NOTIFICATION_TITLE, type NotificationKind } from '@/lib/notification-kind';
 
 // --- TYPES ---
 interface Notification {
@@ -652,117 +653,36 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
 };
 
 /**
- * Phân loại thông báo → giao diện của toast KTV.
+ * Giao diện toast theo NHÓM thông báo.
  *
- * ⚠️ Trước đây mọi loại KHÔNG khớp chuỗi if/else bên dưới đều rơi về mặc định
- * "Phần thưởng mới" kèm ngôi sao xanh. Hệ quả: phiếu TRỪ điểm Office (type
- * WARNING) hiện lên cho KTV y hệt một phần thưởng — "Bạn bị trừ 10 điểm Office"
- * dưới tiêu đề PHẦN THƯỞNG MỚI. Nay mặc định là trung tính, còn muốn hiện như
- * phần thưởng thì phải khai báo rõ ở đây.
+ * Bảng phân loại nằm ở lib/notification-kind.ts và được chuông dùng chung, nên
+ * cùng một tin không thể hiện hai kiểu ở hai chỗ. Trước đây mỗi màn hình tự đoán
+ * bằng một chuỗi if/else riêng: toast để mọi loại lạ rơi về "Phần thưởng mới",
+ * còn chuông thì cho tất cả vào bong bóng chat xanh.
  */
-const REWARD_TYPES = new Set(['REWARD', 'REWARD_APPROVED', 'BONUS', 'EARN', 'TIP', 'COMMISSION']);
-
-/** Trừ điểm, trừ giờ, nhắc nhở kỷ luật. */
-const PENALTY_TYPES = new Set([
-    'WARNING', 'PENALTY', 'DISCIPLINE', 'SUDDEN_OFF_WARNING', 'EXTENSION_WARNING',
-    'ORDER_REJECT', 'KTV_REJECT_ORDER', 'OFFICE_SCORE_DEDUCT', 'HANDOVER_REJECTED',
-    'REACTIVATION_FEE', 'INVALID_WIFI_IP', 'INVALID_LOGIN',
-]);
-
-/** Khoá tài khoản — nặng hơn nhắc nhở, phải nổi bật hơn. */
-const LOCK_TYPES = new Set([
-    'ACCOUNT_LOCK', 'AUTO_LOCK_ABSENCE', 'AUTO_LOCK_REJECT_NO_HOURS', 'AUTO_LOCK_NO_REGISTRATION',
-]);
-
-/** Tin tốt nhưng không phải tiền: hoàn điểm, mở khoá… */
-const SUCCESS_TYPES = new Set(['SUCCESS', 'MANUAL_UNLOCK', 'OFFICE_SCORE_REVOKE']);
+const TOAST_STYLE: Record<NotificationKind, { icon: React.ReactNode; iconBg: string; border: string; titleColor: string }> = {
+    complaint: { icon: <ShieldAlert size={20} />, iconBg: 'bg-white/20', border: 'border-rose-500', titleColor: 'text-rose-100' },
+    lock: { icon: <ShieldAlert size={20} className="text-white" />, iconBg: 'bg-rose-500', border: 'border-rose-200', titleColor: 'text-rose-600' },
+    penalty: { icon: <AlertTriangle size={20} className="text-white" />, iconBg: 'bg-amber-500', border: 'border-amber-200', titleColor: 'text-amber-600' },
+    reward: { icon: <Star size={20} className="text-white fill-white" />, iconBg: 'bg-emerald-500', border: 'border-emerald-100', titleColor: 'text-emerald-600' },
+    success: { icon: <CheckCircle size={20} className="text-white" />, iconBg: 'bg-emerald-500', border: 'border-emerald-100', titleColor: 'text-emerald-600' },
+    order: { icon: <Bell size={20} className="text-white" />, iconBg: 'bg-amber-500', border: 'border-amber-200', titleColor: 'text-amber-600' },
+    checkin: { icon: <CheckCircle size={20} className="text-white" />, iconBg: 'bg-blue-500', border: 'border-blue-100', titleColor: 'text-blue-600' },
+    shift: { icon: <Info size={20} className="text-white" />, iconBg: 'bg-indigo-500', border: 'border-indigo-100', titleColor: 'text-indigo-600' },
+    leave: { icon: <Info size={20} className="text-white" />, iconBg: 'bg-violet-500', border: 'border-violet-100', titleColor: 'text-violet-600' },
+    wallet: { icon: <Info size={20} className="text-white" />, iconBg: 'bg-teal-500', border: 'border-teal-100', titleColor: 'text-teal-600' },
+    reception: { icon: <CheckCircle size={20} className="text-white" />, iconBg: 'bg-emerald-500', border: 'border-emerald-100', titleColor: 'text-emerald-600' },
+    info: { icon: <Bell size={20} className="text-white" />, iconBg: 'bg-slate-500', border: 'border-slate-200', titleColor: 'text-slate-600' },
+};
 
 const KtvMessageToast = ({ notification, currentScreen, onClose, onRedirect }: { notification: Notification, currentScreen: string, onClose: () => void, onRedirect: () => void }) => {
     const isLocked = currentScreen === 'REVIEW';
-    const type = notification.type?.toUpperCase();
-    const isComplaint = type === 'COMPLAINT';
-    const isCheckIn = type === 'CHECK_IN' || type === 'ATTENDANCE' || type === 'ATTENDANCE_REQUEST' || type === 'ATTENDANCE_RESPONSE';
-    const isKtvNewOrder = type === 'KTV_NEW_ORDER';
-    const isShift = type === 'SHIFT_RESPONSE';
-    const isLeave = type === 'LEAVE_RESPONSE';
-    const isWallet = type === 'WALLET';
-    const isRequestConfirmed = type === 'REQUEST_CONFIRMED';
-    
-    // Mặc định TRUNG TÍNH. Loại nào muốn hiện khác thì khai báo trong các nhánh dưới
-    // — đừng để loại chưa biết mượn giao diện của loại khác.
-    let title = 'Thông báo';
-    let iconElement = <Bell size={20} className="text-white" />;
-    let iconBg = 'bg-slate-500';
-    let borderClass = 'border-slate-200';
-    let titleColor = 'text-slate-600';
+    const kind = notificationKind(notification.type);
+    const isComplaint = kind === 'complaint';
 
-    if (isComplaint) {
-        title = 'Thông báo khẩn';
-        iconElement = <ShieldAlert size={20} />;
-        iconBg = 'bg-white/20';
-        borderClass = 'border-rose-500';
-        titleColor = 'text-rose-100';
-    } else if (isKtvNewOrder) {
-        title = 'Đơn hàng mới';
-        iconElement = <Bell size={20} className="text-white" />;
-        iconBg = 'bg-amber-500';
-        borderClass = 'border-amber-200';
-        titleColor = 'text-amber-600';
-    } else if (isCheckIn) {
-        title = 'Điểm danh';
-        iconElement = <CheckCircle size={20} className="text-white" />;
-        iconBg = 'bg-blue-500';
-        borderClass = 'border-blue-100';
-        titleColor = 'text-blue-600';
-    } else if (isShift) {
-        title = 'Thông báo ca';
-        iconElement = <Info size={20} className="text-white" />;
-        iconBg = 'bg-indigo-500';
-        borderClass = 'border-indigo-100';
-        titleColor = 'text-indigo-600';
-    } else if (isLeave) {
-        title = 'Kết quả nghỉ phép';
-        iconElement = <Info size={20} className="text-white" />;
-        iconBg = 'bg-violet-500';
-        borderClass = 'border-violet-100';
-        titleColor = 'text-violet-600';
-    } else if (isWallet) {
-        title = 'Thông báo ví';
-        iconElement = <Info size={20} className="text-white" />;
-        iconBg = 'bg-teal-500';
-        borderClass = 'border-teal-100';
-        titleColor = 'text-teal-600';
-    } else if (isRequestConfirmed) {
-        title = 'Phản hồi từ Quầy';
-        iconElement = <CheckCircle size={20} className="text-white" />;
-        iconBg = 'bg-emerald-500';
-        borderClass = 'border-emerald-100';
-        titleColor = 'text-emerald-600';
-    } else if (type && LOCK_TYPES.has(type)) {
-        title = 'Khoá tài khoản';
-        iconElement = <ShieldAlert size={20} className="text-white" />;
-        iconBg = 'bg-rose-500';
-        borderClass = 'border-rose-200';
-        titleColor = 'text-rose-600';
-    } else if (type && PENALTY_TYPES.has(type)) {
-        title = 'Nhắc nhở kỷ luật';
-        iconElement = <AlertTriangle size={20} className="text-white" />;
-        iconBg = 'bg-amber-500';
-        borderClass = 'border-amber-200';
-        titleColor = 'text-amber-600';
-    } else if (type && REWARD_TYPES.has(type)) {
-        title = 'Phần thưởng mới';
-        iconElement = <Star size={20} className="text-white fill-white" />;
-        iconBg = 'bg-emerald-500';
-        borderClass = 'border-emerald-100';
-        titleColor = 'text-emerald-600';
-    } else if (type && SUCCESS_TYPES.has(type)) {
-        title = 'Đã xử lý';
-        iconElement = <CheckCircle size={20} className="text-white" />;
-        iconBg = 'bg-emerald-500';
-        borderClass = 'border-emerald-100';
-        titleColor = 'text-emerald-600';
-    }
+    const title = NOTIFICATION_TITLE[kind];
+    const { icon: iconElement, iconBg, border: borderClass, titleColor } = TOAST_STYLE[kind];
+    
 
     return (
         <motion.div
