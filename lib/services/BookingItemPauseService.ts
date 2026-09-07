@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { workedMsOf } from '@/lib/segment-time';
+import { punishTurnIfIdle } from '@/lib/turn-punish';
 
 export class BookingItemPauseService {
     /**
@@ -332,12 +333,13 @@ export class BookingItemPauseService {
         // syncTurnsForDate đã lọc sẵn is_punished khỏi turns_completed; trước đây
         // cột này có mà chưa nơi nào ghi, nên "mất tua" chỉ nằm trên giấy.
         if (businessDate && !keepTurnForOldKtv) {
-            await supabase
-                .from('TurnLedger')
-                .update({ is_punished: true })
-                .eq('date', businessDate)
-                .eq('booking_id', item.bookingId)
-                .eq('employee_id', oldKtvId);
+            // punishTurnIfIdle tự quy về mã ĐƠN CHA — sổ cái tua lưu theo đơn cha,
+            // update thẳng theo mã đơn con sẽ khớp 0 dòng và tua không hề bị tước.
+            await punishTurnIfIdle(supabase, {
+                bookingId: item.bookingId,
+                employeeId: oldKtvId,
+                date: businessDate,
+            });
         }
 
         // --- NẾU CÓ KTV MỚI VÀO THAY ---

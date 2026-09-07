@@ -1,4 +1,5 @@
 import { workedMsOf } from '@/lib/segment-time';
+import { punishTurnIfIdle } from '@/lib/turn-punish';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { requirePermission } from '@/lib/auth-server';
 import { createNotification } from '@/lib/notification-helper';
@@ -595,15 +596,14 @@ export class BookingModificationService {
                             room_id: null, bed_id: null, start_time: null, estimated_end_time: null
                         }).eq('id', turn.id);
 
-                        // Mất tua: chỉ đánh dấu khi KTV không còn dịch vụ nào khác trong đơn.
-                        // syncTurnsForDate đã lọc sẵn is_punished khỏi turns_completed.
+                        // Mất tua. punishTurnIfIdle tự quy về mã ĐƠN CHA (sổ cái lưu theo
+                        // đơn cha) và tự bỏ qua nếu KTV còn dịch vụ khác chưa huỷ trong bill.
                         if (cancelCredit === 'NONE' && turn.employee_id && turn.date) {
-                            await supabase
-                                .from('TurnLedger')
-                                .update({ is_punished: true })
-                                .eq('date', turn.date)
-                                .eq('booking_id', bookingId)
-                                .eq('employee_id', turn.employee_id);
+                            await punishTurnIfIdle(supabase, {
+                                bookingId,
+                                employeeId: turn.employee_id,
+                                date: turn.date,
+                            });
                         }
                     }
 

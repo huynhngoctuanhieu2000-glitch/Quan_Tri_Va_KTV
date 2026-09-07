@@ -288,7 +288,11 @@ export class KtvCommissionService {
                 // Chặng bị tước quyền lợi (KTV bị đổi ra, huỷ do lỗi KTV) → không trả tiền.
                 // Vẫn giữ trong đơn để biết ai từng làm cho khách — xem lib/segment-time.ts
                 if (seg?.voided === true) return sum;
-                if (seg.customCommissionDuration) return sum + Number(seg.customCommissionDuration);
+                // ⚠️ Phải so với null, KHÔNG dùng truthy: `0` là một con số HỢP LỆ
+                // (KTV làm dưới 30 giây, hoặc quầy chốt đúng 0 phút). Kiểm kiểu truthy
+                // thì 0 bị coi như "không có override" và rơi xuống trả nguyên GIỜ GÁN
+                // — đã bắt được thật: T016 làm 29 giây mà ra 45 phút tiền.
+                if (seg.customCommissionDuration != null) return sum + Number(seg.customCommissionDuration);
                 const baseMins = Number(seg.duration) || 0;
                 
                 let realMins = 0;

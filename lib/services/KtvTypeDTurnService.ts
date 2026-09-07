@@ -36,7 +36,9 @@ export class KtvTypeDTurnService {
             const assigned = Number(seg.duration) || 0;
 
             // Priority 1: Admin override — số admin cố ý nhập, KHÔNG chặn
-            if (seg.customCommissionDuration) {
+            // So với null chứ không dùng truthy — `0` là số hợp lệ, xem ghi chú
+            // cùng vấn đề ở KtvCommissionService.calculateItemDuration.
+            if (seg.customCommissionDuration != null) {
                 return sum + Number(seg.customCommissionDuration);
             }
 

@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/auth-server';
 import { sendPushNotification } from '@/lib/push-helper';
 import { createNotification } from '@/lib/notification-helper';
 import { workedMsOf } from '@/lib/segment-time';
+import { punishTurnIfIdle } from '@/lib/turn-punish';
 import { BookingModificationService } from '@/lib/services/BookingModificationService';
 import { recalculateEstimatedEndTime } from '@/lib/time-helper';
 import { COMPLETED_STATUSES, isDummyPhone, isDummyEmail, isReturningCustomer, isNameMatch } from '@/lib/customer.logic';
@@ -1243,12 +1244,11 @@ export async function cancelBooking(bookingId: string, date: string, cancelCredi
                     // Đã bắt đầu làm nhưng huỷ mà KHÔNG cộng gì → tước luôn lượt tua.
                     // syncTurnsForDate đã lọc sẵn is_punished khỏi turns_completed.
                     console.log(`⛔ KTV ${turn.employee_id} mất lượt tua do huỷ đơn không cộng giờ.`);
-                    await supabase
-                        .from('TurnLedger')
-                        .update({ is_punished: true })
-                        .eq('date', date)
-                        .eq('booking_id', bookingId)
-                        .eq('employee_id', turn.employee_id);
+                    await punishTurnIfIdle(supabase, {
+                        bookingId,
+                        employeeId: turn.employee_id,
+                        date,
+                    });
                 } else {
                     // ⚠️ Quầy chọn cộng giờ đã làm -> GIỮ Ledger để tính tua/tiền cho KTV
                     console.log(`⚠️ KTV ${turn.employee_id} giữ nguyên lượt tua do quầy cho cộng giờ.`);
