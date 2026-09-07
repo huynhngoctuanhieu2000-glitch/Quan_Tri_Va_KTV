@@ -2365,7 +2365,14 @@ export function useKTVDashboard(config?: DashboardConfig) {
         addToast('Đã gửi yêu cầu về sớm. Hãy đợi Lễ tân xác nhận để hoàn tất đơn hàng.', 'success');
     };
 
-    const handlePause = async () => {
+    /**
+     * @param opts.skipConfirm  Bỏ hộp xác nhận. Dùng cho nút BÁO ĐỘNG KHẨN CẤP:
+     *   đang có sự cố mà còn bắt bấm "OK" thì KTV bỏ qua, kết quả là báo động
+     *   gửi đi nhưng ĐƠN KHÔNG HỀ DỪNG và đồng hồ vẫn chạy tính tiền.
+     * @param opts.silentIfPaused  Đơn đã dừng sẵn thì im lặng bỏ qua, đừng hiện
+     *   lỗi "Chỉ Lễ tân mới có quyền mở lại" — bấm khẩn cấp lần hai là hợp lý.
+     */
+    const handlePause = async (opts?: { skipConfirm?: boolean; silentIfPaused?: boolean }) => {
         if (!booking || !ktvId) return;
         
         const itemId = booking.assignedItemId || booking.assignedItemIds?.[0];
@@ -2375,11 +2382,13 @@ export function useKTVDashboard(config?: DashboardConfig) {
         try {
             const action = isPaused ? 'RESUME' : 'PAUSE';
             if (action === 'RESUME') {
-                addToast('Chỉ Lễ tân mới có quyền mở lại ca làm bị tạm dừng!', 'error');
+                if (!opts?.silentIfPaused) {
+                    addToast('Chỉ Lễ tân mới có quyền mở lại ca làm bị tạm dừng!', 'error');
+                }
                 setIsLoading(false);
                 return;
             }
-            if (action === 'PAUSE' && !confirm('Xác nhận tạm dừng ca làm? Thời gian sẽ được dừng lại.')) {
+            if (action === 'PAUSE' && !opts?.skipConfirm && !confirm('Xác nhận tạm dừng ca làm? Thời gian sẽ được dừng lại.')) {
                 setIsLoading(false);
                 return;
             }

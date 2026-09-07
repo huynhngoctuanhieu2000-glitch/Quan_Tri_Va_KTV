@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { requirePermission } from '@/lib/auth-server';
 import { sendPushNotification } from '@/lib/push-helper';
 import { createNotification } from '@/lib/notification-helper';
-import { workedMsOf } from '@/lib/segment-time';
+import { closeOpenPause, voidSegment } from '@/lib/segment-time';
 import { punishTurnIfIdle } from '@/lib/turn-punish';
 import { BookingModificationService } from '@/lib/services/BookingModificationService';
 import { recalculateEstimatedEndTime } from '@/lib/time-helper';
@@ -1188,22 +1188,12 @@ export async function cancelBooking(bookingId: string, date: string, cancelCredi
             let segmentsModified = false;
             segs.forEach((s: any) => {
                 if (s.actualStartTime && !s.actualEndTime) {
+                    closeOpenPause(s, endMark, 'CANCEL');
                     s.actualEndTime = endMark;
-                    // Đóng nốt khoảng tạm dừng còn hở, nếu không nó tính tới tận lúc
-                    // kết thúc và ăn mất phần làm thật của KTV.
-                    if (Array.isArray(s.pauses)) {
-                        const openIdx = s.pauses.findIndex((p: any) => p && p.from && !p.to);
-                        if (openIdx !== -1) s.pauses[openIdx] = { ...s.pauses[openIdx], to: endMark };
-                    }
                     segmentsModified = true;
                 }
-                // Không cho hưởng gì → tước sạch chặng, nhưng VẪN giữ lại trong đơn
-                // kèm số phút đã làm để biết ai từng làm cho khách (lib/segment-time.ts).
                 if (cancelCredit === 'NONE' && s.actualStartTime) {
-                    const worked = workedMsOf(s, s.actualEndTime || endMark);
-                    if (worked !== null) s.customCommissionDuration = Math.round(worked / 60000);
-                    s.voided = true;
-                    s.note = 'CANCELLED_NO_CREDIT';
+                    voidSegment(s, endMark, 'CANCELLED_NO_CREDIT');
                     segmentsModified = true;
                 }
             });

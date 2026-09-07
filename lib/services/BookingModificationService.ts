@@ -1,4 +1,4 @@
-import { workedMsOf } from '@/lib/segment-time';
+import { closeOpenPause, voidSegment } from '@/lib/segment-time';
 import { punishTurnIfIdle } from '@/lib/turn-punish';
 import { logCounterAction, currentCounterActor } from '@/lib/counter-action-log';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
@@ -524,22 +524,12 @@ export class BookingModificationService {
             let segmentsModified = false;
             segs.forEach((s: any) => {
                 if (s.actualStartTime && !s.actualEndTime) {
+                    closeOpenPause(s, endMark, 'CANCEL');
                     s.actualEndTime = endMark;
-                    // Còn khoảng tạm dừng đang hở thì đóng lại, nếu không nó sẽ được
-                    // tính tới tận lúc kết thúc và ăn mất phần làm thật.
-                    if (Array.isArray(s.pauses)) {
-                        const openIdx = s.pauses.findIndex((p: any) => p && p.from && !p.to);
-                        if (openIdx !== -1) s.pauses[openIdx] = { ...s.pauses[openIdx], to: endMark };
-                    }
                     segmentsModified = true;
                 }
-                // Không cho hưởng gì → tước sạch chặng. Vẫn giữ lại trong đơn (kèm
-                // số phút đã làm) để biết ai từng làm cho khách — xem lib/segment-time.ts
                 if (cancelCredit === 'NONE' && s.actualStartTime) {
-                    const worked = workedMsOf(s, s.actualEndTime || endMark);
-                    if (worked !== null) s.customCommissionDuration = Math.round(worked / 60000);
-                    s.voided = true;
-                    s.note = 'CANCELLED_NO_CREDIT';
+                    voidSegment(s, endMark, 'CANCELLED_NO_CREDIT');
                     segmentsModified = true;
                 }
             });

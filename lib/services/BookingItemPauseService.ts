@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { workedMsOf } from '@/lib/segment-time';
+import { closeOpenPause, voidSegment } from '@/lib/segment-time';
 import { punishTurnIfIdle } from '@/lib/turn-punish';
 import { logCounterAction, currentCounterActor } from '@/lib/counter-action-log';
 
@@ -202,16 +202,13 @@ export class BookingItemPauseService {
                     // Cách cũ cộng thời gian dừng vào mốc bắt đầu → ô "Bắt đầu" trên
                     // Kanban nhảy muộn sau mỗi lần tạm dừng và mất mốc thật vĩnh viễn.
                     // Nay chỉ đóng khoảng dừng lại; giờ làm thực do lib/segment-time.ts trừ ra.
-                    const pauses = Array.isArray(seg.pauses) ? [...seg.pauses] : [];
-                    const openIdx = pauses.findIndex((p: any) => p && p.from && !p.to);
-                    if (openIdx !== -1) {
-                        pauses[openIdx] = { ...pauses[openIdx], to: resumeAt };
-                    } else {
+                    const next = { ...seg, pauses: Array.isArray(seg.pauses) ? [...seg.pauses] : [] };
+                    if (!closeOpenPause(next, resumeAt, 'RESUME')) {
                         // Chặng bị dừng bằng code cũ (chưa có `pauses`) — dựng lại
                         // khoảng dừng từ `pauseStart` để không mất phần đã chờ.
-                        pauses.push({ from: item.pauseStart, to: resumeAt });
+                        next.pauses.push({ from: item.pauseStart, to: resumeAt, closedBy: 'RESUME' });
                     }
-                    return { ...seg, pauses };
+                    return next;
                 });
             }
             
@@ -320,24 +317,16 @@ export class BookingItemPauseService {
 
             // Đóng khoảng tạm dừng còn hở tại mốc bấm dừng, rồi tính giờ làm thực
             // (đã trừ các lần dừng trước đó) — xem lib/segment-time.ts
-            const pauses = Array.isArray(oldSeg.pauses) ? [...oldSeg.pauses] : [];
-            const openIdx = pauses.findIndex((p: any) => p && p.from && !p.to);
-            if (openIdx !== -1) pauses[openIdx] = { ...pauses[openIdx], to: pauseTime };
+            const closed = { ...oldSeg, pauses: Array.isArray(oldSeg.pauses) ? [...oldSeg.pauses] : [] };
+            closeOpenPause(closed, pauseTime, 'SWAP');
+            closed.endTime = pauseTime;
+            closed.actualEndTime = pauseTime;
 
-            const workedMs = workedMsOf({ ...oldSeg, pauses }, pauseTime);
-            oldWorkedMins = workedMs === null ? 0 : Math.round(workedMs / 60000);
+            // Tước sạch quyền lợi nhưng VẪN ghi số phút đã làm để đối soát.
+            voidSegment(closed, pauseTime, 'CHANGED');
+            oldWorkedMins = Number(closed.customCommissionDuration) || 0;
 
-            segments[aIndex] = {
-                ...oldSeg,
-                pauses,
-                endTime: pauseTime,
-                actualEndTime: pauseTime,
-                // Số phút đã làm — CHỈ để hiển thị/đối soát. `voided` khiến mọi hàm
-                // tính tiền bỏ qua con số này, đừng xoá nó đi.
-                customCommissionDuration: oldWorkedMins,
-                voided: true,
-                note: 'CHANGED'
-            };
+            segments[aIndex] = closed;
         }
 
         // --- MẤT TUA CỦA KTV CŨ ---

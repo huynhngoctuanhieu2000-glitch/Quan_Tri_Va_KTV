@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { syncTurnsForDate } from '@/lib/turn-sync';
 import { recomputeBookingStatus } from '@/lib/dispatch-status';
 import { getBusinessDate } from '../booking/_shared/utils';
-import { workedMsOf } from '@/lib/segment-time';
+import { workedMsOf, closeOpenPause } from '@/lib/segment-time';
 import { logCounterAction, currentCounterActor } from '@/lib/counter-action-log';
 
 /**
@@ -104,13 +104,7 @@ export async function POST(req: Request) {
                     const assignedMins = Number(seg.duration) || 0;
                     if (assignedMins > 0 && workedMins > assignedMins) workedMins = assignedMins;
 
-                    // Đóng khoảng tạm dừng còn hở ngay tại mốc dừng. Không đóng thì nó
-                    // treo mãi không có `to`, và bất kỳ chỗ nào tính với mốc muộn hơn
-                    // sẽ trừ nhầm phần thời gian đó của KTV.
-                    if (Array.isArray(seg.pauses)) {
-                        const openIdx = seg.pauses.findIndex((p: any) => p && p.from && !p.to);
-                        if (openIdx !== -1) seg.pauses[openIdx] = { ...seg.pauses[openIdx], to: effectiveEnd };
-                    }
+                    closeOpenPause(seg, effectiveEnd, 'FINISH');
 
                     seg.actualEndTime = effectiveEnd;
                     seg.customCommissionDuration = workedMins;

@@ -517,7 +517,13 @@ export function ScreenTimer({ logic }: { logic: any }) {
             </div>
             
             <button
-              onClick={() => { logic.handlePause(); handleInteraction('EMERGENCY'); }}
+              onClick={async () => {
+                // Dừng đơn TRƯỚC rồi mới báo động, và KHÔNG hỏi lại: đang sự cố mà
+                // bắt xác nhận thì KTV bỏ qua, báo động gửi đi mà đồng hồ vẫn chạy
+                // tính tiền. Đơn đã dừng sẵn thì bỏ qua im lặng, chỉ gửi báo động.
+                await logic.handlePause({ skipConfirm: true, silentIfPaused: true });
+                await handleInteraction('EMERGENCY');
+              }}
               className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-rose-200 active:scale-95 transition-all"
             >
               <ShieldAlert size={18} />

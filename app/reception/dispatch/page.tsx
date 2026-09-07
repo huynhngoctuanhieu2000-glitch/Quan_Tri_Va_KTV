@@ -2882,6 +2882,19 @@ if (!hasPermission('dispatch_board')) {
                 }
               }}
               onCancelClick={(orderId, subOrder) => handleCancelBookingItem(orderId, subOrder?.services?.[0]?.id, subOrder)}
+              onPauseNow={async (orderId, subOrder) => {
+                const svc = (subOrder?.services || []).find((s: any) => s.status === 'IN_PROGRESS');
+                if (!svc) {
+                  alert('Không tìm thấy dịch vụ đang làm để tạm dừng.');
+                  return;
+                }
+                try {
+                  // pauseItem tự dừng luôn các dịch vụ gộp chung KTV, chỉ cần 1 item.
+                  await handleConfirmPauseSwap(svc.id, 'PAUSE');
+                } catch (err: any) {
+                  alert('Lỗi tạm dừng: ' + (err?.message || 'Không rõ nguyên nhân'));
+                }
+              }}
               onResumeClick={async (orderId, subOrder) => {
                 const pausedSvc = (subOrder?.services || []).find((s: any) => s.status === 'PAUSED');
                 if (!pausedSvc) {

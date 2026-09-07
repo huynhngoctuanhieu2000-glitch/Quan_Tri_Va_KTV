@@ -155,6 +155,8 @@ interface KanbanBoardProps {
     onResumeClick?: (orderId: string, subOrder: any) => Promise<void> | void;
     /** Bấm "Huỷ" trên thẻ tạm dừng — huỷ ĐƠN CON của KTV đó, không đụng bill. */
     onCancelClick?: (orderId: string, subOrder: any) => void;
+    /** Bấm "Dừng" trên thẻ đang làm: tạm dừng thẳng, không qua popup chọn. */
+    onPauseNow?: (orderId: string, subOrder: any) => Promise<void> | void;
 }
 
 const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[] = order.services, subOrder?: any) => {
@@ -238,9 +240,20 @@ const getEstimatedEndTime = (order: PendingOrder, servicesToCheck: ServiceBlock[
     return order.time; 
 };
 
-export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused, onResumeClick, onCancelClick }: KanbanBoardProps) {
+export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onConfirmAddonPayment, selectedOrderId, onContextMenu, onPauseClick, roomTransitionTime = 5, onUpdateCustomerName, onReviewClick, staffWorkTypeMap, onSelectOrder, onFinishEarlyPaused, onResumeClick, onCancelClick, onPauseNow }: KanbanBoardProps) {
     // Khoá nút "Tiếp" của đúng thẻ đang gọi API, tránh bấm hai lần.
     const [resumingSubOrderId, setResumingSubOrderId] = React.useState<string | null>(null);
+
+    // Dùng chung khoá cho cả Tiếp lẫn Dừng — cùng là "gọi API rồi khoá nút".
+    const handlePauseNow = async (orderId: string, subOrder: any) => {
+        if (!onPauseNow || resumingSubOrderId) return;
+        setResumingSubOrderId(subOrder.id);
+        try {
+            await onPauseNow(orderId, subOrder);
+        } finally {
+            setResumingSubOrderId(null);
+        }
+    };
 
     const handleResume = async (orderId: string, subOrder: any) => {
         if (!onResumeClick || resumingSubOrderId) return;
@@ -1358,11 +1371,18 @@ export function KanbanBoard({ orders, staffs, onUpdateStatus, onOpenDetail, onCo
                                                         }
                                                         return (
                                                             <button
-                                                                onClick={(e) => { e.stopPropagation(); onPauseClick(order.id, subOrder); }}
-                                                                className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-amber-600 bg-amber-50 hover:bg-amber-100 transition-all border border-amber-100 flex items-center gap-1"
-                                                                title="Tạm dừng / Đổi KTV"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    // Dừng là dừng luôn, không hỏi lại. Muốn đổi KTV thì
+                                                                    // dừng xong bấm "Đổi" trên thẻ đã chuyển sang tạm dừng.
+                                                                    if (onPauseNow) handlePauseNow(order.id, subOrder);
+                                                                    else onPauseClick(order.id, subOrder);
+                                                                }}
+                                                                disabled={resumingSubOrderId === subOrder.id}
+                                                                className="px-2.5 py-2.5 rounded-xl text-[11px] font-black text-amber-600 bg-amber-50 hover:bg-amber-100 transition-all border border-amber-100 flex items-center gap-1 disabled:opacity-50"
+                                                                title="Tạm dừng ngay"
                                                             >
-                                                                <AlertCircle size={12} /> Dừng
+                                                                <AlertCircle size={12} /> {resumingSubOrderId === subOrder.id ? '...' : 'Dừng'}
                                                             </button>
                                                         );
                                                     })()}

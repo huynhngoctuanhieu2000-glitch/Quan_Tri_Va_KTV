@@ -103,3 +103,116 @@ export function expectedEndMs(seg: any, assignedMins: number, now: number = Date
     if (!Number.isFinite(start)) return null;
     return start + assignedMins * 60000 + pausedMsOf(seg, now);
 }
+
+// ── Thao tác chuẩn trên chặng ───────────────────────────────────────
+// Năm chỗ từng chép tay cùng một đoạn "đóng khoảng dừng còn hở", ba chỗ chép
+// tay đoạn "tước chặng". Chép tay là sót: mỗi lần thêm một luồng mới lại quên
+// một nhánh. Từ đây mọi nơi phải gọi hai hàm dưới.
+
+/** Vì sao khoảng tạm dừng bị đóng lại. */
+export type PauseCloseReason = 'RESUME' | 'FINISH' | 'CANCEL' | 'SWAP';
+
+/**
+ * Đóng khoảng tạm dừng đang hở của một chặng.
+ *
+ * ⚠️ `closedBy` KHÔNG phải để trang trí. Khi chốt đơn (FINISH/CANCEL/SWAP) ta
+ * đóng khoảng ngay tại mốc bấm dừng, nên `from === to`. Nhìn dữ liệu thô thì
+ * nó giống hệt một lần "tạm dừng rồi tiếp ngay" — đã có người (và chính tôi)
+ * đọc nhầm T016 thành "có bấm Tiếp" trong khi thực tế không hề. Ghi rõ lý do
+ * đóng thì `scenarioOf` phân biệt được, khỏi phải đoán.
+ *
+ * @returns true nếu có sửa gì đó.
+ */
+export function closeOpenPause(seg: any, at: string, closedBy: PauseCloseReason): boolean {
+    if (!seg || !Array.isArray(seg.pauses)) return false;
+    const idx = seg.pauses.findIndex((p: any) => p && p.from && !p.to);
+    if (idx === -1) return false;
+    seg.pauses[idx] = { ...seg.pauses[idx], to: at, closedBy };
+    return true;
+}
+
+/**
+ * Tước sạch quyền lợi của một chặng: không tiền, không giờ tích luỹ.
+ *
+ * VẪN giữ `customCommissionDuration` = số phút đã làm thật — đó là bằng chứng
+ * đối soát, và là thứ màn hình dùng để hiện "đã làm 25p · 0đ". Đừng xoá.
+ */
+export function voidSegment(seg: any, endMark: string, note: string): void {
+    if (!seg) return;
+    const worked = workedMsOf(seg, seg.actualEndTime || endMark);
+    if (worked !== null) seg.customCommissionDuration = Math.round(worked / 60000);
+    seg.voided = true;
+    seg.note = note;
+}
+
+// ── Nhận diện kịch bản nghiệp vụ ────────────────────────────────────
+
+/**
+ * Sáu kịch bản trong plans/plan_tam_dung_huy_ket_thuc_som.md.
+ * A và C4 cố ý gộp — cùng kết quả tiền, và quầy chỉ gõ lý do tự do nên máy
+ * không phân biệt được (chốt 06/09/2026).
+ */
+export type Scenario =
+    | 'BINH_THUONG'
+    | 'B_RA_SOM'
+    | 'C2_DOI_KTV'
+    | 'C3_HUY_CO_CONG_GIO'
+    | 'A_C4_HUY_MAT_TRANG';
+
+export interface ScenarioInfo {
+    /** Kịch bản kết thúc của dịch vụ này. */
+    scenario: Scenario;
+    /** Số lần quầy thật sự bấm Tạm dừng rồi bấm Tiếp (C1). */
+    soLanTamDung: number;
+    /** Có chặng nào bị tước quyền lợi không. */
+    coChangBiTuoc: boolean;
+}
+
+/**
+ * Suy ra kịch bản từ một BookingItem. NGUỒN DUY NHẤT — Kanban, lịch sử KTV,
+ * báo cáo và script đối soát đều phải gọi hàm này, đừng tự đoán bằng `note`.
+ */
+export function scenarioOf(item: any): ScenarioInfo {
+    let segs: any[] = [];
+    try { segs = typeof item?.segments === 'string' ? JSON.parse(item.segments) : (item?.segments || []); } catch { }
+    if (!Array.isArray(segs)) segs = [];
+
+    let opts: any = item?.options;
+    if (typeof opts === 'string') { try { opts = JSON.parse(opts); } catch { opts = {}; } }
+    opts = opts || {};
+
+    // Lần tạm dừng THẬT = có bấm Tiếp. Loại các khoảng bị đóng để chốt đơn:
+    // ưu tiên cờ `closedBy`, dữ liệu cũ chưa có cờ thì so MỐC THỜI GIAN
+    // (không so chuỗi — '…Z' và '…+00:00' là cùng một lúc mà khác chuỗi).
+    let soLanTamDung = 0;
+    for (const seg of segs) {
+        for (const p of (Array.isArray(seg?.pauses) ? seg.pauses : [])) {
+            if (!p?.from || !p?.to) continue;
+            if (p.closedBy && p.closedBy !== 'RESUME') continue;
+            if (!p.closedBy && parseTimeMs(p.to) <= parseTimeMs(p.from)) continue;
+            soLanTamDung++;
+        }
+    }
+
+    const coChangBiTuoc = segs.some(isVoidedSegment);
+
+    let scenario: Scenario = 'BINH_THUONG';
+    if (item?.status === 'CANCELLED') {
+        scenario = opts.cancelCredit === 'WORKED' ? 'C3_HUY_CO_CONG_GIO' : 'A_C4_HUY_MAT_TRANG';
+    } else if (segs.some((s: any) => s?.note === 'CHANGED')) {
+        scenario = 'C2_DOI_KTV';
+    } else if (opts.earlyLeave === true) {
+        scenario = 'B_RA_SOM';
+    }
+
+    return { scenario, soLanTamDung, coChangBiTuoc };
+}
+
+/** Nhãn tiếng Việt để hiện lên màn hình. */
+export const SCENARIO_LABEL: Record<Scenario, string> = {
+    BINH_THUONG: 'Bình thường',
+    B_RA_SOM: 'Khách xuống sớm',
+    C2_DOI_KTV: 'Đã đổi KTV',
+    C3_HUY_CO_CONG_GIO: 'Huỷ — có cộng giờ',
+    A_C4_HUY_MAT_TRANG: 'Huỷ — mất trắng',
+};
