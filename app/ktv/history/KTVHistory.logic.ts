@@ -32,6 +32,8 @@ export interface HistoryRecord {
   ratingDeductionAmount?: number;     // số tiền bị trừ do đánh giá
   handover_status?: string;
   handover_comment?: string | null;
+  /** Ô góp ý khách tích khi đánh giá: [{id, text}] — có từ migration 20260907000000. */
+  violations?: { id: string; text: string }[] | null;
   ktv_comment?: string | null;
   guestCount?: number;
   coWorkers?: string[];

@@ -216,7 +216,7 @@ export async function GET(request: Request) {
         console.log('🔍 [DEBUG] bookingIds:', JSON.stringify(bookingIds));
         const { data: items, error: iErr } = await supabase
             .from('BookingItems')
-            .select('id, bookingId, serviceId, technicianCodes, tip, segments, itemRating, ktvRatings, options, handover_status, handover_comment, status')
+            .select('id, bookingId, serviceId, technicianCodes, tip, segments, itemRating, ktvRatings, options, handover_status, handover_comment, status, violations')
             .in('bookingId', bookingIds);
         console.log('🔍 [DEBUG] BookingItems error:', iErr, 'count:', items?.length);
 
@@ -504,6 +504,17 @@ export async function GET(request: Request) {
                     mixedTeamNote,
                     handover_status,
                     handover_comment,
+                    // Ô góp ý khách đã tích. Tích lỗi kéo trần đánh giá xuống 3 sao
+                    // nên KTV phải xem được mình bị phản ánh chuyện gì, khỏi thắc mắc.
+                    violations: (() => {
+                        const merged = new Map<string, any>();
+                        for (const i of groupItems) {
+                            for (const v of (Array.isArray(i.violations) ? i.violations : [])) {
+                                if (v && v.id) merged.set(String(v.id), v);
+                            }
+                        }
+                        return Array.from(merged.values());
+                    })(),
                     ktv_comment: b.notes,
                     guestCount: allItemGroups.size > 1 ? 1 : (b.guestCount || 1),
                     coWorkers,

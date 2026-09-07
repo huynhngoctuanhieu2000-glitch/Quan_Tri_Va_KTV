@@ -261,6 +261,21 @@ const OrderCard = ({ order, getStatusLabel }: {
                 </div>
               )}
 
+              {/* Khách tích ô góp ý nào thì hiện ra đây. Tích lỗi kéo trần đánh giá
+                  xuống 3 sao, tức là trừ tiền — nên phải cho KTV biết lý do. */}
+              {Array.isArray(order.violations) && order.violations.length > 0 && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 -mt-1">
+                  <p className="text-[10px] font-black text-rose-700 uppercase tracking-wider mb-1">
+                    Khách phản ánh
+                  </p>
+                  {order.violations.map((v: any) => (
+                    <p key={v.id} className="text-xs text-rose-600 font-medium leading-snug">
+                      • {v.text || v.id}
+                    </p>
+                  ))}
+                </div>
+              )}
+
               {/* Bonus Points */}
               {order.bonusPoints > 0 && (
                 <div className="flex justify-between items-center bg-amber-50 rounded-xl px-3 py-2 -mx-1">
